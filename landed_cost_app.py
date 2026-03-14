@@ -169,7 +169,7 @@ st.markdown(f"""
         border-bottom: 1px solid #d4d8e0;
         position: fixed; top: 0; left: 21rem; right: 0; z-index: 999;
     }}
-    .ib-header-spacer {{ height: 3.2rem; }}
+    .ib-header-spacer {{ height: 4.2rem; }}
     .ib-header-left {{ display: flex; flex-direction: column; }}
     .ib-header h1 {{ font-family: 'Inter', sans-serif; font-size: 1.1rem; font-weight: 700; margin: 0 0 0.1rem 0; letter-spacing: -0.01em; color: {NAVY}; }}
     .ib-header .sub {{ font-size: 0.68rem; color: {GREY_TEXT}; letter-spacing: 0.04em; }}
