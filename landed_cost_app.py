@@ -2121,11 +2121,11 @@ Compares full cost-to-serve across factory locations, including material, labour
     # Base factory name + Cost of Capital
     bf_col1, bf_col2 = st.columns([2, 1])
     with bf_col1:
-        bf_df = pd.DataFrame({"Base Factory Name": [EX_BASE.name if ex else "Base Case"]})
+        bf_df = pd.DataFrame({"Current Factory Name": [EX_BASE.name if ex else "Base Case"]})
         edited_bf = st.data_editor(bf_df, use_container_width=False, num_rows="fixed",
             key="bf_editor", hide_index=True,
-            column_config={"Base Factory Name": st.column_config.TextColumn("Base Factory Name", width=250)})
-        base_factory_name = str(edited_bf.loc[0, "Base Factory Name"] or "Base Case")
+            column_config={"Current Factory Name": st.column_config.TextColumn("Current Factory Name", width=250)})
+        base_factory_name = str(edited_bf.loc[0, "Current Factory Name"] or "Base Case")
     with bf_col2:
         coc_df = pd.DataFrame({"Cost of Capital (WACC %)": [8.0 if ex else 8.0]})
         edited_coc = st.data_editor(coc_df, use_container_width=False, num_rows="fixed",
@@ -2197,7 +2197,7 @@ Compares full cost-to-serve across factory locations, including material, labour
     df_matrix.loc["VA Ratio", base_factory_name] = None
 
     st.markdown('<div class="sec-sm" id="sec-assumptions">Assumptions Matrix</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="callout">These assumptions apply to <strong>all items</strong> in the project. Base case (<strong>{base_factory_name}</strong>) VA Ratio is 1.0x (implicit).</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout">These assumptions apply to <strong>all items</strong> in the project. Current factory (<strong>{base_factory_name}</strong>) VA Ratio is 1.0x (implicit).</div>', unsafe_allow_html=True)
 
     col_config = {
         base_factory_name: st.column_config.NumberColumn(base_factory_name, format="%.2f"),
