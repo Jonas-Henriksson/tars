@@ -447,8 +447,8 @@ def build_waterfall_chart(result, ccy):
         textfont=dict(size=9, family="Inter", color=DARK_TEXT),
     ))
     fig.update_layout(
-        title=None,
-        height=340, margin=dict(l=40, r=30, t=30, b=50),
+        title=dict(text=""),
+        height=340, margin=dict(l=40, r=30, t=20, b=50),
         paper_bgcolor="white", plot_bgcolor="white",
         font=dict(family="Inter", size=9, color=DARK_TEXT),
         yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title=f"{ccy} per unit", title_font=dict(size=9, family="Inter")),
