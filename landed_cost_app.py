@@ -247,14 +247,19 @@ def build_cost_table(results, ccy, target_market=None):
         cells = "".join(f'<td class="{"base-case" if i==0 else ""}">{fmt(r[key])}</td>' for i, r in enumerate(results))
         return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
     def delta_row(lbl, key, fmt, cls="", invert=False):
-        """Row with conditional red/green formatting on non-base cells."""
+        """Row with conditional red/green formatting comparing each cell vs base."""
         c = f'class="{cls}"'
+        base_v = results[0].get(key, 0)
         cells = ""
         for i, r in enumerate(results):
             v = r.get(key, 0)
-            color_v = -v if invert else v
-            cell_cls = "base-case" if i == 0 else dc(color_v) if color_v != 0 else ""
-            cells += f'<td class="{cell_cls}">{fmt(v)}</td>'
+            if i == 0:
+                cells += f'<td class="base-case">{fmt(v)}</td>'
+            else:
+                diff = v - base_v
+                color_diff = -diff if invert else diff
+                cell_cls = dc(color_diff) if color_diff != 0 else ""
+                cells += f'<td class="{cell_cls}">{fmt(v)}</td>'
         return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
     def sep():
         return f'<tr class="row-separator">{"<td></td>" * (len(results)+1)}</tr>'
@@ -327,12 +332,17 @@ def build_annual_table(results, ccy):
         return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
     def delta_row(lbl, key, fmt, cls="", invert=False):
         c = f'class="{cls}"'
+        base_v = results[0].get(key, 0)
         cells = ""
         for i, r in enumerate(results):
             v = r.get(key, 0)
-            color_v = -v if invert else v
-            cell_cls = "base-case" if i == 0 else dc(color_v) if color_v != 0 else ""
-            cells += f'<td class="{cell_cls}">{fmt(v)}</td>'
+            if i == 0:
+                cells += f'<td class="base-case">{fmt(v)}</td>'
+            else:
+                diff = v - base_v
+                color_diff = -diff if invert else diff
+                cell_cls = dc(color_diff) if color_diff != 0 else ""
+                cells += f'<td class="{cell_cls}">{fmt(v)}</td>'
         return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
     html = f'<table class="ib-table"><thead><tr><th>Full Year ({ccy})</th>{hdr}</tr></thead><tbody>'
     html += row("Annual Revenue","annual_rev",lambda v: fi(v,dz=False))
