@@ -1,5 +1,5 @@
 """
-Landed Cost Comparison Model - v4.5
+Landed Cost Comparison Model - v5.0
 Multi-Item Project-Based Production Cost & Profitability Analysis
 Author: Jonas Henriksson — Head of Strategic Planning & Intelligent Hub
 """
@@ -15,68 +15,18 @@ from typing import Optional
 from datetime import date, datetime
 from fpdf import FPDF
 
-# ── CONSTANTS ─────────────────────────────────────────────
-NAVY = "#002060"
-DARK_TEXT = "#1a1a2e"
-GREY_TEXT = "#6c757d"
-ACCENT_BLUE = "#0066cc"
-BASE_CASE_BG = "#F2F2F2"
-BORDER = "#dee2e6"
-GREEN = "#0d6832"
-RED = "#c0392b"
-MUTED = "#999999"
-INPUT_BLUE = "#0000FF"  # IB convention: blue = user-editable hardcoded inputs
+# Import from extracted library modules
+from landed_cost.models import FactoryAssumptions, ItemInputs
+from landed_cost.compute import compute_location, compute_sensitivity
+from landed_cost.lead_times import get_lead_time, estimate_lead_time, LEAD_TIME_MATRIX
+from landed_cost.formatters import fn, fp, fi, dc
+from landed_cost.constants import (
+    NAVY, DARK_TEXT, GREY_TEXT, ACCENT_BLUE, BASE_CASE_BG, BORDER,
+    GREEN, RED, MUTED, INPUT_BLUE, CURRENCIES, COUNTRIES,
+)
 
-CURRENCIES = ["SEK","USD","EUR","GBP","CNY","JPY","CHF","NOK","DKK","PLN","BRL","INR","KRW","MXN","THB"]
-
-COUNTRIES = [
-    "Sweden","Germany","France","Italy","Austria","Poland","Czech Republic","Spain","Netherlands","UK",
-    "USA","Mexico","Brazil","Canada","Argentina",
-    "China","India","Japan","South Korea","Thailand","Vietnam","Malaysia","Indonesia",
-    "South Africa","Turkey","Australia",
-]
-
-# Dummy lead time matrix: (origin_country, destination_country) -> transit days
-# Replace with real data later
-LEAD_TIME_MATRIX = {
-    ("Sweden","Sweden"): 2, ("Sweden","Germany"): 4, ("Sweden","France"): 5, ("Sweden","USA"): 28,
-    ("Sweden","China"): 35, ("Sweden","India"): 32, ("Sweden","Brazil"): 35, ("Sweden","Mexico"): 30,
-    ("Sweden","Japan"): 38, ("Sweden","South Korea"): 36, ("Sweden","UK"): 5, ("Sweden","Italy"): 6,
-    ("Germany","Germany"): 2, ("Germany","Sweden"): 4, ("Germany","France"): 3, ("Germany","USA"): 25,
-    ("Germany","China"): 33, ("Germany","India"): 30, ("Germany","Brazil"): 33, ("Germany","Mexico"): 28,
-    ("Germany","Japan"): 36, ("Germany","UK"): 4, ("Germany","Italy"): 4,
-    ("France","France"): 2, ("France","Germany"): 3, ("France","Sweden"): 5, ("France","USA"): 22,
-    ("France","China"): 34, ("France","India"): 28, ("France","Brazil"): 30, ("France","UK"): 3,
-    ("France","Mexico"): 25, ("France","Italy"): 3,
-    ("Italy","Italy"): 2, ("Italy","Germany"): 4, ("Italy","France"): 3, ("Italy","USA"): 24,
-    ("Italy","China"): 32, ("Italy","India"): 26, ("Italy","Sweden"): 6, ("Italy","UK"): 5,
-    ("China","China"): 3, ("China","USA"): 30, ("China","Germany"): 33, ("China","Sweden"): 35,
-    ("China","France"): 34, ("China","India"): 18, ("China","Japan"): 7, ("China","South Korea"): 5,
-    ("China","Brazil"): 40, ("China","Mexico"): 32, ("China","UK"): 34, ("China","Italy"): 32,
-    ("India","India"): 3, ("India","USA"): 32, ("India","Germany"): 30, ("India","Sweden"): 32,
-    ("India","China"): 18, ("India","France"): 28, ("India","Brazil"): 38, ("India","UK"): 28,
-    ("USA","USA"): 3, ("USA","Germany"): 25, ("USA","Sweden"): 28, ("USA","France"): 22,
-    ("USA","China"): 30, ("USA","India"): 32, ("USA","Mexico"): 5, ("USA","Brazil"): 18,
-    ("USA","Canada"): 4, ("USA","UK"): 20, ("USA","Japan"): 22,
-    ("Mexico","USA"): 5, ("Mexico","Mexico"): 2, ("Mexico","Brazil"): 20, ("Mexico","Germany"): 28,
-    ("Mexico","Sweden"): 30, ("Mexico","China"): 32,
-    ("Brazil","Brazil"): 3, ("Brazil","USA"): 18, ("Brazil","Germany"): 33, ("Brazil","Sweden"): 35,
-    ("Brazil","China"): 40, ("Brazil","Mexico"): 20,
-    ("Japan","Japan"): 2, ("Japan","USA"): 22, ("Japan","China"): 7, ("Japan","Germany"): 36,
-    ("Japan","Sweden"): 38, ("Japan","South Korea"): 3,
-    ("South Korea","South Korea"): 2, ("South Korea","USA"): 24, ("South Korea","China"): 5,
-    ("South Korea","Japan"): 3, ("South Korea","Germany"): 35, ("South Korea","Sweden"): 36,
-    ("UK","UK"): 2, ("UK","USA"): 20, ("UK","Germany"): 4, ("UK","France"): 3,
-    ("UK","Sweden"): 5, ("UK","China"): 34, ("UK","India"): 28,
-    ("Poland","Poland"): 2, ("Poland","Germany"): 3, ("Poland","Sweden"): 4, ("Poland","USA"): 27,
-    ("Poland","France"): 5, ("Poland","China"): 34, ("Poland","UK"): 5,
-    ("Thailand","Thailand"): 2, ("Thailand","USA"): 30, ("Thailand","China"): 10,
-    ("Thailand","Germany"): 34, ("Thailand","Sweden"): 36, ("Thailand","Japan"): 12,
-}
-
-def get_lead_time(origin, destination):
-    """Look up transit days for a country pair. Returns None if not found."""
-    return LEAD_TIME_MATRIX.get((origin, destination))
+# Constants, models, compute engine, formatters, and lead times
+# are imported from the landed_cost package (see landed_cost/ directory).
 
 
 # ── PAGE CONFIG ───────────────────────────────────────────
@@ -173,88 +123,10 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
-# ── DATA CLASSES ──────────────────────────────────────────
-@dataclass
-class FactoryAssumptions:
-    name: str = ""
-    country: str = ""
-    va_ratio: Optional[float] = None
-    ps_index: float = 1.0
-    mcl_pct: float = 100.0
-    sa_pct: float = 0.0
-    tpl: float = 100.0
-    tariff_pct: float = 0.0
-    duties_pct: float = 0.0
-    transport_pct: float = 0.0
 
-@dataclass
-class ItemInputs:
-    item_number: str = ""
-    designation: str = ""
-    currency: str = "SEK"
-    destination: str = ""
-    date: str = ""
-    comment: str = ""
-    net_sales_value: float = 0.0
-    net_sales_qty: int = 0
-    material: float = 0.0
-    variable_va: float = 0.0
-    fixed_va: float = 0.0
-
-
-# ── COMPUTE ENGINE ────────────────────────────────────────
-def compute_location(inputs, factory, is_base=False, overrides=None):
-    ns = inputs.net_sales_value / inputs.net_sales_qty if inputs.net_sales_qty else 0
-    if is_base:
-        mat, vva, fva = inputs.material, inputs.variable_va, inputs.fixed_va
-    else:
-        if factory.va_ratio is None:
-            return None
-        ov = overrides or {}
-        ov_mat = ov.get("material")
-        ov_vva = ov.get("variable_va")
-        ov_fva = ov.get("fixed_va")
-        mat = ov_mat if ov_mat is not None else inputs.material
-        vva = ov_vva if ov_vva is not None else inputs.variable_va * factory.va_ratio
-        fva = ov_fva if ov_fva is not None else inputs.fixed_va * factory.va_ratio
-    sc = mat + vva + fva
-    ps = sc * factory.ps_index
-    ac = ps * (factory.mcl_pct / 100)
-    sa = ns * factory.sa_pct
-    tar = (factory.tpl / 100) * ps * factory.tariff_pct
-    dut = (factory.tpl / 100) * ps * factory.duties_pct
-    trn = ps * factory.transport_pct
-    op = ns - ps - sa - tar - dut - trn
-    om = op / ns if ns else 0
-    return dict(name=factory.name, country=factory.country, material=mat, variable_va=vva, fixed_va=fva,
-        sc=sc, ps=ps, actual_cost=ac, ns_per_unit=ns, sa=sa, tariff=tar, duties=dut,
-        transport=trn, op=op, om=om, annual_rev=ns*inputs.net_sales_qty,
-        annual_cost=(ps+sa+tar+dut+trn)*inputs.net_sales_qty, annual_op=op*inputs.net_sales_qty)
-
-
-# ── FORMATTING HELPERS ────────────────────────────────────
-def fn(v, d=2, sfx="", acct=False, dz=True):
-    if v is None: return "\u2013"
-    if dz and abs(v) < 0.005: return "\u2013"
-    if acct and v < 0: return f"({abs(v):,.{d}f}{sfx})"
-    return f"{v:,.{d}f}{sfx}"
-
-def fp(v, d=1, acct=False, dz=True):
-    if v is None: return "\u2013"
-    if dz and abs(v) < 0.0005: return "\u2013"
-    p = v * 100
-    if acct and p < 0: return f"({abs(p):,.{d}f}%)"
-    return f"{p:,.{d}f}%"
-
-def fi(v, acct=False, dz=True):
-    if v is None: return "\u2013"
-    if dz and abs(v) < 0.5: return "\u2013"
-    if acct and v < 0: return f"({abs(v):,.0f})"
-    return f"{v:,.0f}"
-
-def dc(v):
-    if v is None or abs(v) < 0.0001: return ""
-    return "delta-pos" if v > 0 else "delta-neg"
+# Data classes (FactoryAssumptions, ItemInputs), compute engine
+# (compute_location, compute_sensitivity), and formatting helpers
+# (fn, fp, fi, dc) are imported from landed_cost package.
 
 
 # ── TABLE BUILDERS ────────────────────────────────────────
@@ -285,10 +157,10 @@ def build_cost_table(results, ccy, target_market=None):
     html += f'<tr class="row-bold"><td><em>Delta Margin vs. Base</em></td>{dc_cells}</tr>'
     # Lead time row
     if target_market:
-        base_lt = get_lead_time(results[0].get("country",""), target_market)
+        base_lt = estimate_lead_time(results[0].get("country",""), target_market)
         lt_cells = ""
         for i, r in enumerate(results):
-            lt = get_lead_time(r.get("country",""), target_market)
+            lt = estimate_lead_time(r.get("country",""), target_market)
             if lt is not None:
                 if i == 0:
                     lt_cells += f'<td class="base-case">{lt} days</td>'
@@ -343,6 +215,39 @@ def build_charts(results, ccy):
     fig.update_xaxes(tickangle=0, tickfont=dict(size=11, family="Inter", color=DARK_TEXT))
     fig.update_yaxes(title_text="Margin (%)", row=1, col=1, ticksuffix="%", title_font=dict(size=10))
     fig.update_yaxes(title_text=ccy, row=1, col=2, title_font=dict(size=10))
+    return fig
+
+
+# ── SENSITIVITY CHART ────────────────────────────────────────
+def build_sensitivity_chart(inputs, factories, base_factory, param_name, param_label, steps, ccy, is_pct=False):
+    """Build a line chart showing how OM changes as *param_name* varies across factories."""
+    fig = go.Figure()
+    colors_cycle = [NAVY, ACCENT_BLUE, GREEN, RED, "#e67e22", "#8e44ad"]
+
+    for idx, factory in enumerate([base_factory] + list(factories)):
+        is_base = (idx == 0)
+        results = compute_sensitivity(inputs, factory, param_name, steps, is_base=is_base)
+        if not results:
+            continue
+        x_vals = [r["param_value"] * 100 if is_pct else r["param_value"] for r in results]
+        y_vals = [r["om"] * 100 for r in results]
+        color = colors_cycle[idx % len(colors_cycle)]
+        fig.add_trace(go.Scatter(
+            x=x_vals, y=y_vals, mode="lines+markers", name=factory.name,
+            line=dict(color=color, width=2 if idx > 0 else 3),
+            marker=dict(size=5),
+            hovertemplate=f"{factory.name}<br>{param_label}: %{{x:.1f}}{'%' if is_pct else ''}<br>OM: %{{y:.1f}}%<extra></extra>",
+        ))
+
+    fig.update_layout(
+        title=dict(text=f"Sensitivity: Operating Margin vs. {param_label}", font=dict(size=12, family="Inter")),
+        height=380, margin=dict(l=50, r=30, t=50, b=50),
+        paper_bgcolor="white", plot_bgcolor="white",
+        font=dict(family="Inter", size=10, color=DARK_TEXT),
+        xaxis=dict(title=f"{param_label}{' (%)' if is_pct else ''}", showgrid=True, gridcolor="#eee"),
+        yaxis=dict(title="Operating Margin (%)", showgrid=True, gridcolor="#eee", ticksuffix="%"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
     return fig
 
 
@@ -809,7 +714,7 @@ def main():
     init_state()
 
     st.markdown("""<div class="ib-header" style="position:relative;"><h1>Landed Cost Comparison Model</h1>
-        <div class="sub">Multi-Item Project-Based Production Cost & Profitability Analysis &middot; v4.5</div></div>""", unsafe_allow_html=True)
+        <div class="sub">Multi-Item Project-Based Production Cost & Profitability Analysis &middot; v5.0</div></div>""", unsafe_allow_html=True)
 
     with st.expander("About this model", expanded=False):
         st.markdown(f"""
@@ -844,6 +749,7 @@ The 8-step cost build-up follows standard industrial cost methodology:
 <strong>7.</strong> Save/Load projects as JSON to resume later
 
 <br><br><strong style="font-size:0.9rem;">Changelog</strong><br>
+<span style="color:{GREY_TEXT};">v5.0</span> &mdash; Extracted core logic into testable library modules; added sensitivity analysis; expanded lead-time matrix with region-based fallback estimation; added input validation; added 48 unit tests<br>
 <span style="color:{GREY_TEXT};">v4.5</span> &mdash; Fixed CSS class prefix: .st-key- (hyphen) not .stkey_ (underscore); blue input borders now render correctly<br>
 <span style="color:{GREY_TEXT};">v4.4</span> &mdash; Key-based CSS targeting (.stkey_) for blue input borders; selective styling of editable vs read-only editors<br>
 <span style="color:{GREY_TEXT};">v4.3</span> &mdash; Fixed blue input border rendering (global CSS targeting stDataEditor)<br>
@@ -1018,10 +924,10 @@ For questions, feedback, or feature requests:<br>
         all_factory_names = [base_factory_name] + factory_col_names
         lt_data = []
         base_country = factory_countries.get(base_factory_name, "")
-        base_lt = get_lead_time(base_country, target_market)
+        base_lt = estimate_lead_time(base_country, target_market)
         for fn_ in all_factory_names:
             ctry = factory_countries.get(fn_, "")
-            lt = get_lead_time(ctry, target_market)
+            lt = estimate_lead_time(ctry, target_market)
             delta = (lt - base_lt) if (lt is not None and base_lt is not None) else None
             lt_data.append({"Factory": fn_, "Country": ctry, "Route": f"{ctry} \u2192 {target_market}" if ctry else "\u2013",
                 "Transit Days": lt if lt is not None else None,
@@ -1142,6 +1048,37 @@ For questions, feedback, or feature requests:<br>
                     if len(results) >= 2:
                         st.plotly_chart(build_charts(results, currency), use_container_width=True, config={"displayModeBar": False})
 
+                    # Sensitivity analysis
+                    with st.expander("Sensitivity Analysis", expanded=False):
+                        st.markdown(f'<div class="callout">Explore how changes in a single parameter affect operating margin across all factories.</div>', unsafe_allow_html=True)
+                        sa_params = {
+                            "VA Ratio": ("va_ratio", False),
+                            "Transport %": ("transport_pct", True),
+                            "Tariff %": ("tariff_pct", True),
+                            "Duties %": ("duties_pct", True),
+                            "Material Cost": ("material", False),
+                            "S&A %": ("sa_pct", True),
+                        }
+                        sa_col1, sa_col2 = st.columns([1, 3])
+                        with sa_col1:
+                            sa_choice = st.selectbox("Parameter", list(sa_params.keys()), key=f"i{item_def['id']}_sa_param")
+                        param_key, is_pct = sa_params[sa_choice]
+
+                        # Build sensible default range based on current values
+                        if param_key in ("va_ratio",):
+                            steps = [round(v, 2) for v in np.arange(0.4, 1.61, 0.1)]
+                        elif is_pct:
+                            steps = [round(v, 3) for v in np.arange(0.0, 0.121, 0.01)]
+                        else:
+                            # Material cost: +-50% around current
+                            base_val = getattr(inputs, param_key, 20.0) or 20.0
+                            steps = [round(base_val * m, 2) for m in np.arange(0.5, 1.55, 0.1)]
+
+                        fig_sa = build_sensitivity_chart(
+                            inputs, factories, base, param_key, sa_choice, steps, currency, is_pct=is_pct
+                        )
+                        st.plotly_chart(fig_sa, use_container_width=True, config={"displayModeBar": False})
+
                     all_results.append({
                         "inputs": {"item_number": inputs.item_number, "designation": inputs.designation,
                                    "currency": currency, "destination": inputs.destination},
@@ -1155,7 +1092,7 @@ For questions, feedback, or feature requests:<br>
     # ── FOOTER ────────────────────────────────────────────────
     st.markdown("---")
     c1,c2,c3 = st.columns([4,1,1])
-    c1.markdown(f"<span style='font-size:0.7rem;color:{MUTED};'>Landed Cost Comparison v4.5 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} items &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
+    c1.markdown(f"<span style='font-size:0.7rem;color:{MUTED};'>Landed Cost Comparison v5.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} items &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
     if all_results:
         c2.download_button("Export Excel", data=export_excel_project(all_results),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.xlsx",
