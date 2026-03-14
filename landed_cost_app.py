@@ -146,29 +146,16 @@ st.markdown(f"""
     .stTextInput, .stNumberInput, .stSelectbox {{ margin-bottom: -0.2rem !important; }}
     div[data-testid="stVerticalBlock"] > div {{ gap: 0.25rem; }}
 
-    /* Force Streamlit main containers to allow sticky positioning */
-    section.stMain,
-    section.stMain > div,
-    section.stMain > div > div,
-    section.stMain > div > div > div,
-    .stMainBlockContainer,
-    [data-testid="stMainBlockContainer"],
-    [data-testid="stVerticalBlock"],
-    [data-testid="stVerticalBlockBorderWrapper"],
-    .block-container {{
-        overflow: visible !important;
-    }}
-    /* The actual scrolling container must be the stApp or body */
-    .stApp {{
-        overflow: auto;
-    }}
-    /* ── IB Header (sticky) ── */
+    /* ── IB Header (fixed at top) ── */
     .ib-header {{
         background: #f0f2f6;
-        color: {NAVY}; padding: 0.8rem 1.8rem 0.7rem; margin: -1.5rem -2.5rem 1.2rem -2.5rem;
+        color: {NAVY}; padding: 0.8rem 1.8rem 0.7rem;
         display: flex; align-items: center; justify-content: space-between;
-        position: sticky; top: 0; z-index: 999;
+        position: fixed; top: 0; right: 0; z-index: 999;
         border-bottom: 1px solid #d4d8e0;
+    }}
+    .ib-header-spacer {{
+        height: 3.2rem;
     }}
     .ib-header-left {{ display: flex; flex-direction: column; }}
     .ib-header h1 {{ font-family: 'Inter', sans-serif; font-size: 1.1rem; font-weight: 700; margin: 0 0 0.1rem 0; letter-spacing: -0.01em; color: {NAVY}; }}
@@ -1703,7 +1690,22 @@ def main():
             <div class="sub">Multi-Item Project-Based Production Cost &amp; Profitability Analysis &middot; v9.0</div>
         </div>
         <div>{skf_logo_svg}</div>
-    </div>""", unsafe_allow_html=True)
+    </div>
+    <div class="ib-header-spacer"></div>
+    <script>
+    (function() {{
+        function alignHeader() {{
+            var header = document.querySelector('.ib-header');
+            var main = document.querySelector('section.stMain');
+            if (header && main) {{
+                header.style.left = main.getBoundingClientRect().left + 'px';
+            }}
+        }}
+        alignHeader();
+        new ResizeObserver(alignHeader).observe(document.body);
+        window.addEventListener('resize', alignHeader);
+    }})();
+    </script>""", unsafe_allow_html=True)
 
     # ── SIDEBAR ────────────────────────────────────────────────
     st.sidebar.markdown(f"""<div style="background:{NAVY};padding:0.55rem 1rem;margin:-1rem -1rem 0.8rem -1rem;">
