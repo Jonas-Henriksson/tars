@@ -38,7 +38,7 @@ st.set_page_config(page_title="Landed Cost Comparison Model", layout="wide", ini
 # Fixed keys from main() in A5, dynamic item keys matched via attribute selectors
 INPUT_EDITOR_KEYS = [
     "proj_name", "proj_ccy", "proj_tm", "proj_dt",
-    "fc_editor", "bf_editor", "coc_editor", "country_editor", "assumption_matrix",
+    "fc_editor", "bf_editor", "coc_editor", "country_editor", "assumption_matrix", "nwc_matrix",
 ]
 _blue_border = f"border-left: 3px solid {INPUT_BLUE} !important; padding-left: 2px;"
 _fixed_rules = "\n".join(f"    .st-key-{k} {{ {_blue_border} }}" for k in INPUT_EDITOR_KEYS)
@@ -194,12 +194,20 @@ def build_cost_table(results, ccy, target_market=None):
     dash = "\u2013"
     dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["om"]-bom)}">{dash if i==0 else fp(r["om"]-bom,1,acct=True)}</td>' for i, r in enumerate(results))
     html += f'<tr class="row-bold"><td><em>Delta Margin vs. Base</em></td>{dc_cells}</tr>'
-    # NWC impact rows (only if cost_of_capital > 0 or any delta_lead_time != 0)
-    has_nwc = any(r.get("nwc_carrying_cost_per_unit", 0) != 0 for r in results)
+    # NWC impact rows
     has_lt = any(r.get("lead_time_days") is not None for r in results)
-    if has_lt:
+    has_ext_nwc = any(r.get("safety_stock_days", 0) > 0 or r.get("cycle_stock_days", 0) > 0 or r.get("payment_terms_days", 0) > 0 for r in results)
+    has_any_nwc = has_lt or has_ext_nwc
+    if has_any_nwc:
         html += sep()
-        html += f'<tr class="row-subtotal"><td colspan="{len(results)+1}" style="font-size:0.65rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;padding-top:0.5rem;">Net Working Capital Impact (Goods in Transit)</td></tr>'
+        html += f'<tr class="row-subtotal"><td colspan="{len(results)+1}" style="font-size:0.65rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;padding-top:0.5rem;">Net Working Capital Impact</td></tr>'
+        if has_ext_nwc:
+            # Show component breakdown when extended NWC inputs are used
+            html += row("GIT (Transit)","delta_git",lambda v: fn(v,0,acct=True,dz=True),"",True)
+            html += row("Safety Stock","delta_safety_stock",lambda v: fn(v,0,acct=True,dz=True),"",True)
+            html += row("Cycle Stock","delta_cycle_stock",lambda v: fn(v,0,acct=True,dz=True),"",True)
+            html += row("Payment Terms (DPO)","delta_payables",lambda v: fn(-v,0,acct=True,dz=True),"",True)
+            html += row("Total Delta NWC","delta_nwc",lambda v: fn(v,0,acct=True),"row-subtotal")
         html += row("NWC Carrying Cost / Unit","nwc_carrying_cost_per_unit",lambda v: fn(v,2,acct=True),"",True)
         html += row("Adj. Operating Profit","adj_op",lambda v: fn(v,2,acct=True,dz=True),"row-bold")
         html += row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
@@ -247,16 +255,24 @@ def build_annual_table(results, ccy):
     html += f'<tr class="row-double-top"><td><em>Delta vs. Base Case (Annual)</em></td>{dc_cells}</tr>'
     # NWC annual impact
     has_lt = any(r.get("lead_time_days") is not None for r in results)
-    if has_lt:
+    has_ext_nwc = any(r.get("safety_stock_days", 0) > 0 or r.get("cycle_stock_days", 0) > 0 or r.get("payment_terms_days", 0) > 0 for r in results)
+    has_any_nwc = has_lt or has_ext_nwc
+    if has_any_nwc:
         def sep():
             return f'<tr class="row-separator">{"<td></td>" * (len(results)+1)}</tr>'
         html += sep()
+        html += f'<tr class="row-subtotal"><td colspan="{len(results)+1}" style="font-size:0.65rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;padding-top:0.5rem;">Net Working Capital</td></tr>'
         html += row("Goods in Transit (GIT)","git_value",lambda v: fi(v,dz=False))
-        base_git = results[0].get("git_value", 0)
-        delta_git_cells = ''.join(
-            f'<td class="{"base-case" if i==0 else dc(-(r.get("delta_git",0)))}">{dash if i==0 else fi(r.get("delta_git",0),acct=True)}</td>'
+        if has_ext_nwc:
+            html += row("Safety Stock","safety_stock_value",lambda v: fi(v,dz=False))
+            html += row("Cycle Stock","cycle_stock_value",lambda v: fi(v,dz=False))
+            html += row("Payables (DPO)","payables_value",lambda v: fi(-v,dz=False))
+        html += row("Total NWC","total_nwc",lambda v: fi(v,dz=False),"row-subtotal")
+        base_nwc_total = results[0].get("total_nwc", 0)
+        delta_nwc_cells = ''.join(
+            f'<td class="{"base-case" if i==0 else dc(-(r.get("delta_nwc",0)))}">{dash if i==0 else fi(r.get("delta_nwc",0),acct=True)}</td>'
             for i, r in enumerate(results))
-        html += f'<tr class="indent"><td>Delta GIT vs. Base</td>{delta_git_cells}</tr>'
+        html += f'<tr class="indent"><td>Delta NWC vs. Base</td>{delta_nwc_cells}</tr>'
         html += row("NWC Carrying Cost (Annual)","annual_nwc_cost",lambda v: fi(v,acct=True),"",True)
         html += row("Adj. Annual OP","annual_adj_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
         html += row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
@@ -550,8 +566,25 @@ def export_excel_project(project_data):
                 r+=1
             # NWC per-unit rows
             has_lt = any(res.get("lead_time_days") is not None for res in results)
-            if has_lt:
+            has_ext_nwc = any(res.get("safety_stock_days",0)>0 or res.get("cycle_stock_days",0)>0 or res.get("payment_terms_days",0)>0 for res in results)
+            if has_lt or has_ext_nwc:
                 r+=1
+                if has_ext_nwc:
+                    ws.write(r,0,"  Delta GIT",lf)
+                    for c,res in enumerate(results): ws.write(r,c+1,res.get("delta_git",0),nf)
+                    r+=1
+                    ws.write(r,0,"  Delta Safety Stock",lf)
+                    for c,res in enumerate(results): ws.write(r,c+1,res.get("delta_safety_stock",0),nf)
+                    r+=1
+                    ws.write(r,0,"  Delta Cycle Stock",lf)
+                    for c,res in enumerate(results): ws.write(r,c+1,res.get("delta_cycle_stock",0),nf)
+                    r+=1
+                    ws.write(r,0,"  Delta Payables (DPO)",lf)
+                    for c,res in enumerate(results): ws.write(r,c+1,-res.get("delta_payables",0),nf)
+                    r+=1
+                    ws.write(r,0,"Total Delta NWC",lb)
+                    for c,res in enumerate(results): ws.write(r,c+1,res.get("delta_nwc",0),nb)
+                    r+=1
                 ws.write(r,0,"NWC Carrying Cost/Unit",lf)
                 for c,res in enumerate(results): ws.write(r,c+1,res.get("nwc_carrying_cost_per_unit",0),nf)
                 r+=1
@@ -573,13 +606,28 @@ def export_excel_project(project_data):
             ws.write(r,0,"Delta vs Base",lb)
             for c,res in enumerate(results): ws.write(r,c+1,"\u2013" if c==0 else res["annual_op"]-bop_,inb if c>0 else inf_)
             # NWC annual rows
-            if has_lt:
+            if has_lt or has_ext_nwc:
                 r+=1; r+=1
                 ws.write(r,0,"Goods in Transit (GIT)",lf)
                 for c,res in enumerate(results): ws.write(r,c+1,res.get("git_value",0),inf_)
+                if has_ext_nwc:
+                    r+=1
+                    ws.write(r,0,"Safety Stock",lf)
+                    for c,res in enumerate(results): ws.write(r,c+1,res.get("safety_stock_value",0),inf_)
+                    r+=1
+                    ws.write(r,0,"Cycle Stock",lf)
+                    for c,res in enumerate(results): ws.write(r,c+1,res.get("cycle_stock_value",0),inf_)
+                    r+=1
+                    ws.write(r,0,"Payables (DPO)",lf)
+                    for c,res in enumerate(results): ws.write(r,c+1,-res.get("payables_value",0),inf_)
+                    r+=1
+                    ws.write(r,0,"Total NWC",lb)
+                    for c,res in enumerate(results): ws.write(r,c+1,res.get("total_nwc",0),inb)
                 r+=1
-                ws.write(r,0,"Delta GIT vs Base",lf)
-                for c,res in enumerate(results): ws.write(r,c+1,"\u2013" if c==0 else res.get("delta_git",0),inf_ if c==0 else inb)
+                delta_key = "delta_nwc" if has_ext_nwc else "delta_git"
+                delta_label = "Delta NWC vs Base" if has_ext_nwc else "Delta GIT vs Base"
+                ws.write(r,0,delta_label,lf)
+                for c,res in enumerate(results): ws.write(r,c+1,"\u2013" if c==0 else res.get(delta_key,0),inf_ if c==0 else inb)
                 r+=1
                 ws.write(r,0,"NWC Carrying Cost (Annual)",lf)
                 for c,res in enumerate(results): ws.write(r,c+1,res.get("annual_nwc_cost",0),inf_)
@@ -765,14 +813,23 @@ def export_pdf_project(all_results, ccy, project_name):
         cost_rows.append(["Delta vs Base"] + ["-"] + [fp_(r["om"]-bom) for r in results[1:]])
         nwc_bold = []
         has_lt = any(r.get("lead_time_days") is not None for r in results)
-        if has_lt:
+        has_ext_nwc_pdf = any(r.get("safety_stock_days",0)>0 or r.get("cycle_stock_days",0)>0 or r.get("payment_terms_days",0)>0 for r in results)
+        if has_lt or has_ext_nwc_pdf:
             cost_rows.append([""] * (n+1))
+            if has_ext_nwc_pdf:
+                cost_rows.append(["  Delta GIT"] + [fi_(r.get("delta_git",0)) for r in results])
+                cost_rows.append(["  Delta Safety Stock"] + [fi_(r.get("delta_safety_stock",0)) for r in results])
+                cost_rows.append(["  Delta Cycle Stock"] + [fi_(r.get("delta_cycle_stock",0)) for r in results])
+                cost_rows.append(["  Delta Payables (DPO)"] + [fi_(-r.get("delta_payables",0)) for r in results])
+                cost_rows.append(["Total Delta NWC"] + [fi_(r.get("delta_nwc",0)) for r in results])
             cost_rows.append(["NWC Carrying Cost/Unit"] + [f2(r.get("nwc_carrying_cost_per_unit",0)) for r in results])
             cost_rows.append(["Adj. Operating Profit"] + [f2(r.get("adj_op",r["op"])) for r in results])
             cost_rows.append(["Adj. Operating Margin"] + [fp_(r.get("adj_om",r["om"])) for r in results])
             adj_bom = results[0].get("adj_om", results[0]["om"])
             cost_rows.append(["Adj. Delta vs Base"] + ["-"] + [fp_(r.get("adj_om",r["om"])-adj_bom) for r in results[1:]])
             nwc_bold = [len(cost_rows)-3, len(cost_rows)-2, len(cost_rows)-1]
+            if has_ext_nwc_pdf:
+                nwc_bold.append(len(cost_rows)-5)  # Total Delta NWC row
         add_table(pdf, headers, cost_rows, col_widths, bold_rows=[3,7,13,14,15]+nwc_bold)
 
         pdf.ln(4)
@@ -786,16 +843,27 @@ def export_pdf_project(all_results, ccy, project_name):
         bop = results[0]["annual_op"]
         annual_rows.append(["Delta vs Base"] + ["-"] + [fi_(r["annual_op"]-bop) for r in results[1:]])
         nwc_annual_bold = []
-        if has_lt:
+        if has_lt or has_ext_nwc_pdf:
             annual_rows.append([""] * (n+1))
             annual_rows.append(["Goods in Transit (GIT)"] + [fi_(r.get("git_value",0)) for r in results])
-            annual_rows.append(["Delta GIT vs Base"] + ["-"] + [fi_(r.get("delta_git",0)) for r in results[1:]])
+            if has_ext_nwc_pdf:
+                annual_rows.append(["Safety Stock"] + [fi_(r.get("safety_stock_value",0)) for r in results])
+                annual_rows.append(["Cycle Stock"] + [fi_(r.get("cycle_stock_value",0)) for r in results])
+                annual_rows.append(["Payables (DPO)"] + [fi_(-r.get("payables_value",0)) for r in results])
+                annual_rows.append(["Total NWC"] + [fi_(r.get("total_nwc",0)) for r in results])
+            delta_key_pdf = "delta_nwc" if has_ext_nwc_pdf else "delta_git"
+            delta_label_pdf = "Delta NWC vs Base" if has_ext_nwc_pdf else "Delta GIT vs Base"
+            annual_rows.append([delta_label_pdf] + ["-"] + [fi_(r.get(delta_key_pdf,0)) for r in results[1:]])
             annual_rows.append(["NWC Carrying Cost (Annual)"] + [fi_(r.get("annual_nwc_cost",0)) for r in results])
             annual_rows.append(["Adj. Annual OP"] + [fi_(r.get("annual_adj_op",r["annual_op"])) for r in results])
             annual_rows.append(["Adj. Operating Margin"] + [fp_(r.get("adj_om",r["om"])) for r in results])
             base_adj_op = results[0].get("annual_adj_op", results[0]["annual_op"])
             annual_rows.append(["Adj. Delta vs Base"] + ["-"] + [fi_(r.get("annual_adj_op",r["annual_op"])-base_adj_op) for r in results[1:]])
             nwc_annual_bold = [len(annual_rows)-3, len(annual_rows)-2, len(annual_rows)-1]
+            if has_ext_nwc_pdf:
+                # Bold the Total NWC row
+                total_nwc_idx = len(annual_rows) - 7  # Total NWC is 7 rows back from end
+                nwc_annual_bold.append(total_nwc_idx)
         add_table(pdf, annual_headers, annual_rows, col_widths, bold_rows=[2,3,4]+nwc_annual_bold)
 
     # Portfolio summary page
@@ -1191,6 +1259,19 @@ The 8-step cost build-up follows standard industrial cost methodology:
 <li>Operating Profit = Net Sales - PS - S&A - Tariff - Duties - Transport</li>
 </ol>
 
+<br><strong style="font-size:0.9rem;">NWC Impact (Optional)</strong><br>
+Net Working Capital impact captures the balance sheet cost of inventory tied up across the supply chain:
+<ul style="margin:0.3rem 0 0.3rem 1.2rem;padding:0;">
+<li><strong>Goods in Transit (GIT)</strong> = (PS x Qty / 365) x Transit Days</li>
+<li><strong>Safety Stock</strong> = (PS x Qty / 365) x Safety Stock Days</li>
+<li><strong>Cycle Stock</strong> = (PS x Qty / 365) x Cycle Stock Days</li>
+<li><strong>Payables (DPO)</strong> = (PS x Qty / 365) x Payment Terms Days &mdash; reduces NWC</li>
+<li><strong>Total NWC</strong> = GIT + Safety Stock + Cycle Stock - Payables</li>
+<li><strong>Delta NWC</strong> = NWC(location) - NWC(base)</li>
+<li><strong>NWC Carrying Cost</strong> = Delta NWC x Cost of Capital (WACC %)</li>
+<li><strong>Adjusted OP</strong> = OP - NWC Carrying Cost per unit</li>
+</ul>
+
 <br><strong style="font-size:0.9rem;">How to Use</strong><br>
 <strong>1.</strong> Configure shared factory assumptions in the matrix (applies to all items)<br>
 <strong>2.</strong> Add items using the Item tabs &mdash; enter item details, net sales, and base costs<br>
@@ -1423,6 +1504,56 @@ For questions, feedback, or feature requests:<br>
         lt_html += '</tbody></table>'
         st.markdown(lt_html, unsafe_allow_html=True)
 
+    # ── NWC ASSUMPTIONS (Optional) ──────────────────────────
+    all_factory_names_nwc = [base_factory_name] + factory_col_names
+    with st.expander("NWC Assumptions (Optional)", expanded=False):
+        st.markdown(f'<div class="callout">Optional inputs for extended NWC analysis. Leave blank or zero to exclude. All values in <strong>days</strong>. Applies to all items.</div>', unsafe_allow_html=True)
+        NWC_ROWS = ["Safety Stock Days", "Cycle Stock Days", "Payment Terms (DPO) Days"]
+        NWC_GUIDES = [
+            "Buffer inventory held as safety margin (days of supply)",
+            "Average production cycle inventory (days of supply)",
+            "Supplier payment terms - longer DPO reduces NWC (days)",
+        ]
+        nwc_cols = {}
+        for fn_ in all_factory_names_nwc:
+            if ex:
+                # Example data: base has moderate values, others vary
+                if fn_ == base_factory_name:
+                    nwc_cols[fn_] = [14.0, 10.0, 30.0]
+                elif "Asia" in fn_ or "China" in str(factory_countries.get(fn_, "")):
+                    nwc_cols[fn_] = [21.0, 15.0, 45.0]
+                elif "Americas" in fn_ or "USA" in str(factory_countries.get(fn_, "")):
+                    nwc_cols[fn_] = [14.0, 12.0, 35.0]
+                else:
+                    nwc_cols[fn_] = [14.0, 10.0, 30.0]
+            else:
+                nwc_cols[fn_] = [None, None, None]
+        nwc_cols["Guide"] = NWC_GUIDES
+        nwc_df = pd.DataFrame(nwc_cols, index=NWC_ROWS)
+
+        edited_nwc = st.data_editor(
+            nwc_df, use_container_width=True, num_rows="fixed", key="nwc_matrix",
+            column_config={
+                **{fn_: st.column_config.NumberColumn(fn_, format="%.0f", min_value=0, max_value=365) for fn_ in all_factory_names_nwc},
+                "Guide": st.column_config.TextColumn("Guide", width=320, disabled=True),
+            },
+            disabled=["Guide"])
+
+    # Extract NWC assumptions per factory
+    nwc_assumptions = {}
+    for fn_ in all_factory_names_nwc:
+        def _nwc_val(row_name, col_name):
+            v = edited_nwc.loc[row_name, col_name]
+            if v is not None and not pd.isna(v):
+                return float(v)
+            return 0.0
+        nwc_assumptions[fn_] = {
+            "safety_stock_days": _nwc_val("Safety Stock Days", fn_),
+            "cycle_stock_days": _nwc_val("Cycle Stock Days", fn_),
+            "payment_terms_days": _nwc_val("Payment Terms (DPO) Days", fn_),
+        }
+    base_nwc = nwc_assumptions.get(base_factory_name, {})
+
     # Build factory objects
     base = FactoryAssumptions(
         name=base_factory_name, country=factory_countries.get(base_factory_name, ""), va_ratio=None,
@@ -1485,15 +1616,28 @@ For questions, feedback, or feature requests:<br>
                 results = []
                 br = compute_location(inputs, base, is_base=True,
                     lead_time_days=base_lt, base_lead_time_days=base_lt,
-                    cost_of_capital=cost_of_capital)
+                    cost_of_capital=cost_of_capital,
+                    safety_stock_days=base_nwc.get("safety_stock_days", 0),
+                    base_safety_stock_days=base_nwc.get("safety_stock_days", 0),
+                    cycle_stock_days=base_nwc.get("cycle_stock_days", 0),
+                    base_cycle_stock_days=base_nwc.get("cycle_stock_days", 0),
+                    payment_terms_days=base_nwc.get("payment_terms_days", 0),
+                    base_payment_terms_days=base_nwc.get("payment_terms_days", 0))
                 if br: results.append(br)
                 for f in factories:
                     if f.name:
                         ov = get_ov(f.name)
                         f_lt = estimate_lead_time(f.country, target_market) if target_market and f.country else None
+                        f_nwc = nwc_assumptions.get(f.name, {})
                         r = compute_location(inputs, f, overrides=ov,
                             lead_time_days=f_lt, base_lead_time_days=base_lt,
-                            cost_of_capital=cost_of_capital)
+                            cost_of_capital=cost_of_capital,
+                            safety_stock_days=f_nwc.get("safety_stock_days", 0),
+                            base_safety_stock_days=base_nwc.get("safety_stock_days", 0),
+                            cycle_stock_days=f_nwc.get("cycle_stock_days", 0),
+                            base_cycle_stock_days=base_nwc.get("cycle_stock_days", 0),
+                            payment_terms_days=f_nwc.get("payment_terms_days", 0),
+                            base_payment_terms_days=base_nwc.get("payment_terms_days", 0))
                         if r: results.append(r)
 
                 if results:

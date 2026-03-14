@@ -202,6 +202,78 @@ class TestNWCImpact:
         expected = (ps * qty / 365.0) * 20
         assert r["git_value"] == pytest.approx(expected)
 
+    def test_safety_stock_increases_nwc(self, base_inputs, alt_factory):
+        """Higher safety stock at alt vs base increases NWC carrying cost."""
+        r = compute_location(base_inputs, alt_factory,
+                             lead_time_days=10, base_lead_time_days=10,
+                             safety_stock_days=20, base_safety_stock_days=5,
+                             cost_of_capital=0.08)
+        ps = r["ps"]
+        qty = 2_000_000
+        daily = ps * qty / 365.0
+        # GIT delta is 0 (same lead time), but safety stock delta = 15 days
+        assert r["delta_git"] == pytest.approx(0.0)
+        assert r["delta_safety_stock"] == pytest.approx(daily * 15)
+        assert r["delta_nwc"] == pytest.approx(daily * 15)
+        assert r["nwc_carrying_cost_annual"] == pytest.approx(daily * 15 * 0.08)
+        assert r["adj_op"] < r["op"]
+
+    def test_cycle_stock_delta(self, base_inputs, alt_factory):
+        """Cycle stock difference flows through to NWC delta."""
+        r = compute_location(base_inputs, alt_factory,
+                             cycle_stock_days=30, base_cycle_stock_days=10,
+                             cost_of_capital=0.10)
+        ps = r["ps"]
+        qty = 2_000_000
+        daily = ps * qty / 365.0
+        assert r["delta_cycle_stock"] == pytest.approx(daily * 20)
+        assert r["nwc_carrying_cost_annual"] == pytest.approx(daily * 20 * 0.10)
+
+    def test_payment_terms_reduce_nwc(self, base_inputs, alt_factory):
+        """Longer DPO at alt vs base reduces NWC (benefit)."""
+        r = compute_location(base_inputs, alt_factory,
+                             payment_terms_days=60, base_payment_terms_days=30,
+                             cost_of_capital=0.08)
+        ps = r["ps"]
+        qty = 2_000_000
+        daily = ps * qty / 365.0
+        # Longer DPO = more payables = less NWC needed
+        assert r["delta_payables"] == pytest.approx(daily * 30)
+        # Delta NWC is negative (benefit) because payables increase offsets
+        assert r["delta_nwc"] == pytest.approx(-daily * 30)
+        assert r["nwc_carrying_cost_annual"] < 0  # Benefit
+        assert r["adj_op"] > r["op"]  # Improves profit
+
+    def test_combined_nwc_components(self, base_inputs, alt_factory):
+        """All NWC components aggregate correctly."""
+        r = compute_location(base_inputs, alt_factory,
+                             lead_time_days=35, base_lead_time_days=5,
+                             safety_stock_days=15, base_safety_stock_days=10,
+                             cycle_stock_days=20, base_cycle_stock_days=15,
+                             payment_terms_days=45, base_payment_terms_days=30,
+                             cost_of_capital=0.08)
+        ps = r["ps"]
+        qty = 2_000_000
+        daily = ps * qty / 365.0
+        # delta_git = daily * 30, delta_ss = daily * 5, delta_cs = daily * 5
+        # delta_pt = daily * 15 (subtracted)
+        expected_delta_nwc = daily * (30 + 5 + 5 - 15)
+        assert r["delta_nwc"] == pytest.approx(expected_delta_nwc)
+        assert r["nwc_carrying_cost_annual"] == pytest.approx(expected_delta_nwc * 0.08)
+        # total_nwc = git + ss + cs - pt
+        expected_total = daily * (35 + 15 + 20 - 45)
+        assert r["total_nwc"] == pytest.approx(expected_total)
+
+    def test_nwc_components_default_zero(self, base_inputs, alt_factory):
+        """Without optional NWC params, only GIT contributes."""
+        r = compute_location(base_inputs, alt_factory,
+                             lead_time_days=20, base_lead_time_days=10,
+                             cost_of_capital=0.08)
+        assert r["safety_stock_value"] == 0.0
+        assert r["cycle_stock_value"] == 0.0
+        assert r["payables_value"] == 0.0
+        assert r["delta_nwc"] == pytest.approx(r["delta_git"])
+
 
 # ── Sensitivity analysis ─────────────────────────────────
 class TestSensitivity:

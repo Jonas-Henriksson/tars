@@ -12,12 +12,16 @@ The cost build-up:
   9. Operating Profit = Net Sales - PS - S&A - Tariff - Duties - Transport
  10. Operating Margin = Operating Profit / Net Sales
 
-NWC (Net Working Capital) impact from goods in transit:
- 11. Goods-in-Transit Value = (PS x Annual Qty / 365) x Transit Days
- 12. Delta GIT vs Base = GIT(location) - GIT(base)
- 13. NWC Carrying Cost (annual) = Delta GIT x Cost of Capital %
- 14. NWC Carrying Cost (per unit) = annual NWC cost / Qty
- 15. Adjusted OP = OP - NWC carrying cost per unit
+NWC (Net Working Capital) impact:
+ 11. Goods-in-Transit (GIT) = (PS x Qty / 365) x Transit Days
+ 12. Safety Stock = (PS x Qty / 365) x Safety Stock Days
+ 13. Cycle Stock = (PS x Qty / 365) x Cycle Stock Days
+ 14. Payables (DPO) = (PS x Qty / 365) x Payment Terms Days  [reduces NWC]
+ 15. Total NWC = GIT + Safety Stock + Cycle Stock - Payables
+ 16. Delta NWC = NWC(location) - NWC(base)
+ 17. NWC Carrying Cost (annual) = Delta NWC x Cost of Capital %
+ 18. NWC Carrying Cost (per unit) = annual NWC cost / Qty
+ 19. Adjusted OP = OP - NWC carrying cost per unit
 """
 from __future__ import annotations
 from typing import Optional
@@ -32,17 +36,29 @@ def compute_location(
     lead_time_days: Optional[int] = None,
     base_lead_time_days: Optional[int] = None,
     cost_of_capital: float = 0.0,
+    safety_stock_days: float = 0.0,
+    base_safety_stock_days: float = 0.0,
+    cycle_stock_days: float = 0.0,
+    base_cycle_stock_days: float = 0.0,
+    payment_terms_days: float = 0.0,
+    base_payment_terms_days: float = 0.0,
 ) -> Optional[dict]:
     """Compute the full landed-cost breakdown for one item x one factory.
 
     Args:
-        inputs:              Per-item cost data.
-        factory:             Factory cost assumptions.
-        is_base:             True for the base-case factory.
-        overrides:           Optional per-factory cost overrides.
-        lead_time_days:      Transit days from this factory to target market.
-        base_lead_time_days: Transit days from base factory (for delta calc).
-        cost_of_capital:     Annual cost of capital as a decimal (e.g. 0.08 = 8%).
+        inputs:                  Per-item cost data.
+        factory:                 Factory cost assumptions.
+        is_base:                 True for the base-case factory.
+        overrides:               Optional per-factory cost overrides.
+        lead_time_days:          Transit days from this factory to target market.
+        base_lead_time_days:     Transit days from base factory (for delta calc).
+        cost_of_capital:         Annual cost of capital as a decimal (e.g. 0.08 = 8%).
+        safety_stock_days:       Days of safety stock held for this factory.
+        base_safety_stock_days:  Days of safety stock for the base factory.
+        cycle_stock_days:        Average production cycle stock in days.
+        base_cycle_stock_days:   Cycle stock days for the base factory.
+        payment_terms_days:      Supplier payment terms (DPO) in days.
+        base_payment_terms_days: DPO for the base factory.
 
     Returns a dict with all per-unit metrics, annual metrics, NWC impact,
     and metadata, or ``None`` when the factory's VA ratio is missing.
@@ -79,32 +95,37 @@ def compute_location(
 
     qty = inputs.net_sales_qty
 
-    # ── NWC / Goods-in-Transit Impact ─────────────────────
-    # Inventory in transit is valued at PS (transfer price).
-    # GIT = daily cost flow x transit days = (PS x Qty / 365) x days
+    # ── NWC (Net Working Capital) Impact ────────────────────
+    # All inventory components valued at PS (transfer price).
+    # Daily cost flow = PS x Qty / 365
     lt = lead_time_days
     base_lt = base_lead_time_days
+    daily_flow = (ps * qty / 365.0) if qty > 0 else 0.0
 
-    if lt is not None and qty > 0:
-        git_value = (ps * qty / 365.0) * lt
-    else:
-        git_value = 0.0
-
-    if base_lt is not None and qty > 0:
-        base_git_value = (ps * qty / 365.0) * base_lt if is_base else 0.0
-        # For non-base, base_git is computed with the BASE factory's PS,
-        # but we approximate using this factory's PS for simplicity here.
-        # The caller computes the true delta externally.
-    else:
-        base_git_value = 0.0
-
-    # Delta GIT: additional inventory capital tied up vs. base
+    # 1. Goods-in-Transit
+    git_value = daily_flow * lt if lt is not None else 0.0
     delta_lt = (lt - base_lt) if (lt is not None and base_lt is not None) else 0
-    # Use this factory's PS for the delta inventory valuation
-    delta_git = (ps * qty / 365.0) * delta_lt if qty > 0 else 0.0
+    delta_git = daily_flow * delta_lt
+
+    # 2. Safety Stock (optional)
+    ss_value = daily_flow * safety_stock_days
+    delta_ss = daily_flow * (safety_stock_days - base_safety_stock_days)
+
+    # 3. Cycle Stock (optional)
+    cs_value = daily_flow * cycle_stock_days
+    delta_cs = daily_flow * (cycle_stock_days - base_cycle_stock_days)
+
+    # 4. Payment Terms / DPO (optional) — reduces NWC (longer DPO = benefit)
+    pt_value = daily_flow * payment_terms_days
+    delta_pt = daily_flow * (payment_terms_days - base_payment_terms_days)
+
+    # Total NWC = GIT + Safety Stock + Cycle Stock - Payables
+    total_nwc = git_value + ss_value + cs_value - pt_value
+    # Delta NWC vs base (payables delta subtracted: higher DPO = lower NWC)
+    delta_nwc = delta_git + delta_ss + delta_cs - delta_pt
 
     # Annual carrying cost of the incremental working capital
-    nwc_carrying_cost_annual = delta_git * cost_of_capital
+    nwc_carrying_cost_annual = delta_nwc * cost_of_capital
 
     # Per-unit NWC carrying cost
     nwc_carrying_cost_per_unit = nwc_carrying_cost_annual / qty if qty > 0 else 0.0
@@ -135,6 +156,17 @@ def compute_location(
         "delta_lead_time": delta_lt,
         "git_value": git_value,
         "delta_git": delta_git,
+        "safety_stock_days": safety_stock_days,
+        "safety_stock_value": ss_value,
+        "delta_safety_stock": delta_ss,
+        "cycle_stock_days": cycle_stock_days,
+        "cycle_stock_value": cs_value,
+        "delta_cycle_stock": delta_cs,
+        "payment_terms_days": payment_terms_days,
+        "payables_value": pt_value,
+        "delta_payables": delta_pt,
+        "total_nwc": total_nwc,
+        "delta_nwc": delta_nwc,
         "nwc_carrying_cost_annual": nwc_carrying_cost_annual,
         "nwc_carrying_cost_per_unit": nwc_carrying_cost_per_unit,
         "adj_op": adj_op,
