@@ -56,7 +56,9 @@ st.markdown(f"""
     .stApp {{ font-family: 'Inter', -apple-system, sans-serif; background-color: #ffffff; }}
     .block-container {{ padding: 1.5rem 2.5rem; max-width: 1400px; }}
     #MainMenu, footer {{visibility: hidden;}}
+    header {{background: transparent !important; height: 0 !important; min-height: 0 !important; padding: 0 !important;}}
     header [data-testid="stDecoration"] {{display: none;}}
+    [data-testid="collapsedControl"] {{position: fixed; top: 0.5rem; left: 0.5rem; z-index: 999;}}
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input,
     .stSelectbox > div > div > div {{
