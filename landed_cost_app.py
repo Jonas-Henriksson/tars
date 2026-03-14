@@ -56,7 +56,12 @@ st.markdown(f"""
     .stApp {{ font-family: 'Inter', -apple-system, sans-serif; background-color: #ffffff; }}
     .block-container {{ padding: 1.5rem 2.5rem; max-width: 1400px; }}
     #MainMenu, footer {{visibility: hidden;}}
-    [data-testid="stFileUploader"] small {{display: none;}}
+    [data-testid="stFileUploader"] small {{display: none !important;}}
+    [data-testid="stFileUploader"] section {{font-family: 'Inter', sans-serif !important; font-size: 0.76rem !important;}}
+    [data-testid="stFileUploader"] section div {{font-size: 0.76rem !important; font-family: 'Inter', sans-serif !important;}}
+    [data-testid="stFileUploader"] button {{font-family: 'Inter', sans-serif !important; font-size: 0.72rem !important;}}
+    .stDownloadButton > button {{font-family: 'Inter', sans-serif !important; font-size: 0.72rem !important; padding: 0.3rem 0.8rem !important;}}
+    .stCheckbox label span {{font-family: 'Inter', sans-serif !important; font-size: 0.76rem !important;}}
     header {{background: transparent !important;}}
     header [data-testid="stDecoration"] {{display: none;}}
     [data-testid="collapsedControl"] {{background: {NAVY}; border-radius: 4px; padding: 0.25rem;}}
