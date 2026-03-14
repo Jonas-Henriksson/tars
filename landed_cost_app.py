@@ -1710,7 +1710,7 @@ def main():
     # Legend at bottom of sidebar
     st.sidebar.markdown(f"""<div style="margin-top:1.5rem;padding:0.6rem 0.8rem;border-top:1px solid #d4d8e0;font-family:Inter,sans-serif;font-size:0.68rem;line-height:1.7;color:{GREY_TEXT};">
         <span style="border-left:3px solid {INPUT_BLUE};padding-left:0.3rem;font-weight:600;color:{INPUT_BLUE};">Blue border</span> = editable input<br>
-        <strong style="color:{DARK_TEXT};">Output tables</strong> = calculated results (read-only)<br>
+        <strong style="color:{DARK_TEXT};">Bold</strong> = calculated output<br>
         <span style="font-style:italic;">Grey italic</span> = guidance notes
     </div>""", unsafe_allow_html=True)
 
