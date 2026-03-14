@@ -183,7 +183,7 @@ st.markdown(f"""
     }}
     /* ── Sidebar Nav Buttons ── */
     .nav-sep {{
-        font-family: 'Inter', sans-serif; font-size: 0.6rem; font-weight: 700;
+        font-family: 'Inter', sans-serif; font-size: 0.65rem; font-weight: 700;
         color: {GREY_TEXT}; text-transform: uppercase; letter-spacing: 0.08em;
         padding: 0.6rem 0 0.2rem 0; margin-top: 0.15rem;
     }}
@@ -191,7 +191,7 @@ st.markdown(f"""
         margin-bottom: -0.35rem !important;
     }}
     section[data-testid="stSidebar"] .stButton > button {{
-        font-family: 'Inter', sans-serif !important; font-size: 0.7rem !important;
+        font-family: 'Inter', sans-serif !important; font-size: 0.76rem !important;
         font-weight: 400 !important; text-align: left !important;
         padding: 0.3rem 0.6rem !important; border-radius: 3px !important;
         letter-spacing: 0.01em !important; justify-content: flex-start !important;
@@ -201,7 +201,7 @@ st.markdown(f"""
     section[data-testid="stSidebar"] .stButton > button * {{
         text-align: left !important; justify-content: flex-start !important;
         display: block !important; width: 100% !important;
-        font-family: 'Inter', sans-serif !important; font-size: 0.7rem !important;
+        font-family: 'Inter', sans-serif !important; font-size: 0.76rem !important;
         font-weight: inherit !important;
     }}
     section[data-testid="stSidebar"] .stButton > button[kind="secondary"] {{
@@ -216,7 +216,7 @@ st.markdown(f"""
     }}
     /* Sidebar sub-navigation links */
     .nav-sub {{
-        display: block; font-family: 'Inter', sans-serif; font-size: 0.66rem;
+        display: block; font-family: 'Inter', sans-serif; font-size: 0.72rem;
         color: {GREY_TEXT}; text-decoration: none; padding: 0.2rem 0 0.2rem 1.2rem;
         line-height: 1.4; transition: color 0.15s;
     }}
