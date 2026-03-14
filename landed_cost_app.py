@@ -1688,7 +1688,7 @@ Compares full cost-to-serve across factory locations, including material, labour
         sc1, sc2 = st.columns(2)
         with sc1:
             save_data = save_project_json()
-            st.download_button("Save Project", data=save_data,
+            _ = st.download_button("Save Project", data=save_data,
                 file_name=f"{st.session_state.project_name.replace(' ','_')}.json",
                 mime="application/json")
         with sc2:
@@ -2289,10 +2289,10 @@ Compares full cost-to-serve across factory locations, including material, labour
     c1,c2,c3 = st.columns([4,1,1])
     c1.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} item{'s' if len(st.session_state.project_items)!=1 else ''} &middot; {currency} &middot; Market: {target_market} &middot; {data_classification}</span>", unsafe_allow_html=True)
     if all_results:
-        c2.download_button("Export Excel", data=export_excel_project(all_results),
+        _ = c2.download_button("Export Excel", data=export_excel_project(all_results),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        c3.download_button("Export PDF", data=export_pdf_project(all_results, currency, st.session_state.project_name),
+        _ = c3.download_button("Export PDF", data=export_pdf_project(all_results, currency, st.session_state.project_name),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.pdf",
             mime="application/pdf")
     dc_short = data_classification.split(" - ")[0] if " - " in data_classification else data_classification
