@@ -447,8 +447,8 @@ def build_waterfall_chart(result, ccy):
         textfont=dict(size=9, family="Inter", color=DARK_TEXT),
     ))
     fig.update_layout(
-        title=dict(text=f"Cost Bridge: {result['name']} ({ccy}/unit)", font=dict(size=11, family="Inter", color=DARK_TEXT), y=0.95),
-        height=390, margin=dict(l=40, r=30, t=80, b=50),
+        title=None,
+        height=340, margin=dict(l=40, r=30, t=30, b=50),
         paper_bgcolor="white", plot_bgcolor="white",
         font=dict(family="Inter", size=9, color=DARK_TEXT),
         yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title=f"{ccy} per unit", title_font=dict(size=9, family="Inter")),
@@ -2399,6 +2399,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                         wf_cols = st.columns(n_wf)
                         for wi, wf_r in enumerate(results[:n_wf]):
                             with wf_cols[wi]:
+                                st.markdown(f'<div style="font-size:0.7rem;font-family:Inter,sans-serif;font-weight:600;color:{DARK_TEXT};margin-bottom:0.2rem;">Cost Bridge: {wf_r["name"]} ({currency}/unit)</div>', unsafe_allow_html=True)
                                 st.plotly_chart(build_waterfall_chart(wf_r, currency), use_container_width=True, config={"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False})
                         if len(results) > 3:
                             st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-top:0.3rem;">Showing top 3 of {len(results)} locations. All locations included in tables above.</div>', unsafe_allow_html=True)
