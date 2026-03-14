@@ -134,6 +134,30 @@ st.markdown(f"""
     .exec-summary .es-title {{ font-size: 0.67rem; font-weight: 700; color: {NAVY}; text-transform: uppercase;
         letter-spacing: 0.08em; margin-bottom: 0.4rem; }}
 
+    /* ── User Guide ── */
+    .guide {{ font-family: 'Inter', sans-serif; font-size: 0.8rem; color: {DARK_TEXT}; line-height: 1.75; }}
+    .guide h2 {{ font-size: 0.92rem; font-weight: 700; color: {NAVY}; margin: 1.4rem 0 0.4rem 0;
+        border-bottom: 1px solid {BORDER}; padding-bottom: 0.25rem; text-transform: uppercase;
+        letter-spacing: 0.05em; }}
+    .guide h3 {{ font-size: 0.84rem; font-weight: 600; color: {DARK_TEXT}; margin: 0.9rem 0 0.3rem 0; }}
+    .guide p {{ margin: 0.3rem 0 0.6rem 0; }}
+    .guide .tip {{ background: #e8f4fd; border-left: 3px solid {ACCENT_BLUE}; padding: 0.45rem 0.8rem;
+        margin: 0.4rem 0; font-size: 0.76rem; border-radius: 0 2px 2px 0; }}
+    .guide .tip strong {{ color: {NAVY}; }}
+    .guide .warn {{ background: #fff8e6; border-left: 3px solid #e6a817; padding: 0.45rem 0.8rem;
+        margin: 0.4rem 0; font-size: 0.76rem; border-radius: 0 2px 2px 0; }}
+    .guide .example {{ background: #f0faf3; border-left: 3px solid {GREEN}; padding: 0.45rem 0.8rem;
+        margin: 0.4rem 0; font-size: 0.76rem; border-radius: 0 2px 2px 0; }}
+    .guide .term {{ display: inline-block; background: #f0f2f5; padding: 0.08rem 0.4rem;
+        border-radius: 2px; font-weight: 600; font-size: 0.76rem; color: {NAVY}; margin: 0.05rem 0; }}
+    .guide table {{ width: 100%; border-collapse: collapse; font-size: 0.76rem; margin: 0.4rem 0 0.8rem 0; }}
+    .guide table th {{ background: {NAVY}; color: white; font-weight: 600; padding: 0.35rem 0.6rem;
+        text-align: left; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; }}
+    .guide table td {{ padding: 0.3rem 0.6rem; border-bottom: 1px solid #eef0f2; vertical-align: top; }}
+    .guide table tr:nth-child(even) td {{ background: #fcfcfd; }}
+    .guide ol, .guide ul {{ margin: 0.2rem 0 0.5rem 1.4rem; padding: 0; }}
+    .guide li {{ margin-bottom: 0.25rem; }}
+
     /* ── Confidentiality Footer ── */
     .conf-footer {{ font-size: 0.6rem; color: {MUTED}; text-align: center; padding: 0.5rem 0; margin-top: 0.5rem;
         border-top: 1px solid #eee; letter-spacing: 0.02em; font-style: italic; }}
@@ -1488,6 +1512,187 @@ For questions, feedback, or feature requests:<br>
 
 </div>
 """, unsafe_allow_html=True)
+
+    with st.expander("User Guide — How to Read & Use This Model", expanded=False):
+        st.markdown(f"""<div class="guide">
+
+<h2>What This Model Does</h2>
+<p>This model helps you answer a simple but important question: <strong>"If we moved production of a product from Factory&nbsp;A to Factory&nbsp;B, would it be more or less profitable?"</strong></p>
+<p>It calculates the full cost of making and delivering a product from each factory location — including material, labour, tariffs, shipping, and the hidden cost of having money tied up in inventory. It then compares these costs side by side so you can see which location offers the best operating profit.</p>
+<p>If a transfer requires investment (new equipment, project costs, restructuring), the model also calculates whether that investment pays off over time.</p>
+
+<h2>Quick Start (5 Minutes)</h2>
+<ol>
+<li><strong>Tick "Load example data"</strong> at the top to see a pre-filled analysis. This is the fastest way to understand the model.</li>
+<li>Look at the <strong>KPI cards</strong> — they instantly show which factory has the best margin.</li>
+<li>Scroll down to the <strong>tables</strong> — they break down exactly where the cost differences come from.</li>
+<li>Open the <strong>Portfolio Summary</strong> tab to see the combined picture across all items.</li>
+</ol>
+<div class="tip"><strong>Tip:</strong> All fields with a <span style="border-left:3px solid {INPUT_BLUE};padding-left:0.3rem;font-weight:600;color:{INPUT_BLUE};">blue left border</span> are editable inputs. Everything else is calculated automatically. The rightmost column in grey italic text provides guidance on what each field means.</div>
+
+<h2>Step-by-Step Walkthrough</h2>
+
+<h3>Step 1 — Project Setup</h3>
+<p>At the top of the page, fill in the basics:</p>
+<table>
+<tr><th>Field</th><th>What to Enter</th><th>Why It Matters</th></tr>
+<tr><td><strong>Project Name</strong></td><td>A descriptive name, e.g. "Bearing Line Transfer Evaluation"</td><td>Appears on exports and PDF cover page</td></tr>
+<tr><td><strong>Currency</strong></td><td>The reporting currency (SEK, EUR, USD, etc.)</td><td>All cost figures and results are in this currency</td></tr>
+<tr><td><strong>Target Market</strong></td><td>The country/region where the product is sold</td><td>Determines shipping distances and lead times from each factory</td></tr>
+<tr><td><strong>Date</strong></td><td>Analysis date</td><td>For documentation and version tracking</td></tr>
+</table>
+
+<h3>Step 2 — Factory Configuration</h3>
+<p>This is where you set up the factories you want to compare. These settings apply to <strong>all items</strong> in the project.</p>
+
+<p><strong>Number of Comparison Factories:</strong> How many alternative factories to compare against the base case (1–6).</p>
+
+<p><strong>Base Factory Name:</strong> The "as-is" factory — the one currently producing the item. All comparisons are measured against this baseline.</p>
+
+<p><strong>Cost of Capital (WACC %):</strong> Your company's weighted average cost of capital. This is used to calculate the financial cost of tying up money in inventory and as the discount rate for investment analysis.</p>
+<div class="tip"><strong>Don't know your WACC?</strong> Ask Finance. A typical industrial company might use 8–12%. The default is 8%. If unsure, leave it at the default — you can always change it later and the model will recalculate instantly.</div>
+
+<h3>Step 3 — Factory Locations</h3>
+<p>Assign each factory to a country. The model uses this to automatically look up shipping lead times to your target market. For example, if your target market is the USA and a factory is in China, the model knows that sea freight takes roughly 35 days.</p>
+
+<h3>Step 4 — Assumptions Matrix</h3>
+<p>This is the core configuration. Each row represents a cost factor, and each column is a factory. Here's what each row means in plain language:</p>
+<table>
+<tr><th>Row</th><th>What It Is</th><th>Plain English</th></tr>
+<tr><td><span class="term">VA Ratio</span></td><td>Value-Added cost multiplier</td><td>How much cheaper or more expensive is labour and manufacturing at this location compared to the base? A ratio of 0.7 means labour costs are 30% lower. The base factory is always 1.0 (itself). <em>This is typically the biggest driver of cost differences.</em></td></tr>
+<tr><td><span class="term">PS Index</span></td><td>Price Standard Index</td><td>A multiplier that converts the factory's standard cost into its transfer price. Typically close to 1.0 (e.g. 1.03 means a 3% markup). Accounts for factory overhead allocation.</td></tr>
+<tr><td><span class="term">MCL %</span></td><td>Manufacturing Cost Loading</td><td>The percentage applied to PS to get the "actual cost" — what the product truly costs to make (including variances). Shown for reference only; does not affect profit calculations.</td></tr>
+<tr><td><span class="term">S&A %</span></td><td>Selling & Administrative</td><td>Overhead costs (sales force, admin, marketing) as a percentage of the product's selling price. Typically 3–5%.</td></tr>
+<tr><td><span class="term">TPL</span></td><td>Transfer Price Level</td><td>The base for tariff and duty calculations. Usually 100 (meaning tariffs apply to 100% of the transfer price). Adjust if tariffs apply to a different base.</td></tr>
+<tr><td><span class="term">Tariff %</span></td><td>Import tariff rate</td><td>The tariff percentage charged when goods cross borders. Set to 0 for same-region transfers (e.g. within the EU).</td></tr>
+<tr><td><span class="term">Duties %</span></td><td>Import duties rate</td><td>Additional import duties beyond tariffs. Set to 0 if not applicable.</td></tr>
+<tr><td><span class="term">Transport %</span></td><td>Transportation cost</td><td>Shipping cost as a percentage of the transfer price. Higher for overseas factories, lower for nearby ones.</td></tr>
+</table>
+<div class="warn"><strong>The base factory's VA Ratio is always blank</strong> — this is intentional. The base case uses actual costs directly. Only comparison factories need a VA Ratio to scale their costs relative to the base.</div>
+
+<h3>Step 5 — NWC Assumptions (Optional)</h3>
+<p>Click to expand this section if you want to account for the cost of money tied up in inventory. This is optional but recommended for overseas transfers where inventory levels differ significantly.</p>
+<table>
+<tr><th>Row</th><th>What It Is</th><th>Plain English</th></tr>
+<tr><td><span class="term">Safety Stock Days</span></td><td>Buffer inventory</td><td>Extra inventory held "just in case" of supply disruptions. A factory further away or less reliable may need more safety stock (e.g. 21 days vs. 14 days).</td></tr>
+<tr><td><span class="term">Cycle Stock Days</span></td><td>Production batch inventory</td><td>Average inventory from production batches. Larger, less frequent batches mean more days of stock sitting in the warehouse.</td></tr>
+<tr><td><span class="term">Payment Terms (DPO)</span></td><td>How long until you pay suppliers</td><td>Days Payable Outstanding — how many days of credit your suppliers give you. Longer payment terms are <em>good</em> because they reduce the money you have tied up. A factory in a region with longer payment norms will show a benefit here.</td></tr>
+</table>
+<div class="example"><strong>Example:</strong> Factory A (Sweden) has 14 days safety stock, 10 days cycle stock, and 30-day payment terms. Factory C (China) needs 21 days safety stock (longer supply chain), 15 days cycle stock (larger batches), but gets 45-day payment terms. The model calculates the net difference and applies the cost of capital to determine the annual carrying cost.</div>
+
+<h3>Step 6 — Item Details</h3>
+<p>Switch to the <strong>Item tabs</strong>. Each tab represents one product (SKU) you want to analyse. Enter:</p>
+<table>
+<tr><th>Field</th><th>What to Enter</th><th>Example</th></tr>
+<tr><td><strong>Item Number</strong></td><td>The product's SKU or part number</td><td>1001</td></tr>
+<tr><td><strong>Designation</strong></td><td>Product name or description</td><td>Bearing Assembly XR-200</td></tr>
+<tr><td><strong>Destination</strong></td><td>Where this product is shipped to</td><td>Northern Europe</td></tr>
+<tr><td><strong>Net Sales (Total Value)</strong></td><td>Total annual revenue from this product (in your chosen currency)</td><td>121,280,000</td></tr>
+<tr><td><strong>Net Sales (Quantity)</strong></td><td>Total annual units sold</td><td>2,570,000</td></tr>
+<tr><td><strong>Material</strong></td><td>Material cost per unit at the base factory</td><td>18.96</td></tr>
+<tr><td><strong>Variable VA</strong></td><td>Variable value-added cost per unit (direct labour, energy, etc.)</td><td>2.26</td></tr>
+<tr><td><strong>Fixed VA</strong></td><td>Fixed value-added cost per unit (depreciation, supervision, etc.)</td><td>2.57</td></tr>
+</table>
+<div class="tip"><strong>Where do I find these numbers?</strong> Material, Variable VA, and Fixed VA typically come from your ERP system's standard cost breakdown (e.g. SAP cost component split). Net Sales comes from the sales plan or budget. Ask your controller or finance business partner if you're not sure.</div>
+
+<p><strong>Cost Overrides (Optional):</strong> If a specific factory uses different raw materials or has a known cost that doesn't follow the VA Ratio pattern, you can override individual cost components per factory. Leave blank to use the standard calculation.</p>
+
+<h3>Step 7 — Reading the Results</h3>
+<p>Once you enter the data, results appear automatically:</p>
+
+<p><strong>Executive Summary</strong> — A one-paragraph narrative that tells you the headline finding: which factory is best, by how much, and whether the NWC impact changes the conclusion.</p>
+
+<p><strong>KPI Cards</strong> — At a glance, see the operating margin for each factory and how they rank.</p>
+
+<p><strong>Per Unit Cost Table</strong> — Shows exactly how costs build up from raw material to operating profit for each factory, line by line. Look at the bottom rows for the key comparison:</p>
+<ul>
+<li><span class="term">Operating Margin</span> — profit as a percentage of sales. Higher is better.</li>
+<li><span class="term">Delta Margin vs. Base</span> — the difference in margin compared to the base factory. <span style="color:{GREEN};">Green = better</span>, <span style="color:{RED};">red = worse</span>.</li>
+<li><span class="term">Adj. Operating Margin</span> — the margin after accounting for NWC (inventory capital) costs. This is the "true" comparison.</li>
+</ul>
+
+<p><strong>Full Year Impact Table</strong> — The same comparison but in absolute annual currency terms. This shows the real money at stake.</p>
+
+<h3>Step 8 — Charts & Deeper Analysis</h3>
+<p><strong>Cost Bridge (Waterfall)</strong> — click to expand. Shows how each cost element contributes from Net Sales down to Operating Profit. Useful for presentations.</p>
+<p><strong>Sensitivity Analysis</strong> — click to expand. "What if the VA Ratio is higher or lower than expected?" — this chart shows how sensitive the conclusion is to changes in key assumptions. The tornado chart shows which factors have the biggest impact.</p>
+
+<h3>Step 9 — Transfer Investment Analysis</h3>
+<p>Click <strong>"Transfer Investment Analysis"</strong> to expand this section. This is where you evaluate whether the savings justify the upfront cost of transferring production.</p>
+<table>
+<tr><th>Field</th><th>What It Is</th><th>Example</th></tr>
+<tr><td><span class="term">CAPEX</span></td><td>Capital expenditure — new tooling, equipment, or production lines needed at the receiving factory</td><td>8,000,000</td></tr>
+<tr><td><span class="term">OPEX</span></td><td>One-time project costs — engineering, qualification, testing, travel, process validation</td><td>2,500,000</td></tr>
+<tr><td><span class="term">Restructuring</span></td><td>Costs at the sending factory — severance, decommissioning, early lease termination</td><td>1,500,000</td></tr>
+<tr><td><span class="term">Analysis Horizon</span></td><td>How many years to evaluate the investment over (typically 5–10 years)</td><td>10</td></tr>
+</table>
+<p>The model calculates:</p>
+<ul>
+<li><span class="term">NPV</span> (Net Present Value) — Is the transfer worth it? A <span style="color:{GREEN};">positive NPV</span> means the savings exceed the investment (accounting for the time value of money). A <span style="color:{RED};">negative NPV</span> means it doesn't pay off within the horizon.</li>
+<li><span class="term">IRR</span> (Internal Rate of Return) — What "interest rate" does the investment earn? Compare this to your WACC: if IRR > WACC, the investment creates value. Higher IRR = more attractive.</li>
+<li><span class="term">Simple Payback</span> — How many years until the cumulative savings equal the investment? Ignores the time value of money. Quick gut-check metric.</li>
+<li><span class="term">Discounted Payback</span> — Same as simple payback but accounts for the time value of money. Always longer than simple payback. More accurate.</li>
+</ul>
+<div class="example"><strong>Example:</strong> A transfer to Factory C costs 12M total (CAPEX 8M + OPEX 2.5M + Restructuring 1.5M) but saves 5M per year in adjusted operating profit. The NPV over 10 years at 8% WACC is positive (~18.5M), the IRR is ~38%, and payback is 2.4 years. This is a strong investment case.</div>
+
+<h3>Step 10 — Portfolio Summary</h3>
+<p>The last tab shows the combined picture across all items. This is what you present to leadership:</p>
+<ul>
+<li>Total annual profit by factory location</li>
+<li>Aggregated NWC impact</li>
+<li>Combined investment metrics (NPV, IRR, payback) across all items</li>
+</ul>
+
+<h3>Step 11 — Export & Share</h3>
+<ul>
+<li><strong>Excel</strong> — Full data export with all tables and investment analysis. Good for further analysis or feeding into other models.</li>
+<li><strong>PDF</strong> — A formatted pitch-book with cover page, per-item analysis, and portfolio summary. Ready for management presentations.</li>
+<li><strong>Save Project (JSON)</strong> — Saves all your inputs so you can reload and continue later.</li>
+</ul>
+
+<h2>Glossary of Key Terms</h2>
+<table>
+<tr><th>Term</th><th>Definition</th></tr>
+<tr><td><span class="term">SC</span></td><td><strong>Standard Cost</strong> — Material + Variable VA + Fixed VA. The basic cost of making one unit.</td></tr>
+<tr><td><span class="term">VA</span></td><td><strong>Value Added</strong> — The cost of converting raw materials into a finished product: labour, energy, depreciation, overhead.</td></tr>
+<tr><td><span class="term">VA Ratio</span></td><td>A multiplier that adjusts the VA costs to a different factory's cost level. 0.7 = 30% cheaper, 1.2 = 20% more expensive.</td></tr>
+<tr><td><span class="term">PS</span></td><td><strong>Price Standard</strong> — The internal transfer price. What one factory "charges" another for the product. Calculated as SC &times; PS Index.</td></tr>
+<tr><td><span class="term">MCL</span></td><td><strong>Manufacturing Cost Loading</strong> — Adjusts PS to show actual cost (including production variances). Informational only.</td></tr>
+<tr><td><span class="term">S&A</span></td><td><strong>Selling & Administrative</strong> — Overhead costs not tied to manufacturing: sales teams, offices, marketing. Applied as a % of Net Sales.</td></tr>
+<tr><td><span class="term">OP</span></td><td><strong>Operating Profit</strong> — Revenue minus all costs. The bottom line for each factory location.</td></tr>
+<tr><td><span class="term">OM</span></td><td><strong>Operating Margin</strong> — OP divided by Net Sales, expressed as a percentage. The key comparison metric.</td></tr>
+<tr><td><span class="term">GIT</span></td><td><strong>Goods in Transit</strong> — The value of inventory currently being shipped. Longer shipping routes = more capital tied up.</td></tr>
+<tr><td><span class="term">NWC</span></td><td><strong>Net Working Capital</strong> — Total inventory capital tied up (goods in transit + safety stock + cycle stock, minus supplier credit).</td></tr>
+<tr><td><span class="term">DPO</span></td><td><strong>Days Payable Outstanding</strong> — How many days of credit your suppliers give you. Longer = less cash tied up = good.</td></tr>
+<tr><td><span class="term">WACC</span></td><td><strong>Weighted Average Cost of Capital</strong> — The company's blended cost of debt and equity financing. Used as the discount rate.</td></tr>
+<tr><td><span class="term">CAPEX</span></td><td><strong>Capital Expenditure</strong> — Spending on physical assets: tooling, machines, production lines.</td></tr>
+<tr><td><span class="term">OPEX</span></td><td><strong>Operational Expenditure</strong> — One-time project costs: engineering hours, qualification, testing.</td></tr>
+<tr><td><span class="term">NPV</span></td><td><strong>Net Present Value</strong> — The total value of an investment in today's money. Positive = value-creating, negative = value-destroying.</td></tr>
+<tr><td><span class="term">IRR</span></td><td><strong>Internal Rate of Return</strong> — The annualised return the investment earns. Compare to WACC: IRR &gt; WACC means the investment is worthwhile.</td></tr>
+<tr><td><span class="term">Payback</span></td><td>How many years until cumulative savings equal the initial investment. Shorter = less risky.</td></tr>
+</table>
+
+<h2>Frequently Asked Questions</h2>
+
+<h3>Where do I get the input data?</h3>
+<p>Talk to your <strong>Finance Business Partner</strong> or <strong>Controller</strong>. They can provide standard cost breakdowns (Material, Variable VA, Fixed VA) from the ERP system (typically SAP cost component splits). Net Sales data comes from the sales plan or budget. Tariff rates come from Trade Compliance. VA Ratios may come from a previous benchmarking study or from Industrial Engineering.</p>
+
+<h3>What if I don't know the exact VA Ratio?</h3>
+<p>Start with a rough estimate. Use the <strong>Sensitivity Analysis</strong> to see how much the conclusion changes if the VA Ratio is 10–20% higher or lower. If the conclusion is the same across a wide range, you have a robust answer. If it flips, you need a more precise estimate.</p>
+
+<h3>Should I include NWC and investment analysis?</h3>
+<p>For a quick first look, the basic cost comparison (without NWC or investment) is sufficient. Add NWC assumptions when you're comparing factories with significantly different lead times or inventory policies. Add investment analysis when a transfer requires real money to execute and you need to justify it to leadership.</p>
+
+<h3>What does a negative NPV mean?</h3>
+<p>It means the investment <em>does not pay off</em> within the analysis horizon at the given discount rate. The annual savings are not large enough to justify the upfront costs. Consider: (a) extending the horizon, (b) reducing the investment, (c) finding additional savings, or (d) deciding not to transfer.</p>
+
+<h3>Can I compare more than one item?</h3>
+<p>Yes — click <strong>"Add Item"</strong> to add more products. Each item gets its own tab. The <strong>Portfolio Summary</strong> tab aggregates everything across all items, showing the combined profit impact and investment case.</p>
+
+<h3>How do I share my analysis?</h3>
+<p>Use <strong>Export PDF</strong> for a polished pitch-book suitable for management presentations. Use <strong>Export Excel</strong> for detailed data that others can review or extend. Use <strong>Save Project</strong> to save your inputs as a JSON file that can be reloaded later.</p>
+
+</div>""", unsafe_allow_html=True)
 
     st.markdown(f'<div class="callout" style="font-size:0.72rem;"><span style="border-left:3px solid {INPUT_BLUE};padding-left:0.35rem;font-weight:600;color:{INPUT_BLUE};">Blue border</span> = editable input fields &nbsp;&middot;&nbsp; <span style="font-weight:600;color:{DARK_TEXT};">Output tables</span> = calculated results (read-only) &nbsp;&middot;&nbsp; <span style="color:{GREY_TEXT};font-style:italic;">Grey italic</span> = guidance notes</div>', unsafe_allow_html=True)
 
