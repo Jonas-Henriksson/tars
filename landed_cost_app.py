@@ -144,33 +144,23 @@ st.markdown(f"""
     div[data-testid="stDataEditor"] th:last-child {{
         background-color: #e9ecef !important; color: #6c757d !important;
     }}
-    /* IB Convention: Blue text for user-editable input cells */
-    .input-grid div[data-testid="stDataEditor"] td:not(:first-child):not(:last-child) {{
-        color: #0000FF !important;
+    /* IB Convention: Blue accent on editable input containers */
+    .input-grid, .input-grid-nolabel, .matrix-grid, .country-grid {{
+        border-left: 3px solid #0000FF;
+        padding-left: 0.4rem;
+        margin: 0.3rem 0;
     }}
-    .input-grid-nolabel div[data-testid="stDataEditor"] td {{
-        color: #0000FF !important;
+    .input-grid div[data-testid="stDataEditor"],
+    .input-grid-nolabel div[data-testid="stDataEditor"],
+    .matrix-grid div[data-testid="stDataEditor"],
+    .country-grid div[data-testid="stDataEditor"] {{
+        border: 1px solid #b3c6ff !important;
+        border-radius: 2px !important;
     }}
-    .input-grid-nolabel div[data-testid="stDataEditor"] td:last-child {{
-        color: #6c757d !important;
-    }}
-    /* Country grid: first col (Factory name) is black/disabled, second col (Country) is blue */
-    .country-grid div[data-testid="stDataEditor"] td:first-child {{
-        color: {DARK_TEXT} !important;
-    }}
-    .country-grid div[data-testid="stDataEditor"] td:nth-child(2) {{
-        color: #0000FF !important;
-    }}
-    /* First column (row labels) stays black */
-    .input-grid div[data-testid="stDataEditor"] td:first-child {{
-        color: {DARK_TEXT} !important;
-    }}
-    /* Matrix grid: all columns except first (row labels) and last (guide) are blue */
-    .matrix-grid div[data-testid="stDataEditor"] td:not(:first-child):not(:last-child) {{
-        color: #0000FF !important;
-    }}
-    .matrix-grid div[data-testid="stDataEditor"] td:first-child {{
-        color: {DARK_TEXT} !important;
+    /* Blue-tinted column headers for editable grids */
+    .input-grid div[data-testid="stDataEditor"] [data-testid="glideDataEditor"] > div:first-child,
+    .matrix-grid div[data-testid="stDataEditor"] [data-testid="glideDataEditor"] > div:first-child {{
+        background: linear-gradient(to bottom, #f0f4ff, #ffffff) !important;
     }}
     .stTabs [data-baseweb="tab-list"] {{ gap: 0px; }}
     .stTabs [data-baseweb="tab"] {{
@@ -873,7 +863,7 @@ For questions, feedback, or feature requests:<br>
 </div>
 """, unsafe_allow_html=True)
 
-    st.markdown('<div class="callout" style="font-size:0.72rem;"><span style="color:#0000FF;font-weight:600;">Blue values</span> = editable inputs &nbsp;&middot;&nbsp; <span style="color:#1a1a2e;font-weight:600;">Black values</span> = calculated outputs &nbsp;&middot;&nbsp; <span style="color:#6c757d;font-style:italic;">Grey italic</span> = guidance notes</div>', unsafe_allow_html=True)
+    st.markdown('<div class="callout" style="font-size:0.72rem;"><span style="border-left:3px solid #0000FF;padding-left:0.35rem;font-weight:600;color:#0000FF;">Blue border</span> = editable input fields &nbsp;&middot;&nbsp; <span style="font-weight:600;color:#1a1a2e;">Output tables</span> = calculated results (read-only) &nbsp;&middot;&nbsp; <span style="color:#6c757d;font-style:italic;">Grey italic</span> = guidance notes</div>', unsafe_allow_html=True)
 
     ex = st.checkbox("Load example data", value=st.session_state.ex)
     st.session_state.ex = ex
