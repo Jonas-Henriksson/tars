@@ -56,12 +56,36 @@ st.markdown(f"""
     .stApp {{ font-family: 'Inter', -apple-system, sans-serif; background-color: #ffffff; }}
     .block-container {{ padding: 1.5rem 2.5rem; max-width: 1400px; }}
     #MainMenu, footer {{visibility: hidden;}}
-    [data-testid="stFileUploader"] small {{display: none !important;}}
-    [data-testid="stFileUploader"] section {{font-family: 'Inter', sans-serif !important; font-size: 0.76rem !important;}}
-    [data-testid="stFileUploader"] section div {{font-size: 0.76rem !important; font-family: 'Inter', sans-serif !important;}}
-    [data-testid="stFileUploader"] button {{font-family: 'Inter', sans-serif !important; font-size: 0.72rem !important;}}
-    .stDownloadButton > button {{font-family: 'Inter', sans-serif !important; font-size: 0.72rem !important; padding: 0.3rem 0.8rem !important;}}
-    .stCheckbox label span {{font-family: 'Inter', sans-serif !important; font-size: 0.76rem !important;}}
+    [data-testid="stFileUploader"] small,
+    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] div:last-child {{
+        display: none !important;
+    }}
+    [data-testid="stFileUploader"],
+    [data-testid="stFileUploader"] *,
+    [data-testid="stFileUploaderDropzone"],
+    [data-testid="stFileUploaderDropzoneInstructions"],
+    [data-testid="stFileUploaderDropzoneInstructions"] div,
+    [data-testid="stFileUploaderDropzoneInstructions"] span {{
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.72rem !important;
+    }}
+    [data-testid="stFileUploader"] button,
+    [data-testid="stFileUploader"] button * {{
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.72rem !important;
+    }}
+    .stDownloadButton > button,
+    .stDownloadButton > button * {{
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.72rem !important;
+        padding: 0.3rem 0.8rem !important;
+    }}
+    .stCheckbox label,
+    .stCheckbox label span,
+    .stCheckbox label p {{
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.76rem !important;
+    }}
     header {{background: transparent !important;}}
     header [data-testid="stDecoration"] {{display: none;}}
     [data-testid="collapsedControl"] {{background: {NAVY}; border-radius: 4px; padding: 0.25rem;}}
@@ -2057,12 +2081,12 @@ Compares full cost-to-serve across factory locations, including material, labour
         sc1, sc2 = st.columns(2)
         with sc1:
             save_data = save_project_json()
-            _ = st.download_button("💾 Save Project", data=save_data,
+            _ = st.download_button("Save Project", data=save_data,
                 file_name=f"{st.session_state.project_name.replace(' ','_')}.json",
                 mime="application/json", help="Download project as JSON to continue later")
-            st.markdown(f'<div style="font-size:0.6rem;color:{GREY_TEXT};margin-top:-0.5rem;">Save to continue later</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:0.6rem;font-family:Inter,sans-serif;color:{GREY_TEXT};margin-top:-0.5rem;">Save to continue later</div>', unsafe_allow_html=True)
         with sc2:
-            st.markdown(f'<div style="font-size:0.6rem;color:{GREY_TEXT};margin-bottom:0.2rem;">Load a previously saved project (.json)</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:0.6rem;font-family:Inter,sans-serif;color:{GREY_TEXT};margin-bottom:0.2rem;">Load a previously saved project (.json)</div>', unsafe_allow_html=True)
             uploaded = st.file_uploader("Load Project", type=["json"], key="load_proj", label_visibility="collapsed")
             if uploaded:
                 try:
