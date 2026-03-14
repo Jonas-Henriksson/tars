@@ -121,8 +121,10 @@ st.markdown(f"""
     .kpi .det {{ font-size: 0.65rem; color: {MUTED}; margin-top: 0.1rem; }}
 
     /* ── Delta Colors ── */
-    .delta-pos {{ color: {GREEN}; font-weight: 600; }}
-    .delta-neg {{ color: #b71c1c; font-weight: 600; }}
+    .delta-pos {{ color: {GREEN} !important; font-weight: 600; }}
+    .delta-neg {{ color: #b71c1c !important; font-weight: 600; }}
+    .ib-table td.delta-pos {{ color: {GREEN} !important; font-weight: 600; }}
+    .ib-table td.delta-neg {{ color: #b71c1c !important; font-weight: 600; }}
 
     /* ── Callouts ── */
     .callout {{ border-left: 3px solid {NAVY}; padding: 0.5rem 0.9rem; font-size: 0.73rem;
