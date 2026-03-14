@@ -1,5 +1,5 @@
 """
-Landed Cost Comparison Model - v4.0
+Landed Cost Comparison Model - v4.1
 Multi-Item Project-Based Production Cost & Profitability Analysis
 Author: Jonas Henriksson — Head of Strategic Planning & Intelligent Hub
 """
@@ -15,7 +15,7 @@ from typing import Optional
 from datetime import date, datetime
 from fpdf import FPDF
 
-# ── CONSTANTS ─────────────────────────────────────────────────
+# ── CONSTANTS ─────────────────────────────────────────────
 NAVY = "#002060"
 DARK_TEXT = "#1a1a2e"
 GREY_TEXT = "#6c757d"
@@ -28,7 +28,57 @@ MUTED = "#999999"
 
 CURRENCIES = ["SEK","USD","EUR","GBP","CNY","JPY","CHF","NOK","DKK","PLN","BRL","INR","KRW","MXN","THB"]
 
-# ── PAGE CONFIG ───────────────────────────────────────────────
+COUNTRIES = [
+    "Sweden","Germany","France","Italy","Austria","Poland","Czech Republic","Spain","Netherlands","UK",
+    "USA","Mexico","Brazil","Canada","Argentina",
+    "China","India","Japan","South Korea","Thailand","Vietnam","Malaysia","Indonesia",
+    "South Africa","Turkey","Australia",
+]
+
+# Dummy lead time matrix: (origin_country, destination_country) -> transit days
+# Replace with real data later
+LEAD_TIME_MATRIX = {
+    ("Sweden","Sweden"): 2, ("Sweden","Germany"): 4, ("Sweden","France"): 5, ("Sweden","USA"): 28,
+    ("Sweden","China"): 35, ("Sweden","India"): 32, ("Sweden","Brazil"): 35, ("Sweden","Mexico"): 30,
+    ("Sweden","Japan"): 38, ("Sweden","South Korea"): 36, ("Sweden","UK"): 5, ("Sweden","Italy"): 6,
+    ("Germany","Germany"): 2, ("Germany","Sweden"): 4, ("Germany","France"): 3, ("Germany","USA"): 25,
+    ("Germany","China"): 33, ("Germany","India"): 30, ("Germany","Brazil"): 33, ("Germany","Mexico"): 28,
+    ("Germany","Japan"): 36, ("Germany","UK"): 4, ("Germany","Italy"): 4,
+    ("France","France"): 2, ("France","Germany"): 3, ("France","Sweden"): 5, ("France","USA"): 22,
+    ("France","China"): 34, ("France","India"): 28, ("France","Brazil"): 30, ("France","UK"): 3,
+    ("France","Mexico"): 25, ("France","Italy"): 3,
+    ("Italy","Italy"): 2, ("Italy","Germany"): 4, ("Italy","France"): 3, ("Italy","USA"): 24,
+    ("Italy","China"): 32, ("Italy","India"): 26, ("Italy","Sweden"): 6, ("Italy","UK"): 5,
+    ("China","China"): 3, ("China","USA"): 30, ("China","Germany"): 33, ("China","Sweden"): 35,
+    ("China","France"): 34, ("China","India"): 18, ("China","Japan"): 7, ("China","South Korea"): 5,
+    ("China","Brazil"): 40, ("China","Mexico"): 32, ("China","UK"): 34, ("China","Italy"): 32,
+    ("India","India"): 3, ("India","USA"): 32, ("India","Germany"): 30, ("India","Sweden"): 32,
+    ("India","China"): 18, ("India","France"): 28, ("India","Brazil"): 38, ("India","UK"): 28,
+    ("USA","USA"): 3, ("USA","Germany"): 25, ("USA","Sweden"): 28, ("USA","France"): 22,
+    ("USA","China"): 30, ("USA","India"): 32, ("USA","Mexico"): 5, ("USA","Brazil"): 18,
+    ("USA","Canada"): 4, ("USA","UK"): 20, ("USA","Japan"): 22,
+    ("Mexico","USA"): 5, ("Mexico","Mexico"): 2, ("Mexico","Brazil"): 20, ("Mexico","Germany"): 28,
+    ("Mexico","Sweden"): 30, ("Mexico","China"): 32,
+    ("Brazil","Brazil"): 3, ("Brazil","USA"): 18, ("Brazil","Germany"): 33, ("Brazil","Sweden"): 35,
+    ("Brazil","China"): 40, ("Brazil","Mexico"): 20,
+    ("Japan","Japan"): 2, ("Japan","USA"): 22, ("Japan","China"): 7, ("Japan","Germany"): 36,
+    ("Japan","Sweden"): 38, ("Japan","South Korea"): 3,
+    ("South Korea","South Korea"): 2, ("South Korea","USA"): 24, ("South Korea","China"): 5,
+    ("South Korea","Japan"): 3, ("South Korea","Germany"): 35, ("South Korea","Sweden"): 36,
+    ("UK","UK"): 2, ("UK","USA"): 20, ("UK","Germany"): 4, ("UK","France"): 3,
+    ("UK","Sweden"): 5, ("UK","China"): 34, ("UK","India"): 28,
+    ("Poland","Poland"): 2, ("Poland","Germany"): 3, ("Poland","Sweden"): 4, ("Poland","USA"): 27,
+    ("Poland","France"): 5, ("Poland","China"): 34, ("Poland","UK"): 5,
+    ("Thailand","Thailand"): 2, ("Thailand","USA"): 30, ("Thailand","China"): 10,
+    ("Thailand","Germany"): 34, ("Thailand","Sweden"): 36, ("Thailand","Japan"): 12,
+}
+
+def get_lead_time(origin, destination):
+    """Look up transit days for a country pair. Returns None if not found."""
+    return LEAD_TIME_MATRIX.get((origin, destination))
+
+
+# ── PAGE CONFIG ───────────────────────────────────────────
 st.set_page_config(page_title="Landed Cost Comparison Model", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown(f"""
@@ -102,10 +152,11 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
-# ── DATA CLASSES ──────────────────────────────────────────────
+# ── DATA CLASSES ──────────────────────────────────────────
 @dataclass
 class FactoryAssumptions:
     name: str = ""
+    country: str = ""
     va_ratio: Optional[float] = None
     ps_index: float = 1.0
     mcl_pct: float = 100.0
@@ -130,7 +181,7 @@ class ItemInputs:
     fixed_va: float = 0.0
 
 
-# ── COMPUTE ENGINE ────────────────────────────────────────────
+# ── COMPUTE ENGINE ────────────────────────────────────────
 def compute_location(inputs, factory, is_base=False, overrides=None):
     ns = inputs.net_sales_value / inputs.net_sales_qty if inputs.net_sales_qty else 0
     if is_base:
@@ -154,13 +205,13 @@ def compute_location(inputs, factory, is_base=False, overrides=None):
     trn = ps * factory.transport_pct
     op = ns - ps - sa - tar - dut - trn
     om = op / ns if ns else 0
-    return dict(name=factory.name, material=mat, variable_va=vva, fixed_va=fva,
+    return dict(name=factory.name, country=factory.country, material=mat, variable_va=vva, fixed_va=fva,
         sc=sc, ps=ps, actual_cost=ac, ns_per_unit=ns, sa=sa, tariff=tar, duties=dut,
         transport=trn, op=op, om=om, annual_rev=ns*inputs.net_sales_qty,
         annual_cost=(ps+sa+tar+dut+trn)*inputs.net_sales_qty, annual_op=op*inputs.net_sales_qty)
 
 
-# ── FORMATTING HELPERS ────────────────────────────────────────
+# ── FORMATTING HELPERS ────────────────────────────────────
 def fn(v, d=2, sfx="", acct=False, dz=True):
     if v is None: return "\u2013"
     if dz and abs(v) < 0.005: return "\u2013"
@@ -185,8 +236,8 @@ def dc(v):
     return "delta-pos" if v > 0 else "delta-neg"
 
 
-# ── TABLE BUILDERS ────────────────────────────────────────────
-def build_cost_table(results, ccy):
+# ── TABLE BUILDERS ────────────────────────────────────────
+def build_cost_table(results, ccy, target_market=None):
     if not results: return ""
     hdr = "".join(f'<th>{r["name"]}</th>' for r in results)
     def row(lbl, key, fmt, cls="", indent=False):
@@ -210,7 +261,28 @@ def build_cost_table(results, ccy):
     bom = results[0]["om"]
     dash = "\u2013"
     dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["om"]-bom)}">{dash if i==0 else fp(r["om"]-bom,1,acct=True)}</td>' for i, r in enumerate(results))
-    html += f'<tr class="row-bold"><td><em>Delta Margin vs. Base</em></td>{dc_cells}</tr></tbody></table>'
+    html += f'<tr class="row-bold"><td><em>Delta Margin vs. Base</em></td>{dc_cells}</tr>'
+    # Lead time row
+    if target_market:
+        base_lt = get_lead_time(results[0].get("country",""), target_market)
+        lt_cells = ""
+        for i, r in enumerate(results):
+            lt = get_lead_time(r.get("country",""), target_market)
+            if lt is not None:
+                if i == 0:
+                    lt_cells += f'<td class="base-case">{lt} days</td>'
+                else:
+                    delta = lt - base_lt if base_lt is not None else None
+                    d_str = ""
+                    if delta is not None and delta != 0:
+                        sign = "+" if delta > 0 else ""
+                        cls = "delta-neg" if delta > 0 else "delta-pos"
+                        d_str = f' <span class="{cls}">({sign}{delta}d)</span>'
+                    lt_cells += f'<td>{lt} days{d_str}</td>'
+            else:
+                lt_cells += f'<td class="{"base-case" if i==0 else ""}">{dash}</td>'
+        html += f'<tr class="row-bold"><td>Lead Time to {target_market}</td>{lt_cells}</tr>'
+    html += '</tbody></table>'
     return html
 
 def build_annual_table(results, ccy):
@@ -251,7 +323,6 @@ def build_charts(results, ccy):
     fig.update_yaxes(title_text="Margin (%)", row=1, col=1, ticksuffix="%", title_font=dict(size=10))
     fig.update_yaxes(title_text=ccy, row=1, col=2, title_font=dict(size=10))
     return fig
-
 
 # ── EXCEL EXPORT ──────────────────────────────────────────────
 def export_excel_project(project_data):
@@ -716,7 +787,7 @@ def main():
     init_state()
 
     st.markdown("""<div class="ib-header" style="position:relative;"><h1>Landed Cost Comparison Model</h1>
-        <div class="sub">Multi-Item Project-Based Production Cost & Profitability Analysis &middot; v4.0</div></div>""", unsafe_allow_html=True)
+        <div class="sub">Multi-Item Project-Based Production Cost & Profitability Analysis &middot; v4.1</div></div>""", unsafe_allow_html=True)
 
     with st.expander("About this model", expanded=False):
         st.markdown(f"""
@@ -751,6 +822,7 @@ The 8-step cost build-up follows standard industrial cost methodology:
 <strong>7.</strong> Save/Load projects as JSON to resume later
 
 <br><br><strong style="font-size:0.9rem;">Changelog</strong><br>
+<span style="color:{GREY_TEXT};">v4.1</span> &mdash; Lead time comparison by country pair, factory country assignment<br>
 <span style="color:{GREY_TEXT};">v4.0</span> &mdash; Multi-item project mode, portfolio summary, PDF export, save/load projects<br>
 <span style="color:{GREY_TEXT};">v3.0</span> &mdash; Cost overrides per factory, base factory naming<br>
 <span style="color:{GREY_TEXT};">v2.0</span> &mdash; Matrix input UX, sequential flow, IB styling overhaul<br>
@@ -770,7 +842,7 @@ For questions, feedback, or feature requests:<br>
     # ── PROJECT HEADER ────────────────────────────────────────
     st.markdown('<div class="sec">Project Setup</div>', unsafe_allow_html=True)
 
-    pc1, pc2, pc3, pc4 = st.columns([2, 1, 1, 2])
+    pc1, pc2, pc3, pc4, pc5 = st.columns([2, 1, 1, 1, 2])
     with pc1:
         proj_df = pd.DataFrame({"Project Name": [st.session_state.project_name]})
         edited_proj = st.data_editor(proj_df, use_container_width=True, num_rows="fixed",
@@ -787,12 +859,20 @@ For questions, feedback, or feature requests:<br>
         currency = st.session_state["currency"]
 
     with pc3:
+        tm_df = pd.DataFrame({"Target Market": ["USA" if ex else "USA"]})
+        edited_tm = st.data_editor(tm_df, use_container_width=True, num_rows="fixed",
+            key="proj_tm", hide_index=True,
+            column_config={"Target Market": st.column_config.SelectboxColumn("Target Market", options=COUNTRIES, width=140)})
+        target_market = str(edited_tm.loc[0, "Target Market"] or "")
+        st.session_state["target_market"] = target_market
+
+    with pc4:
         dt_df = pd.DataFrame({"Date": [date.today()]})
         edited_dt = st.data_editor(dt_df, use_container_width=True, num_rows="fixed",
             key="proj_dt", hide_index=True,
             column_config={"Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY", width=130)})
 
-    with pc4:
+    with pc5:
         sc1, sc2 = st.columns(2)
         with sc1:
             save_data = save_project_json()
@@ -829,6 +909,32 @@ For questions, feedback, or feature requests:<br>
         key="bf_editor", hide_index=True,
         column_config={"Base Factory Name": st.column_config.TextColumn("Base Factory Name", width=250)})
     base_factory_name = str(edited_bf.loc[0, "Base Factory Name"] or "Base Case")
+
+    # Factory country assignment
+    st.markdown('<div class="sec-sm">Factory Locations</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout">Assign the <strong>country</strong> where each factory is located. This determines lead time to the target market (<strong>{target_market}</strong>).</div>', unsafe_allow_html=True)
+
+    ex_base_country = "Sweden" if ex else "Sweden"
+    ex_factory_countries = ["Germany", "China", "France", "USA"] if ex else []
+    country_data = {"Factory": [base_factory_name], "Country": [ex_base_country]}
+    for i in range(num_factories):
+        ex_f = EX_FACTORIES[i] if ex and i < len(EX_FACTORIES) else None
+        col_name = ex_f.name if ex_f else f"Factory {i+2}"
+        country_data["Factory"].append(col_name)
+        country_data["Country"].append(ex_factory_countries[i] if ex and i < len(ex_factory_countries) else "")
+    country_df = pd.DataFrame(country_data)
+
+    edited_countries = st.data_editor(
+        country_df, use_container_width=False, num_rows="fixed", key="country_editor", hide_index=True,
+        column_config={
+            "Factory": st.column_config.TextColumn("Factory", width=200, disabled=True),
+            "Country": st.column_config.SelectboxColumn("Country", options=COUNTRIES, width=180),
+        },
+        disabled=["Factory"],
+    )
+    factory_countries = {}
+    for _, r in edited_countries.iterrows():
+        factory_countries[r["Factory"]] = str(r["Country"] or "")
 
     # Assumptions matrix
     ROWS = ["VA Ratio","PS Index","MCL %","S&A %","TPL","Tariff %","Duties %","Transport %"]
@@ -878,9 +984,49 @@ For questions, feedback, or feature requests:<br>
         df_matrix, use_container_width=True, num_rows="fixed", key="assumption_matrix",
         column_config=col_config, disabled=["Guide"])
 
+    # Lead time comparison
+    if target_market:
+        st.markdown(f'<div class="sec-sm">Lead Time to {target_market}</div>', unsafe_allow_html=True)
+        all_factory_names = [base_factory_name] + factory_col_names
+        lt_data = []
+        base_country = factory_countries.get(base_factory_name, "")
+        base_lt = get_lead_time(base_country, target_market)
+        for fn_ in all_factory_names:
+            ctry = factory_countries.get(fn_, "")
+            lt = get_lead_time(ctry, target_market)
+            delta = (lt - base_lt) if (lt is not None and base_lt is not None) else None
+            lt_data.append({"Factory": fn_, "Country": ctry, "Route": f"{ctry} \u2192 {target_market}" if ctry else "\u2013",
+                "Transit Days": lt if lt is not None else None,
+                "Delta vs Base": delta if delta is not None and fn_ != base_factory_name else None})
+        lt_df = pd.DataFrame(lt_data)
+        hdr = "".join(f'<th>{r["Factory"]}</th>' for r in lt_data)
+        route_cells = "".join(f'<td class="{"base-case" if i==0 else ""}">{r["Route"]}</td>' for i, r in enumerate(lt_data))
+        days_cells = "".join(f'<td class="{"base-case" if i==0 else ""}">{r["Transit Days"] if r["Transit Days"] is not None else "\u2013"}</td>' for i, r in enumerate(lt_data))
+        delta_cells = ""
+        dash = "\u2013"
+        for i, r in enumerate(lt_data):
+            if i == 0:
+                delta_cells += f'<td class="base-case">{dash}</td>'
+            else:
+                d = r["Delta vs Base"]
+                if d is not None and d != 0:
+                    sign = "+" if d > 0 else ""
+                    cls = "delta-neg" if d > 0 else "delta-pos"
+                    delta_cells += f'<td class="{cls}">{sign}{d} days</td>'
+                elif d is not None:
+                    delta_cells += f'<td>{dash}</td>'
+                else:
+                    delta_cells += f'<td>{dash}</td>'
+        lt_html = f'<table class="ib-table"><thead><tr><th>Lead Time</th>{hdr}</tr></thead><tbody>'
+        lt_html += f'<tr><td>Route</td>{route_cells}</tr>'
+        lt_html += f'<tr class="row-bold"><td>Transit Days</td>{days_cells}</tr>'
+        lt_html += f'<tr class="row-bold"><td><em>Delta vs. Base</em></td>{delta_cells}</tr>'
+        lt_html += '</tbody></table>'
+        st.markdown(lt_html, unsafe_allow_html=True)
+
     # Build factory objects
     base = FactoryAssumptions(
-        name=base_factory_name, va_ratio=None,
+        name=base_factory_name, country=factory_countries.get(base_factory_name, ""), va_ratio=None,
         ps_index=float(edited_df.loc["PS Index", base_factory_name] or 1.0),
         mcl_pct=float(edited_df.loc["MCL %", base_factory_name] or 100.0),
         sa_pct=float(edited_df.loc["S&A %", base_factory_name] or 0.0),
@@ -893,7 +1039,7 @@ For questions, feedback, or feature requests:<br>
     for cn in factory_col_names:
         va = edited_df.loc["VA Ratio", cn]
         factories.append(FactoryAssumptions(
-            name=cn,
+            name=cn, country=factory_countries.get(cn, ""),
             va_ratio=float(va) if va is not None and not pd.isna(va) else 1.0,
             ps_index=float(edited_df.loc["PS Index", cn] or 1.0),
             mcl_pct=float(edited_df.loc["MCL %", cn] or 100.0),
@@ -960,7 +1106,7 @@ For questions, feedback, or feature requests:<br>
                         cols[i+1].markdown(f'<div style="background:#fafafa;border:1px solid {BORDER};{bdr}border-radius:2px;padding:0.8rem 1rem;text-align:center;"><div style="font-size:0.65rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.2rem;">{labels[i]}</div><div style="font-size:1.15rem;font-weight:700;color:{DARK_TEXT};">{fp(r["om"],1,dz=False)}</div><div style="font-size:0.82rem;font-weight:600;color:{DARK_TEXT};margin-top:0.15rem;">{r["name"]}</div><div style="font-size:0.7rem;{d_cls}margin-top:0.15rem;">{d_sign}{delta_pp:.1f}pp vs base</div></div>', unsafe_allow_html=True)
 
                     st.markdown(f'<div class="sec-sm">Per Unit Cost Comparison ({currency})</div>', unsafe_allow_html=True)
-                    st.markdown(build_cost_table(results, currency), unsafe_allow_html=True)
+                    st.markdown(build_cost_table(results, currency, target_market), unsafe_allow_html=True)
 
                     st.markdown(f'<div class="sec-sm">Full Year Impact ({currency})</div>', unsafe_allow_html=True)
                     st.markdown(build_annual_table(results, currency), unsafe_allow_html=True)
@@ -981,7 +1127,7 @@ For questions, feedback, or feature requests:<br>
     # ── FOOTER ────────────────────────────────────────────────
     st.markdown("---")
     c1,c2,c3 = st.columns([4,1,1])
-    c1.markdown(f"<span style='font-size:0.7rem;color:{MUTED};'>Landed Cost Comparison v4.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} items &middot; {currency}</span>", unsafe_allow_html=True)
+    c1.markdown(f"<span style='font-size:0.7rem;color:{MUTED};'>Landed Cost Comparison v4.1 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} items &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
     if all_results:
         c2.download_button("Export Excel", data=export_excel_project(all_results),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.xlsx",
@@ -993,4 +1139,5 @@ For questions, feedback, or feature requests:<br>
 
 if __name__ == "__main__":
     main()
+
 
