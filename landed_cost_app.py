@@ -536,16 +536,18 @@ def build_tornado_chart(inputs, factory, is_base, ccy, overrides=None):
         left_v = min(low, high)
         right_v = max(low, high)
         # Left label (positioned outside left end of bar)
+        left_color = GREEN if left_v > 0 else RED if left_v < 0 else GREY_TEXT
         fig.add_annotation(
             x=left_v, y=label, text=f"{left_v:+.1f}pp",
             showarrow=False, xanchor="right", xshift=-4,
-            font=dict(size=8, family="Inter", color=GREEN),
+            font=dict(size=8, family="Inter", color=left_color),
         )
         # Right label (positioned outside right end of bar)
+        right_color = GREEN if right_v > 0 else RED if right_v < 0 else GREY_TEXT
         fig.add_annotation(
             x=right_v, y=label, text=f"{right_v:+.1f}pp",
             showarrow=False, xanchor="left", xshift=4,
-            font=dict(size=8, family="Inter", color=RED),
+            font=dict(size=8, family="Inter", color=right_color),
         )
 
     fig.update_layout(
