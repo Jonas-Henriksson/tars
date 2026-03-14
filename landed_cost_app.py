@@ -191,9 +191,9 @@ st.markdown(f"""
         margin-bottom: -0.35rem !important;
     }}
     section[data-testid="stSidebar"] .stButton > button {{
-        font-family: 'Inter', sans-serif !important; font-size: 0.76rem !important;
+        font-family: 'Inter', sans-serif !important; font-size: 0.72rem !important;
         font-weight: 400 !important; text-align: left !important;
-        padding: 0.35rem 0.6rem !important; border-radius: 3px !important;
+        padding: 0.3rem 0.6rem !important; border-radius: 3px !important;
         letter-spacing: 0.01em !important; justify-content: flex-start !important;
         border: none !important; transition: background 0.15s !important;
         line-height: 1.4 !important; min-height: 0 !important; height: auto !important;
@@ -208,6 +208,13 @@ st.markdown(f"""
         background: #e8edf4 !important; color: {NAVY} !important;
         font-weight: 600 !important; border-left: 3px solid {NAVY} !important;
     }}
+    /* Sidebar sub-navigation links */
+    .nav-sub {{
+        display: block; font-family: 'Inter', sans-serif; font-size: 0.66rem;
+        color: {GREY_TEXT}; text-decoration: none; padding: 0.2rem 0 0.2rem 1.2rem;
+        line-height: 1.4; transition: color 0.15s;
+    }}
+    .nav-sub:hover {{ color: {NAVY}; }}
 
     /* Print optimizations */
     @media print {{
@@ -1545,9 +1552,8 @@ def main():
     </div>""", unsafe_allow_html=True)
 
     # ── SIDEBAR ────────────────────────────────────────────────
-    st.sidebar.markdown(f"""<div style="background:{NAVY};padding:0.8rem 1rem;margin:-1rem -1rem 1rem -1rem;">
-        <div style="font-size:0.9rem;font-weight:700;color:white;letter-spacing:0.02em;">Landed Cost Model</div>
-        <div style="font-size:0.65rem;color:rgba(255,255,255,0.7);margin-top:0.15rem;">v9.0 &middot; SKF Group</div>
+    st.sidebar.markdown(f"""<div style="background:{NAVY};padding:0.7rem 1rem;margin:-1rem -1rem 0.8rem -1rem;">
+        <div style="font-size:0.8rem;font-weight:700;color:white;letter-spacing:0.02em;">Landed Cost Model</div>
     </div>""", unsafe_allow_html=True)
 
     # Navigation buttons
@@ -1568,6 +1574,22 @@ def main():
                              type="primary" if st.session_state.active_page == key else "secondary"):
             st.session_state.active_page = key
             st.rerun()
+
+    # Sub-section links when on Landed Cost Analysis page
+    if st.session_state.active_page == "model":
+        sub_sections = [
+            ("Project Setup", "sec-project-setup"),
+            ("Factory Configuration", "sec-factory-config"),
+            ("Factory Locations", "sec-factory-locations"),
+            ("Assumptions Matrix", "sec-assumptions"),
+            ("Lead Times", "sec-lead-times"),
+            ("NWC Assumptions", "sec-nwc"),
+            ("Item Analysis", "sec-item-analysis"),
+        ]
+        links_html = "".join(
+            f'<a class="nav-sub" href="#{anchor}">{lbl}</a>' for lbl, anchor in sub_sections
+        )
+        st.sidebar.markdown(links_html, unsafe_allow_html=True)
 
     st.sidebar.markdown(f'<div class="nav-sep">Reference</div>', unsafe_allow_html=True)
     for label, key in info_pages:
@@ -1601,7 +1623,7 @@ The 8-step cost build-up follows standard industrial cost methodology:
 <li>Operating Profit = Net Sales - PS - S&A - Tariff - Duties - Transport</li>
 </ol>
 
-<br><strong style="font-size:0.9rem;">NWC Impact (Optional)</strong><br>
+<br><strong style="font-size:0.82rem;">NWC Impact</strong><br>
 Net Working Capital impact captures the balance sheet cost of inventory tied up across the supply chain:
 <ul style="margin:0.3rem 0 0.3rem 1.2rem;padding:0;">
 <li><strong>Goods in Transit (GIT)</strong> = (PS x Qty / 365) x Transit Days</li>
@@ -1915,7 +1937,7 @@ Compares full cost-to-serve across factory locations, including material, labour
     st.session_state.ex = ex
 
     # ── PROJECT HEADER ────────────────────────────────────────
-    st.markdown('<div class="sec">Project Setup</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec" id="sec-project-setup">Project Setup</div>', unsafe_allow_html=True)
 
     pc1, pc2, pc3, pc4, pc4b, pc5 = st.columns([2, 1, 1, 1, 1, 2])
     with pc1:
@@ -1977,7 +1999,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                     st.error("Invalid project file.")
 
     # ── SHARED FACTORY SETUP ──────────────────────────────────────
-    st.markdown('<div class="sec">Shared Factory Configuration</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec" id="sec-factory-config">Shared Factory Configuration</div>', unsafe_allow_html=True)
 
     fc_data = {"Comparison Factories": [4 if ex else st.session_state.get("num_fac", 2)]}
     fc_df = pd.DataFrame(fc_data)
@@ -2006,7 +2028,7 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.session_state["cost_of_capital"] = cost_of_capital
 
     # Factory country assignment
-    st.markdown('<div class="sec-sm">Factory Locations</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sm" id="sec-factory-locations">Factory Locations</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="callout">Assign the <strong>country</strong> where each factory is located. This determines lead time to the target market (<strong>{target_market}</strong>).</div>', unsafe_allow_html=True)
 
     ex_base_country = "Sweden" if ex else "Sweden"
@@ -2066,7 +2088,7 @@ Compares full cost-to-serve across factory locations, including material, labour
     df_matrix = pd.DataFrame(factory_cols, index=ROWS)
     df_matrix.loc["VA Ratio", base_factory_name] = None
 
-    st.markdown('<div class="sec-sm">Assumptions Matrix</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sm" id="sec-assumptions">Assumptions Matrix</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="callout">These assumptions apply to <strong>all items</strong> in the project. Base case (<strong>{base_factory_name}</strong>) VA Ratio is 1.0x (implicit).</div>', unsafe_allow_html=True)
 
     col_config = {
@@ -2081,7 +2103,7 @@ Compares full cost-to-serve across factory locations, including material, labour
 
     # Lead time comparison
     if target_market:
-        st.markdown(f'<div class="sec-sm">Lead Time to {target_market}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="sec-sm" id="sec-lead-times">Lead Time to {target_market}</div>', unsafe_allow_html=True)
         all_factory_names = [base_factory_name] + factory_col_names
         lt_data = []
         base_country = factory_countries.get(base_factory_name, "")
@@ -2120,40 +2142,40 @@ Compares full cost-to-serve across factory locations, including material, labour
         lt_html += '</tbody></table>'
         st.markdown(lt_html, unsafe_allow_html=True)
 
-    # ── NWC ASSUMPTIONS (Optional) ──────────────────────────
+    # ── NWC ASSUMPTIONS ──────────────────────────────────────
     all_factory_names_nwc = [base_factory_name] + factory_col_names
-    with st.expander("NWC Assumptions (Optional)", expanded=False):
-        st.markdown(f'<div class="callout">Optional inputs for extended NWC analysis. Leave blank or zero to exclude. All values in <strong>days</strong>. Applies to all items.</div>', unsafe_allow_html=True)
-        NWC_ROWS = ["Safety Stock Days", "Cycle Stock Days", "Payment Terms (DPO) Days"]
-        NWC_GUIDES = [
-            "Buffer inventory held as safety margin (days of supply)",
-            "Average production cycle inventory (days of supply)",
-            "Supplier payment terms - longer DPO reduces NWC (days)",
-        ]
-        nwc_cols = {}
-        for fn_ in all_factory_names_nwc:
-            if ex:
-                # Example data: base has moderate values, others vary
-                if fn_ == base_factory_name:
-                    nwc_cols[fn_] = [14.0, 10.0, 30.0]
-                elif "Asia" in fn_ or "China" in str(factory_countries.get(fn_, "")):
-                    nwc_cols[fn_] = [21.0, 15.0, 45.0]
-                elif "Americas" in fn_ or "USA" in str(factory_countries.get(fn_, "")):
-                    nwc_cols[fn_] = [14.0, 12.0, 35.0]
-                else:
-                    nwc_cols[fn_] = [14.0, 10.0, 30.0]
+    st.markdown('<div class="sec-sm" id="sec-nwc">NWC Assumptions</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout">Net Working Capital assumptions for inventory and payment terms analysis. Leave blank or zero to exclude. All values in <strong>days</strong>. Applies to all items.</div>', unsafe_allow_html=True)
+    NWC_ROWS = ["Safety Stock Days", "Cycle Stock Days", "Payment Terms (DPO) Days"]
+    NWC_GUIDES = [
+        "Buffer inventory held as safety margin (days of supply)",
+        "Average production cycle inventory (days of supply)",
+        "Supplier payment terms - longer DPO reduces NWC (days)",
+    ]
+    nwc_cols = {}
+    for fn_ in all_factory_names_nwc:
+        if ex:
+            # Example data: base has moderate values, others vary
+            if fn_ == base_factory_name:
+                nwc_cols[fn_] = [14.0, 10.0, 30.0]
+            elif "Asia" in fn_ or "China" in str(factory_countries.get(fn_, "")):
+                nwc_cols[fn_] = [21.0, 15.0, 45.0]
+            elif "Americas" in fn_ or "USA" in str(factory_countries.get(fn_, "")):
+                nwc_cols[fn_] = [14.0, 12.0, 35.0]
             else:
-                nwc_cols[fn_] = [None, None, None]
-        nwc_cols["Guide"] = NWC_GUIDES
-        nwc_df = pd.DataFrame(nwc_cols, index=NWC_ROWS)
+                nwc_cols[fn_] = [14.0, 10.0, 30.0]
+        else:
+            nwc_cols[fn_] = [None, None, None]
+    nwc_cols["Guide"] = NWC_GUIDES
+    nwc_df = pd.DataFrame(nwc_cols, index=NWC_ROWS)
 
-        edited_nwc = st.data_editor(
-            nwc_df, use_container_width=True, num_rows="fixed", key="nwc_matrix",
-            column_config={
-                **{fn_: st.column_config.NumberColumn(fn_, format="%.0f", min_value=0, max_value=365) for fn_ in all_factory_names_nwc},
-                "Guide": st.column_config.TextColumn("Guide", width=320, disabled=True),
-            },
-            disabled=["Guide"])
+    edited_nwc = st.data_editor(
+        nwc_df, use_container_width=True, num_rows="fixed", key="nwc_matrix",
+        column_config={
+            **{fn_: st.column_config.NumberColumn(fn_, format="%.0f", min_value=0, max_value=365) for fn_ in all_factory_names_nwc},
+            "Guide": st.column_config.TextColumn("Guide", width=320, disabled=True),
+        },
+        disabled=["Guide"])
 
     # Extract NWC assumptions per factory
     nwc_assumptions = {}
@@ -2196,7 +2218,7 @@ Compares full cost-to-serve across factory locations, including material, labour
             transport_pct=float(edited_df.loc["Transport %", cn] or 0.0)))
 
     # ── ITEM TABS ─────────────────────────────────────────────
-    st.markdown('<div class="sec">Item Analysis</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec" id="sec-item-analysis">Item Analysis</div>', unsafe_allow_html=True)
 
     # Add / remove item buttons
     bc1, bc2, _ = st.columns([1, 1, 6])
