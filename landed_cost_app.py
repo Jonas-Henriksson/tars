@@ -648,15 +648,16 @@ def export_pdf_project(all_results, ccy, project_name):
     pdf.set_text_color(108, 117, 125)
     pdf.cell(0, 5, "Strategic Planning & Intelligent Hub", align="C", ln=True)
 
-    f2 = lambda v: f"{v:,.2f}" if v is not None else "\u2013"
-    fp_ = lambda v: f"{v*100:.1f}%" if v is not None else "\u2013"
-    fi_ = lambda v: f"{v:,.0f}" if v is not None else "\u2013"
+    # PDF-safe formatters: use ASCII hyphen instead of en-dash (Helvetica can't encode \u2013)
+    f2 = lambda v: f"{v:,.2f}" if v is not None else "-"
+    fp_ = lambda v: f"{v*100:.1f}%" if v is not None else "-"
+    fi_ = lambda v: f"{v:,.0f}" if v is not None else "-"
 
     for item in all_results:
         pdf.add_page()
         inp = item["inputs"]
         results = item["results"]
-        add_page_header(pdf, f"{inp['item_number']} \u2013 {inp['designation']}", f"{ccy}  |  Destination: {inp.get('destination','')}")
+        add_page_header(pdf, f"{inp['item_number']} - {inp['designation']}", f"{ccy}  |  Destination: {inp.get('destination','')}")
 
         n = len(results)
         lw = 48
@@ -673,7 +674,7 @@ def export_pdf_project(all_results, ccy, project_name):
             cost_rows.append([lbl] + [f2(r[key]) for r in results])
         cost_rows.append(["Operating Margin"] + [fp_(r["om"]) for r in results])
         bom = results[0]["om"]
-        cost_rows.append(["Delta vs Base"] + ["\u2013"] + [fp_(r["om"]-bom) for r in results[1:]])
+        cost_rows.append(["Delta vs Base"] + ["-"] + [fp_(r["om"]-bom) for r in results[1:]])
         add_table(pdf, headers, cost_rows, col_widths, bold_rows=[3,7,13,14,15])
 
         pdf.ln(4)
@@ -685,7 +686,7 @@ def export_pdf_project(all_results, ccy, project_name):
             ["Operating Margin"] + [fp_(r["om"]) for r in results],
         ]
         bop = results[0]["annual_op"]
-        annual_rows.append(["Delta vs Base"] + ["\u2013"] + [fi_(r["annual_op"]-bop) for r in results[1:]])
+        annual_rows.append(["Delta vs Base"] + ["-"] + [fi_(r["annual_op"]-bop) for r in results[1:]])
         add_table(pdf, annual_headers, annual_rows, col_widths, bold_rows=[2,3,4])
 
     # Portfolio summary page
@@ -710,15 +711,15 @@ def export_pdf_project(all_results, ccy, project_name):
         rows = []
         for item in all_results:
             inp = item["inputs"]
-            row = [f"{inp['item_number']} \u2013 {inp['designation']}"]
+            row = [f"{inp['item_number']} - {inp['designation']}"]
             for fn_ in all_fnames:
                 match = [r for r in item["results"] if r["name"] == fn_]
-                row.append(fi_(match[0]["annual_op"]) if match else "\u2013")
+                row.append(fi_(match[0]["annual_op"]) if match else "-")
             rows.append(row)
         rows.append(["Total Annual OP"] + [fi_(totals[fn_]) for fn_ in all_fnames])
-        rows.append(["Operating Margin"] + [f"{totals[fn_]/total_rev[fn_]*100:.1f}%" if total_rev[fn_] else "\u2013" for fn_ in all_fnames])
+        rows.append(["Operating Margin"] + [f"{totals[fn_]/total_rev[fn_]*100:.1f}%" if total_rev[fn_] else "-" for fn_ in all_fnames])
         base_op = totals.get(all_fnames[0], 0) if all_fnames else 0
-        rows.append(["Delta vs Base"] + ["\u2013"] + [fi_(totals[fn_]-base_op) for fn_ in all_fnames[1:]])
+        rows.append(["Delta vs Base"] + ["-"] + [fi_(totals[fn_]-base_op) for fn_ in all_fnames[1:]])
         add_table(pdf, headers, rows, col_widths, bold_rows=[len(all_results), len(all_results)+1, len(all_results)+2])
 
     buf = io.BytesIO()
