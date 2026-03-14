@@ -1033,7 +1033,8 @@ def export_pdf_project(all_results, ccy, project_name):
                     # Multi-cell for wrapping long text
                     x_start = pdf.get_x()
                     y_start = pdf.get_y()
-                    pdf.multi_cell(0, 4.5, txt, border=0)
+                    safe_txt = txt.encode("latin-1", "replace").decode("latin-1")
+                    pdf.multi_cell(0, 4.5, safe_txt, border=0)
                     pdf.ln(0.5)
 
     # Portfolio summary page
