@@ -1,5 +1,5 @@
 """
-Landed Cost Comparison Model - v4.4
+Landed Cost Comparison Model - v4.5
 Multi-Item Project-Based Production Cost & Profitability Analysis
 Author: Jonas Henriksson — Head of Strategic Planning & Intelligent Hub
 """
@@ -83,18 +83,18 @@ def get_lead_time(origin, destination):
 st.set_page_config(page_title="Landed Cost Comparison Model", layout="wide", initial_sidebar_state="collapsed")
 
 # ── BLUE INPUT BORDER CSS HELPER ──────────────────────────
-# Builds CSS rules for key-based targeting (.stkey_{key})
+# Builds CSS rules for key-based targeting (.st-key-{key})
 # Fixed keys from main() in A5, dynamic item keys matched via attribute selectors
 INPUT_EDITOR_KEYS = [
     "proj_name", "proj_ccy", "proj_tm", "proj_dt",
     "fc_editor", "bf_editor", "country_editor", "assumption_matrix",
 ]
 _blue_border = f"border-left: 3px solid {INPUT_BLUE} !important; padding-left: 2px;"
-_fixed_rules = "\n".join(f"    .stkey_{k} {{ {_blue_border} }}" for k in INPUT_EDITOR_KEYS)
+_fixed_rules = "\n".join(f"    .st-key-{k} {{ {_blue_border} }}" for k in INPUT_EDITOR_KEYS)
 # Dynamic item keys: i0_txt, i1_ns, i2_ov, etc. — use attribute selectors
-_dynamic_rules = """    [class*="stkey_"][class*="_txt"] { %(bb)s }
-    [class*="stkey_"][class*="_ns"] { %(bb)s }
-    [class*="stkey_"][class*="_ov"] { %(bb)s }""" % {"bb": _blue_border}
+_dynamic_rules = """    [class*="st-key-"][class*="_txt"] { %(bb)s }
+    [class*="st-key-"][class*="_ns"] { %(bb)s }
+    [class*="st-key-"][class*="_ov"] { %(bb)s }""" % {"bb": _blue_border}
 
 st.markdown(f"""
 <style>
@@ -159,7 +159,7 @@ st.markdown(f"""
         background-color: #e9ecef !important; color: #6c757d !important;
     }}
     /* IB Convention: Blue left border on editable data editors via key-based CSS classes */
-    /* Streamlit assigns .stkey_{{key}} class to widget containers based on their key= param */
+    /* Streamlit assigns .st-key-{{key}} class to widget containers based on their key= param */
     /* Fixed editor keys (Project Setup, Factory Config) */
 {_fixed_rules}
     /* Dynamic item editor keys (i0_txt, i1_ns, i2_ov, etc.) via attribute selectors */
@@ -797,7 +797,7 @@ def render_portfolio_summary(all_results, ccy):
 def save_project_json():
     """Collect all session state into a JSON-serializable dict."""
     return json.dumps({
-        "version": "4.4",
+        "version": "4.5",
         "project_name": st.session_state.get("project_name", ""),
         "project_items": st.session_state.get("project_items", []),
         "next_id": st.session_state.get("next_id", 1),
@@ -809,7 +809,7 @@ def main():
     init_state()
 
     st.markdown("""<div class="ib-header" style="position:relative;"><h1>Landed Cost Comparison Model</h1>
-        <div class="sub">Multi-Item Project-Based Production Cost & Profitability Analysis &middot; v4.4</div></div>""", unsafe_allow_html=True)
+        <div class="sub">Multi-Item Project-Based Production Cost & Profitability Analysis &middot; v4.5</div></div>""", unsafe_allow_html=True)
 
     with st.expander("About this model", expanded=False):
         st.markdown(f"""
@@ -844,6 +844,7 @@ The 8-step cost build-up follows standard industrial cost methodology:
 <strong>7.</strong> Save/Load projects as JSON to resume later
 
 <br><br><strong style="font-size:0.9rem;">Changelog</strong><br>
+<span style="color:{GREY_TEXT};">v4.5</span> &mdash; Fixed CSS class prefix: .st-key- (hyphen) not .stkey_ (underscore); blue input borders now render correctly<br>
 <span style="color:{GREY_TEXT};">v4.4</span> &mdash; Key-based CSS targeting (.stkey_) for blue input borders; selective styling of editable vs read-only editors<br>
 <span style="color:{GREY_TEXT};">v4.3</span> &mdash; Fixed blue input border rendering (global CSS targeting stDataEditor)<br>
 <span style="color:{GREY_TEXT};">v4.2</span> &mdash; IB blue input formatting concept, color legend<br>
@@ -1154,7 +1155,7 @@ For questions, feedback, or feature requests:<br>
     # ── FOOTER ────────────────────────────────────────────────
     st.markdown("---")
     c1,c2,c3 = st.columns([4,1,1])
-    c1.markdown(f"<span style='font-size:0.7rem;color:{MUTED};'>Landed Cost Comparison v4.4 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} items &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
+    c1.markdown(f"<span style='font-size:0.7rem;color:{MUTED};'>Landed Cost Comparison v4.5 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} items &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
     if all_results:
         c2.download_button("Export Excel", data=export_excel_project(all_results),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.xlsx",
