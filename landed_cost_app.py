@@ -2270,10 +2270,12 @@ adjust safety stock policies.
     st.markdown('<div class="sec" id="sec-factory-config">Shared Factory Configuration</div>', unsafe_allow_html=True)
 
     # Number of comparison factories
-    _fc_col, _ = st.columns([1, 9])
-    with _fc_col:
-        num_factories = st.selectbox("Comparison Factories", options=list(range(1, 9)),
-            index=(3 if ex else st.session_state.get("num_fac", 2) - 1), key="fc_editor")
+    fc_df = pd.DataFrame({"Comparison Factories": [4 if ex else st.session_state.get("num_fac", 2)]})
+    edited_fc = st.data_editor(fc_df, use_container_width=False, num_rows="fixed",
+        key="fc_editor", hide_index=True,
+        column_config={"Comparison Factories": st.column_config.SelectboxColumn(
+            "Comparison Factories", options=list(range(1, 9)), width=180)})
+    num_factories = int(edited_fc.loc[0, "Comparison Factories"] or 2)
     st.session_state["num_fac"] = num_factories
 
     # Factory locations — consolidated table (first row = current factory)
