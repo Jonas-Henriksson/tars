@@ -201,6 +201,8 @@ st.markdown(f"""
     section[data-testid="stSidebar"] .stButton > button * {{
         text-align: left !important; justify-content: flex-start !important;
         display: block !important; width: 100% !important;
+        font-family: 'Inter', sans-serif !important; font-size: 0.7rem !important;
+        font-weight: inherit !important;
     }}
     section[data-testid="stSidebar"] .stButton > button[kind="secondary"] {{
         background: transparent !important; color: {DARK_TEXT} !important;
