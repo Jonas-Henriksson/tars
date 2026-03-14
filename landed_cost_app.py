@@ -55,7 +55,8 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     .stApp {{ font-family: 'Inter', -apple-system, sans-serif; background-color: #ffffff; }}
     .block-container {{ padding: 1.5rem 2.5rem; max-width: 1400px; }}
-    #MainMenu, footer, header {{visibility: hidden;}}
+    #MainMenu, footer {{visibility: hidden;}}
+    header [data-testid="stDecoration"] {{display: none;}}
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input,
     .stSelectbox > div > div > div {{
