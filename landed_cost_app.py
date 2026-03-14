@@ -1699,7 +1699,7 @@ def main():
     st.markdown(f"""<div class="ib-header">
         <div class="ib-header-left">
             <h1>Landed Cost Comparison Model</h1>
-            <div class="sub">Multi-Item Project-Based Production Cost &amp; Profitability Analysis &middot; v9.0</div>
+            <div class="sub">&nbsp;</div>
         </div>
         <div>{skf_logo_svg}</div>
     </div>
@@ -1762,6 +1762,9 @@ def main():
         <span style="border-left:3px solid {INPUT_BLUE};padding-left:0.3rem;font-weight:600;color:{INPUT_BLUE};">Blue border</span> = editable input<br>
         <strong style="color:{DARK_TEXT};">Bold</strong> = calculated output<br>
         <span style="font-style:italic;">Grey italic</span> = guidance notes
+    </div>
+    <div style="margin-top:0.4rem;padding:0.4rem 0.8rem;font-family:Inter,sans-serif;font-size:0.64rem;color:{GREY_TEXT};line-height:1.5;">
+        Multi-Item Production Cost &amp; Profitability Analysis &middot; v9.0
     </div>""", unsafe_allow_html=True)
 
     # ── SIDEBAR CONTENT (Reference pages) ──
