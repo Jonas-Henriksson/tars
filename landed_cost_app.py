@@ -1706,8 +1706,8 @@ def main():
     <div class="ib-header-spacer"></div>""", unsafe_allow_html=True)
 
     # ── SIDEBAR ────────────────────────────────────────────────
-    st.sidebar.markdown(f"""<div style="background:{NAVY};padding:0.55rem 1rem;margin:-1rem -1rem 0.8rem -1rem;">
-        <div style="font-family:Inter,sans-serif;font-size:0.72rem;font-weight:600;color:white;letter-spacing:0.04em;text-transform:uppercase;">Navigation</div>
+    st.sidebar.markdown(f"""<div style="padding:0.55rem 1rem 0.4rem 1rem;margin:-1rem -1rem 0.8rem -1rem;border-bottom:2px solid {NAVY};">
+        <div style="font-family:Inter,sans-serif;font-size:0.72rem;font-weight:600;color:{NAVY};letter-spacing:0.04em;text-transform:uppercase;">Navigation</div>
     </div>""", unsafe_allow_html=True)
 
     # Navigation buttons
