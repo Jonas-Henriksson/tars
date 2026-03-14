@@ -1987,18 +1987,45 @@ Three numbers per facility: average inventory value, total warehousing spend, an
 Include rent/depreciation, utilities, and direct warehouse labor. This gives you the storage percentage for that specific location.</li>
 <li><strong>Calculate Risk Cost</strong> &mdash; Total value of written-off, scrapped, and lost stock &divide; average inventory value.
 This provides the local risk percentage.</li>
-<li><strong>Map the footprint</strong> &mdash; Hand these local percentages to your Network Optimization team.
-Map the variables across the global network to identify outliers. Expect high storage costs in mature markets and high risk costs
-in nodes handling volatile or aging product lines.</li>
-<li><strong>Establish regional benchmarks</strong> &mdash; Move away from a global flat rate.
-Set benchmark carrying cost rates by region or facility type. A central hub in Europe will have a very different cost profile
-than a regional distribution center in Asia.</li>
 </ol>
-<br>
-This approach gives you a true picture of where capital is actually bleeding and highlights exactly where you might need to
-adjust safety stock policies.
 </div>
 """, unsafe_allow_html=True)
+
+            st.markdown(f'<div style="font-size:0.78rem;color:{DARK_TEXT};font-weight:600;margin-top:1rem;margin-bottom:0.4rem;">Rate Calculator</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};margin-bottom:0.5rem;">Enter trailing 12-month data for a facility to calculate its Storage &amp; Handling and Risk Cost rates.</div>', unsafe_allow_html=True)
+
+            calc_df = pd.DataFrame({
+                "Input": ["Average Inventory Value", "Total Warehousing Spend", "Total Scrap / Write-off Value"],
+                "Amount": [None, None, None],
+                "Guide": [
+                    "Average on-hand inventory value over 12 months",
+                    "Rent/depreciation + utilities + direct warehouse labor",
+                    "Written-off, scrapped, damaged, and lost stock value",
+                ],
+            })
+            edited_calc = st.data_editor(
+                calc_df, use_container_width=False, num_rows="fixed", key="cc_calc", hide_index=True,
+                column_config={
+                    "Input": st.column_config.TextColumn("Input", width=220, disabled=True),
+                    "Amount": st.column_config.NumberColumn("Amount", min_value=0, format="%.0f", width=160),
+                    "Guide": st.column_config.TextColumn("Guide", width=320, disabled=True),
+                },
+                disabled=["Input", "Guide"])
+
+            inv_val = edited_calc.loc[0, "Amount"]
+            wh_spend = edited_calc.loc[1, "Amount"]
+            scrap_val = edited_calc.loc[2, "Amount"]
+
+            if inv_val and not pd.isna(inv_val) and float(inv_val) > 0:
+                inv_v = float(inv_val)
+                storage_pct = (float(wh_spend) / inv_v * 100) if (wh_spend and not pd.isna(wh_spend)) else 0.0
+                risk_pct = (float(scrap_val) / inv_v * 100) if (scrap_val and not pd.isna(scrap_val)) else 0.0
+                st.markdown(f"""<div style="font-size:0.78rem;color:{DARK_TEXT};line-height:1.8;margin-top:0.4rem;padding:0.5rem 0.8rem;background:#f8f9fb;border-radius:4px;">
+                    <strong>Results:</strong><br>
+                    Storage &amp; Handling Rate: <strong>{storage_pct:.1f}%</strong> &nbsp;(warehousing spend &divide; inventory value)<br>
+                    Risk Cost Rate: <strong>{risk_pct:.1f}%</strong> &nbsp;(scrap value &divide; inventory value)<br>
+                    Combined: <strong>{storage_pct + risk_pct:.1f}%</strong> &nbsp;&mdash; add WACC and Service Cost for the total carrying cost rate
+                </div>""", unsafe_allow_html=True)
 
         st.markdown("---")
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Financial Configuration</span>", unsafe_allow_html=True)
