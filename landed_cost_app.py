@@ -198,8 +198,9 @@ st.markdown(f"""
         border: none !important; transition: background 0.15s !important;
         line-height: 1.4 !important; min-height: 0 !important; height: auto !important;
     }}
-    section[data-testid="stSidebar"] .stButton > button p {{
-        text-align: left !important; width: 100% !important;
+    section[data-testid="stSidebar"] .stButton > button * {{
+        text-align: left !important; justify-content: flex-start !important;
+        display: block !important; width: 100% !important;
     }}
     section[data-testid="stSidebar"] .stButton > button[kind="secondary"] {{
         background: transparent !important; color: {DARK_TEXT} !important;
@@ -1555,8 +1556,8 @@ def main():
     </div>""", unsafe_allow_html=True)
 
     # ── SIDEBAR ────────────────────────────────────────────────
-    st.sidebar.markdown(f"""<div style="background:{NAVY};padding:0.7rem 1rem;margin:-1rem -1rem 0.8rem -1rem;">
-        <div style="font-size:0.8rem;font-weight:700;color:white;letter-spacing:0.02em;">Landed Cost Model</div>
+    st.sidebar.markdown(f"""<div style="background:{NAVY};padding:0.55rem 1rem;margin:-1rem -1rem 0.8rem -1rem;">
+        <div style="font-family:Inter,sans-serif;font-size:0.72rem;font-weight:600;color:white;letter-spacing:0.04em;text-transform:uppercase;">Navigation</div>
     </div>""", unsafe_allow_html=True)
 
     # Navigation buttons
