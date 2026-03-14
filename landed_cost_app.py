@@ -533,11 +533,12 @@ def build_tornado_chart(inputs, factory, is_base, ccy, overrides=None):
     fig.update_layout(
         title=dict(text=f"Tornado: OM Sensitivity to ±20% ({factory.name})", font=dict(size=11, family="Inter", color=DARK_TEXT)),
         height=max(250, 50 * len(bars) + 80), barmode="overlay",
-        margin=dict(l=100, r=30, t=45, b=40),
+        margin=dict(l=120, r=30, t=45, b=40),
         paper_bgcolor="white", plot_bgcolor="white",
-        font=dict(family="Inter", size=9, color=DARK_TEXT),
-        xaxis=dict(title="Change in OM (pp)", showgrid=True, gridcolor="#f0f0f0", zeroline=False, ticksuffix="pp"),
-        yaxis=dict(showgrid=False),
+        font=dict(family="Inter", size=10, color=DARK_TEXT),
+        xaxis=dict(title="Change in OM (pp)", showgrid=True, gridcolor="#f0f0f0", zeroline=False, ticksuffix="pp",
+                   title_font=dict(size=10, family="Inter"), tickfont=dict(size=10, family="Inter")),
+        yaxis=dict(showgrid=False, tickfont=dict(size=10, family="Inter")),
         showlegend=False,
     )
     return fig
@@ -1458,7 +1459,7 @@ def render_portfolio_summary(all_results, ccy, cost_of_capital=0.08):
         )
         fig.update_xaxes(tickangle=0, tickfont=dict(size=11, family="Inter", color=DARK_TEXT))
         fig.update_yaxes(title_text=ccy, title_font=dict(size=10))
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False})
 
     # ── INVESTMENT SUMMARY (Portfolio) ────────────────────────
     has_inv = any(
@@ -1959,7 +1960,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                     yaxis=dict(title=currency, showgrid=True, gridcolor="#eee", zeroline=True, zerolinecolor="#ccc"),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 )
-                st.plotly_chart(fig_cf, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig_cf, use_container_width=True, config={"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False})
 
         # Footer for investment page
         st.markdown("---")
@@ -2359,7 +2360,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                     st.markdown(build_annual_table(results, currency), unsafe_allow_html=True)
 
                     if len(results) >= 2:
-                        st.plotly_chart(build_charts(results, currency), use_container_width=True, config={"displayModeBar": False})
+                        st.plotly_chart(build_charts(results, currency), use_container_width=True, config={"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False})
 
                     # ── SUB-TABS: Cost Bridge | Sensitivity ──
                     sub_tab_labels = ["Cost Bridge", "Sensitivity Analysis"]
@@ -2372,7 +2373,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                         wf_cols = st.columns(n_wf)
                         for wi, wf_r in enumerate(results[:n_wf]):
                             with wf_cols[wi]:
-                                st.plotly_chart(build_waterfall_chart(wf_r, currency), use_container_width=True, config={"displayModeBar": False})
+                                st.plotly_chart(build_waterfall_chart(wf_r, currency), use_container_width=True, config={"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False})
                         if len(results) > 3:
                             st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-top:0.3rem;">Showing top 3 of {len(results)} locations. All locations included in tables above.</div>', unsafe_allow_html=True)
 
@@ -2390,7 +2391,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                             if tornado_factory:
                                 tornado_fig = build_tornado_chart(inputs, tornado_factory, is_base=False, ccy=currency, overrides=get_ov(tornado_factory.name))
                                 if tornado_fig:
-                                    st.plotly_chart(tornado_fig, use_container_width=True, config={"displayModeBar": False})
+                                    st.plotly_chart(tornado_fig, use_container_width=True, config={"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False})
 
                         sa_params = {
                             "VA Ratio": ("va_ratio", False),
@@ -2416,7 +2417,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                         fig_sa = build_sensitivity_chart(
                             inputs, factories, base, param_key, sa_choice, steps, currency, is_pct=is_pct
                         )
-                        st.plotly_chart(fig_sa, use_container_width=True, config={"displayModeBar": False})
+                        st.plotly_chart(fig_sa, use_container_width=True, config={"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False})
 
                     inv_results = []
 
