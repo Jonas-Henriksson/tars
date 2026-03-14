@@ -2262,6 +2262,13 @@ adjust safety stock policies.
     # ── SHARED FACTORY SETUP ──────────────────────────────────────
     st.markdown('<div class="sec" id="sec-factory-config">Shared Factory Configuration</div>', unsafe_allow_html=True)
 
+    # Base factory name
+    bf_df = pd.DataFrame({"Current Factory Name": [EX_BASE.name if ex else "Base Case"]})
+    edited_bf = st.data_editor(bf_df, use_container_width=False, num_rows="fixed",
+        key="bf_editor", hide_index=True,
+        column_config={"Current Factory Name": st.column_config.TextColumn("Current Factory Name", width=250)})
+    base_factory_name = str(edited_bf.loc[0, "Current Factory Name"] or "Base Case")
+
     fc_data = {"Comparison Factories": [4 if ex else st.session_state.get("num_fac", 2)]}
     fc_df = pd.DataFrame(fc_data)
     edited_fc = st.data_editor(
@@ -2270,13 +2277,6 @@ adjust safety stock policies.
             "Comparison Factories", min_value=1, max_value=6, step=1, format="%d", width=180)})
     num_factories = max(1, min(6, int(edited_fc.loc[0, "Comparison Factories"])))
     st.session_state["num_fac"] = num_factories
-
-    # Base factory name
-    bf_df = pd.DataFrame({"Current Factory Name": [EX_BASE.name if ex else "Base Case"]})
-    edited_bf = st.data_editor(bf_df, use_container_width=False, num_rows="fixed",
-        key="bf_editor", hide_index=True,
-        column_config={"Current Factory Name": st.column_config.TextColumn("Current Factory Name", width=250)})
-    base_factory_name = str(edited_bf.loc[0, "Current Factory Name"] or "Base Case")
 
     # Factory country assignment
     st.markdown('<div class="sec-sm" id="sec-factory-locations">Factory Locations</div>', unsafe_allow_html=True)
