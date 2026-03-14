@@ -268,8 +268,8 @@ def build_cost_table(results, ccy, target_market=None):
     html += row("Tariff","tariff",lambda v: fn(v,2,acct=True,dz=True),"",True)
     html += row("Duties","duties",lambda v: fn(v,2,acct=True,dz=True),"",True)
     html += row("Transportation","transport",lambda v: fn(v,2,acct=True,dz=True),"",True) + sep()
-    html += row("Operating Profit","op",lambda v: fn(v,2,acct=True,dz=True),"row-double-top")
-    html += row("Operating Margin","om",lambda v: fp(v,1,dz=False),"row-bold")
+    html += delta_row("Operating Profit","op",lambda v: fn(v,2,acct=True,dz=True),"row-double-top")
+    html += delta_row("Operating Margin","om",lambda v: fp(v,1,dz=False),"row-bold")
     bom = results[0]["om"]
     dash = "\u2013"
     dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["om"]-bom)}">{dash if i==0 else fp(r["om"]-bom,1,acct=True)}</td>' for i, r in enumerate(results))
