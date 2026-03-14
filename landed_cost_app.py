@@ -39,8 +39,8 @@ st.set_page_config(page_title="Landed Cost Comparison Model", layout="wide", ini
 # Fixed keys from main() in A5, dynamic item keys matched via attribute selectors
 INPUT_EDITOR_KEYS = [
     "proj_name", "proj_ccy", "proj_tm", "proj_dt",
-    "fc_editor", "bf_editor", "wacc_editor", "target_pb_editor", "target_om_editor",
-    "coc_editor", "country_editor", "assumption_matrix", "nwc_matrix",
+    "fc_editor", "bf_editor", "country_editor", "assumption_matrix", "nwc_matrix",
+    "wacc_editor", "target_pb_editor", "target_om_editor", "coc_editor",
 ]
 _blue_border = f"border-left: 3px solid {INPUT_BLUE} !important; padding-left: 2px;"
 _fixed_rules = "\n".join(f"    .st-key-{k} {{ {_blue_border} }}" for k in INPUT_EDITOR_KEYS)
@@ -839,7 +839,7 @@ def export_excel_project(project_data):
             has_inv_data = any(ic.get("total_investment", 0) > 0 for ic in inv_data)
             if has_inv_data and len(results) >= 2:
                 r+=2
-                ws.write(r,0,"Transfer Investment",hl)
+                ws.write(r,0,"Required Investments",hl)
                 for c,res in enumerate(results): ws.write(r,c+1,res["name"] if c>0 else "",hf if c>0 else hl)
                 r+=1
                 inv_by_name = {ic["factory_name"]: ic for ic in inv_data}
@@ -1533,7 +1533,7 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
         for ic in item.get("investment", [])
     )
     if has_inv:
-        st.markdown(f'<div class="sec-sm">Transfer Investment Summary</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="sec-sm">Required Investments Summary</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="callout">Aggregated investment metrics across all items by receiving factory ({ccy}).</div>', unsafe_allow_html=True)
 
         # Collect alt factory names (exclude base)
@@ -1665,8 +1665,9 @@ def main():
     # Navigation buttons
     nav_pages = [
         ("Landed Cost Analysis", "model"),
-        ("Transfer Investment", "investment"),
+        ("Required Investments", "investment"),
         ("Strategic Context", "strategic"),
+        ("Financial Configuration", "financial"),
     ]
     info_pages = [
         ("About & Methodology", "about"),
@@ -1691,7 +1692,6 @@ def main():
                 ("Assumptions Matrix", "sec-assumptions"),
                 ("Lead Times", "sec-lead-times"),
                 ("NWC Assumptions", "sec-nwc"),
-                ("Financial Configuration", "sec-financial-config"),
                 ("Item Analysis", "sec-item-analysis"),
             ]
             links_html = "".join(
@@ -1744,7 +1744,7 @@ Net Working Capital impact captures the balance sheet cost of inventory tied up 
 <li><strong>Adjusted OP</strong> = OP - NWC Carrying Cost per unit</li>
 </ul>
 
-<br><strong style="font-size:0.9rem;">Transfer Investment Analysis</strong><br>
+<br><strong style="font-size:0.9rem;">Required Investments Analysis</strong><br>
 A separate module evaluates the overall investment rationale for each production transfer:
 <ul style="margin:0.3rem 0 0.3rem 1.2rem;padding:0;">
 <li><strong>Total Investment</strong> = CAPEX + OPEX + Restructuring</li>
@@ -1765,7 +1765,7 @@ Investment inputs are per receiving factory and per item. The discount rate defa
 <div style="font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};line-height:1.6;">
 <strong style="font-size:0.82rem;">Changelog</strong><br>
 <span style="color:{GREY_TEXT};">v9.0</span> &mdash; Qualitative context, Data Classification, sidebar nav<br>
-<span style="color:{GREY_TEXT};">v8.0</span> &mdash; Transfer Investment Analysis (NPV, IRR, payback)<br>
+<span style="color:{GREY_TEXT};">v8.0</span> &mdash; Required Investments Analysis (NPV, IRR, payback)<br>
 <span style="color:{GREY_TEXT};">v7.0</span> &mdash; NWC impact, GIT, adjusted OP/margin<br>
 <span style="color:{GREY_TEXT};">v6.0</span> &mdash; IB visual refresh, waterfall, tornado, PDF export<br>
 <span style="color:{GREY_TEXT};">v5.0</span> &mdash; Testable modules, sensitivity, lead times<br>
@@ -1848,7 +1848,155 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Strategic Context</span>", unsafe_allow_html=True)
         return  # Don't render the model page
 
-    # ── TRANSFER INVESTMENT PAGE ─────────────────────────────
+    # ── FINANCIAL CONFIGURATION PAGE ──────────────────────────
+    if st.session_state.active_page == "financial":
+        ex = st.session_state.ex
+        all_factory_names_cc = st.session_state.get("_all_factory_names", ["Base Case"])
+        factory_countries = st.session_state.get("_factory_countries", {})
+
+        st.markdown('<div class="sec">Financial Configuration</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout">Company-wide financial parameters for investment analysis and performance benchmarking.</div>', unsafe_allow_html=True)
+
+        fin_col1, fin_col2, fin_col3 = st.columns([1, 1, 1])
+        with fin_col1:
+            wacc_df = pd.DataFrame({"Company WACC (%)": [st.session_state.get("company_wacc", 0.08) * 100]})
+            edited_wacc = st.data_editor(wacc_df, use_container_width=False, num_rows="fixed",
+                key="wacc_editor", hide_index=True,
+                column_config={"Company WACC (%)": st.column_config.NumberColumn(
+                    "Company WACC (%)", min_value=0.0, max_value=30.0, step=0.5, format="%.1f", width=200)})
+            company_wacc = float(edited_wacc.loc[0, "Company WACC (%)"] or 0.0) / 100.0
+            st.session_state["company_wacc"] = company_wacc
+        with fin_col2:
+            pb_df = pd.DataFrame({"Target Payback (Years)": [st.session_state.get("target_payback", 3)]})
+            edited_pb = st.data_editor(pb_df, use_container_width=False, num_rows="fixed",
+                key="target_pb_editor", hide_index=True,
+                column_config={"Target Payback (Years)": st.column_config.NumberColumn(
+                    "Target Payback (Years)", min_value=1, max_value=15, step=1, format="%d", width=200)})
+            target_payback = max(1, int(edited_pb.loc[0, "Target Payback (Years)"] or 3))
+            st.session_state["target_payback"] = target_payback
+        with fin_col3:
+            om_df = pd.DataFrame({"Target Op. Margin (%)": [st.session_state.get("target_om", 0.20) * 100]})
+            edited_om = st.data_editor(om_df, use_container_width=False, num_rows="fixed",
+                key="target_om_editor", hide_index=True,
+                column_config={"Target Op. Margin (%)": st.column_config.NumberColumn(
+                    "Target Op. Margin (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.1f", width=200)})
+            target_om = float(edited_om.loc[0, "Target Op. Margin (%)"] or 0.0) / 100.0
+            st.session_state["target_om"] = target_om
+
+        # ── Total Carrying Costs
+        st.markdown('<div class="sec-sm">Total Carrying Costs</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout">Annual carrying cost rate applied to Delta NWC. Typically <strong>15–30%</strong> of inventory value. Use a company-wide rate for simplicity, or per-factory rates to isolate cost differences across the footprint.</div>', unsafe_allow_html=True)
+
+        CC_ROWS = ["Capital Cost (WACC)", "Risk Cost", "Storage & Handling", "Service Cost"]
+        CC_GUIDES = [
+            "Opportunity cost of tied-up cash — driven by interest rates, tax rates, and network risk profile (typical: 7–15%)",
+            "Write-offs, shrinkage, damage, spoilage — divide trailing 12-mo scrap value by avg inventory value (typical: 3–9%)",
+            "Warehousing rent/depreciation, utilities, direct labor — divide total warehouse spend by avg inventory value (typical: 2–5%)",
+            "Insurance, property taxes, inventory management software (typical: 1–3%)",
+        ]
+        cc_defaults = [8.0, 5.0, 3.0, 2.0]
+
+        cc_mode = st.radio("Carrying cost mode", ["Company-wide rate", "Per-factory rates"],
+                           horizontal=True, key="cc_mode",
+                           index=1 if ex else 0)
+
+        if cc_mode == "Company-wide rate":
+            cc_data = {
+                "Component": CC_ROWS,
+                "Rate (%)": cc_defaults,
+                "Guide": CC_GUIDES,
+            }
+            cc_df = pd.DataFrame(cc_data)
+            edited_cc = st.data_editor(
+                cc_df, use_container_width=False, num_rows="fixed", key="coc_editor", hide_index=True,
+                column_config={
+                    "Component": st.column_config.TextColumn("Component", width=200, disabled=True),
+                    "Rate (%)": st.column_config.NumberColumn("Rate (%)", min_value=0.0, max_value=50.0, step=0.5, format="%.1f", width=120),
+                    "Guide": st.column_config.TextColumn("Guide", width=420, disabled=True),
+                },
+                disabled=["Component", "Guide"])
+            global_cc_pct = 0.0
+            for _, row in edited_cc.iterrows():
+                v = row["Rate (%)"]
+                if v is not None and not pd.isna(v):
+                    global_cc_pct += float(v)
+            global_cc_rate = global_cc_pct / 100.0
+            carrying_cost_rates = {fn_: global_cc_rate for fn_ in all_factory_names_cc}
+            st.markdown(f'<div style="font-size:0.78rem;color:{DARK_TEXT};font-weight:600;margin-top:0.3rem;">Total Carrying Cost Rate: {global_cc_pct:.1f}% (all factories)</div>', unsafe_allow_html=True)
+        else:
+            cc_cols = {}
+            for fn_ in all_factory_names_cc:
+                if ex:
+                    if "Asia" in fn_ or "China" in str(factory_countries.get(fn_, "")):
+                        cc_cols[fn_] = [9.0, 7.0, 2.5, 1.5]
+                    elif "Americas" in fn_ or "USA" in str(factory_countries.get(fn_, "")):
+                        cc_cols[fn_] = [8.5, 4.0, 4.0, 2.5]
+                    else:
+                        cc_cols[fn_] = [8.0, 5.0, 3.0, 2.0]
+                else:
+                    cc_cols[fn_] = list(cc_defaults)
+            cc_cols["Guide"] = CC_GUIDES
+            cc_df = pd.DataFrame(cc_cols, index=CC_ROWS)
+
+            edited_cc = st.data_editor(
+                cc_df, use_container_width=True, num_rows="fixed", key="coc_editor", hide_index=False,
+                column_config={
+                    **{fn_: st.column_config.NumberColumn(fn_, min_value=0.0, max_value=50.0, step=0.5, format="%.1f") for fn_ in all_factory_names_cc},
+                    "Guide": st.column_config.TextColumn("Guide", width=420, disabled=True),
+                },
+                disabled=["Guide"])
+
+            carrying_cost_rates = {}
+            cc_summary_parts = []
+            for fn_ in all_factory_names_cc:
+                total_pct = 0.0
+                for row_name in CC_ROWS:
+                    v = edited_cc.loc[row_name, fn_]
+                    if v is not None and not pd.isna(v):
+                        total_pct += float(v)
+                carrying_cost_rates[fn_] = total_pct / 100.0
+                cc_summary_parts.append(f"{fn_}: <strong>{total_pct:.1f}%</strong>")
+            cc_summary = " &nbsp;|&nbsp; ".join(cc_summary_parts)
+            st.markdown(f'<div style="font-size:0.78rem;color:{DARK_TEXT};font-weight:600;margin-top:0.3rem;">Total Carrying Cost Rate &mdash; {cc_summary}</div>', unsafe_allow_html=True)
+
+        st.session_state["_carrying_cost_rates"] = carrying_cost_rates
+
+        with st.expander("How to calculate your facility-specific rates"):
+            st.markdown(f"""
+<div style="font-size:0.78rem;color:{DARK_TEXT};line-height:1.7;">
+<strong>What drives your specific rate</strong><br>
+Your actual rate fluctuates based on practical factors: current interest rates (cost of debt feeds directly into WACC),
+corporate tax rates (interest on debt is tax-deductible, shifting the effective number), and your network risk profile
+(stable, mature supply networks command lower equity premiums vs. volatile sectors).
+If your planning teams are using a blanket textbook rate without isolating actual WACC and operational costs per facility,
+you are missing clear optimization opportunities across the footprint.
+
+<br><br><strong>Practical approach to isolate per-facility rates</strong>
+<ol style="margin:0.3rem 0 0 1.2rem;padding:0;">
+<li><strong>Isolate the data</strong> &mdash; Pull 12 months of trailing data for each major node in the network.
+Three numbers per facility: average inventory value, total warehousing spend, and total value of written-off or scrapped stock.</li>
+<li><strong>Calculate Storage &amp; Handling</strong> &mdash; Total warehousing spend &divide; average inventory value.
+Include rent/depreciation, utilities, and direct warehouse labor. This gives you the storage percentage for that specific location.</li>
+<li><strong>Calculate Risk Cost</strong> &mdash; Total value of written-off, scrapped, and lost stock &divide; average inventory value.
+This provides the local risk percentage.</li>
+<li><strong>Map the footprint</strong> &mdash; Hand these local percentages to your Network Optimization team.
+Map the variables across the global network to identify outliers. Expect high storage costs in mature markets and high risk costs
+in nodes handling volatile or aging product lines.</li>
+<li><strong>Establish regional benchmarks</strong> &mdash; Move away from a global flat rate.
+Set benchmark carrying cost rates by region or facility type. A central hub in Europe will have a very different cost profile
+than a regional distribution center in Asia.</li>
+</ol>
+<br>
+This approach gives you a true picture of where capital is actually bleeding and highlights exactly where you might need to
+adjust safety stock policies.
+</div>
+""", unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Financial Configuration</span>", unsafe_allow_html=True)
+        return  # Don't render the model page
+
+    # ── REQUIRED INVESTMENTS PAGE ─────────────────────────────
     if st.session_state.active_page == "investment":
         all_results = st.session_state.get("_all_results", [])
         company_wacc = st.session_state.get("_company_wacc", 0.08)
@@ -1873,7 +2021,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                 continue
 
             item_label = f"{inp.get('item_number', '')} {inp.get('designation', '')}".strip() or f"Item {item_idx + 1}"
-            st.markdown(f'<div class="sec">Transfer Investment — {item_label}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="sec">Required Investments — {item_label}</div>', unsafe_allow_html=True)
 
             inv_c1, inv_c2 = st.columns([1, 1])
             with inv_c1:
@@ -1948,7 +2096,7 @@ Compares full cost-to-serve across factory locations, including material, labour
             if has_any_inv:
                 dash = "\u2013"
                 inv_hdr = "".join(f'<th>{ic["factory_name"]}</th>' for ic in inv_results)
-                inv_html = f'<table class="ib-table"><thead><tr><th>Transfer Investment ({currency})</th>{inv_hdr}</tr></thead><tbody>'
+                inv_html = f'<table class="ib-table"><thead><tr><th>Required Investments ({currency})</th>{inv_hdr}</tr></thead><tbody>'
 
                 def _inv_row(lbl, vals, cls=""):
                     cells = "".join(f'<td>{v}</td>' for v in vals)
@@ -2032,7 +2180,7 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         # Footer for investment page
         st.markdown("---")
-        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Transfer Investment Analysis</span>", unsafe_allow_html=True)
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Required Investments Analysis</span>", unsafe_allow_html=True)
         return
 
     # ── Reference-only pages: show info message ──
@@ -2156,6 +2304,7 @@ Compares full cost-to-serve across factory locations, including material, labour
     factory_countries = {}
     for _, r in edited_countries.iterrows():
         factory_countries[str(r["Factory"])] = str(r["Country"] or "")
+    st.session_state["_factory_countries"] = factory_countries
 
     # Assumptions matrix
     ROWS = ["VA Ratio","PS Index","MCL %","S&A %","TPL","Tariff %","Duties %","Transport %"]
@@ -2192,6 +2341,7 @@ Compares full cost-to-serve across factory locations, including material, labour
     factory_cols["Guide"] = GUIDES
     df_matrix = pd.DataFrame(factory_cols, index=ROWS)
     df_matrix.loc["VA Ratio", base_factory_name] = None
+    st.session_state["_all_factory_names"] = [base_factory_name] + factory_col_names
 
     st.markdown('<div class="sec-sm" id="sec-assumptions">Assumptions Matrix</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="callout">These assumptions apply to <strong>all items</strong> in the project. Current factory (<strong>{base_factory_name}</strong>) VA Ratio is 1.0x (implicit).</div>', unsafe_allow_html=True)
@@ -2297,145 +2447,11 @@ Compares full cost-to-serve across factory locations, including material, labour
         }
     base_nwc = nwc_assumptions.get(base_factory_name, {})
 
-    # ── FINANCIAL CONFIGURATION ──────────────────────────────
-    st.markdown('<div class="sec-sm" id="sec-financial-config">Financial Configuration</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="callout">Company-wide financial parameters for investment analysis and performance benchmarking.</div>', unsafe_allow_html=True)
-
-    fin_col1, fin_col2, fin_col3 = st.columns([1, 1, 1])
-    with fin_col1:
-        wacc_df = pd.DataFrame({"Company WACC (%)": [8.0 if ex else 8.0]})
-        edited_wacc = st.data_editor(wacc_df, use_container_width=False, num_rows="fixed",
-            key="wacc_editor", hide_index=True,
-            column_config={"Company WACC (%)": st.column_config.NumberColumn(
-                "Company WACC (%)", min_value=0.0, max_value=30.0, step=0.5, format="%.1f", width=200)})
-        company_wacc = float(edited_wacc.loc[0, "Company WACC (%)"] or 0.0) / 100.0
-        st.session_state["company_wacc"] = company_wacc
-    with fin_col2:
-        pb_df = pd.DataFrame({"Target Payback (Years)": [3 if ex else 3]})
-        edited_pb = st.data_editor(pb_df, use_container_width=False, num_rows="fixed",
-            key="target_pb_editor", hide_index=True,
-            column_config={"Target Payback (Years)": st.column_config.NumberColumn(
-                "Target Payback (Years)", min_value=1, max_value=15, step=1, format="%d", width=200)})
-        target_payback = max(1, int(edited_pb.loc[0, "Target Payback (Years)"] or 3))
-        st.session_state["target_payback"] = target_payback
-    with fin_col3:
-        om_df = pd.DataFrame({"Target Op. Margin (%)": [20.0 if ex else 20.0]})
-        edited_om = st.data_editor(om_df, use_container_width=False, num_rows="fixed",
-            key="target_om_editor", hide_index=True,
-            column_config={"Target Op. Margin (%)": st.column_config.NumberColumn(
-                "Target Op. Margin (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.1f", width=200)})
-        target_om = float(edited_om.loc[0, "Target Op. Margin (%)"] or 0.0) / 100.0
-        st.session_state["target_om"] = target_om
-
-    # ── Total Carrying Costs (sub-section)
-    all_factory_names_cc = [base_factory_name] + factory_col_names
-    st.markdown('<div class="sec-sm" id="sec-carrying-costs">Total Carrying Costs</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="callout">Annual carrying cost rate applied to Delta NWC. Typically <strong>15–30%</strong> of inventory value. Use a company-wide rate for simplicity, or per-factory rates to isolate cost differences across the footprint.</div>', unsafe_allow_html=True)
-
-    CC_ROWS = ["Capital Cost (WACC)", "Risk Cost", "Storage & Handling", "Service Cost"]
-    CC_GUIDES = [
-        "Opportunity cost of tied-up cash — driven by interest rates, tax rates, and network risk profile (typical: 7–15%)",
-        "Write-offs, shrinkage, damage, spoilage — divide trailing 12-mo scrap value by avg inventory value (typical: 3–9%)",
-        "Warehousing rent/depreciation, utilities, direct labor — divide total warehouse spend by avg inventory value (typical: 2–5%)",
-        "Insurance, property taxes, inventory management software (typical: 1–3%)",
-    ]
-    cc_defaults = [8.0, 5.0, 3.0, 2.0]
-
-    cc_mode = st.radio("Carrying cost mode", ["Company-wide rate", "Per-factory rates"],
-                       horizontal=True, key="cc_mode",
-                       index=1 if ex else 0)
-
-    if cc_mode == "Company-wide rate":
-        cc_data = {
-            "Component": CC_ROWS,
-            "Rate (%)": cc_defaults,
-            "Guide": CC_GUIDES,
-        }
-        cc_df = pd.DataFrame(cc_data)
-        edited_cc = st.data_editor(
-            cc_df, use_container_width=False, num_rows="fixed", key="coc_editor", hide_index=True,
-            column_config={
-                "Component": st.column_config.TextColumn("Component", width=200, disabled=True),
-                "Rate (%)": st.column_config.NumberColumn("Rate (%)", min_value=0.0, max_value=50.0, step=0.5, format="%.1f", width=120),
-                "Guide": st.column_config.TextColumn("Guide", width=420, disabled=True),
-            },
-            disabled=["Component", "Guide"])
-        # Sum to a single company-wide carrying cost rate
-        global_cc_pct = 0.0
-        for _, row in edited_cc.iterrows():
-            v = row["Rate (%)"]
-            if v is not None and not pd.isna(v):
-                global_cc_pct += float(v)
-        global_cc_rate = global_cc_pct / 100.0
-        carrying_cost_rates = {fn_: global_cc_rate for fn_ in all_factory_names_cc}
-        st.markdown(f'<div style="font-size:0.78rem;color:{DARK_TEXT};font-weight:600;margin-top:0.3rem;">Total Carrying Cost Rate: {global_cc_pct:.1f}% (all factories)</div>', unsafe_allow_html=True)
-    else:
-        cc_cols = {}
-        for fn_ in all_factory_names_cc:
-            if ex:
-                if "Asia" in fn_ or "China" in str(factory_countries.get(fn_, "")):
-                    cc_cols[fn_] = [9.0, 7.0, 2.5, 1.5]
-                elif "Americas" in fn_ or "USA" in str(factory_countries.get(fn_, "")):
-                    cc_cols[fn_] = [8.5, 4.0, 4.0, 2.5]
-                else:
-                    cc_cols[fn_] = [8.0, 5.0, 3.0, 2.0]
-            else:
-                cc_cols[fn_] = list(cc_defaults)
-        cc_cols["Guide"] = CC_GUIDES
-        cc_df = pd.DataFrame(cc_cols, index=CC_ROWS)
-
-        edited_cc = st.data_editor(
-            cc_df, use_container_width=True, num_rows="fixed", key="coc_editor", hide_index=False,
-            column_config={
-                **{fn_: st.column_config.NumberColumn(fn_, min_value=0.0, max_value=50.0, step=0.5, format="%.1f") for fn_ in all_factory_names_cc},
-                "Guide": st.column_config.TextColumn("Guide", width=420, disabled=True),
-            },
-            disabled=["Guide"])
-
-        # Compute per-factory total carrying cost rates
-        carrying_cost_rates = {}
-        cc_summary_parts = []
-        for fn_ in all_factory_names_cc:
-            total_pct = 0.0
-            for row_name in CC_ROWS:
-                v = edited_cc.loc[row_name, fn_]
-                if v is not None and not pd.isna(v):
-                    total_pct += float(v)
-            carrying_cost_rates[fn_] = total_pct / 100.0
-            cc_summary_parts.append(f"{fn_}: <strong>{total_pct:.1f}%</strong>")
-        cc_summary = " &nbsp;|&nbsp; ".join(cc_summary_parts)
-        st.markdown(f'<div style="font-size:0.78rem;color:{DARK_TEXT};font-weight:600;margin-top:0.3rem;">Total Carrying Cost Rate &mdash; {cc_summary}</div>', unsafe_allow_html=True)
-
-    with st.expander("How to calculate your facility-specific rates"):
-        st.markdown(f"""
-<div style="font-size:0.78rem;color:{DARK_TEXT};line-height:1.7;">
-<strong>What drives your specific rate</strong><br>
-Your actual rate fluctuates based on practical factors: current interest rates (cost of debt feeds directly into WACC),
-corporate tax rates (interest on debt is tax-deductible, shifting the effective number), and your network risk profile
-(stable, mature supply networks command lower equity premiums vs. volatile sectors).
-If your planning teams are using a blanket textbook rate without isolating actual WACC and operational costs per facility,
-you are missing clear optimization opportunities across the footprint.
-
-<br><br><strong>Practical approach to isolate per-facility rates</strong>
-<ol style="margin:0.3rem 0 0 1.2rem;padding:0;">
-<li><strong>Isolate the data</strong> &mdash; Pull 12 months of trailing data for each major node in the network.
-Three numbers per facility: average inventory value, total warehousing spend, and total value of written-off or scrapped stock.</li>
-<li><strong>Calculate Storage &amp; Handling</strong> &mdash; Total warehousing spend &divide; average inventory value.
-Include rent/depreciation, utilities, and direct warehouse labor. This gives you the storage percentage for that specific location.</li>
-<li><strong>Calculate Risk Cost</strong> &mdash; Total value of written-off, scrapped, and lost stock &divide; average inventory value.
-This provides the local risk percentage.</li>
-<li><strong>Map the footprint</strong> &mdash; Hand these local percentages to your Network Optimization team.
-Map the variables across the global network to identify outliers. Expect high storage costs in mature markets and high risk costs
-in nodes handling volatile or aging product lines.</li>
-<li><strong>Establish regional benchmarks</strong> &mdash; Move away from a global flat rate.
-Set benchmark carrying cost rates by region or facility type. A central hub in Europe will have a very different cost profile
-than a regional distribution center in Asia.</li>
-</ol>
-<br>
-This approach gives you a true picture of where capital is actually bleeding and highlights exactly where you might need to
-adjust safety stock policies.
-</div>
-""", unsafe_allow_html=True)
+    # ── Read financial configuration from session state ──────
+    carrying_cost_rates = st.session_state.get("_carrying_cost_rates", {})
+    company_wacc = st.session_state.get("company_wacc", 0.08)
+    target_payback = st.session_state.get("target_payback", 3)
+    target_om = st.session_state.get("target_om", 0.20)
 
     # Build factory objects
     base = FactoryAssumptions(
