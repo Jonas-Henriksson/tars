@@ -467,6 +467,27 @@ def build_tornado_chart(inputs, factory, is_base, ccy, overrides=None):
 
 
 # ── EXECUTIVE SUMMARY NARRATIVE ──────────────────────────────
+def build_qualitative_summary(qualitative):
+    """Build HTML block for qualitative strategic context."""
+    if not qualitative:
+        return ""
+    parts = []
+    if qualitative.get("strategic_rationale", "").strip():
+        parts.append(f'<tr><td style="font-weight:600;color:{NAVY};white-space:nowrap;vertical-align:top;padding:0.3rem 0.8rem 0.3rem 0;">Strategic Rationale</td><td style="padding:0.3rem 0;">{qualitative["strategic_rationale"].strip()}</td></tr>')
+    if qualitative.get("purpose", "").strip():
+        parts.append(f'<tr><td style="font-weight:600;color:{NAVY};white-space:nowrap;vertical-align:top;padding:0.3rem 0.8rem 0.3rem 0;">Purpose & Objective</td><td style="padding:0.3rem 0;">{qualitative["purpose"].strip()}</td></tr>')
+    if qualitative.get("risk_of_inaction", "").strip():
+        parts.append(f'<tr><td style="font-weight:600;color:{NAVY};white-space:nowrap;vertical-align:top;padding:0.3rem 0.8rem 0.3rem 0;">Risk of Inaction</td><td style="padding:0.3rem 0;">{qualitative["risk_of_inaction"].strip()}</td></tr>')
+    if qualitative.get("risks", "").strip():
+        parts.append(f'<tr><td style="font-weight:600;color:{NAVY};white-space:nowrap;vertical-align:top;padding:0.3rem 0.8rem 0.3rem 0;">Key Risks</td><td style="padding:0.3rem 0;">{qualitative["risks"].strip()}</td></tr>')
+    if not parts:
+        return ""
+    return f"""<div style="background:#fafbfc;border:1px solid {BORDER};border-left:3px solid {NAVY};border-radius:2px;padding:0.7rem 1rem;margin:0.5rem 0 0.8rem 0;font-family:Inter,sans-serif;font-size:0.78rem;color:{DARK_TEXT};line-height:1.6;">
+<div style="font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:{GREY_TEXT};margin-bottom:0.4rem;">Strategic Context</div>
+<table style="border-collapse:collapse;width:100%;">{"".join(parts)}</table>
+</div>"""
+
+
 def build_exec_summary(results, inputs, ccy):
     """Generate an auto-written executive summary paragraph for IB-style reports."""
     if len(results) < 2:
@@ -576,7 +597,8 @@ def export_excel_project(project_data):
             w.sheets[sname] = ws
             n = len(results)
             ws.merge_range(0,0,0,n,f"Landed Cost: {inputs['item_number']} - {inputs['designation']}",tf)
-            ws.merge_range(1,0,1,n,f"{inputs['currency']} | Destination: {inputs['destination']}",sf)
+            dc_ = inputs.get("data_classification", "C3 - Confidential")
+            ws.merge_range(1,0,1,n,f"{inputs['currency']} | Destination: {inputs['destination']} | {dc_}",sf)
             ws.set_column(0,0,24)
             for c in range(1,n+1): ws.set_column(c,c,16)
             r=3
@@ -707,6 +729,23 @@ def export_excel_project(project_data):
                             ws.write(r,c,"\u2013",inf_)
                     r+=1
 
+            # Qualitative context
+            qual = item.get("qualitative", {})
+            has_qual = any(v.strip() for v in qual.values()) if qual else False
+            if has_qual:
+                r+=2
+                wf = wb.add_format({"font_name":"Arial","font_size":9,"text_wrap":True,"font_color":DARK_TEXT,"valign":"top"})
+                ws.write(r,0,"Strategic Context",hl)
+                ws.merge_range(r,1,r,n,"",hl)
+                r+=1
+                for q_key, q_label in [("strategic_rationale","Strategic Rationale"),("purpose","Purpose & Objective"),
+                    ("risk_of_inaction","Risk of Inaction"),("risks","Key Risks & Mitigations")]:
+                    txt = qual.get(q_key, "").strip()
+                    if txt:
+                        ws.write(r,0,q_label,lb)
+                        ws.merge_range(r,1,r,n,txt,wf) if n > 1 else ws.write(r,1,txt,wf)
+                        r+=1
+
         # Summary sheet
         if len(project_data) > 1:
             ws = wb.add_worksheet("Portfolio Summary")
@@ -744,10 +783,11 @@ def export_excel_project(project_data):
 class IBPitchPDF(FPDF):
     """Custom FPDF with IB-style headers and footers."""
 
-    def __init__(self, project_name="", ccy="", **kwargs):
+    def __init__(self, project_name="", ccy="", data_classification="C3 - Confidential", **kwargs):
         super().__init__(orientation="L", unit="mm", format="A4", **kwargs)
         self._project_name = project_name
         self._ccy = ccy
+        self._dc = data_classification
         self.set_auto_page_break(auto=True, margin=20)
 
     def header(self):
@@ -768,12 +808,13 @@ class IBPitchPDF(FPDF):
         self.ln(2)
         self.set_font("Helvetica", "I", 5.5)
         self.set_text_color(153, 153, 153)
-        self.cell(0, 4, "Confidential & Proprietary  -  SKF Group  -  Strategic Planning & Intelligent Hub", align="L")
+        self.cell(0, 4, f"{self._dc}  -  SKF Group  -  Strategic Planning & Intelligent Hub", align="L")
         self.cell(0, 4, f"Page {self.page_no()}", align="R")
 
 
 def export_pdf_project(all_results, ccy, project_name):
-    pdf = IBPitchPDF(project_name=project_name, ccy=ccy)
+    dc_label = all_results[0]["inputs"].get("data_classification", "C3 - Confidential") if all_results else "C3 - Confidential"
+    pdf = IBPitchPDF(project_name=project_name, ccy=ccy, data_classification=dc_label)
     navy_r, navy_g, navy_b = 0, 32, 96
     white_r, white_g, white_b = 255, 255, 255
     dark_r, dark_g, dark_b = 26, 26, 46
@@ -837,8 +878,11 @@ def export_pdf_project(all_results, ccy, project_name):
     pdf.set_line_width(0.8)
     pdf.line(100, pdf.get_y(), 197, pdf.get_y())
     pdf.ln(8)
+    # Data classification from first item (project-level)
+    dc_label = all_results[0]["inputs"].get("data_classification", "C3 - Confidential") if all_results else "C3 - Confidential"
+
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, f"{ccy}  |  {len(all_results)} Item{'s' if len(all_results)!=1 else ''}", align="C", ln=True)
+    pdf.cell(0, 6, f"{ccy}  |  {len(all_results)} Item{'s' if len(all_results)!=1 else ''}  |  {dc_label}", align="C", ln=True)
     pdf.set_font("Helvetica", "", 9)
     pdf.cell(0, 6, date.today().strftime("%B %d, %Y"), align="C", ln=True)
     pdf.ln(20)
@@ -968,6 +1012,29 @@ def export_pdf_project(all_results, ccy, project_name):
                 dpb_row.append(f"{dpb_v:.1f} yrs" if dpb_v is not None else "-")
             inv_rows.extend([npv_row, irr_row, pb_row, dpb_row])
             add_table(pdf, inv_headers, inv_rows, col_widths, bold_rows=[3, 5, 8, 9, 10, 11])
+
+        # Qualitative context in PDF
+        qual = item.get("qualitative", {})
+        has_qual_pdf = any(v.strip() for v in qual.values()) if qual else False
+        if has_qual_pdf:
+            pdf.ln(4)
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.set_fill_color(navy_r, navy_g, navy_b)
+            pdf.set_text_color(white_r, white_g, white_b)
+            pdf.cell(0, 5.5, "Strategic Context", ln=True, fill=True)
+            pdf.set_text_color(dark_r, dark_g, dark_b)
+            for q_key, q_label in [("strategic_rationale","Strategic Rationale"),("purpose","Purpose & Objective"),
+                ("risk_of_inaction","Risk of Inaction"),("risks","Key Risks & Mitigations")]:
+                txt = qual.get(q_key, "").strip()
+                if txt:
+                    pdf.set_font("Helvetica", "B", 6.5)
+                    pdf.cell(45, 4.5, q_label, border=0)
+                    pdf.set_font("Helvetica", "", 6.5)
+                    # Multi-cell for wrapping long text
+                    x_start = pdf.get_x()
+                    y_start = pdf.get_y()
+                    pdf.multi_cell(0, 4.5, txt, border=0)
+                    pdf.ln(0.5)
 
     # Portfolio summary page
     if len(all_results) > 1:
@@ -1402,6 +1469,22 @@ def render_portfolio_summary(all_results, ccy, cost_of_capital=0.08):
             inv_p_html += '</tbody></table>'
             st.markdown(inv_p_html, unsafe_allow_html=True)
 
+    # ── QUALITATIVE CONTEXT (Portfolio) ──────────────────────
+    has_qual = any(
+        any(v.strip() for v in item.get("qualitative", {}).values())
+        for item in all_results
+    )
+    if has_qual:
+        st.markdown(f'<div class="sec-sm">Strategic Context</div>', unsafe_allow_html=True)
+        for item in all_results:
+            qual = item.get("qualitative", {})
+            if not any(v.strip() for v in qual.values()):
+                continue
+            inp = item["inputs"]
+            lbl = f"{inp['item_number']} - {inp['designation']}" if inp.get("item_number") else inp.get("designation", "Item")
+            st.markdown(f'<div style="font-weight:600;font-size:0.8rem;color:{NAVY};margin:0.6rem 0 0.2rem 0;">{lbl}</div>', unsafe_allow_html=True)
+            st.markdown(build_qualitative_summary(qual), unsafe_allow_html=True)
+
 
 # ── SAVE / LOAD ───────────────────────────────────────────────
 def save_project_json():
@@ -1423,7 +1506,7 @@ def main():
     st.markdown(f"""<div class="ib-header">
         <div class="ib-header-left">
             <h1>Landed Cost Comparison Model</h1>
-            <div class="sub">Multi-Item Project-Based Production Cost &amp; Profitability Analysis &middot; v8.0</div>
+            <div class="sub">Multi-Item Project-Based Production Cost &amp; Profitability Analysis &middot; v9.0</div>
         </div>
         <div>{skf_logo_svg}</div>
     </div>""", unsafe_allow_html=True)
@@ -1487,10 +1570,13 @@ Investment inputs are per receiving factory and per item. The discount rate defa
 <strong>8.</strong> Review results: KPI cards, per-unit tables, full-year impact, NWC impact, and charts<br>
 <strong>9.</strong> Optionally enter transfer investment costs (CAPEX, OPEX, restructuring) per receiving factory to see NPV, IRR, and payback analysis<br>
 <strong>10.</strong> Use the Portfolio Summary tab to compare across all items with aggregated investment metrics<br>
-<strong>11.</strong> Export to Excel or PDF pitch-book for distribution<br>
-<strong>12.</strong> Save/Load projects as JSON to resume later
+<strong>11.</strong> Set the Data Classification (C1&ndash;C4) &mdash; defaults to C3 (Confidential). Appears in footer and exports<br>
+<strong>12.</strong> Optionally provide strategic context (rationale, purpose, risk of inaction, key risks) per item &mdash; these appear in the executive summary and are included in all exports<br>
+<strong>13.</strong> Export to Excel or PDF pitch-book for distribution<br>
+<strong>14.</strong> Save/Load projects as JSON to resume later
 
 <br><br><strong style="font-size:0.9rem;">Changelog</strong><br>
+<span style="color:{GREY_TEXT};">v9.0</span> &mdash; Qualitative strategic context inputs (rationale, purpose, risks); Data Classification (C1&ndash;C4); included in executive summary, portfolio overview, Excel &amp; PDF exports<br>
 <span style="color:{GREY_TEXT};">v8.0</span> &mdash; Transfer Investment Analysis module: CAPEX, OPEX, restructuring inputs per receiving factory; NPV, IRR, payback computation; cumulative cash flow charts; portfolio-level investment summary; Excel &amp; PDF export<br>
 <span style="color:{GREY_TEXT};">v7.0</span> &mdash; NWC (Net Working Capital) impact from goods-in-transit: Cost of Capital input, GIT valuation, delta analysis, adjusted OP/margin across all views, portfolio summary, Excel &amp; PDF exports<br>
 <span style="color:{GREY_TEXT};">v6.0</span> &mdash; IB-grade visual refresh: SKF branding, waterfall cost bridge charts, tornado sensitivity, executive summary narrative, refined typography &amp; table styling, confidentiality footer, pitch-book PDF with cover page &amp; page numbers<br>
@@ -1635,15 +1721,27 @@ For questions, feedback, or feature requests:<br>
 </ul>
 <div class="example"><strong>Example:</strong> A transfer to Factory C costs 12M total (CAPEX 8M + OPEX 2.5M + Restructuring 1.5M) but saves 5M per year in adjusted operating profit. The NPV over 10 years at 8% WACC is positive (~18.5M), the IRR is ~38%, and payback is 2.4 years. This is a strong investment case.</div>
 
-<h3>Step 10 — Portfolio Summary</h3>
+<h3>Step 10 — Strategic Context & Qualitative Assessment</h3>
+<p>Click <strong>"Strategic Context & Qualitative Assessment"</strong> to expand this section. This is where you document the <em>why</em> behind the transfer analysis — the strategic reasoning that goes beyond the numbers.</p>
+<table>
+<tr><th>Field</th><th>What to Enter</th><th>Example</th></tr>
+<tr><td><strong>Strategic Rationale</strong></td><td>Why is this transfer being considered? What strategic objective does it serve?</td><td>"Diversify manufacturing footprint to reduce single-source risk and improve cost competitiveness in growth markets."</td></tr>
+<tr><td><strong>Purpose & Objective</strong></td><td>The specific goal of this evaluation</td><td>"Annual sourcing review for high-volume bearing line as part of 2026 footprint optimisation."</td></tr>
+<tr><td><strong>Risk of Inaction</strong></td><td>What happens if we do nothing?</td><td>"Continued 2-3pp annual margin erosion. Single-source risk limits growth in Americas."</td></tr>
+<tr><td><strong>Key Risks</strong></td><td>Main risks of proceeding with the transfer</td><td>"6-12 month quality ramp-up. Customer re-approval needed for automotive OEM accounts."</td></tr>
+</table>
+<div class="tip"><strong>Why does this matter?</strong> Numbers alone rarely tell the full story. Decision-makers need to understand the strategic context, the urgency, and the risks. This section ensures that the qualitative reasoning is captured alongside the quantitative analysis in a single document — making your business case complete.</div>
+
+<h3>Step 11 — Portfolio Summary</h3>
 <p>The last tab shows the combined picture across all items. This is what you present to leadership:</p>
 <ul>
 <li>Total annual profit by factory location</li>
 <li>Aggregated NWC impact</li>
 <li>Combined investment metrics (NPV, IRR, payback) across all items</li>
+<li>Strategic context for each item (if provided)</li>
 </ul>
 
-<h3>Step 11 — Export & Share</h3>
+<h3>Step 12 — Export & Share</h3>
 <ul>
 <li><strong>Excel</strong> — Full data export with all tables and investment analysis. Good for further analysis or feeding into other models.</li>
 <li><strong>PDF</strong> — A formatted pitch-book with cover page, per-item analysis, and portfolio summary. Ready for management presentations.</li>
@@ -1670,6 +1768,7 @@ For questions, feedback, or feature requests:<br>
 <tr><td><span class="term">NPV</span></td><td><strong>Net Present Value</strong> — The total value of an investment in today's money. Positive = value-creating, negative = value-destroying.</td></tr>
 <tr><td><span class="term">IRR</span></td><td><strong>Internal Rate of Return</strong> — The annualised return the investment earns. Compare to WACC: IRR &gt; WACC means the investment is worthwhile.</td></tr>
 <tr><td><span class="term">Payback</span></td><td>How many years until cumulative savings equal the initial investment. Shorter = less risky.</td></tr>
+<tr><td><span class="term">C1&ndash;C4</span></td><td><strong>Data Classification</strong> &mdash; C1 (Public), C2 (Internal), C3 (Confidential), C4 (Strictly Confidential). Determines handling requirements. Most analyses default to C3.</td></tr>
 </table>
 
 <h2>Frequently Asked Questions</h2>
@@ -1702,7 +1801,7 @@ For questions, feedback, or feature requests:<br>
     # ── PROJECT HEADER ────────────────────────────────────────
     st.markdown('<div class="sec">Project Setup</div>', unsafe_allow_html=True)
 
-    pc1, pc2, pc3, pc4, pc5 = st.columns([2, 1, 1, 1, 2])
+    pc1, pc2, pc3, pc4, pc4b, pc5 = st.columns([2, 1, 1, 1, 1, 2])
     with pc1:
         proj_df = pd.DataFrame({"Project Name": [st.session_state.project_name]})
         edited_proj = st.data_editor(proj_df, use_container_width=True, num_rows="fixed",
@@ -1731,6 +1830,16 @@ For questions, feedback, or feature requests:<br>
         edited_dt = st.data_editor(dt_df, use_container_width=True, num_rows="fixed",
             key="proj_dt", hide_index=True,
             column_config={"Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY", width=130)})
+
+    with pc4b:
+        DATA_CLASSES = ["C1 - Public", "C2 - Internal", "C3 - Confidential", "C4 - Strictly Confidential"]
+        dc_df = pd.DataFrame({"Data Classification": ["C3 - Confidential"]})
+        edited_dc = st.data_editor(dc_df, use_container_width=True, num_rows="fixed",
+            key="proj_dc", hide_index=True,
+            column_config={"Data Classification": st.column_config.SelectboxColumn(
+                "Data Classification", options=DATA_CLASSES, width=180)})
+        data_classification = str(edited_dc.loc[0, "Data Classification"] or "C3 - Confidential")
+        st.session_state["data_classification"] = data_classification
 
     with pc5:
         sc1, sc2 = st.columns(2)
@@ -2032,10 +2141,21 @@ For questions, feedback, or feature requests:<br>
                         if r: results.append(r)
 
                 if results:
+                    # Qualitative data from session state (persisted from text_area widgets)
+                    qual_from_state = {
+                        key: st.session_state.get(f"i{item_def['id']}_qual_{key}", "")
+                        for key in ("strategic_rationale", "purpose", "risk_of_inaction", "risks")
+                    }
+
                     # Executive summary narrative
                     exec_html = build_exec_summary(results, inputs, currency)
                     if exec_html:
                         st.markdown(exec_html, unsafe_allow_html=True)
+
+                    # Strategic context (qualitative inputs)
+                    qual_html = build_qualitative_summary(qual_from_state)
+                    if qual_html:
+                        st.markdown(qual_html, unsafe_allow_html=True)
 
                     # KPI cards
                     bom = results[0]["om"]
@@ -2264,11 +2384,43 @@ For questions, feedback, or feature requests:<br>
                                 )
                                 st.plotly_chart(fig_cf, use_container_width=True, config={"displayModeBar": False})
 
+                    # ── QUALITATIVE ASSESSMENT ──────────────────────
+                    qual = {}
+                    with st.expander("Strategic Context & Qualitative Assessment", expanded=False):
+                        st.markdown(f'<div class="callout">Provide strategic context and qualitative rationale for this transfer decision. These inputs will appear in the executive summary, portfolio overview, and exported reports.</div>', unsafe_allow_html=True)
+
+                        q_labels = [
+                            ("strategic_rationale", "Strategic Rationale",
+                             "Why is this transfer being considered? What strategic objective does it serve? (e.g. cost competitiveness, capacity, market proximity, risk diversification)"),
+                            ("purpose", "Purpose & Objective",
+                             "What is the specific goal of this evaluation? (e.g. annual sourcing review, new product launch, capacity constraint resolution)"),
+                            ("risk_of_inaction", "What Happens If We Don't Do This?",
+                             "Describe the consequence of maintaining the status quo. (e.g. continued margin erosion, capacity bottleneck, single-source risk, inability to serve key market)"),
+                            ("risks", "Key Risks & Mitigations",
+                             "What are the main risks of this transfer? (e.g. quality ramp-up, customer approval timeline, IP concerns, FX exposure, geopolitical risk)"),
+                        ]
+                        ex_qual = {
+                            "strategic_rationale": "Diversify manufacturing footprint to reduce single-source risk and improve cost competitiveness in key growth markets. Aligns with Group strategy to establish regional production hubs." if ex else "",
+                            "purpose": "Annual sourcing review — evaluate transfer feasibility for high-volume bearing assembly line as part of the 2026 manufacturing footprint optimisation programme." if ex else "",
+                            "risk_of_inaction": "Continued margin erosion of 2-3pp annually due to rising European labour costs. Single-source risk from Factory A capacity constraints limits growth in Americas and Asia-Pacific markets." if ex else "",
+                            "risks": "Quality ramp-up: 6-12 month qualification period at receiving site. Customer re-approval required for automotive OEM accounts (est. 9 months). FX exposure on CNY/SEK if transferring to Asia. Geopolitical risk for China-based production." if ex else "",
+                        }
+
+                        for key, label, help_text in q_labels:
+                            st.markdown(f'<div style="font-size:0.75rem;font-weight:600;color:{DARK_TEXT};margin:0.6rem 0 0.2rem 0;">{label}</div>', unsafe_allow_html=True)
+                            qual[key] = st.text_area(
+                                label, value=ex_qual.get(key, ""),
+                                key=f"i{item_def['id']}_qual_{key}",
+                                height=80, label_visibility="collapsed",
+                                placeholder=help_text)
+
                     all_results.append({
                         "inputs": {"item_number": inputs.item_number, "designation": inputs.designation,
-                                   "currency": currency, "destination": inputs.destination},
+                                   "currency": currency, "destination": inputs.destination,
+                                   "data_classification": data_classification},
                         "results": results,
                         "investment": inv_results,
+                        "qualitative": qual,
                     })
 
     # Portfolio Summary tab
@@ -2278,7 +2430,7 @@ For questions, feedback, or feature requests:<br>
     # ── FOOTER ────────────────────────────────────────────────
     st.markdown("---")
     c1,c2,c3 = st.columns([4,1,1])
-    c1.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v8.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} item{'s' if len(st.session_state.project_items)!=1 else ''} &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
+    c1.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} item{'s' if len(st.session_state.project_items)!=1 else ''} &middot; {currency} &middot; Market: {target_market} &middot; {data_classification}</span>", unsafe_allow_html=True)
     if all_results:
         c2.download_button("Export Excel", data=export_excel_project(all_results),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.xlsx",
@@ -2286,7 +2438,8 @@ For questions, feedback, or feature requests:<br>
         c3.download_button("Export PDF", data=export_pdf_project(all_results, currency, st.session_state.project_name),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.pdf",
             mime="application/pdf")
-    st.markdown(f'<div class="conf-footer">Confidential &amp; Proprietary &mdash; SKF Group &mdash; Strategic Planning &amp; Intelligent Hub &mdash; {date.today().strftime("%B %Y")}</div>', unsafe_allow_html=True)
+    dc_short = data_classification.split(" - ")[0] if " - " in data_classification else data_classification
+    st.markdown(f'<div class="conf-footer">{data_classification} &mdash; SKF Group &mdash; Strategic Planning &amp; Intelligent Hub &mdash; {date.today().strftime("%B %Y")}</div>', unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
