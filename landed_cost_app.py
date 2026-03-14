@@ -39,7 +39,7 @@ st.set_page_config(page_title="Landed Cost Comparison Model", layout="wide", ini
 # Fixed keys from main() in A5, dynamic item keys matched via attribute selectors
 INPUT_EDITOR_KEYS = [
     "proj_name", "proj_ccy", "proj_tm", "proj_dt",
-    "fc_editor", "bf_editor", "country_editor", "assumption_matrix", "nwc_matrix",
+    "fc_editor", "country_editor", "assumption_matrix", "nwc_matrix",
     "wacc_editor", "target_pb_editor", "target_om_editor", "coc_editor",
 ]
 _blue_border = f"border-left: 3px solid {INPUT_BLUE} !important; padding-left: 2px;"
@@ -1710,7 +1710,7 @@ def main():
     # Legend at bottom of sidebar
     st.sidebar.markdown(f"""<div style="margin-top:1.5rem;padding:0.6rem 0.8rem;border-top:1px solid #d4d8e0;font-family:Inter,sans-serif;font-size:0.68rem;line-height:1.7;color:{GREY_TEXT};">
         <span style="border-left:3px solid {INPUT_BLUE};padding-left:0.3rem;font-weight:600;color:{INPUT_BLUE};">Blue border</span> = editable input<br>
-        <strong style="color:{DARK_TEXT};">Output tables</strong> = calculated results (read-only)<br>
+        <strong style="color:{DARK_TEXT};">Bold</strong> = calculated output<br>
         <span style="font-style:italic;">Grey italic</span> = guidance notes
     </div>""", unsafe_allow_html=True)
 
@@ -1910,52 +1910,54 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         if cc_mode == "Company-wide rate":
             cc_data = {
-                "Component": CC_ROWS,
-                "Rate (%)": cc_defaults,
-                "Guide": CC_GUIDES,
+                "Component": CC_ROWS + ["Total"],
+                "Rate (%)": cc_defaults + [sum(cc_defaults)],
+                "Guide": CC_GUIDES + ["Sum of all components — applied to Delta NWC"],
             }
             cc_df = pd.DataFrame(cc_data)
             edited_cc = st.data_editor(
                 cc_df, use_container_width=False, num_rows="fixed", key="coc_editor", hide_index=True,
                 column_config={
                     "Component": st.column_config.TextColumn("Component", width=200, disabled=True),
-                    "Rate (%)": st.column_config.NumberColumn("Rate (%)", min_value=0.0, max_value=50.0, step=0.5, format="%.1f", width=120),
+                    "Rate (%)": st.column_config.NumberColumn("Rate (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.1f", width=120),
                     "Guide": st.column_config.TextColumn("Guide", width=420, disabled=True),
                 },
                 disabled=["Component", "Guide"])
+            # Sum the editable component rows (exclude the Total row itself)
             global_cc_pct = 0.0
-            for _, row in edited_cc.iterrows():
-                v = row["Rate (%)"]
-                if v is not None and not pd.isna(v):
-                    global_cc_pct += float(v)
+            for i, row in edited_cc.iterrows():
+                if row["Component"] != "Total":
+                    v = row["Rate (%)"]
+                    if v is not None and not pd.isna(v):
+                        global_cc_pct += float(v)
             global_cc_rate = global_cc_pct / 100.0
             carrying_cost_rates = {fn_: global_cc_rate for fn_ in all_factory_names_cc}
-            st.markdown(f'<div style="font-size:0.78rem;color:{DARK_TEXT};font-weight:600;margin-top:0.3rem;">Total Carrying Cost Rate: {global_cc_pct:.1f}% (all factories)</div>', unsafe_allow_html=True)
         else:
             cc_cols = {}
             for fn_ in all_factory_names_cc:
                 if ex:
                     if "Asia" in fn_ or "China" in str(factory_countries.get(fn_, "")):
-                        cc_cols[fn_] = [9.0, 7.0, 2.5, 1.5]
+                        vals = [9.0, 7.0, 2.5, 1.5]
                     elif "Americas" in fn_ or "USA" in str(factory_countries.get(fn_, "")):
-                        cc_cols[fn_] = [8.5, 4.0, 4.0, 2.5]
+                        vals = [8.5, 4.0, 4.0, 2.5]
                     else:
-                        cc_cols[fn_] = [8.0, 5.0, 3.0, 2.0]
+                        vals = [8.0, 5.0, 3.0, 2.0]
                 else:
-                    cc_cols[fn_] = list(cc_defaults)
-            cc_cols["Guide"] = CC_GUIDES
-            cc_df = pd.DataFrame(cc_cols, index=CC_ROWS)
+                    vals = list(cc_defaults)
+                cc_cols[fn_] = vals + [sum(vals)]
+            cc_cols["Guide"] = CC_GUIDES + ["Sum of all components — applied to Delta NWC"]
+            cc_rows_with_total = CC_ROWS + ["Total"]
+            cc_df = pd.DataFrame(cc_cols, index=cc_rows_with_total)
 
             edited_cc = st.data_editor(
                 cc_df, use_container_width=True, num_rows="fixed", key="coc_editor", hide_index=False,
                 column_config={
-                    **{fn_: st.column_config.NumberColumn(fn_, min_value=0.0, max_value=50.0, step=0.5, format="%.1f") for fn_ in all_factory_names_cc},
+                    **{fn_: st.column_config.NumberColumn(fn_, min_value=0.0, max_value=100.0, step=0.5, format="%.1f") for fn_ in all_factory_names_cc},
                     "Guide": st.column_config.TextColumn("Guide", width=420, disabled=True),
                 },
                 disabled=["Guide"])
 
             carrying_cost_rates = {}
-            cc_summary_parts = []
             for fn_ in all_factory_names_cc:
                 total_pct = 0.0
                 for row_name in CC_ROWS:
@@ -1963,9 +1965,6 @@ Compares full cost-to-serve across factory locations, including material, labour
                     if v is not None and not pd.isna(v):
                         total_pct += float(v)
                 carrying_cost_rates[fn_] = total_pct / 100.0
-                cc_summary_parts.append(f"{fn_}: <strong>{total_pct:.1f}%</strong>")
-            cc_summary = " &nbsp;|&nbsp; ".join(cc_summary_parts)
-            st.markdown(f'<div style="font-size:0.78rem;color:{DARK_TEXT};font-weight:600;margin-top:0.3rem;">Total Carrying Cost Rate &mdash; {cc_summary}</div>', unsafe_allow_html=True)
 
         st.session_state["_carrying_cost_rates"] = carrying_cost_rates
 
@@ -1987,18 +1986,45 @@ Three numbers per facility: average inventory value, total warehousing spend, an
 Include rent/depreciation, utilities, and direct warehouse labor. This gives you the storage percentage for that specific location.</li>
 <li><strong>Calculate Risk Cost</strong> &mdash; Total value of written-off, scrapped, and lost stock &divide; average inventory value.
 This provides the local risk percentage.</li>
-<li><strong>Map the footprint</strong> &mdash; Hand these local percentages to your Network Optimization team.
-Map the variables across the global network to identify outliers. Expect high storage costs in mature markets and high risk costs
-in nodes handling volatile or aging product lines.</li>
-<li><strong>Establish regional benchmarks</strong> &mdash; Move away from a global flat rate.
-Set benchmark carrying cost rates by region or facility type. A central hub in Europe will have a very different cost profile
-than a regional distribution center in Asia.</li>
 </ol>
-<br>
-This approach gives you a true picture of where capital is actually bleeding and highlights exactly where you might need to
-adjust safety stock policies.
 </div>
 """, unsafe_allow_html=True)
+
+            st.markdown(f'<div style="font-size:0.78rem;color:{DARK_TEXT};font-weight:600;margin-top:1rem;margin-bottom:0.4rem;">Rate Calculator</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};margin-bottom:0.5rem;">Enter trailing 12-month data for a facility to calculate its Storage &amp; Handling and Risk Cost rates.</div>', unsafe_allow_html=True)
+
+            calc_df = pd.DataFrame({
+                "Input": ["Average Inventory Value", "Total Warehousing Spend", "Total Scrap / Write-off Value"],
+                "Amount": [None, None, None],
+                "Guide": [
+                    "Average on-hand inventory value over 12 months",
+                    "Rent/depreciation + utilities + direct warehouse labor",
+                    "Written-off, scrapped, damaged, and lost stock value",
+                ],
+            })
+            edited_calc = st.data_editor(
+                calc_df, use_container_width=False, num_rows="fixed", key="cc_calc", hide_index=True,
+                column_config={
+                    "Input": st.column_config.TextColumn("Input", width=220, disabled=True),
+                    "Amount": st.column_config.NumberColumn("Amount", min_value=0, format="%.0f", width=160),
+                    "Guide": st.column_config.TextColumn("Guide", width=320, disabled=True),
+                },
+                disabled=["Input", "Guide"])
+
+            inv_val = edited_calc.loc[0, "Amount"]
+            wh_spend = edited_calc.loc[1, "Amount"]
+            scrap_val = edited_calc.loc[2, "Amount"]
+
+            if inv_val and not pd.isna(inv_val) and float(inv_val) > 0:
+                inv_v = float(inv_val)
+                storage_pct = (float(wh_spend) / inv_v * 100) if (wh_spend and not pd.isna(wh_spend)) else 0.0
+                risk_pct = (float(scrap_val) / inv_v * 100) if (scrap_val and not pd.isna(scrap_val)) else 0.0
+                st.markdown(f"""<div style="font-size:0.78rem;color:{DARK_TEXT};line-height:1.8;margin-top:0.4rem;padding:0.5rem 0.8rem;background:#f8f9fb;border-radius:4px;">
+                    <strong>Results:</strong><br>
+                    Storage &amp; Handling Rate: <strong>{storage_pct:.1f}%</strong> &nbsp;(warehousing spend &divide; inventory value)<br>
+                    Risk Cost Rate: <strong>{risk_pct:.1f}%</strong> &nbsp;(scrap value &divide; inventory value)<br>
+                    Combined: <strong>{storage_pct + risk_pct:.1f}%</strong> &nbsp;&mdash; add WACC and Service Cost for the total carrying cost rate
+                </div>""", unsafe_allow_html=True)
 
         st.markdown("---")
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Financial Configuration</span>", unsafe_allow_html=True)
@@ -2269,29 +2295,29 @@ adjust safety stock policies.
     # ── SHARED FACTORY SETUP ──────────────────────────────────────
     st.markdown('<div class="sec" id="sec-factory-config">Shared Factory Configuration</div>', unsafe_allow_html=True)
 
-    # Base factory name
-    bf_df = pd.DataFrame({"Current Factory Name": [EX_BASE.name if ex else "Base Case"]})
-    edited_bf = st.data_editor(bf_df, use_container_width=False, num_rows="fixed",
-        key="bf_editor", hide_index=True,
-        column_config={"Current Factory Name": st.column_config.TextColumn("Current Factory Name", width=250)})
-    base_factory_name = str(edited_bf.loc[0, "Current Factory Name"] or "Base Case")
-
-    num_factories = st.selectbox("Comparison Factories", options=list(range(1, 9)),
-        index=(3 if ex else st.session_state.get("num_fac", 2) - 1), key="fc_editor")
+    # Number of comparison factories
+    fc_df = pd.DataFrame({"Comparison Factories": [4 if ex else st.session_state.get("num_fac", 2)]})
+    edited_fc = st.data_editor(fc_df, use_container_width=False, num_rows="fixed",
+        key="fc_editor", hide_index=True,
+        column_config={"Comparison Factories": st.column_config.SelectboxColumn(
+            "Comparison Factories", options=list(range(1, 9)), width=180)})
+    num_factories = int(edited_fc.loc[0, "Comparison Factories"] or 2)
     st.session_state["num_fac"] = num_factories
 
-    # Factory country assignment
-    st.markdown('<div class="sec-sm" id="sec-factory-locations">Factory Locations</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="callout">Name each factory and assign the <strong>country</strong> where it is located. This determines lead time to the target market (<strong>{target_market}</strong>).</div>', unsafe_allow_html=True)
+    # Factory locations — consolidated table (first row = current factory)
+    st.markdown(f'<div class="callout">Name each factory and assign its <strong>country</strong>. The first row is your <strong>current factory</strong> (base case). This determines lead time to the target market (<strong>{target_market}</strong>).</div>', unsafe_allow_html=True)
 
+    ex_base_name = EX_BASE.name if ex else "Base Case"
     ex_base_country = "Sweden" if ex else "Sweden"
     ex_factory_countries = ["Germany", "China", "France", "USA"] if ex else []
-    country_data = {"Factory": [base_factory_name], "Country": [ex_base_country]}
+    country_data = {"Factory": [ex_base_name], "Country": [ex_base_country],
+                    "Guide": ["Current factory (base case)"]}
     for i in range(num_factories):
         ex_f = EX_FACTORIES[i] if ex and i < len(EX_FACTORIES) else None
         col_name = ex_f.name if ex_f else f"Factory {i+2}"
         country_data["Factory"].append(col_name)
         country_data["Country"].append(ex_factory_countries[i] if ex and i < len(ex_factory_countries) else "")
+        country_data["Guide"].append(f"Comparison factory {i+1}")
     country_df = pd.DataFrame(country_data)
 
     edited_countries = st.data_editor(
@@ -2299,7 +2325,9 @@ adjust safety stock policies.
         column_config={
             "Factory": st.column_config.TextColumn("Factory", width=200),
             "Country": st.column_config.SelectboxColumn("Country", options=COUNTRIES, width=180),
+            "Guide": st.column_config.TextColumn("Guide", width=220, disabled=True),
         },
+        disabled=["Guide"],
     )
     # Read back edited factory names (user may have renamed them)
     edited_factory_names = list(edited_countries["Factory"])
