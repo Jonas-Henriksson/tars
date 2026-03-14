@@ -138,6 +138,10 @@ st.markdown(f"""
     section[data-testid="stSidebar"] {{
         min-width: 21rem !important; max-width: 21rem !important;
         transform: none !important; visibility: visible !important;
+        background: #f0f2f6 !important;
+    }}
+    section[data-testid="stSidebar"] > div {{
+        background: #f0f2f6 !important;
     }}
     .stMainBlockContainer {{ padding-top: 0 !important; }}
     .stTextInput > div > div > input,
