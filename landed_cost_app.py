@@ -2276,8 +2276,10 @@ adjust safety stock policies.
         column_config={"Current Factory Name": st.column_config.TextColumn("Current Factory Name", width=250)})
     base_factory_name = str(edited_bf.loc[0, "Current Factory Name"] or "Base Case")
 
-    num_factories = st.selectbox("Comparison Factories", options=list(range(1, 9)),
-        index=(3 if ex else st.session_state.get("num_fac", 2) - 1), key="fc_editor")
+    _fc_col, _ = st.columns([1, 4])
+    with _fc_col:
+        num_factories = st.selectbox("Comparison Factories", options=list(range(1, 9)),
+            index=(3 if ex else st.session_state.get("num_fac", 2) - 1), key="fc_editor")
     st.session_state["num_fac"] = num_factories
 
     # Factory country assignment
