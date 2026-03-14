@@ -531,15 +531,16 @@ def build_tornado_chart(inputs, factory, is_base, ccy, overrides=None):
     ))
     fig.add_vline(x=0, line=dict(color=NAVY, width=1.5, dash="dot"))
     fig.update_layout(
-        title=dict(text=f"Tornado: OM Sensitivity to ±20% ({factory.name})", font=dict(size=11, family="Inter", color=DARK_TEXT)),
+        title=dict(text=f"Tornado: OM Sensitivity to ±20% Parameter Changes ({factory.name})<br><span style='font-size:9px;color:#666;font-weight:normal'>Each bar shows the impact on Operating Margin when a single cost parameter is changed by ±20% from its current value</span>", font=dict(size=11, family="Inter", color=DARK_TEXT)),
         height=max(250, 50 * len(bars) + 80), barmode="overlay",
-        margin=dict(l=120, r=30, t=45, b=40),
+        margin=dict(l=120, r=30, t=60, b=40),
         paper_bgcolor="white", plot_bgcolor="white",
         font=dict(family="Inter", size=10, color=DARK_TEXT),
-        xaxis=dict(title="Change in OM (pp)", showgrid=True, gridcolor="#f0f0f0", zeroline=False, ticksuffix="pp",
+        xaxis=dict(title="Change in OM (percentage points)", showgrid=True, gridcolor="#f0f0f0", zeroline=False, ticksuffix="pp",
                    title_font=dict(size=10, family="Inter"), tickfont=dict(size=10, family="Inter")),
         yaxis=dict(showgrid=False, tickfont=dict(size=10, family="Inter")),
-        showlegend=False,
+        showlegend=True, legend=dict(font=dict(size=9, family="Inter"), orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5),
+        dragmode=False,
     )
     return fig
 
@@ -2379,7 +2380,7 @@ Compares full cost-to-serve across factory locations, including material, labour
 
                     # ── Sensitivity tab ──
                     with sub_tabs[1]:
-                        st.markdown(f'<div class="callout">Explore how changes in a single parameter affect operating margin. The <strong>tornado chart</strong> shows which cost factors have the largest impact on a selected factory. The <strong>line chart</strong> below lets you sweep a single parameter across all factories.</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="callout">Explore how changes in a single parameter affect operating margin. The <strong>tornado chart</strong> shows the impact on OM when each cost parameter is individually changed by ±20% from its current value — longer bars indicate higher sensitivity. The <strong>line chart</strong> below lets you sweep a single parameter across all factories.</div>', unsafe_allow_html=True)
 
                         # Tornado chart with factory selector
                         if len(results) >= 2:
