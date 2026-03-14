@@ -19,6 +19,7 @@ from fpdf import FPDF
 # Import from extracted library modules
 from landed_cost.models import FactoryAssumptions, ItemInputs
 from landed_cost.compute import compute_location, compute_sensitivity
+from landed_cost.investment import compute_investment_case
 from landed_cost.lead_times import get_lead_time, estimate_lead_time, LEAD_TIME_MATRIX
 from landed_cost.formatters import fn, fp, fi, dc
 from landed_cost.constants import (
@@ -45,7 +46,9 @@ _fixed_rules = "\n".join(f"    .st-key-{k} {{ {_blue_border} }}" for k in INPUT_
 # Dynamic item keys: i0_txt, i1_ns, i2_ov, etc. — use attribute selectors
 _dynamic_rules = """    [class*="st-key-"][class*="_txt"] { %(bb)s }
     [class*="st-key-"][class*="_ns"] { %(bb)s }
-    [class*="st-key-"][class*="_ov"] { %(bb)s }""" % {"bb": _blue_border}
+    [class*="st-key-"][class*="_ov"] { %(bb)s }
+    [class*="st-key-"][class*="_inv_matrix"] { %(bb)s }
+    [class*="st-key-"][class*="_inv_hz"] { %(bb)s }""" % {"bb": _blue_border}
 
 st.markdown(f"""
 <style>
@@ -642,6 +645,44 @@ def export_excel_project(project_data):
                 ws.write(r,0,"Adj. Delta vs Base",lb)
                 for c,res in enumerate(results): ws.write(r,c+1,"\u2013" if c==0 else res.get("annual_adj_op",res["annual_op"])-base_adj_op,inb if c>0 else inf_)
 
+            # Investment analysis rows
+            inv_data = item.get("investment", [])
+            has_inv_data = any(ic.get("total_investment", 0) > 0 for ic in inv_data)
+            if has_inv_data and len(results) >= 2:
+                r+=2
+                ws.write(r,0,"Transfer Investment",hl)
+                for c,res in enumerate(results): ws.write(r,c+1,res["name"] if c>0 else "",hf if c>0 else hl)
+                r+=1
+                inv_by_name = {ic["factory_name"]: ic for ic in inv_data}
+                for lbl_,key_ in [("CAPEX","capex"),("OPEX","opex"),("Restructuring","restructuring"),("Total Investment","total_investment")]:
+                    ws.write(r,0,lbl_,lb if "Total" in lbl_ else lf)
+                    ws.write(r,1,"\u2013",inf_)
+                    for c,res in enumerate(results[1:],2):
+                        ic = inv_by_name.get(res["name"],{})
+                        ws.write(r,c,ic.get(key_,0),inb if "Total" in lbl_ else inf_)
+                    r+=1
+                r+=1
+                ws.write(r,0,"Annual Savings",lf)
+                ws.write(r,1,"\u2013",inf_)
+                for c,res in enumerate(results[1:],2):
+                    ic = inv_by_name.get(res["name"],{})
+                    ws.write(r,c,ic.get("annual_savings",0),inb)
+                r+=1
+                for lbl_,key_ in [("NPV","npv"),("IRR","irr"),("Simple Payback (yrs)","simple_payback"),("Discounted Payback (yrs)","discounted_payback")]:
+                    ws.write(r,0,lbl_,lb)
+                    ws.write(r,1,"\u2013",inf_)
+                    for c,res in enumerate(results[1:],2):
+                        ic = inv_by_name.get(res["name"],{})
+                        v = ic.get(key_)
+                        if v is not None:
+                            if key_ == "irr":
+                                ws.write(r,c,v,pf)
+                            else:
+                                ws.write(r,c,v,inb if key_=="npv" else nf)
+                        else:
+                            ws.write(r,c,"\u2013",inf_)
+                    r+=1
+
         # Summary sheet
         if len(project_data) > 1:
             ws = wb.add_worksheet("Portfolio Summary")
@@ -866,6 +907,44 @@ def export_pdf_project(all_results, ccy, project_name):
                 nwc_annual_bold.append(total_nwc_idx)
         add_table(pdf, annual_headers, annual_rows, col_widths, bold_rows=[2,3,4]+nwc_annual_bold)
 
+        # Investment analysis in PDF
+        inv_data = item.get("investment", [])
+        has_inv_pdf = any(ic.get("total_investment", 0) > 0 for ic in inv_data)
+        if has_inv_pdf and len(results) >= 2:
+            pdf.ln(4)
+            inv_headers = [f"Investment ({ccy})"] + [r["name"] for r in results]
+            inv_rows = []
+            inv_by_name = {ic["factory_name"]: ic for ic in inv_data}
+            for lbl_, key_ in [("CAPEX","capex"),("OPEX","opex"),("Restructuring","restructuring"),("Total Investment","total_investment")]:
+                row_data = [lbl_, "-"]
+                for r in results[1:]:
+                    ic = inv_by_name.get(r["name"],{})
+                    row_data.append(fi_(ic.get(key_,0)))
+                inv_rows.append(row_data)
+            inv_rows.append([""] * (n+1))
+            sav_row = ["Annual Savings", "-"]
+            for r in results[1:]:
+                ic = inv_by_name.get(r["name"],{})
+                sav_row.append(fi_(ic.get("annual_savings",0)))
+            inv_rows.append(sav_row)
+            inv_rows.append([""] * (n+1))
+            # Metrics
+            npv_row = ["NPV", "-"]
+            irr_row = ["IRR", "-"]
+            pb_row = ["Simple Payback", "-"]
+            dpb_row = ["Disc. Payback", "-"]
+            for r in results[1:]:
+                ic = inv_by_name.get(r["name"],{})
+                npv_row.append(fi_(ic.get("npv",0)))
+                irr_v = ic.get("irr")
+                irr_row.append(f"{irr_v*100:.1f}%" if irr_v is not None else "-")
+                pb_v = ic.get("simple_payback")
+                pb_row.append(f"{pb_v:.1f} yrs" if pb_v is not None else "-")
+                dpb_v = ic.get("discounted_payback")
+                dpb_row.append(f"{dpb_v:.1f} yrs" if dpb_v is not None else "-")
+            inv_rows.extend([npv_row, irr_row, pb_row, dpb_row])
+            add_table(pdf, inv_headers, inv_rows, col_widths, bold_rows=[3, 5, 8, 9, 10, 11])
+
     # Portfolio summary page
     if len(all_results) > 1:
         pdf.add_page()
@@ -1071,7 +1150,7 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
 
 
 # ── PORTFOLIO SUMMARY ─────────────────────────────────────────
-def render_portfolio_summary(all_results, ccy):
+def render_portfolio_summary(all_results, ccy, cost_of_capital=0.08):
     if not all_results:
         st.markdown('<div class="callout">Complete at least one item analysis to see the portfolio summary.</div>', unsafe_allow_html=True)
         return
@@ -1210,6 +1289,95 @@ def render_portfolio_summary(all_results, ccy):
         fig.update_yaxes(title_text=ccy, title_font=dict(size=10))
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
+    # ── INVESTMENT SUMMARY (Portfolio) ────────────────────────
+    has_inv = any(
+        ic.get("total_investment", 0) > 0
+        for item in all_results
+        for ic in item.get("investment", [])
+    )
+    if has_inv:
+        st.markdown(f'<div class="sec-sm">Transfer Investment Summary</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout">Aggregated investment metrics across all items by receiving factory ({ccy}).</div>', unsafe_allow_html=True)
+
+        # Collect alt factory names (exclude base)
+        alt_fnames = [fn_ for fn_ in all_fnames if fn_ != base_fn]
+        if alt_fnames:
+            # Aggregate: total investment, total annual savings, combined NPV
+            agg_inv = {fn_: 0.0 for fn_ in alt_fnames}
+            agg_savings = {fn_: 0.0 for fn_ in alt_fnames}
+            agg_capex = {fn_: 0.0 for fn_ in alt_fnames}
+            agg_opex = {fn_: 0.0 for fn_ in alt_fnames}
+            agg_restr = {fn_: 0.0 for fn_ in alt_fnames}
+            for item in all_results:
+                for ic in item.get("investment", []):
+                    fn_ = ic.get("factory_name", "")
+                    if fn_ in alt_fnames:
+                        agg_inv[fn_] += ic.get("total_investment", 0)
+                        agg_savings[fn_] += ic.get("annual_savings", 0)
+                        agg_capex[fn_] += ic.get("capex", 0)
+                        agg_opex[fn_] += ic.get("opex", 0)
+                        agg_restr[fn_] += ic.get("restructuring", 0)
+
+            # Compute portfolio-level NPV, IRR, payback using aggregated flows
+            agg_cases = {}
+            for fn_ in alt_fnames:
+                agg_cases[fn_] = compute_investment_case(
+                    annual_savings=agg_savings[fn_],
+                    capex=agg_capex[fn_], opex=agg_opex[fn_], restructuring=agg_restr[fn_],
+                    discount_rate=cost_of_capital,
+                    horizon_years=10,
+                )
+
+            inv_p_hdr = "".join(f'<th>{fn_}</th>' for fn_ in alt_fnames)
+            inv_p_html = f'<table class="ib-table"><thead><tr><th>Portfolio Investment ({ccy})</th>{inv_p_hdr}</tr></thead><tbody>'
+
+            def _pr(lbl, vals, cls=""):
+                cells = "".join(f'<td>{v}</td>' for v in vals)
+                return f'<tr class="{cls}"><td>{lbl}</td>{cells}</tr>'
+
+            inv_p_html += _pr("Total CAPEX", [fi(agg_capex[fn_], dz=True) for fn_ in alt_fnames])
+            inv_p_html += _pr("Total OPEX", [fi(agg_opex[fn_], dz=True) for fn_ in alt_fnames])
+            inv_p_html += _pr("Total Restructuring", [fi(agg_restr[fn_], dz=True) for fn_ in alt_fnames])
+            inv_p_html += _pr("Total Investment", [fi(agg_inv[fn_], dz=False) for fn_ in alt_fnames], "row-subtotal")
+            inv_p_html += _pr("Total Annual Savings", [fi(agg_savings[fn_], acct=True, dz=False) for fn_ in alt_fnames])
+
+            sep_cells = "<td></td>" * (len(alt_fnames) + 1)
+            inv_p_html += f'<tr class="row-separator">{sep_cells}</tr>'
+
+            # NPV
+            npv_cells = ""
+            for fn_ in alt_fnames:
+                v = agg_cases[fn_]["npv"]
+                cls = "delta-pos" if v > 0 else ("delta-neg" if v < 0 else "")
+                npv_cells += f'<td class="{cls}"><strong>{fi(v, acct=True, dz=False)}</strong></td>'
+            inv_p_html += f'<tr class="row-bold"><td><strong>NPV (10yr)</strong></td>{npv_cells}</tr>'
+
+            # IRR
+            irr_cells = ""
+            dash = "\u2013"
+            for fn_ in alt_fnames:
+                irr = agg_cases[fn_]["irr"]
+                if irr is not None:
+                    cls = "delta-pos" if irr > cost_of_capital else "delta-neg"
+                    irr_cells += f'<td class="{cls}"><strong>{irr*100:.1f}%</strong></td>'
+                else:
+                    irr_cells += f'<td>{dash}</td>'
+            inv_p_html += f'<tr class="row-bold"><td><strong>IRR</strong></td>{irr_cells}</tr>'
+
+            # Payback
+            pb_cells = ""
+            for fn_ in alt_fnames:
+                pb = agg_cases[fn_]["simple_payback"]
+                if pb is not None:
+                    cls = "delta-pos" if pb <= 10 else "delta-neg"
+                    pb_cells += f'<td class="{cls}">{pb:.1f} years</td>'
+                else:
+                    pb_cells += f'<td>{dash}</td>'
+            inv_p_html += f'<tr class="row-bold"><td>Simple Payback</td>{pb_cells}</tr>'
+
+            inv_p_html += '</tbody></table>'
+            st.markdown(inv_p_html, unsafe_allow_html=True)
+
 
 # ── SAVE / LOAD ───────────────────────────────────────────────
 def save_project_json():
@@ -1231,7 +1399,7 @@ def main():
     st.markdown(f"""<div class="ib-header">
         <div class="ib-header-left">
             <h1>Landed Cost Comparison Model</h1>
-            <div class="sub">Multi-Item Project-Based Production Cost &amp; Profitability Analysis &middot; v7.0</div>
+            <div class="sub">Multi-Item Project-Based Production Cost &amp; Profitability Analysis &middot; v8.0</div>
         </div>
         <div>{skf_logo_svg}</div>
     </div>""", unsafe_allow_html=True)
@@ -1282,6 +1450,7 @@ Net Working Capital impact captures the balance sheet cost of inventory tied up 
 <strong>7.</strong> Save/Load projects as JSON to resume later
 
 <br><br><strong style="font-size:0.9rem;">Changelog</strong><br>
+<span style="color:{GREY_TEXT};">v8.0</span> &mdash; Transfer Investment Analysis module: CAPEX, OPEX, restructuring inputs per receiving factory; NPV, IRR, payback computation; cumulative cash flow charts; portfolio-level investment summary; Excel &amp; PDF export<br>
 <span style="color:{GREY_TEXT};">v7.0</span> &mdash; NWC (Net Working Capital) impact from goods-in-transit: Cost of Capital input, GIT valuation, delta analysis, adjusted OP/margin across all views, portfolio summary, Excel &amp; PDF exports<br>
 <span style="color:{GREY_TEXT};">v6.0</span> &mdash; IB-grade visual refresh: SKF branding, waterfall cost bridge charts, tornado sensitivity, executive summary narrative, refined typography &amp; table styling, confidentiality footer, pitch-book PDF with cover page &amp; page numbers<br>
 <span style="color:{GREY_TEXT};">v5.0</span> &mdash; Extracted core logic into testable library modules; added sensitivity analysis; expanded lead-time matrix with region-based fallback estimation; added input validation; added 48 unit tests<br>
@@ -1717,20 +1886,177 @@ For questions, feedback, or feature requests:<br>
                         )
                         st.plotly_chart(fig_sa, use_container_width=True, config={"displayModeBar": False})
 
+                    # ── TRANSFER INVESTMENT ANALYSIS ──────────────────
+                    inv_results = []
+                    if len(results) >= 2:
+                        with st.expander("Transfer Investment Analysis", expanded=False):
+                            st.markdown(f'<div class="callout">Evaluate the investment rationale for transferring production. Enter one-time costs per receiving factory. Annual savings are derived from the NWC-adjusted OP delta vs. base. Leave blank or zero if no investment is required.</div>', unsafe_allow_html=True)
+
+                            inv_c1, inv_c2 = st.columns([1, 1])
+                            with inv_c1:
+                                inv_horizon_df = pd.DataFrame({"Analysis Horizon (Years)": [10]})
+                                edited_hz = st.data_editor(inv_horizon_df, use_container_width=False, num_rows="fixed",
+                                    key=f"i{item_def['id']}_inv_hz", hide_index=True,
+                                    column_config={"Analysis Horizon (Years)": st.column_config.NumberColumn(
+                                        "Analysis Horizon (Years)", min_value=1, max_value=30, step=1, format="%d", width=200)})
+                                inv_horizon = max(1, min(30, int(edited_hz.loc[0, "Analysis Horizon (Years)"] or 10)))
+                            with inv_c2:
+                                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};padding-top:0.6rem;">Discount rate uses Cost of Capital (WACC): <strong>{cost_of_capital*100:.1f}%</strong></div>', unsafe_allow_html=True)
+
+                            alt_names = [r["name"] for r in results[1:]]
+                            INV_ROWS = ["CAPEX (Tooling / Equipment)", "OPEX (Project / Qualification)", "Restructuring (Sending Site)"]
+                            inv_cols = {}
+                            for an in alt_names:
+                                if ex:
+                                    if "Asia" in an or "China" in str(factory_countries.get(an, "")):
+                                        inv_cols[an] = [8_000_000.0, 2_500_000.0, 1_500_000.0]
+                                    elif "Americas" in an or "USA" in str(factory_countries.get(an, "")):
+                                        inv_cols[an] = [5_000_000.0, 1_800_000.0, 1_000_000.0]
+                                    else:
+                                        inv_cols[an] = [3_000_000.0, 1_000_000.0, 500_000.0]
+                                else:
+                                    inv_cols[an] = [None, None, None]
+                            inv_cols["Guide"] = [
+                                f"Capital expenditure for tooling / equipment at receiving site ({currency})",
+                                f"One-time project, transfer, qualification costs ({currency})",
+                                f"Restructuring / severance costs at sending site ({currency})",
+                            ]
+                            inv_df = pd.DataFrame(inv_cols, index=INV_ROWS)
+
+                            edited_inv = st.data_editor(
+                                inv_df, use_container_width=True, num_rows="fixed",
+                                key=f"i{item_def['id']}_inv_matrix",
+                                column_config={
+                                    **{an: st.column_config.NumberColumn(an, format="%,.0f", min_value=0) for an in alt_names},
+                                    "Guide": st.column_config.TextColumn("Guide", width=380, disabled=True),
+                                },
+                                disabled=["Guide"])
+
+                            # Compute investment cases
+                            base_adj_annual_op = results[0].get("annual_adj_op", results[0]["annual_op"])
+                            for alt_r in results[1:]:
+                                an = alt_r["name"]
+                                def _inv_val(row_name, col_name):
+                                    v = edited_inv.loc[row_name, col_name]
+                                    if v is not None and not pd.isna(v):
+                                        return float(v)
+                                    return 0.0
+                                capex = _inv_val("CAPEX (Tooling / Equipment)", an)
+                                opex = _inv_val("OPEX (Project / Qualification)", an)
+                                restr = _inv_val("Restructuring (Sending Site)", an)
+                                annual_savings = alt_r.get("annual_adj_op", alt_r["annual_op"]) - base_adj_annual_op
+
+                                inv_case = compute_investment_case(
+                                    annual_savings=annual_savings,
+                                    capex=capex, opex=opex, restructuring=restr,
+                                    discount_rate=cost_of_capital,
+                                    horizon_years=inv_horizon,
+                                )
+                                inv_case["factory_name"] = an
+                                inv_results.append(inv_case)
+
+                            # Display investment results table
+                            has_any_inv = any(ic["total_investment"] > 0 or ic["annual_savings"] != 0 for ic in inv_results)
+                            if has_any_inv:
+                                dash = "\u2013"
+                                inv_hdr = "".join(f'<th>{ic["factory_name"]}</th>' for ic in inv_results)
+                                inv_html = f'<table class="ib-table"><thead><tr><th>Transfer Investment ({currency})</th>{inv_hdr}</tr></thead><tbody>'
+
+                                def _inv_row(lbl, vals, cls=""):
+                                    cells = "".join(f'<td>{v}</td>' for v in vals)
+                                    return f'<tr class="{cls}"><td>{lbl}</td>{cells}</tr>'
+
+                                inv_html += _inv_row("CAPEX", [fi(ic["capex"], dz=True) for ic in inv_results])
+                                inv_html += _inv_row("OPEX", [fi(ic["opex"], dz=True) for ic in inv_results])
+                                inv_html += _inv_row("Restructuring", [fi(ic["restructuring"], dz=True) for ic in inv_results])
+                                inv_html += _inv_row("Total Investment", [fi(ic["total_investment"], dz=False) for ic in inv_results], "row-subtotal")
+
+                                inv_html += f'<tr class="row-separator">{"<td></td>" * (len(inv_results)+1)}</tr>'
+                                inv_html += _inv_row("Annual Savings (Adj. OP Delta)", [fi(ic["annual_savings"], acct=True, dz=False) for ic in inv_results])
+                                inv_html += _inv_row(f"Analysis Horizon", [f"{ic['horizon_years']} years" for ic in inv_results])
+                                inv_html += _inv_row(f"Discount Rate (WACC)", [fp(ic['discount_rate'], 1, dz=False) for ic in inv_results])
+
+                                inv_html += f'<tr class="row-separator">{"<td></td>" * (len(inv_results)+1)}</tr>'
+
+                                # NPV with color coding
+                                npv_cells = ""
+                                for ic in inv_results:
+                                    cls = f"delta-pos" if ic["npv"] > 0 else (f"delta-neg" if ic["npv"] < 0 else "")
+                                    npv_cells += f'<td class="{cls}"><strong>{fi(ic["npv"], acct=True, dz=False)}</strong></td>'
+                                inv_html += f'<tr class="row-bold"><td><strong>NPV</strong></td>{npv_cells}</tr>'
+
+                                # IRR
+                                irr_cells = ""
+                                for ic in inv_results:
+                                    if ic["irr"] is not None:
+                                        cls = "delta-pos" if ic["irr"] > cost_of_capital else "delta-neg"
+                                        irr_cells += f'<td class="{cls}"><strong>{ic["irr"]*100:.1f}%</strong></td>'
+                                    else:
+                                        irr_cells += f'<td>{dash}</td>'
+                                inv_html += f'<tr class="row-bold"><td><strong>IRR</strong></td>{irr_cells}</tr>'
+
+                                # Payback
+                                pb_cells = ""
+                                for ic in inv_results:
+                                    if ic["simple_payback"] is not None:
+                                        cls = "delta-pos" if ic["simple_payback"] <= inv_horizon else "delta-neg"
+                                        pb_cells += f'<td class="{cls}">{ic["simple_payback"]:.1f} years</td>'
+                                    else:
+                                        pb_cells += f'<td>{dash}</td>'
+                                inv_html += f'<tr class="row-bold"><td>Simple Payback</td>{pb_cells}</tr>'
+
+                                dpb_cells = ""
+                                for ic in inv_results:
+                                    if ic["discounted_payback"] is not None:
+                                        cls = "delta-pos" if ic["discounted_payback"] <= inv_horizon else "delta-neg"
+                                        dpb_cells += f'<td class="{cls}">{ic["discounted_payback"]:.1f} years</td>'
+                                    else:
+                                        dpb_cells += f'<td>{dash}</td>'
+                                inv_html += f'<tr class="row-bold"><td>Discounted Payback</td>{dpb_cells}</tr>'
+
+                                inv_html += '</tbody></table>'
+                                st.markdown(inv_html, unsafe_allow_html=True)
+
+                                # Cumulative cash flow chart
+                                fig_cf = go.Figure()
+                                colors_cycle = [ACCENT_BLUE, GREEN, RED, "#e67e22", "#8e44ad", NAVY]
+                                for ci, ic in enumerate(inv_results):
+                                    if ic["total_investment"] > 0 or ic["annual_savings"] != 0:
+                                        years = list(range(inv_horizon + 1))
+                                        color = colors_cycle[ci % len(colors_cycle)]
+                                        fig_cf.add_trace(go.Scatter(
+                                            x=years, y=ic["cumulative_cf"],
+                                            mode="lines+markers", name=ic["factory_name"],
+                                            line=dict(color=color, width=2), marker=dict(size=4),
+                                            hovertemplate=f"{ic['factory_name']}<br>Year %{{x}}<br>Cumulative: %{{y:,.0f}} {currency}<extra></extra>",
+                                        ))
+                                fig_cf.add_hline(y=0, line=dict(color=NAVY, width=1.5, dash="dot"))
+                                fig_cf.update_layout(
+                                    title=dict(text=f"Cumulative Cash Flow ({currency})", font=dict(size=12, family="Inter")),
+                                    height=350, margin=dict(l=50, r=30, t=50, b=50),
+                                    paper_bgcolor="white", plot_bgcolor="white",
+                                    font=dict(family="Inter", size=10, color=DARK_TEXT),
+                                    xaxis=dict(title="Year", showgrid=True, gridcolor="#eee", dtick=1),
+                                    yaxis=dict(title=currency, showgrid=True, gridcolor="#eee", zeroline=True, zerolinecolor="#ccc"),
+                                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                                )
+                                st.plotly_chart(fig_cf, use_container_width=True, config={"displayModeBar": False})
+
                     all_results.append({
                         "inputs": {"item_number": inputs.item_number, "designation": inputs.designation,
                                    "currency": currency, "destination": inputs.destination},
                         "results": results,
+                        "investment": inv_results,
                     })
 
     # Portfolio Summary tab
     with tabs[-1]:
-        render_portfolio_summary(all_results, currency)
+        render_portfolio_summary(all_results, currency, cost_of_capital=cost_of_capital)
 
     # ── FOOTER ────────────────────────────────────────────────
     st.markdown("---")
     c1,c2,c3 = st.columns([4,1,1])
-    c1.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v7.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} item{'s' if len(st.session_state.project_items)!=1 else ''} &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
+    c1.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v8.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} item{'s' if len(st.session_state.project_items)!=1 else ''} &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
     if all_results:
         c2.download_button("Export Excel", data=export_excel_project(all_results),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.xlsx",
