@@ -1,5 +1,5 @@
 """
-Landed Cost Comparison Model - v4.2
+Landed Cost Comparison Model - v4.3
 Multi-Item Project-Based Production Cost & Profitability Analysis
 Author: Jonas Henriksson — Head of Strategic Planning & Intelligent Hub
 """
@@ -144,23 +144,10 @@ st.markdown(f"""
     div[data-testid="stDataEditor"] th:last-child {{
         background-color: #e9ecef !important; color: #6c757d !important;
     }}
-    /* IB Convention: Blue accent on editable input containers */
-    .input-grid, .input-grid-nolabel, .matrix-grid, .country-grid {{
-        border-left: 3px solid #0000FF;
-        padding-left: 0.4rem;
-        margin: 0.3rem 0;
-    }}
-    .input-grid div[data-testid="stDataEditor"],
-    .input-grid-nolabel div[data-testid="stDataEditor"],
-    .matrix-grid div[data-testid="stDataEditor"],
-    .country-grid div[data-testid="stDataEditor"] {{
-        border: 1px solid #b3c6ff !important;
-        border-radius: 2px !important;
-    }}
-    /* Blue-tinted column headers for editable grids */
-    .input-grid div[data-testid="stDataEditor"] [data-testid="glideDataEditor"] > div:first-child,
-    .matrix-grid div[data-testid="stDataEditor"] [data-testid="glideDataEditor"] > div:first-child {{
-        background: linear-gradient(to bottom, #f0f4ff, #ffffff) !important;
+    /* IB Convention: Blue left border on ALL data editor grids (= editable inputs) */
+    div[data-testid="stDataEditor"] {{
+        border-left: 3px solid {INPUT_BLUE} !important;
+        padding-left: 2px;
     }}
     .stTabs [data-baseweb="tab-list"] {{ gap: 0px; }}
     .stTabs [data-baseweb="tab"] {{
@@ -342,6 +329,7 @@ def build_charts(results, ccy):
     fig.update_yaxes(title_text="Margin (%)", row=1, col=1, ticksuffix="%", title_font=dict(size=10))
     fig.update_yaxes(title_text=ccy, row=1, col=2, title_font=dict(size=10))
     return fig
+
 
 # ── EXCEL EXPORT ──────────────────────────────────────────────
 def export_excel_project(project_data):
@@ -570,7 +558,7 @@ EXAMPLE_ITEMS = [
 ]
 
 
-# ── SESSION STATE INIT ────────────────────────────────────────
+# ── SESSION STATE INIT ──────────────────────────────────────────
 def init_state():
     if "project_name" not in st.session_state:
         st.session_state.project_name = "New Project"
@@ -582,7 +570,7 @@ def init_state():
         st.session_state.ex = False
 
 
-# ── ITEM ANALYSIS RENDERER ───────────────────────────────────
+# ── ITEM ANALYSIS RENDERER ───────────────────────────────────────
 def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared, num_factories, ex):
     pfx = f"i{item_id}_"
     today = date.today()
@@ -607,7 +595,6 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
     }
     txt_df = pd.DataFrame(txt_data).set_index("Field")
 
-    st.markdown('<div class="input-grid">', unsafe_allow_html=True)
     edited_txt = st.data_editor(
         txt_df, use_container_width=True, num_rows="fixed", key=f"{pfx}txt",
         column_config={
@@ -617,7 +604,6 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
         disabled=["Guide"],
     )
 
-    st.markdown('</div>', unsafe_allow_html=True)
     item_number = str(edited_txt.loc["Item Number", "Value"] or "")
     designation = str(edited_txt.loc["Designation", "Value"] or "")
     destination = str(edited_txt.loc["Destination", "Value"] or "")
@@ -645,7 +631,6 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
     }
     ns_df = pd.DataFrame(ns_data).set_index("Field")
 
-    st.markdown('<div class="input-grid">', unsafe_allow_html=True)
     edited_ns = st.data_editor(
         ns_df, use_container_width=True, num_rows="fixed", key=f"{pfx}ns",
         column_config={
@@ -655,7 +640,6 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
         disabled=["Guide"],
     )
 
-    st.markdown('</div>', unsafe_allow_html=True)
     net_sales_value = float(edited_ns.loc["Net Sales (Total Value)", "Value"] or 0)
     net_sales_qty = int(edited_ns.loc["Net Sales (Quantity)", "Value"] or 0)
     material = float(edited_ns.loc["Material", "Value"] or 0)
@@ -677,7 +661,6 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
     ov_cols["Guide"] = ["Override material (blank = base)", "Override variable VA (blank = VA Ratio)", "Override fixed VA (blank = VA Ratio)"]
     ov_df = pd.DataFrame(ov_cols, index=OV_ROWS)
 
-    st.markdown('<div class="matrix-grid">', unsafe_allow_html=True)
     edited_ov = st.data_editor(
         ov_df, use_container_width=True, num_rows="fixed", key=f"{pfx}ov",
         column_config={
@@ -686,8 +669,6 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
         },
         disabled=["Guide"],
     )
-
-    st.markdown('</div>', unsafe_allow_html=True)
 
     def get_ov(cn):
         ov = {}
@@ -801,7 +782,7 @@ def render_portfolio_summary(all_results, ccy):
 def save_project_json():
     """Collect all session state into a JSON-serializable dict."""
     return json.dumps({
-        "version": "4.0",
+        "version": "4.3",
         "project_name": st.session_state.get("project_name", ""),
         "project_items": st.session_state.get("project_items", []),
         "next_id": st.session_state.get("next_id", 1),
@@ -813,7 +794,7 @@ def main():
     init_state()
 
     st.markdown("""<div class="ib-header" style="position:relative;"><h1>Landed Cost Comparison Model</h1>
-        <div class="sub">Multi-Item Project-Based Production Cost & Profitability Analysis &middot; v4.2</div></div>""", unsafe_allow_html=True)
+        <div class="sub">Multi-Item Project-Based Production Cost & Profitability Analysis &middot; v4.3</div></div>""", unsafe_allow_html=True)
 
     with st.expander("About this model", expanded=False):
         st.markdown(f"""
@@ -848,7 +829,8 @@ The 8-step cost build-up follows standard industrial cost methodology:
 <strong>7.</strong> Save/Load projects as JSON to resume later
 
 <br><br><strong style="font-size:0.9rem;">Changelog</strong><br>
-<span style="color:{GREY_TEXT};">v4.2</span> &mdash; IB blue input formatting (editable vs. calculated), color legend<br>
+<span style="color:{GREY_TEXT};">v4.3</span> &mdash; Fixed blue input border rendering (global CSS targeting stDataEditor)<br>
+<span style="color:{GREY_TEXT};">v4.2</span> &mdash; IB blue input formatting concept, color legend<br>
 <span style="color:{GREY_TEXT};">v4.1</span> &mdash; Lead time comparison by country pair, factory country assignment<br>
 <span style="color:{GREY_TEXT};">v4.0</span> &mdash; Multi-item project mode, portfolio summary, PDF export, save/load projects<br>
 <span style="color:{GREY_TEXT};">v3.0</span> &mdash; Cost overrides per factory, base factory naming<br>
@@ -863,7 +845,7 @@ For questions, feedback, or feature requests:<br>
 </div>
 """, unsafe_allow_html=True)
 
-    st.markdown('<div class="callout" style="font-size:0.72rem;"><span style="border-left:3px solid #0000FF;padding-left:0.35rem;font-weight:600;color:#0000FF;">Blue border</span> = editable input fields &nbsp;&middot;&nbsp; <span style="font-weight:600;color:#1a1a2e;">Output tables</span> = calculated results (read-only) &nbsp;&middot;&nbsp; <span style="color:#6c757d;font-style:italic;">Grey italic</span> = guidance notes</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout" style="font-size:0.72rem;"><span style="border-left:3px solid {INPUT_BLUE};padding-left:0.35rem;font-weight:600;color:{INPUT_BLUE};">Blue border</span> = editable input fields &nbsp;&middot;&nbsp; <span style="font-weight:600;color:{DARK_TEXT};">Output tables</span> = calculated results (read-only) &nbsp;&middot;&nbsp; <span style="color:{GREY_TEXT};font-style:italic;">Grey italic</span> = guidance notes</div>', unsafe_allow_html=True)
 
     ex = st.checkbox("Load example data", value=st.session_state.ex)
     st.session_state.ex = ex
@@ -874,41 +856,32 @@ For questions, feedback, or feature requests:<br>
     pc1, pc2, pc3, pc4, pc5 = st.columns([2, 1, 1, 1, 2])
     with pc1:
         proj_df = pd.DataFrame({"Project Name": [st.session_state.project_name]})
-        st.markdown('<div class="input-grid-nolabel">', unsafe_allow_html=True)
         edited_proj = st.data_editor(proj_df, use_container_width=True, num_rows="fixed",
             key="proj_name", hide_index=True,
             column_config={"Project Name": st.column_config.TextColumn("Project Name", width=280)})
-        st.markdown('</div>', unsafe_allow_html=True)
         st.session_state.project_name = str(edited_proj.loc[0, "Project Name"] or "New Project")
 
     with pc2:
         ccy_df = pd.DataFrame({"Currency": ["SEK"]})
-        st.markdown('<div class="input-grid-nolabel">', unsafe_allow_html=True)
         edited_ccy = st.data_editor(ccy_df, use_container_width=True, num_rows="fixed",
             key="proj_ccy", hide_index=True,
             column_config={"Currency": st.column_config.SelectboxColumn("Currency", options=CURRENCIES, width=100)})
-        st.markdown('</div>', unsafe_allow_html=True)
         st.session_state["currency"] = str(edited_ccy.loc[0, "Currency"] or "SEK")
         currency = st.session_state["currency"]
 
     with pc3:
         tm_df = pd.DataFrame({"Target Market": ["USA" if ex else "USA"]})
-        st.markdown('<div class="input-grid-nolabel">', unsafe_allow_html=True)
         edited_tm = st.data_editor(tm_df, use_container_width=True, num_rows="fixed",
             key="proj_tm", hide_index=True,
             column_config={"Target Market": st.column_config.SelectboxColumn("Target Market", options=COUNTRIES, width=140)})
-        st.markdown('</div>', unsafe_allow_html=True)
         target_market = str(edited_tm.loc[0, "Target Market"] or "")
         st.session_state["target_market"] = target_market
 
     with pc4:
         dt_df = pd.DataFrame({"Date": [date.today()]})
-        st.markdown('<div class="input-grid-nolabel">', unsafe_allow_html=True)
         edited_dt = st.data_editor(dt_df, use_container_width=True, num_rows="fixed",
             key="proj_dt", hide_index=True,
             column_config={"Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY", width=130)})
-
-        st.markdown('</div>', unsafe_allow_html=True)
 
     with pc5:
         sc1, sc2 = st.columns(2)
@@ -929,27 +902,23 @@ For questions, feedback, or feature requests:<br>
                 except Exception:
                     st.error("Invalid project file.")
 
-    # ── SHARED FACTORY SETUP ──────────────────────────────────
+    # ── SHARED FACTORY SETUP ──────────────────────────────────────
     st.markdown('<div class="sec">Shared Factory Configuration</div>', unsafe_allow_html=True)
 
     fc_data = {"Comparison Factories": [4 if ex else st.session_state.get("num_fac", 2)]}
     fc_df = pd.DataFrame(fc_data)
-    st.markdown('<div class="input-grid-nolabel">', unsafe_allow_html=True)
     edited_fc = st.data_editor(
         fc_df, use_container_width=False, num_rows="fixed", key="fc_editor", hide_index=True,
         column_config={"Comparison Factories": st.column_config.NumberColumn(
             "Comparison Factories", min_value=1, max_value=6, step=1, format="%d", width=180)})
-    st.markdown('</div>', unsafe_allow_html=True)
     num_factories = max(1, min(6, int(edited_fc.loc[0, "Comparison Factories"])))
     st.session_state["num_fac"] = num_factories
 
     # Base factory name
     bf_df = pd.DataFrame({"Base Factory Name": [EX_BASE.name if ex else "Base Case"]})
-    st.markdown('<div class="input-grid-nolabel">', unsafe_allow_html=True)
     edited_bf = st.data_editor(bf_df, use_container_width=False, num_rows="fixed",
         key="bf_editor", hide_index=True,
         column_config={"Base Factory Name": st.column_config.TextColumn("Base Factory Name", width=250)})
-    st.markdown('</div>', unsafe_allow_html=True)
     base_factory_name = str(edited_bf.loc[0, "Base Factory Name"] or "Base Case")
 
     # Factory country assignment
@@ -966,7 +935,6 @@ For questions, feedback, or feature requests:<br>
         country_data["Country"].append(ex_factory_countries[i] if ex and i < len(ex_factory_countries) else "")
     country_df = pd.DataFrame(country_data)
 
-    st.markdown('<div class="country-grid">', unsafe_allow_html=True)
     edited_countries = st.data_editor(
         country_df, use_container_width=False, num_rows="fixed", key="country_editor", hide_index=True,
         column_config={
@@ -975,7 +943,6 @@ For questions, feedback, or feature requests:<br>
         },
         disabled=["Factory"],
     )
-    st.markdown('</div>', unsafe_allow_html=True)
     factory_countries = {}
     for _, r in edited_countries.iterrows():
         factory_countries[r["Factory"]] = str(r["Country"] or "")
@@ -1024,12 +991,9 @@ For questions, feedback, or feature requests:<br>
         "Guide": st.column_config.TextColumn("Guide", width=320, disabled=True),
     }
 
-    st.markdown('<div class="matrix-grid">', unsafe_allow_html=True)
     edited_df = st.data_editor(
         df_matrix, use_container_width=True, num_rows="fixed", key="assumption_matrix",
         column_config=col_config, disabled=["Guide"])
-
-    st.markdown('</div>', unsafe_allow_html=True)
 
     # Lead time comparison
     if target_market:
@@ -1174,7 +1138,7 @@ For questions, feedback, or feature requests:<br>
     # ── FOOTER ────────────────────────────────────────────────
     st.markdown("---")
     c1,c2,c3 = st.columns([4,1,1])
-    c1.markdown(f"<span style='font-size:0.7rem;color:{MUTED};'>Landed Cost Comparison v4.2 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} items &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
+    c1.markdown(f"<span style='font-size:0.7rem;color:{MUTED};'>Landed Cost Comparison v4.3 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} items &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
     if all_results:
         c2.download_button("Export Excel", data=export_excel_project(all_results),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.xlsx",
@@ -1186,4 +1150,3 @@ For questions, feedback, or feature requests:<br>
 
 if __name__ == "__main__":
     main()
-
