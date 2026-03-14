@@ -105,23 +105,30 @@ st.markdown(f"""
         min-height: 0 !important;
         height: auto !important;
     }}
-    .stCheckbox,
     .stCheckbox label,
-    .stCheckbox label *,
-    [data-testid="stCheckbox"] label,
-    [data-testid="stCheckbox"] label * {{
-        font-family: 'Inter', sans-serif !important;
-        font-size: 0.76rem !important;
+    [data-testid="stCheckbox"] label {{
         display: flex !important;
         align-items: center !important;
+        gap: 0.4rem !important;
+    }}
+    .stCheckbox label span,
+    .stCheckbox label p,
+    [data-testid="stCheckbox"] label span,
+    [data-testid="stCheckbox"] label p {{
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.76rem !important;
+        line-height: 1 !important;
+        padding: 0 !important;
+        margin: 0 !important;
     }}
     /* Square checkbox */
-    .stCheckbox [data-testid="stCheckbox"] input[type="checkbox"],
     .stCheckbox svg,
-    [data-testid="stCheckbox"] svg {{
-        border-radius: 1px !important;
-    }}
-    .stCheckbox label > div:first-child {{
+    [data-testid="stCheckbox"] svg,
+    .stCheckbox label > div:first-child,
+    [data-testid="stCheckbox"] label > div:first-child,
+    [data-testid="stCheckbox"] label > div:first-child > div,
+    [data-baseweb="checkbox"] div[data-testid="stMarkdownContainer"],
+    [data-baseweb="checkbox"] > div {{
         border-radius: 1px !important;
     }}
     header {{background: transparent !important; visibility: hidden;}}
@@ -150,13 +157,15 @@ st.markdown(f"""
     .stTextInput, .stNumberInput, .stSelectbox {{ margin-bottom: -0.2rem !important; }}
     div[data-testid="stVerticalBlock"] > div {{ gap: 0.25rem; }}
 
-    /* ── IB Header ── */
+    /* ── IB Header (fixed) ── */
     .ib-header {{
         background: #f0f2f6;
-        color: {NAVY}; padding: 0.8rem 1.8rem 0.7rem; margin: -1.5rem -2.5rem 1.2rem -2.5rem;
+        color: {NAVY}; padding: 0.8rem 1.8rem 0.7rem;
         display: flex; align-items: center; justify-content: space-between;
         border-bottom: 1px solid #d4d8e0;
+        position: fixed; top: 0; left: 21rem; right: 0; z-index: 999;
     }}
+    .ib-header-spacer {{ height: 3.2rem; }}
     .ib-header-left {{ display: flex; flex-direction: column; }}
     .ib-header h1 {{ font-family: 'Inter', sans-serif; font-size: 1.1rem; font-weight: 700; margin: 0 0 0.1rem 0; letter-spacing: -0.01em; color: {NAVY}; }}
     .ib-header .sub {{ font-size: 0.68rem; color: {GREY_TEXT}; letter-spacing: 0.04em; }}
@@ -240,7 +249,6 @@ st.markdown(f"""
     .conf-footer {{ font-size: 0.6rem; color: {MUTED}; text-align: center; padding: 0.5rem 0; margin-top: 0.5rem;
         border-top: 1px solid #eee; letter-spacing: 0.02em; font-style: italic; }}
 
-    .stCheckbox label span {{ font-size: 0.76rem !important; font-family: 'Inter', sans-serif !important; }}
     div[data-testid="stDataEditor"] td:last-child {{
         background-color: #f8f9fa !important; color: #6c757d !important;
         font-style: italic !important; font-size: 0.73rem !important;
@@ -1690,7 +1698,8 @@ def main():
             <div class="sub">Multi-Item Project-Based Production Cost &amp; Profitability Analysis &middot; v9.0</div>
         </div>
         <div>{skf_logo_svg}</div>
-    </div>""", unsafe_allow_html=True)
+    </div>
+    <div class="ib-header-spacer"></div>""", unsafe_allow_html=True)
 
     # ── SIDEBAR ────────────────────────────────────────────────
     st.sidebar.markdown(f"""<div style="background:{NAVY};padding:0.55rem 1rem;margin:-1rem -1rem 0.8rem -1rem;">
