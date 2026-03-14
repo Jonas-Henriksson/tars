@@ -95,7 +95,9 @@ st.markdown(f"""
         font-weight: 500 !important;
     }}
     /* Main-area buttons (Add Item, Remove Last, etc.) */
-    .main .stButton > button {{
+    .main .stButton > button,
+    .main [data-testid="stButton"] > button,
+    .main button[kind="secondary"] {{
         font-family: 'Inter', sans-serif !important;
         font-size: 0.76rem !important;
         font-weight: 500 !important;
@@ -135,6 +137,8 @@ st.markdown(f"""
     header [data-testid="stDecoration"] {{display: none;}}
     /* Keep sidebar always visible (non-collapsible) */
     [data-testid="collapsedControl"] {{display: none !important;}}
+    section[data-testid="stSidebar"] button[kind="header"] {{display: none !important;}}
+    section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {{display: none !important;}}
     section[data-testid="stSidebar"] {{
         min-width: 21rem !important; max-width: 21rem !important;
         transform: none !important; visibility: visible !important;
@@ -178,9 +182,9 @@ st.markdown(f"""
     /* ── Sections ── */
     .sec {{ font-family: 'Inter', sans-serif; font-size: 0.7rem; font-weight: 700; color: {NAVY};
         text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 2px solid {NAVY};
-        padding-bottom: 0.25rem; margin: 1.6rem 0 0.7rem 0; }}
+        padding-bottom: 0.25rem; margin: 1.6rem 0 0.7rem 0; scroll-margin-top: 5rem; }}
     .sec-sm {{ font-family: 'Inter', sans-serif; font-size: 0.65rem; font-weight: 600; color: {GREY_TEXT};
-        text-transform: uppercase; letter-spacing: 0.08em; margin: 0.7rem 0 0.35rem 0; }}
+        text-transform: uppercase; letter-spacing: 0.08em; margin: 0.7rem 0 0.35rem 0; scroll-margin-top: 5rem; }}
 
     /* ── IB Tables ── */
     .ib-table {{ width: 100%; border-collapse: collapse; font-size: 0.76rem; font-family: 'Inter', sans-serif; }}
@@ -478,21 +482,21 @@ def build_charts(results, ccy):
     colors = [NAVY if i==0 else ACCENT_BLUE for i in range(len(results))]
     fig = make_subplots(rows=1, cols=2, subplot_titles=("Operating Margin by Location", f"Annual Operating Profit ({ccy})"), horizontal_spacing=0.12)
     fig.add_trace(go.Bar(x=names, y=oms, marker_color=colors, text=[f"{v:.1f}%" for v in oms],
-        textposition="outside", textfont=dict(size=10, family="Inter", color=DARK_TEXT),
+        textposition="outside", textfont=dict(size=10, family="Inter, sans-serif", color=DARK_TEXT),
         hovertemplate="%{x}<br>OM: %{y:.1f}%<extra></extra>", showlegend=False), row=1, col=1)
     fig.add_trace(go.Bar(x=names, y=ops, marker_color=colors, text=[fi(v,dz=False) for v in ops],
-        textposition="outside", textfont=dict(size=10, family="Inter", color=DARK_TEXT),
+        textposition="outside", textfont=dict(size=10, family="Inter, sans-serif", color=DARK_TEXT),
         hovertemplate="%{x}<br>OP: %{y:,.0f}<extra></extra>", showlegend=False), row=1, col=2)
     fig.update_layout(height=400, margin=dict(l=40,r=40,t=45,b=60), paper_bgcolor="white",
-        plot_bgcolor="white", font=dict(family="Inter", size=10, color=DARK_TEXT))
+        plot_bgcolor="white", font=dict(family="Inter, sans-serif", size=10, color=DARK_TEXT))
     # Style subplot titles to match model typography
     for ann in fig.layout.annotations:
-        ann.update(font=dict(family="Inter", size=11, color=DARK_TEXT))
+        ann.update(font=dict(family="Inter, sans-serif", size=11, color=DARK_TEXT))
     for ax in ["yaxis","yaxis2"]:
         fig.update_layout(**{ax: dict(showgrid=True, gridcolor="#eee", zeroline=True, zerolinecolor="#ccc")})
-    fig.update_xaxes(tickangle=0, tickfont=dict(size=10, family="Inter", color=DARK_TEXT))
-    fig.update_yaxes(title_text="Margin (%)", row=1, col=1, ticksuffix="%", title_font=dict(size=10, family="Inter"))
-    fig.update_yaxes(title_text=ccy, row=1, col=2, title_font=dict(size=10, family="Inter"))
+    fig.update_xaxes(tickangle=0, tickfont=dict(size=10, family="Inter, sans-serif", color=DARK_TEXT))
+    fig.update_yaxes(title_text="Margin (%)", row=1, col=1, ticksuffix="%", title_font=dict(size=10, family="Inter, sans-serif"))
+    fig.update_yaxes(title_text=ccy, row=1, col=2, title_font=dict(size=10, family="Inter, sans-serif"))
     return fig
 
 
@@ -530,15 +534,15 @@ def build_waterfall_chart(result, ccy):
         totals=dict(marker=dict(color=NAVY if op >= 0 else RED, line=dict(color=NAVY if op >= 0 else RED, width=1))),
         textposition="outside",
         text=[fn(abs(v), 2, dz=False) for v in values],
-        textfont=dict(size=9, family="Inter", color=DARK_TEXT),
+        textfont=dict(size=9, family="Inter, sans-serif", color=DARK_TEXT),
     ))
     fig.update_layout(
         title=dict(text=""),
         height=340, margin=dict(l=40, r=30, t=20, b=50),
         paper_bgcolor="white", plot_bgcolor="white",
-        font=dict(family="Inter", size=9, color=DARK_TEXT),
-        yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title=f"{ccy} per unit", title_font=dict(size=9, family="Inter")),
-        xaxis=dict(tickfont=dict(size=9, family="Inter")),
+        font=dict(family="Inter, sans-serif", size=9, color=DARK_TEXT),
+        yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title=f"{ccy} per unit", title_font=dict(size=9, family="Inter, sans-serif")),
+        xaxis=dict(tickfont=dict(size=9, family="Inter, sans-serif")),
         showlegend=False,
     )
     return fig
@@ -633,23 +637,23 @@ def build_tornado_chart(inputs, factory, is_base, ccy, overrides=None):
         fig.add_annotation(
             x=left_v, y=label, text=f"{left_lbl}: {left_v:+.1f}pp",
             showarrow=False, xanchor="right", xshift=-4,
-            font=dict(size=8, family="Inter", color=left_color),
+            font=dict(size=8, family="Inter, sans-serif", color=left_color),
         )
         fig.add_annotation(
             x=right_v, y=label, text=f"{right_lbl}: {right_v:+.1f}pp",
             showarrow=False, xanchor="left", xshift=4,
-            font=dict(size=8, family="Inter", color=right_color),
+            font=dict(size=8, family="Inter, sans-serif", color=right_color),
         )
 
     fig.update_layout(
-        title=dict(text=f"Tornado: OM Sensitivity to ±20% Parameter Changes ({factory.name})<br><span style='font-size:9px;color:#666;font-weight:normal'>Each bar shows the impact on Operating Margin when a single cost parameter is changed by ±20% from its current value</span>", font=dict(size=11, family="Inter", color=DARK_TEXT)),
+        title=dict(text=f"Tornado: OM Sensitivity to ±20% Parameter Changes ({factory.name})<br><span style='font-size:9px;color:#666;font-weight:normal'>Each bar shows the impact on Operating Margin when a single cost parameter is changed by ±20% from its current value</span>", font=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT)),
         height=max(250, 50 * len(bars) + 80), barmode="overlay",
         margin=dict(l=120, r=60, t=60, b=40),
         paper_bgcolor="white", plot_bgcolor="white",
-        font=dict(family="Inter", size=10, color=DARK_TEXT),
+        font=dict(family="Inter, sans-serif", size=10, color=DARK_TEXT),
         xaxis=dict(title="Change in OM (percentage points)", showgrid=True, gridcolor="#f0f0f0", zeroline=False, ticksuffix="pp",
-                   title_font=dict(size=10, family="Inter"), tickfont=dict(size=10, family="Inter")),
-        yaxis=dict(showgrid=False, tickfont=dict(size=10, family="Inter")),
+                   title_font=dict(size=10, family="Inter, sans-serif"), tickfont=dict(size=10, family="Inter, sans-serif")),
+        yaxis=dict(showgrid=False, tickfont=dict(size=10, family="Inter, sans-serif")),
         showlegend=False,
         dragmode=False,
     )
@@ -751,10 +755,259 @@ def build_sensitivity_chart(inputs, factories, base_factory, param_name, param_l
         ))
 
     fig.update_layout(
-        title=dict(text=f"Sensitivity: Operating Margin vs. {param_label}", font=dict(size=11, family="Inter", color=DARK_TEXT)),
+        title=dict(text=f"Sensitivity: Operating Margin vs. {param_label}", font=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT)),
         height=380, margin=dict(l=50, r=30, t=50, b=50),
         paper_bgcolor="white", plot_bgcolor="white",
-        font=dict(family="Inter", size=10, color=DARK_TEXT),
+        font=dict(family="Inter, sans-serif", size=10, color=DARK_TEXT),
+        xaxis=dict(title=f"{param_label}{' (%)' if is_pct else ''}", showgrid=True, gridcolor="#eee"),
+        yaxis=dict(title="Operating Margin (%)", showgrid=True, gridcolor="#eee", ticksuffix="%"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    return fig
+
+
+# ── PORTFOLIO WATERFALL (COST BRIDGE) ─────────────────────────
+def build_portfolio_waterfall(all_results, factory_name, ccy):
+    """Build a waterfall chart aggregating annual cost components across all items for one factory."""
+    total_rev = 0.0
+    total_ps = 0.0
+    total_sa = 0.0
+    total_tar = 0.0
+    total_dut = 0.0
+    total_trn = 0.0
+    total_nwc = 0.0
+    total_op = 0.0
+
+    for item in all_results:
+        for r in item["results"]:
+            if r["name"] == factory_name:
+                qty = r["annual_rev"] / r["ns_per_unit"] if r["ns_per_unit"] else 0
+                total_rev += r["annual_rev"]
+                total_ps += r["ps"] * qty
+                total_sa += r["sa"] * qty
+                total_tar += r["tariff"] * qty
+                total_dut += r["duties"] * qty
+                total_trn += r["transport"] * qty
+                total_nwc += r.get("nwc_carrying_cost_annual", 0)
+                total_op += r["annual_op"]
+
+    labels = ["Net Sales", "Price Std.", "S&A", "Tariff", "Duties", "Transport", "NWC Cost", "Op. Profit"]
+    values = [total_rev, -total_ps, -total_sa, -total_tar, -total_dut, -total_trn, -total_nwc, total_op]
+    measures = ["absolute", "relative", "relative", "relative", "relative", "relative", "relative", "total"]
+
+    filtered = [(l, v, m) for l, v, m in zip(labels, values, measures) if abs(v) > 0.005 or m in ("absolute", "total")]
+    labels, values, measures = zip(*filtered) if filtered else (labels, values, measures)
+
+    fig = go.Figure(go.Waterfall(
+        x=list(labels), y=list(values), measure=list(measures),
+        connector=dict(line=dict(color="#ccc", width=1)),
+        increasing=dict(marker=dict(color="#e8f5e9", line=dict(color=GREEN, width=1))),
+        decreasing=dict(marker=dict(color="#ffebee", line=dict(color=RED, width=1))),
+        totals=dict(marker=dict(color=NAVY if total_op >= 0 else RED, line=dict(color=NAVY if total_op >= 0 else RED, width=1))),
+        textposition="outside",
+        text=[fi(abs(v), dz=False) for v in values],
+        textfont=dict(size=9, family="Inter, sans-serif", color=DARK_TEXT),
+    ))
+    fig.update_layout(
+        title=dict(text=""),
+        height=340, margin=dict(l=40, r=30, t=20, b=50),
+        paper_bgcolor="white", plot_bgcolor="white",
+        font=dict(family="Inter, sans-serif", size=9, color=DARK_TEXT),
+        yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title=f"{ccy} (annual)", title_font=dict(size=9, family="Inter, sans-serif")),
+        xaxis=dict(tickfont=dict(size=9, family="Inter, sans-serif")),
+        showlegend=False,
+    )
+    return fig
+
+
+# ── PORTFOLIO TORNADO CHART ──────────────────────────────────
+def build_portfolio_tornado(all_results, factory_name, ccy):
+    """Build a tornado chart showing portfolio-level OM sensitivity for one factory."""
+    # Compute base portfolio OM for this factory
+    base_rev = sum(r["annual_rev"] for item in all_results for r in item["results"] if r["name"] == factory_name)
+    base_op = sum(r["annual_op"] for item in all_results for r in item["results"] if r["name"] == factory_name)
+    if base_rev == 0:
+        return None
+    base_om = base_op / base_rev * 100
+
+    params = [
+        ("VA Ratio", "va_ratio", False),
+        ("PS Index", "ps_index", False),
+        ("S&A %", "sa_pct", True),
+        ("Transport %", "transport_pct", True),
+        ("Tariff %", "tariff_pct", True),
+        ("Duties %", "duties_pct", True),
+    ]
+
+    factory_attrs = {"va_ratio", "ps_index", "mcl_pct", "sa_pct", "tpl", "tariff_pct", "duties_pct", "transport_pct"}
+    from dataclasses import replace
+
+    bars = []
+    for label, param, is_pct in params:
+        # Get current value from first item's factory
+        first_factory = None
+        for item in all_results:
+            dc_inputs = item.get("_inputs_dc")
+            base_f = item.get("_base_factory")
+            facs = item.get("_factories", [])
+            target_f = base_f if base_f and base_f.name == factory_name else next((f for f in facs if f.name == factory_name), None)
+            if target_f:
+                first_factory = target_f
+                break
+        if not first_factory:
+            continue
+
+        current = getattr(first_factory, param, None)
+        if current is None or current == 0:
+            continue
+        if param == "va_ratio" and first_factory.name == all_results[0]["results"][0]["name"]:
+            continue  # skip VA ratio for base
+
+        low_val = current * 0.8
+        high_val = current * 1.2
+
+        # Recompute all items with tweaked parameter
+        om_low = _portfolio_om_with_tweak(all_results, factory_name, param, low_val, factory_attrs)
+        om_high = _portfolio_om_with_tweak(all_results, factory_name, param, high_val, factory_attrs)
+        if om_low is None or om_high is None:
+            continue
+
+        d_low = om_low - base_om
+        d_high = om_high - base_om
+        spread = abs(d_high - d_low)
+        bars.append((label, d_low, d_high, spread))
+
+    if not bars:
+        return None
+
+    bars.sort(key=lambda x: x[3])
+    labels = [b[0] for b in bars]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=labels, x=[min(b[1], b[2]) for b in bars],
+        orientation="h", marker=dict(color="#e8f5e9", line=dict(color=GREEN, width=1)),
+        name="-20%", hovertemplate="%{y}: %{x:+.2f}pp<extra>-20%</extra>",
+    ))
+    fig.add_trace(go.Bar(
+        y=labels, x=[max(b[1], b[2]) - min(b[1], b[2]) for b in bars],
+        orientation="h", marker=dict(color="#ffebee", line=dict(color=RED, width=1)),
+        name="+20%", base=[min(b[1], b[2]) for b in bars],
+        hovertemplate="%{y}: %{x:+.2f}pp<extra>+20%</extra>",
+    ))
+    fig.add_vline(x=0, line=dict(color=NAVY, width=1.5, dash="dot"))
+
+    for i, (lbl, low, high, _) in enumerate(bars):
+        left_v = min(low, high)
+        right_v = max(low, high)
+        left_is_low = (left_v == low)
+        left_lbl = "\u221220%" if left_is_low else "+20%"
+        right_lbl = "+20%" if left_is_low else "\u221220%"
+        left_color = GREEN if left_v > 0 else RED if left_v < 0 else GREY_TEXT
+        right_color = GREEN if right_v > 0 else RED if right_v < 0 else GREY_TEXT
+        fig.add_annotation(x=left_v, y=lbl, text=f"{left_lbl}: {left_v:+.1f}pp",
+            showarrow=False, xanchor="right", xshift=-4, font=dict(size=8, family="Inter, sans-serif", color=left_color))
+        fig.add_annotation(x=right_v, y=lbl, text=f"{right_lbl}: {right_v:+.1f}pp",
+            showarrow=False, xanchor="left", xshift=4, font=dict(size=8, family="Inter, sans-serif", color=right_color))
+
+    fig.update_layout(
+        title=dict(text=f"Portfolio Tornado: OM Sensitivity to \u00b120% ({factory_name})<br><span style='font-size:9px;color:#666;font-weight:normal'>Impact on portfolio Operating Margin when a shared parameter is changed by \u00b120%</span>", font=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT)),
+        height=max(250, 50 * len(bars) + 80), barmode="overlay",
+        margin=dict(l=120, r=60, t=60, b=40),
+        paper_bgcolor="white", plot_bgcolor="white",
+        font=dict(family="Inter, sans-serif", size=10, color=DARK_TEXT),
+        xaxis=dict(title="Change in OM (percentage points)", showgrid=True, gridcolor="#f0f0f0", zeroline=False, ticksuffix="pp",
+                   title_font=dict(size=10, family="Inter, sans-serif"), tickfont=dict(size=10, family="Inter, sans-serif")),
+        yaxis=dict(showgrid=False, tickfont=dict(size=10, family="Inter, sans-serif")),
+        showlegend=False, dragmode=False,
+    )
+    return fig
+
+
+def _portfolio_om_with_tweak(all_results, factory_name, param, value, factory_attrs):
+    """Recompute portfolio OM for a factory with one parameter tweaked."""
+    from dataclasses import replace
+    total_rev = 0.0
+    total_op = 0.0
+    for item in all_results:
+        dc_inputs = item.get("_inputs_dc")
+        base_f = item.get("_base_factory")
+        facs = item.get("_factories", [])
+        get_ov = item.get("_get_ov")
+        if not dc_inputs:
+            continue
+
+        is_base = (base_f and base_f.name == factory_name)
+        target_f = base_f if is_base else next((f for f in facs if f.name == factory_name), None)
+        if not target_f:
+            continue
+
+        if param in factory_attrs:
+            tweaked_f = replace(target_f, **{param: value})
+            r = compute_location(dc_inputs, tweaked_f, is_base=is_base, overrides=get_ov(factory_name) if get_ov else None)
+        else:
+            tweaked_inputs = replace(dc_inputs, **{param: value})
+            r = compute_location(tweaked_inputs, target_f, is_base=is_base, overrides=get_ov(factory_name) if get_ov else None)
+        if r:
+            total_rev += r["annual_rev"]
+            total_op += r["annual_op"]
+    return (total_op / total_rev * 100) if total_rev else None
+
+
+# ── PORTFOLIO SENSITIVITY SWEEP ──────────────────────────────
+def build_portfolio_sensitivity_chart(all_results, all_fnames, param_name, param_label, steps, ccy, is_pct=False):
+    """Build a line chart showing how portfolio OM changes as param varies across all factories."""
+    from dataclasses import replace
+    factory_attrs = {"va_ratio", "ps_index", "mcl_pct", "sa_pct", "tpl", "tariff_pct", "duties_pct", "transport_pct"}
+    fig = go.Figure()
+    colors_cycle = [NAVY, ACCENT_BLUE, GREEN, RED, "#e67e22", "#8e44ad"]
+
+    for idx, fn_ in enumerate(all_fnames):
+        x_vals = []
+        y_vals = []
+        for step_val in steps:
+            total_rev = 0.0
+            total_op = 0.0
+            for item in all_results:
+                dc_inputs = item.get("_inputs_dc")
+                base_f = item.get("_base_factory")
+                facs = item.get("_factories", [])
+                get_ov = item.get("_get_ov")
+                if not dc_inputs:
+                    continue
+
+                is_base = (base_f and base_f.name == fn_)
+                target_f = base_f if is_base else next((f for f in facs if f.name == fn_), None)
+                if not target_f:
+                    continue
+
+                if param_name in factory_attrs:
+                    tweaked_f = replace(target_f, **{param_name: step_val})
+                    r = compute_location(dc_inputs, tweaked_f, is_base=is_base, overrides=get_ov(fn_) if get_ov else None)
+                else:
+                    tweaked_inputs = replace(dc_inputs, **{param_name: step_val})
+                    r = compute_location(tweaked_inputs, target_f, is_base=is_base, overrides=get_ov(fn_) if get_ov else None)
+                if r:
+                    total_rev += r["annual_rev"]
+                    total_op += r["annual_op"]
+
+            om = (total_op / total_rev * 100) if total_rev else 0
+            x_vals.append(step_val * 100 if is_pct else step_val)
+            y_vals.append(om)
+
+        color = colors_cycle[idx % len(colors_cycle)]
+        fig.add_trace(go.Scatter(
+            x=x_vals, y=y_vals, mode="lines+markers", name=fn_,
+            line=dict(color=color, width=3 if idx == 0 else 2),
+            marker=dict(size=5),
+            hovertemplate=f"{fn_}<br>{param_label}: %{{x:.1f}}{'%' if is_pct else ''}<br>OM: %{{y:.1f}}%<extra></extra>",
+        ))
+
+    fig.update_layout(
+        title=dict(text=f"Portfolio Sensitivity: Operating Margin vs. {param_label}", font=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT)),
+        height=380, margin=dict(l=50, r=30, t=50, b=50),
+        paper_bgcolor="white", plot_bgcolor="white",
+        font=dict(family="Inter, sans-serif", size=10, color=DARK_TEXT),
         xaxis=dict(title=f"{param_label}{' (%)' if is_pct else ''}", showgrid=True, gridcolor="#eee"),
         yaxis=dict(title="Operating Margin (%)", showgrid=True, gridcolor="#eee", ticksuffix="%"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -1560,18 +1813,72 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
             marker_color=colors,
             text=[fi(totals[fn_], dz=False) for fn_ in all_fnames],
             textposition="outside",
-            textfont=dict(size=11, family="Inter", color=DARK_TEXT),
+            textfont=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT),
         ))
         fig.update_layout(
-            title=dict(text=f"Total Annual OP by Location ({ccy})", font=dict(size=11, family="Inter", color=DARK_TEXT)),
+            title=dict(text=f"Total Annual OP by Location ({ccy})", font=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT)),
             height=400, margin=dict(l=40,r=40,t=50,b=60),
             paper_bgcolor="white", plot_bgcolor="white",
-            font=dict(family="Inter", size=10, color=DARK_TEXT),
+            font=dict(family="Inter, sans-serif", size=10, color=DARK_TEXT),
             yaxis=dict(showgrid=True, gridcolor="#eee"),
         )
-        fig.update_xaxes(tickangle=0, tickfont=dict(size=11, family="Inter", color=DARK_TEXT))
+        fig.update_xaxes(tickangle=0, tickfont=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT))
         fig.update_yaxes(title_text=ccy, title_font=dict(size=10))
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False})
+
+    # ── PORTFOLIO COST BRIDGE & SENSITIVITY (same layout as item-level) ──
+    if len(all_fnames) >= 2:
+        sub_tab_labels = ["Cost Bridge", "Sensitivity Analysis"]
+        sub_tabs = st.tabs(sub_tab_labels)
+
+        plotly_cfg = {"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False}
+
+        with sub_tabs[0]:
+            st.markdown(f'<div class="callout">Waterfall from Net Sales to Operating Profit aggregated across all items. Shows top {min(len(all_fnames), 3)} locations.</div>', unsafe_allow_html=True)
+            n_wf = min(len(all_fnames), 3)
+            wf_cols = st.columns(n_wf)
+            for wi, fn_ in enumerate(all_fnames[:n_wf]):
+                with wf_cols[wi]:
+                    st.markdown(f'<div style="font-size:0.7rem;font-family:Inter,sans-serif;font-weight:600;color:{DARK_TEXT};margin-bottom:0.2rem;">Cost Bridge: {fn_} ({ccy}/year)</div>', unsafe_allow_html=True)
+                    st.plotly_chart(build_portfolio_waterfall(all_results, fn_, ccy), use_container_width=True, config=plotly_cfg)
+            if len(all_fnames) > 3:
+                st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-top:0.3rem;">Showing top 3 of {len(all_fnames)} locations.</div>', unsafe_allow_html=True)
+
+        with sub_tabs[1]:
+            st.markdown(f'<div class="callout">Explore how changes in a single parameter affect portfolio-level operating margin. The <strong>tornado chart</strong> shows the impact on OM when each cost parameter is individually changed by \u00b120%. The <strong>line chart</strong> below sweeps a single parameter across all factories.</div>', unsafe_allow_html=True)
+
+            # Tornado chart with factory selector
+            tornado_fnames = all_fnames[1:]  # exclude base
+            if tornado_fnames:
+                tc1, tc2 = st.columns([1, 3])
+                with tc1:
+                    tornado_sel = st.selectbox("Tornado Factory", tornado_fnames, key="portfolio_tornado_fac")
+                tornado_fig = build_portfolio_tornado(all_results, tornado_sel, ccy)
+                if tornado_fig:
+                    st.plotly_chart(tornado_fig, use_container_width=True, config=plotly_cfg)
+
+            # Parameter sweep
+            sa_params = {
+                "VA Ratio": ("va_ratio", False),
+                "Transport %": ("transport_pct", True),
+                "Tariff %": ("tariff_pct", True),
+                "Duties %": ("duties_pct", True),
+                "S&A %": ("sa_pct", True),
+            }
+            sa_col1, sa_col2 = st.columns([1, 3])
+            with sa_col1:
+                sa_choice = st.selectbox("Parameter", list(sa_params.keys()), key="portfolio_sa_param")
+            param_key, is_pct = sa_params[sa_choice]
+
+            if param_key in ("va_ratio",):
+                steps = [round(v, 2) for v in np.arange(0.4, 1.61, 0.1)]
+            elif is_pct:
+                steps = [round(v, 3) for v in np.arange(0.0, 0.121, 0.01)]
+            else:
+                steps = [round(v, 2) for v in np.arange(0.5, 1.55, 0.1)]
+
+            fig_sa = build_portfolio_sensitivity_chart(all_results, all_fnames, param_key, sa_choice, steps, ccy, is_pct=is_pct)
+            st.plotly_chart(fig_sa, use_container_width=True, config=plotly_cfg)
 
     # ── INVESTMENT SUMMARY (Portfolio) ────────────────────────
     has_inv = any(
@@ -1736,7 +2043,6 @@ def main():
             sub_sections = [
                 ("Analysis Setup", "sec-project-setup"),
                 ("Factory Configuration", "sec-factory-config"),
-                ("Lead Times", "sec-lead-times"),
                 ("NWC Assumptions", "sec-nwc"),
                 ("Item Analysis", "sec-item-analysis"),
             ]
@@ -2266,10 +2572,10 @@ This provides the local risk percentage.</li>
                         ))
                 fig_cf.add_hline(y=0, line=dict(color=NAVY, width=1.5, dash="dot"))
                 fig_cf.update_layout(
-                    title=dict(text=f"Cumulative Cash Flow ({currency})", font=dict(size=11, family="Inter", color=DARK_TEXT)),
+                    title=dict(text=f"Cumulative Cash Flow ({currency})", font=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT)),
                     height=350, margin=dict(l=50, r=30, t=50, b=50),
                     paper_bgcolor="white", plot_bgcolor="white",
-                    font=dict(family="Inter", size=10, color=DARK_TEXT),
+                    font=dict(family="Inter, sans-serif", size=10, color=DARK_TEXT),
                     xaxis=dict(title="Year", showgrid=True, gridcolor="#eee", dtick=1),
                     yaxis=dict(title=currency, showgrid=True, gridcolor="#eee", zeroline=True, zerolinecolor="#ccc"),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -2449,28 +2755,77 @@ This provides the local risk percentage.</li>
         df_matrix, use_container_width=True, num_rows="fixed", key="assumption_matrix",
         column_config=col_config, disabled=["Guide"])
 
-    # Lead time comparison
+    # ── NWC ASSUMPTIONS (major section) ──────────────────────
+    st.markdown('<div class="sec" id="sec-nwc">NWC Assumptions</div>', unsafe_allow_html=True)
+
+    # Lead time comparison (subsection within NWC)
     if target_market:
         st.markdown(f'<div class="sec-sm" id="sec-lead-times">Lead Time to {target_market}</div>', unsafe_allow_html=True)
         all_factory_names = [base_factory_name] + factory_col_names
         lt_data = []
         base_country = factory_countries.get(base_factory_name, "")
-        base_lt = estimate_lead_time(base_country, target_market)
+        base_lt_est = estimate_lead_time(base_country, target_market)
+        has_any_override = False
         for fn_ in all_factory_names:
             ctry = factory_countries.get(fn_, "")
-            lt = estimate_lead_time(ctry, target_market)
-            delta = (lt - base_lt) if (lt is not None and base_lt is not None) else None
-            lt_data.append({"Factory": fn_, "Country": ctry, "Route": f"{ctry} \u2192 {target_market}" if ctry else "\u2013",
-                "Transit Days": lt if lt is not None else None,
-                "Delta vs Base": delta if delta is not None and fn_ != base_factory_name else None})
-        lt_df = pd.DataFrame(lt_data)
-        hdr = "".join(f'<th>{r["Factory"]}</th>' for r in lt_data)
-        route_cells = "".join(f'<td class="{"base-case" if i==0 else ""}">{r["Route"]}</td>' for i, r in enumerate(lt_data))
-        dash = "\u2013"
-        days_cells = "".join(f'<td class="{"base-case" if i==0 else ""}">{r["Transit Days"] if r["Transit Days"] is not None else dash}</td>' for i, r in enumerate(lt_data))
-        delta_cells = ""
-        dash = "\u2013"
+            est = estimate_lead_time(ctry, target_market)
+            ov_key = f"lt_override_{fn_}"
+            ov_val = st.session_state.get(ov_key)
+            is_overridden = ov_val is not None and ov_val != est
+            if is_overridden:
+                has_any_override = True
+            lt = ov_val if ov_val is not None else est
+            base_lt_final = st.session_state.get(f"lt_override_{base_factory_name}", base_lt_est) or base_lt_est
+            delta = (lt - base_lt_final) if (lt is not None and base_lt_final is not None) else None
+            lt_data.append({"Factory": fn_, "Country": ctry,
+                "Route": f"{ctry} \u2192 {target_market}" if ctry else "\u2013",
+                "Estimated": est, "Transit Days": lt,
+                "Delta vs Base": delta if delta is not None and fn_ != base_factory_name else None,
+                "overridden": is_overridden})
+
+        # Editable transit days row
+        st.markdown(f'<div class="callout">Transit days are estimated from the lead time matrix. Override any value below to use a manual estimate instead.</div>', unsafe_allow_html=True)
+        lt_cols = st.columns(len(all_factory_names) + 1)
+        lt_cols[0].markdown(f'<div style="font-size:0.68rem;font-weight:600;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.04em;padding-top:0.5rem;">Transit Days</div>', unsafe_allow_html=True)
         for i, r in enumerate(lt_data):
+            default_val = r["Estimated"] if r["Estimated"] is not None else 0
+            ov_key = f"lt_override_{r['Factory']}"
+            val = lt_cols[i+1].number_input(
+                r["Factory"], min_value=0, value=st.session_state.get(ov_key, default_val) or default_val,
+                step=1, key=ov_key, label_visibility="collapsed")
+
+        # Re-read after input
+        lt_data_final = []
+        base_lt_final = st.session_state.get(f"lt_override_{base_factory_name}", base_lt_est) or base_lt_est
+        has_any_override = False
+        for fn_ in all_factory_names:
+            ctry = factory_countries.get(fn_, "")
+            est = estimate_lead_time(ctry, target_market)
+            ov_key = f"lt_override_{fn_}"
+            ov_val = st.session_state.get(ov_key)
+            is_overridden = ov_val is not None and ov_val != est
+            if is_overridden:
+                has_any_override = True
+            lt = ov_val if ov_val is not None else est
+            delta = (lt - base_lt_final) if (lt is not None and base_lt_final is not None) else None
+            lt_data_final.append({"Factory": fn_, "Country": ctry,
+                "Route": f"{ctry} \u2192 {target_market}" if ctry else "\u2013",
+                "Estimated": est, "Transit Days": lt,
+                "Delta vs Base": delta if delta is not None and fn_ != base_factory_name else None,
+                "overridden": is_overridden})
+
+        hdr = "".join(f'<th>{r["Factory"]}</th>' for r in lt_data_final)
+        route_cells = "".join(f'<td class="{"base-case" if i==0 else ""}">{r["Route"]}</td>' for i, r in enumerate(lt_data_final))
+        dash = "\u2013"
+        days_cells = ""
+        for i, r in enumerate(lt_data_final):
+            cls = "base-case" if i == 0 else ""
+            val_str = str(r["Transit Days"]) if r["Transit Days"] is not None else dash
+            if r["overridden"]:
+                val_str = f'<span style="color:{ACCENT_BLUE};font-weight:700;" title="Manual override (estimated: {r["Estimated"]})">{val_str} *</span>'
+            days_cells += f'<td class="{cls}">{val_str}</td>'
+        delta_cells = ""
+        for i, r in enumerate(lt_data_final):
             if i == 0:
                 delta_cells += f'<td class="base-case">{dash}</td>'
             else:
@@ -2488,11 +2843,13 @@ This provides the local risk percentage.</li>
         lt_html += f'<tr class="row-bold"><td>Transit Days</td>{days_cells}</tr>'
         lt_html += f'<tr class="row-bold"><td><em>Delta vs. Base</em></td>{delta_cells}</tr>'
         lt_html += '</tbody></table>'
+        if has_any_override:
+            lt_html += f'<div style="font-size:0.68rem;color:{ACCENT_BLUE};margin-top:0.3rem;font-style:italic;">* Manual override applied — estimated value from lead time matrix has been replaced.</div>'
         st.markdown(lt_html, unsafe_allow_html=True)
 
-    # ── NWC ASSUMPTIONS ──────────────────────────────────────
+    # ── NWC inventory & payment terms ──────────────────────
     all_factory_names_nwc = [base_factory_name] + factory_col_names
-    st.markdown('<div class="sec-sm" id="sec-nwc">NWC Assumptions</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sec-sm">Inventory &amp; Payment Terms</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="callout">Net Working Capital assumptions for inventory and payment terms analysis. Leave blank or zero to exclude. All values in <strong>days</strong>. Applies to all items.</div>', unsafe_allow_html=True)
     NWC_ROWS = ["Safety Stock Days", "Cycle Stock Days", "Payment Terms (DPO) Days"]
     NWC_GUIDES = [
@@ -2601,9 +2958,12 @@ This provides the local risk percentage.</li>
                 inputs = item_data["inputs"]
                 get_ov = item_data["get_ov"]
 
-                # Resolve lead times for NWC calculation
+                # Resolve lead times for NWC calculation (use overrides if set)
                 base_country = factory_countries.get(base_factory_name, "")
-                base_lt = estimate_lead_time(base_country, target_market) if target_market else None
+                base_lt_est = estimate_lead_time(base_country, target_market) if target_market else None
+                base_lt = st.session_state.get(f"lt_override_{base_factory_name}", base_lt_est) if target_market else None
+                if base_lt is None:
+                    base_lt = base_lt_est
 
                 results = []
                 base_cc_rate = carrying_cost_rates.get(base_factory_name, 0.18)
@@ -2620,7 +2980,10 @@ This provides the local risk percentage.</li>
                 for f in factories:
                     if f.name:
                         ov = get_ov(f.name)
-                        f_lt = estimate_lead_time(f.country, target_market) if target_market and f.country else None
+                        f_lt_est = estimate_lead_time(f.country, target_market) if target_market and f.country else None
+                        f_lt = st.session_state.get(f"lt_override_{f.name}", f_lt_est) if target_market else None
+                        if f_lt is None:
+                            f_lt = f_lt_est
                         f_nwc = nwc_assumptions.get(f.name, {})
                         f_cc_rate = carrying_cost_rates.get(f.name, 0.18)
                         r = compute_location(inputs, f, overrides=ov,
@@ -2749,6 +3112,10 @@ This provides the local risk percentage.</li>
                         "results": results,
                         "investment": inv_results,
                         "qualitative": qual,
+                        "_inputs_dc": inputs,
+                        "_base_factory": base,
+                        "_factories": factories,
+                        "_get_ov": get_ov,
                     })
 
     # Portfolio Summary tab
