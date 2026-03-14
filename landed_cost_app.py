@@ -126,9 +126,13 @@ st.markdown(f"""
     }}
     header {{background: transparent !important; visibility: hidden;}}
     header [data-testid="stDecoration"] {{display: none;}}
+    /* Keep sidebar always visible (non-collapsible) */
+    [data-testid="collapsedControl"] {{display: none !important;}}
+    section[data-testid="stSidebar"] {{
+        min-width: 21rem !important; max-width: 21rem !important;
+        transform: none !important; visibility: visible !important;
+    }}
     .stMainBlockContainer {{ padding-top: 0 !important; }}
-    [data-testid="collapsedControl"] {{background: {NAVY}; border-radius: 4px; padding: 0.25rem;}}
-    [data-testid="collapsedControl"] svg {{fill: white !important; color: white !important;}}
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input,
     .stSelectbox > div > div > div {{
@@ -146,16 +150,12 @@ st.markdown(f"""
     .stTextInput, .stNumberInput, .stSelectbox {{ margin-bottom: -0.2rem !important; }}
     div[data-testid="stVerticalBlock"] > div {{ gap: 0.25rem; }}
 
-    /* ── IB Header (fixed at top) ── */
+    /* ── IB Header ── */
     .ib-header {{
         background: #f0f2f6;
-        color: {NAVY}; padding: 0.8rem 1.8rem 0.7rem;
+        color: {NAVY}; padding: 0.8rem 1.8rem 0.7rem; margin: -1.5rem -2.5rem 1.2rem -2.5rem;
         display: flex; align-items: center; justify-content: space-between;
-        position: fixed; top: 0; right: 0; z-index: 999;
         border-bottom: 1px solid #d4d8e0;
-    }}
-    .ib-header-spacer {{
-        height: 3.2rem;
     }}
     .ib-header-left {{ display: flex; flex-direction: column; }}
     .ib-header h1 {{ font-family: 'Inter', sans-serif; font-size: 1.1rem; font-weight: 700; margin: 0 0 0.1rem 0; letter-spacing: -0.01em; color: {NAVY}; }}
@@ -1690,22 +1690,7 @@ def main():
             <div class="sub">Multi-Item Project-Based Production Cost &amp; Profitability Analysis &middot; v9.0</div>
         </div>
         <div>{skf_logo_svg}</div>
-    </div>
-    <div class="ib-header-spacer"></div>
-    <script>
-    (function() {{
-        function alignHeader() {{
-            var header = document.querySelector('.ib-header');
-            var main = document.querySelector('section.stMain');
-            if (header && main) {{
-                header.style.left = main.getBoundingClientRect().left + 'px';
-            }}
-        }}
-        alignHeader();
-        new ResizeObserver(alignHeader).observe(document.body);
-        window.addEventListener('resize', alignHeader);
-    }})();
-    </script>""", unsafe_allow_html=True)
+    </div>""", unsafe_allow_html=True)
 
     # ── SIDEBAR ────────────────────────────────────────────────
     st.sidebar.markdown(f"""<div style="background:{NAVY};padding:0.55rem 1rem;margin:-1rem -1rem 0.8rem -1rem;">
