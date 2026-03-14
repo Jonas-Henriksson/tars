@@ -76,14 +76,34 @@ st.markdown(f"""
         font-size: 0.72rem !important;
     }}
     .stDownloadButton button,
+    [data-testid="stDownloadButton"] button {{
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.76rem !important;
+        font-weight: 500 !important;
+        border-radius: 1px !important;
+        border: 1px solid #ccc !important;
+        padding: 0.3rem 0.9rem !important;
+        min-height: 0 !important;
+        height: auto !important;
+    }}
     .stDownloadButton button *,
     .stDownloadButton button p,
     .stDownloadButton button span,
-    [data-testid="stDownloadButton"] button,
     [data-testid="stDownloadButton"] button * {{
         font-family: 'Inter', sans-serif !important;
         font-size: 0.76rem !important;
         font-weight: 500 !important;
+    }}
+    /* Main-area buttons (Add Item, Remove Last, etc.) */
+    .main .stButton > button {{
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.76rem !important;
+        font-weight: 500 !important;
+        border-radius: 1px !important;
+        border: 1px solid #ccc !important;
+        padding: 0.3rem 0.9rem !important;
+        min-height: 0 !important;
+        height: auto !important;
     }}
     .stCheckbox,
     .stCheckbox label,
@@ -94,6 +114,15 @@ st.markdown(f"""
         font-size: 0.76rem !important;
         display: flex !important;
         align-items: center !important;
+    }}
+    /* Square checkbox */
+    .stCheckbox [data-testid="stCheckbox"] input[type="checkbox"],
+    .stCheckbox svg,
+    [data-testid="stCheckbox"] svg {{
+        border-radius: 1px !important;
+    }}
+    .stCheckbox label > div:first-child {{
+        border-radius: 1px !important;
     }}
     header {{background: transparent !important; visibility: hidden;}}
     header [data-testid="stDecoration"] {{display: none;}}
@@ -1707,8 +1736,13 @@ def main():
             st.session_state.active_page = key
             st.rerun()
 
+    # Example data toggle at bottom of sidebar
+    with st.sidebar:
+        ex = st.checkbox("Load example data", value=st.session_state.ex)
+        st.session_state.ex = ex
+
     # Legend at bottom of sidebar
-    st.sidebar.markdown(f"""<div style="margin-top:1.5rem;padding:0.6rem 0.8rem;border-top:1px solid #d4d8e0;font-family:Inter,sans-serif;font-size:0.68rem;line-height:1.7;color:{GREY_TEXT};">
+    st.sidebar.markdown(f"""<div style="margin-top:0.5rem;padding:0.6rem 0.8rem;border-top:1px solid #d4d8e0;font-family:Inter,sans-serif;font-size:0.68rem;line-height:1.7;color:{GREY_TEXT};">
         <span style="border-left:3px solid {INPUT_BLUE};padding-left:0.3rem;font-weight:600;color:{INPUT_BLUE};">Blue border</span> = editable input<br>
         <strong style="color:{DARK_TEXT};">Bold</strong> = calculated output<br>
         <span style="font-style:italic;">Grey italic</span> = guidance notes
@@ -2238,9 +2272,7 @@ This provides the local risk percentage.</li>
 
     # ── COST MODEL PAGE (active_page == "model") ──
 
-
-    ex = st.checkbox("Load example data", value=st.session_state.ex)
-    st.session_state.ex = ex
+    ex = st.session_state.ex
 
     # ── PROJECT HEADER ────────────────────────────────────────
     st.markdown('<div class="sec" id="sec-project-setup">Project Setup</div>', unsafe_allow_html=True)
