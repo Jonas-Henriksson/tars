@@ -56,6 +56,7 @@ st.markdown(f"""
     .stApp {{ font-family: 'Inter', -apple-system, sans-serif; background-color: #ffffff; }}
     .block-container {{ padding: 1.5rem 2.5rem; max-width: 1400px; }}
     #MainMenu, footer {{visibility: hidden;}}
+    [data-testid="stFileUploader"] small {{display: none;}}
     header {{background: transparent !important;}}
     header [data-testid="stDecoration"] {{display: none;}}
     [data-testid="collapsedControl"] {{background: {NAVY}; border-radius: 4px; padding: 0.25rem;}}
