@@ -380,18 +380,21 @@ def build_charts(results, ccy):
     colors = [NAVY if i==0 else ACCENT_BLUE for i in range(len(results))]
     fig = make_subplots(rows=1, cols=2, subplot_titles=("Operating Margin by Location", f"Annual Operating Profit ({ccy})"), horizontal_spacing=0.12)
     fig.add_trace(go.Bar(x=names, y=oms, marker_color=colors, text=[f"{v:.1f}%" for v in oms],
-        textposition="outside", textfont=dict(size=11, family="Inter", color=DARK_TEXT),
+        textposition="outside", textfont=dict(size=10, family="Inter", color=DARK_TEXT),
         hovertemplate="%{x}<br>OM: %{y:.1f}%<extra></extra>", showlegend=False), row=1, col=1)
     fig.add_trace(go.Bar(x=names, y=ops, marker_color=colors, text=[fi(v,dz=False) for v in ops],
         textposition="outside", textfont=dict(size=10, family="Inter", color=DARK_TEXT),
         hovertemplate="%{x}<br>OP: %{y:,.0f}<extra></extra>", showlegend=False), row=1, col=2)
     fig.update_layout(height=400, margin=dict(l=40,r=40,t=45,b=60), paper_bgcolor="white",
         plot_bgcolor="white", font=dict(family="Inter", size=10, color=DARK_TEXT))
+    # Style subplot titles to match model typography
+    for ann in fig.layout.annotations:
+        ann.update(font=dict(family="Inter", size=11, color=DARK_TEXT))
     for ax in ["yaxis","yaxis2"]:
         fig.update_layout(**{ax: dict(showgrid=True, gridcolor="#eee", zeroline=True, zerolinecolor="#ccc")})
-    fig.update_xaxes(tickangle=0, tickfont=dict(size=11, family="Inter", color=DARK_TEXT))
-    fig.update_yaxes(title_text="Margin (%)", row=1, col=1, ticksuffix="%", title_font=dict(size=10))
-    fig.update_yaxes(title_text=ccy, row=1, col=2, title_font=dict(size=10))
+    fig.update_xaxes(tickangle=0, tickfont=dict(size=10, family="Inter", color=DARK_TEXT))
+    fig.update_yaxes(title_text="Margin (%)", row=1, col=1, ticksuffix="%", title_font=dict(size=10, family="Inter"))
+    fig.update_yaxes(title_text=ccy, row=1, col=2, title_font=dict(size=10, family="Inter"))
     return fig
 
 
@@ -431,12 +434,12 @@ def build_waterfall_chart(result, ccy):
         textfont=dict(size=9, family="Inter", color=DARK_TEXT),
     ))
     fig.update_layout(
-        title=dict(text=f"Cost Bridge: {result['name']} ({ccy}/unit)", font=dict(size=11, family="Inter", weight=600)),
+        title=dict(text=f"Cost Bridge: {result['name']} ({ccy}/unit)", font=dict(size=11, family="Inter", color=DARK_TEXT)),
         height=360, margin=dict(l=40, r=30, t=45, b=50),
         paper_bgcolor="white", plot_bgcolor="white",
         font=dict(family="Inter", size=9, color=DARK_TEXT),
-        yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title=f"{ccy} per unit", title_font=dict(size=9)),
-        xaxis=dict(tickfont=dict(size=9)),
+        yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title=f"{ccy} per unit", title_font=dict(size=9, family="Inter")),
+        xaxis=dict(tickfont=dict(size=9, family="Inter")),
         showlegend=False,
     )
     return fig
@@ -516,7 +519,7 @@ def build_tornado_chart(inputs, factory, is_base, ccy, overrides=None):
     ))
     fig.add_vline(x=0, line=dict(color=NAVY, width=1.5, dash="dot"))
     fig.update_layout(
-        title=dict(text=f"Tornado: OM Sensitivity to ±20% ({factory.name})", font=dict(size=11, family="Inter", weight=600)),
+        title=dict(text=f"Tornado: OM Sensitivity to ±20% ({factory.name})", font=dict(size=11, family="Inter", color=DARK_TEXT)),
         height=max(250, 50 * len(bars) + 80), barmode="overlay",
         margin=dict(l=100, r=30, t=45, b=40),
         paper_bgcolor="white", plot_bgcolor="white",
@@ -623,7 +626,7 @@ def build_sensitivity_chart(inputs, factories, base_factory, param_name, param_l
         ))
 
     fig.update_layout(
-        title=dict(text=f"Sensitivity: Operating Margin vs. {param_label}", font=dict(size=12, family="Inter")),
+        title=dict(text=f"Sensitivity: Operating Margin vs. {param_label}", font=dict(size=11, family="Inter", color=DARK_TEXT)),
         height=380, margin=dict(l=50, r=30, t=50, b=50),
         paper_bgcolor="white", plot_bgcolor="white",
         font=dict(family="Inter", size=10, color=DARK_TEXT),
@@ -1435,7 +1438,7 @@ def render_portfolio_summary(all_results, ccy, cost_of_capital=0.08):
             textfont=dict(size=11, family="Inter", color=DARK_TEXT),
         ))
         fig.update_layout(
-            title=dict(text=f"Total Annual OP by Location ({ccy})", font=dict(size=12, family="Inter")),
+            title=dict(text=f"Total Annual OP by Location ({ccy})", font=dict(size=11, family="Inter", color=DARK_TEXT)),
             height=400, margin=dict(l=40,r=40,t=50,b=60),
             paper_bgcolor="white", plot_bgcolor="white",
             font=dict(family="Inter", size=10, color=DARK_TEXT),
@@ -1936,7 +1939,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                         ))
                 fig_cf.add_hline(y=0, line=dict(color=NAVY, width=1.5, dash="dot"))
                 fig_cf.update_layout(
-                    title=dict(text=f"Cumulative Cash Flow ({currency})", font=dict(size=12, family="Inter")),
+                    title=dict(text=f"Cumulative Cash Flow ({currency})", font=dict(size=11, family="Inter", color=DARK_TEXT)),
                     height=350, margin=dict(l=50, r=30, t=50, b=50),
                     paper_bgcolor="white", plot_bgcolor="white",
                     font=dict(family="Inter", size=10, color=DARK_TEXT),
