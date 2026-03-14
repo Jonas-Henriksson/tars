@@ -1,5 +1,5 @@
 """
-Landed Cost Comparison Model - v5.0
+Landed Cost Comparison Model - v6.0
 Multi-Item Project-Based Production Cost & Profitability Analysis
 Author: Jonas Henriksson — Head of Strategic Planning & Intelligent Hub
 """
@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import io
 import json
+import base64
 from dataclasses import dataclass, asdict
 from typing import Optional
 from datetime import date, datetime
@@ -57,67 +58,105 @@ st.markdown(f"""
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input,
     .stSelectbox > div > div > div {{
-        border-radius: 2px !important; font-size: 0.78rem !important;
-        font-family: 'Inter', sans-serif !important; padding: 0.3rem 0.5rem !important;
+        border-radius: 1px !important; font-size: 0.76rem !important;
+        font-family: 'Inter', sans-serif !important; padding: 0.25rem 0.45rem !important;
         border: 1px solid #ccc !important; height: auto !important; min-height: 0 !important;
     }}
-    .stNumberInput > div > div {{ border-radius: 2px !important; }}
+    .stNumberInput > div > div {{ border-radius: 1px !important; }}
     .stNumberInput button {{ border-radius: 0 !important; padding: 0 !important; }}
     .stTextInput label, .stNumberInput label, .stSelectbox label {{
-        font-size: 0.72rem !important; font-weight: 600 !important; color: {GREY_TEXT} !important;
-        letter-spacing: 0.02em; margin-bottom: 0.15rem !important; font-family: 'Inter', sans-serif !important;
+        font-size: 0.68rem !important; font-weight: 600 !important; color: {GREY_TEXT} !important;
+        letter-spacing: 0.03em; margin-bottom: 0.1rem !important; font-family: 'Inter', sans-serif !important;
+        text-transform: uppercase;
     }}
     .stTextInput, .stNumberInput, .stSelectbox {{ margin-bottom: -0.2rem !important; }}
-    div[data-testid="stVerticalBlock"] > div {{ gap: 0.3rem; }}
-    .ib-header {{ background: {NAVY}; color: white; padding: 1.2rem 1.8rem 1rem; margin: -1.5rem -2.5rem 1.5rem -2.5rem; }}
-    .ib-header h1 {{ font-family: 'Inter', sans-serif; font-size: 1.25rem; font-weight: 700; margin: 0 0 0.15rem 0; }}
-    .ib-header .sub {{ font-size: 0.78rem; opacity: 0.8; }}
-    .sec {{ font-family: 'Inter', sans-serif; font-size: 0.73rem; font-weight: 700; color: {NAVY};
-        text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 2px solid {NAVY};
-        padding-bottom: 0.3rem; margin: 1.8rem 0 0.8rem 0; }}
-    .sec-sm {{ font-family: 'Inter', sans-serif; font-size: 0.7rem; font-weight: 600; color: {GREY_TEXT};
-        text-transform: uppercase; letter-spacing: 0.06em; margin: 0.8rem 0 0.4rem 0; }}
-    .ib-table {{ width: 100%; border-collapse: collapse; font-size: 0.78rem; font-family: 'Inter', sans-serif; }}
-    .ib-table th {{ background: {NAVY}; color: white; font-weight: 600; font-size: 0.7rem;
-        text-transform: uppercase; letter-spacing: 0.03em; padding: 0.45rem 0.7rem;
-        text-align: center; border-bottom: 2px solid {NAVY}; }}
-    .ib-table th:first-child {{ text-align: left; padding-left: 0.8rem; }}
-    .ib-table td {{ padding: 0.35rem 0.7rem; text-align: center; border-bottom: 1px solid #eef0f2; color: {DARK_TEXT}; }}
-    .ib-table td:first-child {{ text-align: left; font-weight: 500; padding-left: 0.8rem; }}
+    div[data-testid="stVerticalBlock"] > div {{ gap: 0.25rem; }}
+
+    /* ── IB Header ── */
+    .ib-header {{
+        background: linear-gradient(135deg, {NAVY} 0%, #001540 100%);
+        color: white; padding: 1.1rem 1.8rem 0.9rem; margin: -1.5rem -2.5rem 1.5rem -2.5rem;
+        display: flex; align-items: center; justify-content: space-between;
+    }}
+    .ib-header-left {{ display: flex; flex-direction: column; }}
+    .ib-header h1 {{ font-family: 'Inter', sans-serif; font-size: 1.2rem; font-weight: 700; margin: 0 0 0.1rem 0; letter-spacing: -0.01em; }}
+    .ib-header .sub {{ font-size: 0.72rem; opacity: 0.75; letter-spacing: 0.04em; }}
+    .ib-header .skf-logo {{ height: 32px; opacity: 0.95; }}
+
+    /* ── Sections ── */
+    .sec {{ font-family: 'Inter', sans-serif; font-size: 0.7rem; font-weight: 700; color: {NAVY};
+        text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 2px solid {NAVY};
+        padding-bottom: 0.25rem; margin: 1.6rem 0 0.7rem 0; }}
+    .sec-sm {{ font-family: 'Inter', sans-serif; font-size: 0.65rem; font-weight: 600; color: {GREY_TEXT};
+        text-transform: uppercase; letter-spacing: 0.08em; margin: 0.7rem 0 0.35rem 0; }}
+
+    /* ── IB Tables ── */
+    .ib-table {{ width: 100%; border-collapse: collapse; font-size: 0.76rem; font-family: 'Inter', sans-serif; }}
+    .ib-table th {{ background: {NAVY}; color: white; font-weight: 600; font-size: 0.67rem;
+        text-transform: uppercase; letter-spacing: 0.04em; padding: 0.4rem 0.65rem;
+        text-align: right; border-bottom: 2px solid {NAVY}; white-space: nowrap; }}
+    .ib-table th:first-child {{ text-align: left; padding-left: 0.7rem; }}
+    .ib-table td {{ padding: 0.3rem 0.65rem; text-align: right; border-bottom: 1px solid #eef0f2;
+        color: {DARK_TEXT}; font-variant-numeric: tabular-nums; }}
+    .ib-table td:first-child {{ text-align: left; font-weight: 500; padding-left: 0.7rem; }}
     .ib-table tr:last-child td {{ border-bottom: none; }}
-    .ib-table .row-bold td {{ font-weight: 700; border-top: 1px solid #bbb; }}
-    .ib-table .row-subtotal td {{ font-weight: 600; border-top: 1px solid #ddd; }}
-    .ib-table .row-separator td {{ border-bottom: none; padding: 0.1rem; }}
-    .ib-table .row-double-top td {{ border-top: 3px double #333; font-weight: 700; }}
-    .ib-table .indent td:first-child {{ padding-left: 1.6rem; font-weight: 400; color: {GREY_TEXT}; }}
-    .ib-table .base-case {{ background: {BASE_CASE_BG}; }}
-    .kpi {{ background: #fafafa; border: 1px solid {BORDER}; border-radius: 2px; padding: 0.8rem 1rem; text-align: center; }}
-    .kpi .lbl {{ font-size: 0.65rem; color: {GREY_TEXT}; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 0.2rem; }}
-    .kpi .val {{ font-size: 1.15rem; font-weight: 700; color: {DARK_TEXT}; }}
-    .kpi .det {{ font-size: 0.68rem; color: {MUTED}; margin-top: 0.1rem; }}
+    .ib-table tr:nth-child(even) td {{ background: #fcfcfd; }}
+    .ib-table .row-bold td {{ font-weight: 700; border-top: 1px solid #bbb; background: transparent; }}
+    .ib-table .row-subtotal td {{ font-weight: 600; border-top: 1px solid #ddd; background: transparent; }}
+    .ib-table .row-separator td {{ border-bottom: none; padding: 0.08rem; background: transparent; }}
+    .ib-table .row-double-top td {{ border-top: 3px double #333; font-weight: 700; background: transparent; }}
+    .ib-table .indent td:first-child {{ padding-left: 1.4rem; font-weight: 400; color: {GREY_TEXT}; font-size: 0.73rem; }}
+    .ib-table .base-case {{ background: {BASE_CASE_BG} !important; }}
+
+    /* ── KPI Cards ── */
+    .kpi {{ background: #fafafa; border: 1px solid {BORDER}; border-radius: 1px; padding: 0.7rem 0.9rem; text-align: center; }}
+    .kpi .lbl {{ font-size: 0.62rem; color: {GREY_TEXT}; text-transform: uppercase; letter-spacing: 0.06em;
+        font-weight: 600; margin-bottom: 0.15rem; }}
+    .kpi .val {{ font-size: 1.1rem; font-weight: 700; color: {DARK_TEXT}; font-variant-numeric: tabular-nums; }}
+    .kpi .det {{ font-size: 0.65rem; color: {MUTED}; margin-top: 0.1rem; }}
+
+    /* ── Delta Colors ── */
     .delta-pos {{ color: {GREEN}; }}
     .delta-neg {{ color: {RED}; }}
-    .callout {{ border-left: 3px solid {NAVY}; padding: 0.6rem 1rem; font-size: 0.75rem;
-        color: {GREY_TEXT}; background: #fafafa; margin: 0.6rem 0; line-height: 1.45; }}
+
+    /* ── Callouts ── */
+    .callout {{ border-left: 3px solid {NAVY}; padding: 0.5rem 0.9rem; font-size: 0.73rem;
+        color: {GREY_TEXT}; background: #fafbfc; margin: 0.5rem 0; line-height: 1.4; }}
     .callout strong {{ color: {DARK_TEXT}; }}
-    .stCheckbox label span {{ font-size: 0.78rem !important; font-family: 'Inter', sans-serif !important; }}
+
+    /* ── Executive Summary ── */
+    .exec-summary {{ background: #f8f9fb; border: 1px solid {BORDER}; border-left: 4px solid {NAVY};
+        padding: 0.8rem 1.1rem; margin: 0.6rem 0; font-size: 0.76rem; line-height: 1.55;
+        font-family: 'Inter', sans-serif; color: {DARK_TEXT}; }}
+    .exec-summary .es-title {{ font-size: 0.67rem; font-weight: 700; color: {NAVY}; text-transform: uppercase;
+        letter-spacing: 0.08em; margin-bottom: 0.4rem; }}
+
+    /* ── Confidentiality Footer ── */
+    .conf-footer {{ font-size: 0.6rem; color: {MUTED}; text-align: center; padding: 0.5rem 0; margin-top: 0.5rem;
+        border-top: 1px solid #eee; letter-spacing: 0.02em; font-style: italic; }}
+
+    .stCheckbox label span {{ font-size: 0.76rem !important; font-family: 'Inter', sans-serif !important; }}
     div[data-testid="stDataEditor"] td:last-child {{
         background-color: #f8f9fa !important; color: #6c757d !important;
-        font-style: italic !important; font-size: 0.75rem !important;
+        font-style: italic !important; font-size: 0.73rem !important;
     }}
     div[data-testid="stDataEditor"] th:last-child {{
         background-color: #e9ecef !important; color: #6c757d !important;
     }}
     /* IB Convention: Blue left border on editable data editors via key-based CSS classes */
-    /* Streamlit assigns .st-key-{{key}} class to widget containers based on their key= param */
-    /* Fixed editor keys (Project Setup, Factory Config) */
 {_fixed_rules}
-    /* Dynamic item editor keys (i0_txt, i1_ns, i2_ov, etc.) via attribute selectors */
 {_dynamic_rules}
-    .stTabs [data-baseweb="tab-list"] {{ gap: 0px; }}
+    .stTabs [data-baseweb="tab-list"] {{ gap: 0px; border-bottom: 2px solid {NAVY}; }}
     .stTabs [data-baseweb="tab"] {{
-        font-family: 'Inter', sans-serif; font-size: 0.78rem; font-weight: 500;
-        padding: 0.5rem 1.2rem; border-radius: 0;
+        font-family: 'Inter', sans-serif; font-size: 0.74rem; font-weight: 500;
+        padding: 0.45rem 1.1rem; border-radius: 0; text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }}
+    /* Print optimizations */
+    @media print {{
+        .stApp {{ background: white !important; }}
+        .ib-header {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+        .ib-table th {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -216,6 +255,169 @@ def build_charts(results, ccy):
     fig.update_yaxes(title_text="Margin (%)", row=1, col=1, ticksuffix="%", title_font=dict(size=10))
     fig.update_yaxes(title_text=ccy, row=1, col=2, title_font=dict(size=10))
     return fig
+
+
+# ── WATERFALL (COST BRIDGE) CHART ─────────────────────────────
+def build_waterfall_chart(result, ccy):
+    """Build an IB-style waterfall from Net Sales down to Operating Profit."""
+    ns = result["ns_per_unit"]
+    ps = result["ps"]
+    sa = result["sa"]
+    tar = result["tariff"]
+    dut = result["duties"]
+    trn = result["transport"]
+    op = result["op"]
+
+    labels = ["Net Sales", "Price Std.", "S&A", "Tariff", "Duties", "Transport", "Op. Profit"]
+    values = [ns, -ps, -sa, -tar, -dut, -trn, op]
+    measures = ["absolute", "relative", "relative", "relative", "relative", "relative", "total"]
+
+    # Filter out zero-value items (but always keep NS and OP)
+    filtered = [(l, v, m) for l, v, m in zip(labels, values, measures) if abs(v) > 0.005 or m in ("absolute", "total")]
+    labels, values, measures = zip(*filtered) if filtered else (labels, values, measures)
+
+    colors = {
+        "increasing": "#e8f5e9",
+        "decreasing": "#ffebee",
+        "totals": NAVY if op >= 0 else RED,
+    }
+
+    fig = go.Figure(go.Waterfall(
+        x=list(labels), y=list(values), measure=list(measures),
+        connector=dict(line=dict(color="#ccc", width=1)),
+        increasing=dict(marker=dict(color="#e8f5e9", line=dict(color=GREEN, width=1))),
+        decreasing=dict(marker=dict(color="#ffebee", line=dict(color=RED, width=1))),
+        totals=dict(marker=dict(color=NAVY if op >= 0 else RED, line=dict(color=NAVY if op >= 0 else RED, width=1))),
+        textposition="outside",
+        text=[fn(abs(v), 2, dz=False) for v in values],
+        textfont=dict(size=9, family="Inter", color=DARK_TEXT),
+    ))
+    fig.update_layout(
+        title=dict(text=f"Cost Bridge: {result['name']} ({ccy}/unit)", font=dict(size=11, family="Inter", weight=600)),
+        height=360, margin=dict(l=40, r=30, t=45, b=50),
+        paper_bgcolor="white", plot_bgcolor="white",
+        font=dict(family="Inter", size=9, color=DARK_TEXT),
+        yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title=f"{ccy} per unit", title_font=dict(size=9)),
+        xaxis=dict(tickfont=dict(size=9)),
+        showlegend=False,
+    )
+    return fig
+
+
+# ── TORNADO CHART ─────────────────────────────────────────────
+def build_tornado_chart(inputs, factory, is_base, ccy, overrides=None):
+    """Build a tornado chart showing which parameters have the largest OM impact."""
+    base_result = compute_location(inputs, factory, is_base=is_base, overrides=overrides)
+    if base_result is None:
+        return None
+    base_om = base_result["om"] * 100
+
+    params = [
+        ("VA Ratio", "va_ratio", False),
+        ("PS Index", "ps_index", False),
+        ("S&A %", "sa_pct", True),
+        ("Transport %", "transport_pct", True),
+        ("Tariff %", "tariff_pct", True),
+        ("Duties %", "duties_pct", True),
+        ("Material", "material", False),
+    ]
+
+    bars = []
+    for label, param, is_pct in params:
+        if param in ("va_ratio",) and is_base:
+            continue
+        current = getattr(factory, param, None) or getattr(inputs, param, None)
+        if current is None or current == 0:
+            if param not in ("material",):
+                continue
+            current = getattr(inputs, param, 0)
+            if current == 0:
+                continue
+
+        low_val = current * 0.8
+        high_val = current * 1.2
+
+        factory_attrs = {"va_ratio", "ps_index", "mcl_pct", "sa_pct", "tpl", "tariff_pct", "duties_pct", "transport_pct"}
+        input_attrs = {"material", "variable_va", "fixed_va", "net_sales_value"}
+
+        if param in factory_attrs:
+            from dataclasses import replace
+            r_low = compute_location(inputs, replace(factory, **{param: low_val}), is_base=is_base, overrides=overrides)
+            r_high = compute_location(inputs, replace(factory, **{param: high_val}), is_base=is_base, overrides=overrides)
+        else:
+            from dataclasses import replace as rep
+            r_low = compute_location(rep(inputs, **{param: low_val}), factory, is_base=is_base, overrides=overrides)
+            r_high = compute_location(rep(inputs, **{param: high_val}), factory, is_base=is_base, overrides=overrides)
+
+        if r_low and r_high:
+            om_low = r_low["om"] * 100 - base_om
+            om_high = r_high["om"] * 100 - base_om
+            spread = abs(om_high - om_low)
+            bars.append((label, om_low, om_high, spread))
+
+    if not bars:
+        return None
+
+    # Sort by spread (largest impact at top)
+    bars.sort(key=lambda x: x[3])
+    labels = [b[0] for b in bars]
+    lows = [b[1] for b in bars]
+    highs = [b[2] for b in bars]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=labels, x=[min(l, h) for l, h in zip(lows, highs)],
+        orientation="h", marker=dict(color="#e8f5e9", line=dict(color=GREEN, width=1)),
+        name="-20%", hovertemplate="%{y}: %{x:+.2f}pp<extra>-20%</extra>",
+    ))
+    fig.add_trace(go.Bar(
+        y=labels, x=[max(l, h) - min(l, h) for l, h in zip(lows, highs)],
+        orientation="h", marker=dict(color="#ffebee", line=dict(color=RED, width=1)),
+        name="+20%", base=[min(l, h) for l, h in zip(lows, highs)],
+        hovertemplate="%{y}: %{x:+.2f}pp<extra>+20%</extra>",
+    ))
+    fig.add_vline(x=0, line=dict(color=NAVY, width=1.5, dash="dot"))
+    fig.update_layout(
+        title=dict(text=f"Tornado: OM Sensitivity to ±20% ({factory.name})", font=dict(size=11, family="Inter", weight=600)),
+        height=max(250, 50 * len(bars) + 80), barmode="overlay",
+        margin=dict(l=100, r=30, t=45, b=40),
+        paper_bgcolor="white", plot_bgcolor="white",
+        font=dict(family="Inter", size=9, color=DARK_TEXT),
+        xaxis=dict(title="Change in OM (pp)", showgrid=True, gridcolor="#f0f0f0", zeroline=False, ticksuffix="pp"),
+        yaxis=dict(showgrid=False),
+        showlegend=False,
+    )
+    return fig
+
+
+# ── EXECUTIVE SUMMARY NARRATIVE ──────────────────────────────
+def build_exec_summary(results, inputs, ccy):
+    """Generate an auto-written executive summary paragraph for IB-style reports."""
+    if len(results) < 2:
+        return ""
+    base = results[0]
+    ranked = sorted(results[1:], key=lambda r: r["om"], reverse=True)
+    best = ranked[0]
+    delta_pp = (best["om"] - base["om"]) * 100
+    delta_annual = best["annual_op"] - base["annual_op"]
+
+    item_desc = f"{inputs.item_number} ({inputs.designation})" if inputs.item_number else inputs.designation or "this item"
+
+    if delta_pp > 0.05:
+        verdict = f'<strong style="color:{GREEN};">{best["name"]}</strong> offers the highest operating margin at <strong>{fp(best["om"],1,dz=False)}</strong>, a <strong style="color:{GREEN};">+{delta_pp:.1f}pp</strong> improvement over the base case ({base["name"]}, {fp(base["om"],1,dz=False)})'
+        annual_str = f', translating to an annual profit uplift of <strong style="color:{GREEN};">{fi(delta_annual, dz=False)} {ccy}</strong>' if abs(delta_annual) > 0.5 else ""
+    elif delta_pp < -0.05:
+        verdict = f'The base case <strong>{base["name"]}</strong> remains the optimal location at <strong>{fp(base["om"],1,dz=False)}</strong> OM. The best alternative ({best["name"]}) trails by <strong style="color:{RED};">{delta_pp:.1f}pp</strong>'
+        annual_str = ""
+    else:
+        verdict = f'All locations deliver comparable margins near <strong>{fp(base["om"],1,dz=False)}</strong>. No material cost advantage exists between {base["name"]} and {best["name"]}'
+        annual_str = ""
+
+    return f"""<div class="exec-summary">
+<div class="es-title">Executive Summary</div>
+For {item_desc}, {verdict}{annual_str}.
+Analysis covers {len(results)} manufacturing location{"s" if len(results)>1 else ""} with {ccy} reporting.
+</div>"""
 
 
 # ── SENSITIVITY CHART ────────────────────────────────────────
@@ -338,64 +540,129 @@ def export_excel_project(project_data):
 
 
 # ── PDF EXPORT ────────────────────────────────────────────────
+class IBPitchPDF(FPDF):
+    """Custom FPDF with IB-style headers and footers."""
+
+    def __init__(self, project_name="", ccy="", **kwargs):
+        super().__init__(orientation="L", unit="mm", format="A4", **kwargs)
+        self._project_name = project_name
+        self._ccy = ccy
+        self.set_auto_page_break(auto=True, margin=20)
+
+    def header(self):
+        if self.page_no() == 1:
+            return
+        self.set_font("Helvetica", "", 6)
+        self.set_text_color(153, 153, 153)
+        self.cell(0, 4, f"SKF  |  Landed Cost Analysis  |  {self._project_name}  |  {self._ccy}", align="L")
+        self.ln(2)
+        self.set_draw_color(200, 200, 200)
+        self.line(10, self.get_y(), 287, self.get_y())
+        self.ln(3)
+
+    def footer(self):
+        self.set_y(-12)
+        self.set_draw_color(200, 200, 200)
+        self.line(10, self.get_y(), 287, self.get_y())
+        self.ln(2)
+        self.set_font("Helvetica", "I", 5.5)
+        self.set_text_color(153, 153, 153)
+        self.cell(0, 4, "Confidential & Proprietary  -  SKF Group  -  Strategic Planning & Intelligent Hub", align="L")
+        self.cell(0, 4, f"Page {self.page_no()}", align="R")
+
+
 def export_pdf_project(all_results, ccy, project_name):
-    pdf = FPDF(orientation="L", unit="mm", format="A4")
-    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf = IBPitchPDF(project_name=project_name, ccy=ccy)
     navy_r, navy_g, navy_b = 0, 32, 96
     white_r, white_g, white_b = 255, 255, 255
-    grey_r, grey_g, grey_b = 108, 117, 125
     dark_r, dark_g, dark_b = 26, 26, 46
     base_bg_r, base_bg_g, base_bg_b = 242, 242, 242
+    green_r, green_g, green_b = 13, 104, 50
+    red_r, red_g, red_b = 192, 57, 43
 
-    def add_header(pdf, title, subtitle=""):
+    def add_page_header(pdf, title, subtitle=""):
         pdf.set_fill_color(navy_r, navy_g, navy_b)
         pdf.set_text_color(white_r, white_g, white_b)
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 10, title, ln=True, fill=True)
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.cell(0, 9, title, ln=True, fill=True)
         if subtitle:
-            pdf.set_font("Helvetica", "", 9)
-            pdf.cell(0, 6, subtitle, ln=True, fill=True)
+            pdf.set_font("Helvetica", "", 8)
+            pdf.cell(0, 5, subtitle, ln=True, fill=True)
         pdf.set_text_color(dark_r, dark_g, dark_b)
-        pdf.ln(4)
+        pdf.ln(3)
 
     def add_table(pdf, headers, rows, col_widths, bold_rows=None, base_col=0):
         bold_rows = bold_rows or []
-        pdf.set_font("Helvetica", "B", 7)
+        pdf.set_font("Helvetica", "B", 6.5)
         pdf.set_fill_color(navy_r, navy_g, navy_b)
         pdf.set_text_color(white_r, white_g, white_b)
         for i, h in enumerate(headers):
-            pdf.cell(col_widths[i], 6, h, border=1, align="L" if i == 0 else "C", fill=True)
+            pdf.cell(col_widths[i], 5.5, h, border=0, align="L" if i == 0 else "R", fill=True)
         pdf.ln()
         pdf.set_text_color(dark_r, dark_g, dark_b)
         for ri, row in enumerate(rows):
             is_bold = ri in bold_rows
-            pdf.set_font("Helvetica", "B" if is_bold else "", 7)
+            pdf.set_font("Helvetica", "B" if is_bold else "", 6.5)
+            # Alternating row shading
+            if ri % 2 == 0 and ri not in bold_rows:
+                pdf.set_fill_color(250, 251, 252)
+                fill = True
+            else:
+                fill = False
             for ci, val in enumerate(row):
-                if ci == base_col and ci > 0:
+                if ci == 1:
                     pdf.set_fill_color(base_bg_r, base_bg_g, base_bg_b)
-                    pdf.cell(col_widths[ci], 5, str(val), border=0, align="L" if ci == 0 else "C", fill=True)
-                elif ci == 1:
-                    pdf.set_fill_color(base_bg_r, base_bg_g, base_bg_b)
-                    pdf.cell(col_widths[ci], 5, str(val), border=0, align="C", fill=True)
+                    pdf.cell(col_widths[ci], 4.5, str(val), border=0, align="R", fill=True)
                 else:
-                    pdf.cell(col_widths[ci], 5, str(val), border=0, align="L" if ci == 0 else "C")
+                    pdf.cell(col_widths[ci], 4.5, str(val), border=0, align="L" if ci == 0 else "R", fill=fill and ci > 0)
             pdf.ln()
+            # Draw line under bold rows
+            if is_bold:
+                y = pdf.get_y()
+                pdf.set_draw_color(180, 180, 180)
+                pdf.line(10, y, sum(col_widths) + 10, y)
+
+    # Cover page
+    pdf.add_page()
+    pdf.ln(40)
+    pdf.set_font("Helvetica", "B", 28)
+    pdf.set_text_color(navy_r, navy_g, navy_b)
+    pdf.cell(0, 14, "Landed Cost Analysis", align="C", ln=True)
+    pdf.set_font("Helvetica", "", 14)
+    pdf.set_text_color(108, 117, 125)
+    pdf.cell(0, 8, project_name, align="C", ln=True)
+    pdf.ln(6)
+    pdf.set_draw_color(navy_r, navy_g, navy_b)
+    pdf.set_line_width(0.8)
+    pdf.line(100, pdf.get_y(), 197, pdf.get_y())
+    pdf.ln(8)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"{ccy}  |  {len(all_results)} Item{'s' if len(all_results)!=1 else ''}", align="C", ln=True)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(0, 6, date.today().strftime("%B %d, %Y"), align="C", ln=True)
+    pdf.ln(20)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(navy_r, navy_g, navy_b)
+    pdf.cell(0, 6, "SKF", align="C", ln=True)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(108, 117, 125)
+    pdf.cell(0, 5, "Strategic Planning & Intelligent Hub", align="C", ln=True)
+
+    f2 = lambda v: f"{v:,.2f}" if v is not None else "\u2013"
+    fp_ = lambda v: f"{v*100:.1f}%" if v is not None else "\u2013"
+    fi_ = lambda v: f"{v:,.0f}" if v is not None else "\u2013"
 
     for item in all_results:
         pdf.add_page()
         inp = item["inputs"]
         results = item["results"]
-        add_header(pdf, f"{inp['item_number']} - {inp['designation']}", f"{ccy} | Destination: {inp.get('destination','')}")
+        add_page_header(pdf, f"{inp['item_number']} \u2013 {inp['designation']}", f"{ccy}  |  Destination: {inp.get('destination','')}")
 
         n = len(results)
-        lw = 50
+        lw = 48
         cw = int((297 - 20 - lw) / n) if n else 40
         col_widths = [lw] + [cw] * n
         headers = [f"Per Unit ({ccy})"] + [r["name"] for r in results]
-
-        f2 = lambda v: f"{v:,.2f}" if v is not None else "-"
-        fp_ = lambda v: f"{v*100:.1f}%" if v is not None else "-"
-        fi_ = lambda v: f"{v:,.0f}" if v is not None else "-"
 
         cost_rows = []
         for lbl, key in [("Material","material"),("Variable VA","variable_va"),("Fixed VA","fixed_va"),
@@ -406,7 +673,7 @@ def export_pdf_project(all_results, ccy, project_name):
             cost_rows.append([lbl] + [f2(r[key]) for r in results])
         cost_rows.append(["Operating Margin"] + [fp_(r["om"]) for r in results])
         bom = results[0]["om"]
-        cost_rows.append(["Delta vs Base"] + ["-"] + [fp_(r["om"]-bom) for r in results[1:]])
+        cost_rows.append(["Delta vs Base"] + ["\u2013"] + [fp_(r["om"]-bom) for r in results[1:]])
         add_table(pdf, headers, cost_rows, col_widths, bold_rows=[3,7,13,14,15])
 
         pdf.ln(4)
@@ -418,13 +685,13 @@ def export_pdf_project(all_results, ccy, project_name):
             ["Operating Margin"] + [fp_(r["om"]) for r in results],
         ]
         bop = results[0]["annual_op"]
-        annual_rows.append(["Delta vs Base"] + ["-"] + [fi_(r["annual_op"]-bop) for r in results[1:]])
+        annual_rows.append(["Delta vs Base"] + ["\u2013"] + [fi_(r["annual_op"]-bop) for r in results[1:]])
         add_table(pdf, annual_headers, annual_rows, col_widths, bold_rows=[2,3,4])
 
     # Portfolio summary page
     if len(all_results) > 1:
         pdf.add_page()
-        add_header(pdf, "Portfolio Summary", f"{ccy} | {project_name}")
+        add_page_header(pdf, "Portfolio Summary", f"{ccy}  |  {project_name}")
         all_fnames = []
         for item in all_results:
             for r in item["results"]:
@@ -436,22 +703,22 @@ def export_pdf_project(all_results, ccy, project_name):
                 totals[r["name"]] += r["annual_op"]
                 total_rev[r["name"]] += r["annual_rev"]
         n = len(all_fnames)
-        lw = 60
+        lw = 58
         cw = int((297 - 20 - lw) / n) if n else 40
         col_widths = [lw] + [cw] * n
         headers = ["Item"] + all_fnames
         rows = []
         for item in all_results:
             inp = item["inputs"]
-            row = [f"{inp['item_number']} - {inp['designation']}"]
+            row = [f"{inp['item_number']} \u2013 {inp['designation']}"]
             for fn_ in all_fnames:
                 match = [r for r in item["results"] if r["name"] == fn_]
-                row.append(fi_(match[0]["annual_op"]) if match else "-")
+                row.append(fi_(match[0]["annual_op"]) if match else "\u2013")
             rows.append(row)
         rows.append(["Total Annual OP"] + [fi_(totals[fn_]) for fn_ in all_fnames])
-        rows.append(["Operating Margin"] + [f"{totals[fn_]/total_rev[fn_]*100:.1f}%" if total_rev[fn_] else "-" for fn_ in all_fnames])
+        rows.append(["Operating Margin"] + [f"{totals[fn_]/total_rev[fn_]*100:.1f}%" if total_rev[fn_] else "\u2013" for fn_ in all_fnames])
         base_op = totals.get(all_fnames[0], 0) if all_fnames else 0
-        rows.append(["Delta vs Base"] + ["-"] + [fi_(totals[fn_]-base_op) for fn_ in all_fnames[1:]])
+        rows.append(["Delta vs Base"] + ["\u2013"] + [fi_(totals[fn_]-base_op) for fn_ in all_fnames[1:]])
         add_table(pdf, headers, rows, col_widths, bold_rows=[len(all_results), len(all_results)+1, len(all_results)+2])
 
     buf = io.BytesIO()
@@ -713,8 +980,15 @@ def save_project_json():
 def main():
     init_state()
 
-    st.markdown("""<div class="ib-header" style="position:relative;"><h1>Landed Cost Comparison Model</h1>
-        <div class="sub">Multi-Item Project-Based Production Cost & Profitability Analysis &middot; v5.0</div></div>""", unsafe_allow_html=True)
+    # SKF logo (inline SVG for the wordmark)
+    skf_logo_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" height="32"><text x="0" y="30" font-family="Inter,Arial,sans-serif" font-size="32" font-weight="800" fill="white" letter-spacing="4">SKF</text></svg>'
+    st.markdown(f"""<div class="ib-header">
+        <div class="ib-header-left">
+            <h1>Landed Cost Comparison Model</h1>
+            <div class="sub">Multi-Item Project-Based Production Cost &amp; Profitability Analysis &middot; v6.0</div>
+        </div>
+        <div>{skf_logo_svg}</div>
+    </div>""", unsafe_allow_html=True)
 
     with st.expander("About this model", expanded=False):
         st.markdown(f"""
@@ -749,6 +1023,7 @@ The 8-step cost build-up follows standard industrial cost methodology:
 <strong>7.</strong> Save/Load projects as JSON to resume later
 
 <br><br><strong style="font-size:0.9rem;">Changelog</strong><br>
+<span style="color:{GREY_TEXT};">v6.0</span> &mdash; IB-grade visual refresh: SKF branding, waterfall cost bridge charts, tornado sensitivity, executive summary narrative, refined typography &amp; table styling, confidentiality footer, pitch-book PDF with cover page &amp; page numbers<br>
 <span style="color:{GREY_TEXT};">v5.0</span> &mdash; Extracted core logic into testable library modules; added sensitivity analysis; expanded lead-time matrix with region-based fallback estimation; added input validation; added 48 unit tests<br>
 <span style="color:{GREY_TEXT};">v4.5</span> &mdash; Fixed CSS class prefix: .st-key- (hyphen) not .stkey_ (underscore); blue input borders now render correctly<br>
 <span style="color:{GREY_TEXT};">v4.4</span> &mdash; Key-based CSS targeting (.stkey_) for blue input borders; selective styling of editable vs read-only editors<br>
@@ -935,7 +1210,8 @@ For questions, feedback, or feature requests:<br>
         lt_df = pd.DataFrame(lt_data)
         hdr = "".join(f'<th>{r["Factory"]}</th>' for r in lt_data)
         route_cells = "".join(f'<td class="{"base-case" if i==0 else ""}">{r["Route"]}</td>' for i, r in enumerate(lt_data))
-        days_cells = "".join(f'<td class="{"base-case" if i==0 else ""}">{r["Transit Days"] if r["Transit Days"] is not None else "\u2013"}</td>' for i, r in enumerate(lt_data))
+        dash = "\u2013"
+        days_cells = "".join(f'<td class="{"base-case" if i==0 else ""}">{r["Transit Days"] if r["Transit Days"] is not None else dash}</td>' for i, r in enumerate(lt_data))
         delta_cells = ""
         dash = "\u2013"
         for i, r in enumerate(lt_data):
@@ -1023,13 +1299,18 @@ For questions, feedback, or feature requests:<br>
                         if r: results.append(r)
 
                 if results:
-                    # Executive summary KPIs
+                    # Executive summary narrative
+                    exec_html = build_exec_summary(results, inputs, currency)
+                    if exec_html:
+                        st.markdown(exec_html, unsafe_allow_html=True)
+
+                    # KPI cards
                     bom = results[0]["om"]
                     ranked = sorted(results[1:], key=lambda r: r["om"], reverse=True)
                     labels = ["Best Location", "2nd Best", "3rd Best"]
                     ncards = min(len(ranked), 3) + 1
                     cols = st.columns(ncards)
-                    cols[0].markdown(f'<div style="background:{BASE_CASE_BG};border:1px solid {BORDER};border-radius:2px;padding:0.8rem 1rem;text-align:center;"><div style="font-size:0.65rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.2rem;">Base Case OM</div><div style="font-size:1.15rem;font-weight:700;color:{DARK_TEXT};">{fp(bom,1,dz=False)}</div><div style="font-size:0.82rem;font-weight:600;color:{DARK_TEXT};margin-top:0.15rem;">{results[0]["name"]}</div></div>', unsafe_allow_html=True)
+                    cols[0].markdown(f'<div style="background:{BASE_CASE_BG};border:1px solid {BORDER};border-radius:1px;padding:0.7rem 0.9rem;text-align:center;"><div style="font-size:0.62rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin-bottom:0.15rem;">Base Case OM</div><div style="font-size:1.1rem;font-weight:700;color:{DARK_TEXT};font-variant-numeric:tabular-nums;">{fp(bom,1,dz=False)}</div><div style="font-size:0.78rem;font-weight:600;color:{DARK_TEXT};margin-top:0.1rem;">{results[0]["name"]}</div></div>', unsafe_allow_html=True)
                     for i, r in enumerate(ranked[:3]):
                         delta_pp = (r["om"] - bom) * 100
                         is_better = delta_pp > 0.05
@@ -1037,7 +1318,7 @@ For questions, feedback, or feature requests:<br>
                         bdr = f"border-left:3px solid {GREEN};" if is_better else (f"border-left:3px solid {RED};" if is_worse else f"border-left:3px solid {BORDER};")
                         d_sign = "+" if delta_pp > 0 else ""
                         d_cls = f"color:{GREEN};font-weight:600;" if is_better else (f"color:{RED};font-weight:600;" if is_worse else f"color:{MUTED};")
-                        cols[i+1].markdown(f'<div style="background:#fafafa;border:1px solid {BORDER};{bdr}border-radius:2px;padding:0.8rem 1rem;text-align:center;"><div style="font-size:0.65rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.2rem;">{labels[i]}</div><div style="font-size:1.15rem;font-weight:700;color:{DARK_TEXT};">{fp(r["om"],1,dz=False)}</div><div style="font-size:0.82rem;font-weight:600;color:{DARK_TEXT};margin-top:0.15rem;">{r["name"]}</div><div style="font-size:0.7rem;{d_cls}margin-top:0.15rem;">{d_sign}{delta_pp:.1f}pp vs base</div></div>', unsafe_allow_html=True)
+                        cols[i+1].markdown(f'<div style="background:#fafafa;border:1px solid {BORDER};{bdr}border-radius:1px;padding:0.7rem 0.9rem;text-align:center;"><div style="font-size:0.62rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin-bottom:0.15rem;">{labels[i]}</div><div style="font-size:1.1rem;font-weight:700;color:{DARK_TEXT};font-variant-numeric:tabular-nums;">{fp(r["om"],1,dz=False)}</div><div style="font-size:0.78rem;font-weight:600;color:{DARK_TEXT};margin-top:0.1rem;">{r["name"]}</div><div style="font-size:0.68rem;{d_cls}margin-top:0.1rem;">{d_sign}{delta_pp:.1f}pp vs base</div></div>', unsafe_allow_html=True)
 
                     st.markdown(f'<div class="sec-sm">Per Unit Cost Comparison ({currency})</div>', unsafe_allow_html=True)
                     st.markdown(build_cost_table(results, currency, target_market), unsafe_allow_html=True)
@@ -1048,9 +1329,26 @@ For questions, feedback, or feature requests:<br>
                     if len(results) >= 2:
                         st.plotly_chart(build_charts(results, currency), use_container_width=True, config={"displayModeBar": False})
 
+                    # Cost bridge waterfall charts
+                    with st.expander("Cost Bridge (Waterfall)", expanded=False):
+                        wf_cols = st.columns(min(len(results), 3))
+                        for wi, wf_r in enumerate(results[:3]):
+                            with wf_cols[wi % len(wf_cols)]:
+                                st.plotly_chart(build_waterfall_chart(wf_r, currency), use_container_width=True, config={"displayModeBar": False})
+
                     # Sensitivity analysis
                     with st.expander("Sensitivity Analysis", expanded=False):
                         st.markdown(f'<div class="callout">Explore how changes in a single parameter affect operating margin across all factories.</div>', unsafe_allow_html=True)
+
+                        # Tornado chart for best alternative
+                        if len(results) >= 2:
+                            best_alt = ranked[0] if ranked else None
+                            best_factory = next((f for f in factories if f.name == best_alt["name"]), None) if best_alt else None
+                            if best_factory:
+                                tornado_fig = build_tornado_chart(inputs, best_factory, is_base=False, ccy=currency, overrides=get_ov(best_factory.name))
+                                if tornado_fig:
+                                    st.plotly_chart(tornado_fig, use_container_width=True, config={"displayModeBar": False})
+
                         sa_params = {
                             "VA Ratio": ("va_ratio", False),
                             "Transport %": ("transport_pct", True),
@@ -1064,13 +1362,11 @@ For questions, feedback, or feature requests:<br>
                             sa_choice = st.selectbox("Parameter", list(sa_params.keys()), key=f"i{item_def['id']}_sa_param")
                         param_key, is_pct = sa_params[sa_choice]
 
-                        # Build sensible default range based on current values
                         if param_key in ("va_ratio",):
                             steps = [round(v, 2) for v in np.arange(0.4, 1.61, 0.1)]
                         elif is_pct:
                             steps = [round(v, 3) for v in np.arange(0.0, 0.121, 0.01)]
                         else:
-                            # Material cost: +-50% around current
                             base_val = getattr(inputs, param_key, 20.0) or 20.0
                             steps = [round(base_val * m, 2) for m in np.arange(0.5, 1.55, 0.1)]
 
@@ -1092,7 +1388,7 @@ For questions, feedback, or feature requests:<br>
     # ── FOOTER ────────────────────────────────────────────────
     st.markdown("---")
     c1,c2,c3 = st.columns([4,1,1])
-    c1.markdown(f"<span style='font-size:0.7rem;color:{MUTED};'>Landed Cost Comparison v5.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} items &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
+    c1.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v6.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} item{'s' if len(st.session_state.project_items)!=1 else ''} &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
     if all_results:
         c2.download_button("Export Excel", data=export_excel_project(all_results),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.xlsx",
@@ -1100,6 +1396,7 @@ For questions, feedback, or feature requests:<br>
         c3.download_button("Export PDF", data=export_pdf_project(all_results, currency, st.session_state.project_name),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.pdf",
             mime="application/pdf")
+    st.markdown(f'<div class="conf-footer">Confidential &amp; Proprietary &mdash; SKF Group &mdash; Strategic Planning &amp; Intelligent Hub &mdash; {date.today().strftime("%B %Y")}</div>', unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
