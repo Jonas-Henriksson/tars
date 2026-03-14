@@ -1296,7 +1296,7 @@ EXAMPLE_ITEMS = [
 # ── SESSION STATE INIT ──────────────────────────────────────────
 def init_state():
     if "project_name" not in st.session_state:
-        st.session_state.project_name = "New Project"
+        st.session_state.project_name = "New Analysis"
     if "project_items" not in st.session_state:
         st.session_state.project_items = [{"id": 0}]
     if "next_id" not in st.session_state:
@@ -1718,7 +1718,7 @@ def main():
         # Sub-section links appear directly below the active Landed Cost Analysis button
         if key == "model" and st.session_state.active_page == "model":
             sub_sections = [
-                ("Project Setup", "sec-project-setup"),
+                ("Analysis Setup", "sec-project-setup"),
                 ("Factory Configuration", "sec-factory-config"),
                 ("Lead Times", "sec-lead-times"),
                 ("NWC Assumptions", "sec-nwc"),
@@ -1838,7 +1838,7 @@ Compares full cost-to-serve across factory locations, including material, labour
 <span style="color:{GREY_TEXT};font-style:italic;">Grey italic</span> = guidance notes
 
 <br><br><strong style="font-size:0.82rem;">Workflow</strong><br>
-<strong>1.</strong> Set project name, currency, target market<br>
+<strong>1.</strong> Set analysis name, currency, target market<br>
 <strong>2.</strong> Configure factory assumptions matrix<br>
 <strong>3.</strong> Assign factory countries for lead times<br>
 <strong>4.</strong> Set Company WACC, carrying cost rates, and NWC assumptions<br>
@@ -2275,15 +2275,15 @@ This provides the local risk percentage.</li>
     ex = st.session_state.ex
 
     # ── PROJECT HEADER ────────────────────────────────────────
-    st.markdown('<div class="sec" id="sec-project-setup">Project Setup</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec" id="sec-project-setup">Analysis Setup</div>', unsafe_allow_html=True)
 
     pc1, pc2, pc3, pc4, pc4b, pc5 = st.columns([2, 1, 1, 1, 1, 2])
     with pc1:
-        proj_df = pd.DataFrame({"Project Name": [st.session_state.project_name]})
+        proj_df = pd.DataFrame({"Analysis Name": [st.session_state.project_name]})
         edited_proj = st.data_editor(proj_df, use_container_width=True, num_rows="fixed",
             key="proj_name", hide_index=True,
-            column_config={"Project Name": st.column_config.TextColumn("Project Name", width=280)})
-        st.session_state.project_name = str(edited_proj.loc[0, "Project Name"] or "New Project")
+            column_config={"Analysis Name": st.column_config.TextColumn("Analysis Name", width=280)})
+        st.session_state.project_name = str(edited_proj.loc[0, "Analysis Name"] or "New Analysis")
 
     with pc2:
         ccy_df = pd.DataFrame({"Currency": ["SEK"]})
@@ -2321,7 +2321,7 @@ This provides the local risk percentage.</li>
         sc1, sc2 = st.columns(2)
         with sc1:
             save_data = save_project_json()
-            _ = st.download_button("Save Project", data=save_data,
+            _ = st.download_button("Save Analysis", data=save_data,
                 file_name=f"{st.session_state.project_name.replace(' ','_')}.json",
                 mime="application/json", help="Download project as JSON to continue later")
             st.markdown(f'<div style="font-size:0.6rem;font-family:Inter,sans-serif;color:{GREY_TEXT};margin-top:-0.5rem;">Save to continue later</div>', unsafe_allow_html=True)
@@ -2331,7 +2331,7 @@ This provides the local risk percentage.</li>
             if uploaded:
                 try:
                     proj = json.load(uploaded)
-                    st.session_state.project_name = proj.get("project_name", "Loaded Project")
+                    st.session_state.project_name = proj.get("project_name", "Loaded Analysis")
                     st.session_state.project_items = proj.get("project_items", [{"id": 0}])
                     st.session_state.next_id = proj.get("next_id", 1)
                     st.rerun()
