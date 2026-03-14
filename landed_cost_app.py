@@ -39,7 +39,7 @@ st.set_page_config(page_title="Landed Cost Comparison Model", layout="wide", ini
 # Fixed keys from main() in A5, dynamic item keys matched via attribute selectors
 INPUT_EDITOR_KEYS = [
     "proj_name", "proj_ccy", "proj_tm", "proj_dt",
-    "fc_editor", "bf_editor", "country_editor", "assumption_matrix", "nwc_matrix",
+    "fc_editor", "country_editor", "assumption_matrix", "nwc_matrix",
     "wacc_editor", "target_pb_editor", "target_om_editor", "coc_editor",
 ]
 _blue_border = f"border-left: 3px solid {INPUT_BLUE} !important; padding-left: 2px;"
@@ -2269,31 +2269,27 @@ adjust safety stock policies.
     # ── SHARED FACTORY SETUP ──────────────────────────────────────
     st.markdown('<div class="sec" id="sec-factory-config">Shared Factory Configuration</div>', unsafe_allow_html=True)
 
-    # Base factory name
-    bf_df = pd.DataFrame({"Current Factory Name": [EX_BASE.name if ex else "Base Case"]})
-    edited_bf = st.data_editor(bf_df, use_container_width=False, num_rows="fixed",
-        key="bf_editor", hide_index=True,
-        column_config={"Current Factory Name": st.column_config.TextColumn("Current Factory Name", width=250)})
-    base_factory_name = str(edited_bf.loc[0, "Current Factory Name"] or "Base Case")
-
+    # Number of comparison factories
     _fc_col, _ = st.columns([1, 9])
     with _fc_col:
         num_factories = st.selectbox("Comparison Factories", options=list(range(1, 9)),
             index=(3 if ex else st.session_state.get("num_fac", 2) - 1), key="fc_editor")
     st.session_state["num_fac"] = num_factories
 
-    # Factory country assignment
-    st.markdown('<div class="sec-sm" id="sec-factory-locations">Factory Locations</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="callout">Name each factory and assign the <strong>country</strong> where it is located. This determines lead time to the target market (<strong>{target_market}</strong>).</div>', unsafe_allow_html=True)
+    # Factory locations — consolidated table (first row = current factory)
+    st.markdown(f'<div class="callout">Name each factory and assign its <strong>country</strong>. The first row is your <strong>current factory</strong> (base case). This determines lead time to the target market (<strong>{target_market}</strong>).</div>', unsafe_allow_html=True)
 
+    ex_base_name = EX_BASE.name if ex else "Base Case"
     ex_base_country = "Sweden" if ex else "Sweden"
     ex_factory_countries = ["Germany", "China", "France", "USA"] if ex else []
-    country_data = {"Factory": [base_factory_name], "Country": [ex_base_country]}
+    country_data = {"Factory": [ex_base_name], "Country": [ex_base_country],
+                    "Guide": ["Current factory (base case)"]}
     for i in range(num_factories):
         ex_f = EX_FACTORIES[i] if ex and i < len(EX_FACTORIES) else None
         col_name = ex_f.name if ex_f else f"Factory {i+2}"
         country_data["Factory"].append(col_name)
         country_data["Country"].append(ex_factory_countries[i] if ex and i < len(ex_factory_countries) else "")
+        country_data["Guide"].append(f"Comparison factory {i+1}")
     country_df = pd.DataFrame(country_data)
 
     edited_countries = st.data_editor(
@@ -2301,7 +2297,9 @@ adjust safety stock policies.
         column_config={
             "Factory": st.column_config.TextColumn("Factory", width=200),
             "Country": st.column_config.SelectboxColumn("Country", options=COUNTRIES, width=180),
+            "Guide": st.column_config.TextColumn("Guide", width=220, disabled=True),
         },
+        disabled=["Guide"],
     )
     # Read back edited factory names (user may have renamed them)
     edited_factory_names = list(edited_countries["Factory"])
