@@ -1395,7 +1395,7 @@ def main():
     init_state()
 
     # SKF logo (inline SVG for the wordmark)
-    skf_logo_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" height="32"><text x="0" y="30" font-family="Inter,Arial,sans-serif" font-size="32" font-weight="800" fill="white" letter-spacing="4">SKF</text></svg>'
+    skf_logo_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2498 587.1" height="36"><path d="m94.4 294.7c-11.5 0-20.7-11.5-20.7-23v-251c0-9.2 9.2-20.7 20.7-20.7h545.6c9.2 0 20.7 11.5 20.7 20.7v103.6c0 11.5-11.5 23-20.7 23h-177.2c-11.5 0-23-11.5-23-23v-36.8c0-6.9-6.9-13.8-13.8-13.8h-117.5c-6.9 0-16.1 6.9-16.1 13.8v117.4c0 6.9 9.2 16.1 16.1 16.1h402.9c16.1 0 23 6.9 23 20.7v324.6c0 11.5-11.5 20.7-23 20.7h-690.7c-11.4.1-20.7-9.1-20.7-20.5 0-.1 0-.1 0-.2v-177.2c0-11.4 9.2-20.7 20.5-20.7h.2 177.3c11.4 0 20.7 9.2 20.7 20.6v.2 110.5c0 6.9 9.2 13.8 16.1 13.8h264.8c6.9 0 13.8-6.9 13.8-13.8v-191.2c0-6.9-6.9-13.8-13.8-13.8zm787.4-59.9v117.4c0 6.9-6.9 11.5-16.1 16.1-13.8 2.3-20.7 9.2-20.7 20.7v177.3c0 11.4 9.2 20.7 20.5 20.7h.2 214.1c11.4 0 20.7-9.2 20.7-20.6 0-.1 0-.1 0-.2v-195.5c0-2.3 4.6-4.6 6.9-2.3l209.5 214.1c4.6 4.6 6.9 4.6 13.8 4.6h262.5c11.5 0 23-9.2 23-20.7v-177.3c0-11.5-11.5-20.7-23-20.7h-191.1c-4.6 0-6.9 0-9.2-4.6l-142.7-140.4c0-2.3-2.3-2.3 0-4.6l69.1-69.1c2.3-2.3 4.6-2.3 9.2-2.3h193.4c9.2 0 20.7-11.5 20.7-23v-103.7c0-9.2-11.5-20.7-20.7-20.7h-191.1c-6.9 0-9.2 2.3-13.8 6.9l-207.2 211.8c-4.6 2.3-9.2 2.3-9.2-2.3v-195.7c0-9.2-9.2-20.7-20.7-20.7h-214.2c-11.5 0-20.7 11.5-20.7 20.7v177.3c0 11.5 6.9 18.4 18.4 20.7 13.8 4.6 18.4 9.2 18.4 16.1zm844.9 331.6c0 11.5 11.5 20.7 23 20.7h211.8c11.5 0 23-9.2 23-20.7v-175c0-11.5-6.9-20.7-20.7-23-11.5-4.6-16.1-6.9-16.1-16.1v-43.7c0-6.9 6.9-13.8 13.8-13.8h80.6c9.2 0 16.1 6.9 16.1 13.8 0 11.5 11.5 23 20.7 23h177.3c11.5 0 23-11.5 23-23v-103.7c0-11.5-11.5-20.7-23-20.7h-177.2c-9.2 0-20.7 9.2-20.7 20.7 0 6.9-6.9 16.1-16.1 16.1h-80.6c-6.9 0-13.8-9.2-13.8-16.1v-117.4c0-6.9 6.9-13.8 13.8-13.8h227.9c6.9 0 16.1 6.9 16.1 13.8v36.8c0 11.5 9.2 23 20.7 23h251c11.5 0 20.7-11.5 20.7-23v-103.6c0-9.2-9.2-20.7-20.7-20.7h-727.5c-11.5 0-23 11.5-23 20.7v177.3c0 11.5 9.2 18.4 20.7 20.7 9.2 2.3 16.1 9.2 16.1 16.1v117.4c0 6.9-4.6 13.8-16.1 16.1-13.8 2.3-20.7 9.2-20.7 20.7z" fill="white"/></svg>'
     st.markdown(f"""<div class="ib-header">
         <div class="ib-header-left">
             <h1>Landed Cost Comparison Model</h1>
@@ -1440,14 +1440,31 @@ Net Working Capital impact captures the balance sheet cost of inventory tied up 
 <li><strong>Adjusted OP</strong> = OP - NWC Carrying Cost per unit</li>
 </ul>
 
+<br><strong style="font-size:0.9rem;">Transfer Investment Analysis</strong><br>
+A separate module evaluates the overall investment rationale for each production transfer:
+<ul style="margin:0.3rem 0 0.3rem 1.2rem;padding:0;">
+<li><strong>Total Investment</strong> = CAPEX + OPEX + Restructuring</li>
+<li><strong>Annual Savings</strong> = NWC-Adjusted Annual OP (alternative) - NWC-Adjusted Annual OP (base)</li>
+<li><strong>NPV</strong> = -Investment + &Sigma; [Annual Savings / (1+r)<sup>t</sup>] over the analysis horizon</li>
+<li><strong>IRR</strong> = Discount rate where NPV = 0 (solved numerically)</li>
+<li><strong>Simple Payback</strong> = Total Investment / Annual Savings</li>
+<li><strong>Discounted Payback</strong> = First year where cumulative discounted cash flow &ge; 0</li>
+</ul>
+Investment inputs are per receiving factory and per item. The discount rate defaults to the Cost of Capital (WACC).
+
 <br><strong style="font-size:0.9rem;">How to Use</strong><br>
-<strong>1.</strong> Configure shared factory assumptions in the matrix (applies to all items)<br>
-<strong>2.</strong> Add items using the Item tabs &mdash; enter item details, net sales, and base costs<br>
-<strong>3.</strong> Optionally override specific costs per factory in the Cost Overrides grid<br>
-<strong>4.</strong> Review results: KPI cards, per-unit tables, full-year impact, and charts<br>
-<strong>5.</strong> Use the Portfolio Summary tab to compare across all items<br>
-<strong>6.</strong> Export to Excel or PDF for distribution<br>
-<strong>7.</strong> Save/Load projects as JSON to resume later
+<strong>1.</strong> Set up the project: name, currency, target market, and date<br>
+<strong>2.</strong> Configure shared factory assumptions in the matrix (applies to all items)<br>
+<strong>3.</strong> Assign factory countries to auto-calculate lead times to target market<br>
+<strong>4.</strong> Set Cost of Capital (WACC %) for NWC and investment discount rate<br>
+<strong>5.</strong> Optionally enter NWC assumptions (safety stock, cycle stock, payment terms) in the collapsible section<br>
+<strong>6.</strong> Add items using the Item tabs &mdash; enter item details, net sales, and base costs<br>
+<strong>7.</strong> Optionally override specific costs per factory in the Cost Overrides grid<br>
+<strong>8.</strong> Review results: KPI cards, per-unit tables, full-year impact, NWC impact, and charts<br>
+<strong>9.</strong> Optionally enter transfer investment costs (CAPEX, OPEX, restructuring) per receiving factory to see NPV, IRR, and payback analysis<br>
+<strong>10.</strong> Use the Portfolio Summary tab to compare across all items with aggregated investment metrics<br>
+<strong>11.</strong> Export to Excel or PDF pitch-book for distribution<br>
+<strong>12.</strong> Save/Load projects as JSON to resume later
 
 <br><br><strong style="font-size:0.9rem;">Changelog</strong><br>
 <span style="color:{GREY_TEXT};">v8.0</span> &mdash; Transfer Investment Analysis module: CAPEX, OPEX, restructuring inputs per receiving factory; NPV, IRR, payback computation; cumulative cash flow charts; portfolio-level investment summary; Excel &amp; PDF export<br>
