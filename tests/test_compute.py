@@ -124,6 +124,85 @@ class TestComputeLocation:
         assert r["annual_op"] == pytest.approx(r["annual_rev"] - r["annual_cost"])
 
 
+# ── NWC / Goods-in-Transit Impact ────────────────────────
+class TestNWCImpact:
+
+    def test_no_lead_time_means_zero_nwc(self, base_inputs, base_factory):
+        """Without lead time data, all NWC fields should be zero."""
+        r = compute_location(base_inputs, base_factory, is_base=True)
+        assert r["git_value"] == 0.0
+        assert r["delta_git"] == 0.0
+        assert r["nwc_carrying_cost_annual"] == 0.0
+        assert r["nwc_carrying_cost_per_unit"] == 0.0
+        assert r["adj_op"] == r["op"]
+        assert r["adj_om"] == r["om"]
+
+    def test_base_case_zero_delta(self, base_inputs, base_factory):
+        """Base case with lead time: GIT exists but delta is zero."""
+        r = compute_location(base_inputs, base_factory, is_base=True,
+                             lead_time_days=5, base_lead_time_days=5, cost_of_capital=0.08)
+        ps = r["ps"]  # 25.0
+        qty = 2_000_000
+        expected_git = (ps * qty / 365.0) * 5
+        assert r["git_value"] == pytest.approx(expected_git)
+        assert r["delta_lead_time"] == 0
+        assert r["delta_git"] == pytest.approx(0.0)
+        assert r["nwc_carrying_cost_annual"] == pytest.approx(0.0)
+        assert r["adj_op"] == pytest.approx(r["op"])
+
+    def test_longer_lead_time_increases_nwc_cost(self, base_inputs, alt_factory):
+        """Longer transit = more GIT = NWC carrying cost reduces adj_op."""
+        r = compute_location(base_inputs, alt_factory,
+                             lead_time_days=35, base_lead_time_days=5,
+                             cost_of_capital=0.08)
+        ps = r["ps"]
+        qty = 2_000_000
+        delta_days = 30  # 35 - 5
+        assert r["delta_lead_time"] == 30
+
+        expected_delta_git = (ps * qty / 365.0) * delta_days
+        assert r["delta_git"] == pytest.approx(expected_delta_git)
+
+        expected_annual_cost = expected_delta_git * 0.08
+        assert r["nwc_carrying_cost_annual"] == pytest.approx(expected_annual_cost)
+
+        expected_per_unit = expected_annual_cost / qty
+        assert r["nwc_carrying_cost_per_unit"] == pytest.approx(expected_per_unit)
+
+        assert r["adj_op"] == pytest.approx(r["op"] - expected_per_unit)
+        assert r["adj_op"] < r["op"]  # NWC cost reduces profit
+        assert r["annual_adj_op"] == pytest.approx(r["adj_op"] * qty)
+
+    def test_shorter_lead_time_reduces_nwc_cost(self, base_inputs, alt_factory):
+        """Shorter transit = NWC benefit (negative carrying cost)."""
+        r = compute_location(base_inputs, alt_factory,
+                             lead_time_days=3, base_lead_time_days=10,
+                             cost_of_capital=0.10)
+        assert r["delta_lead_time"] == -7
+        assert r["delta_git"] < 0  # Negative = capital released
+        assert r["nwc_carrying_cost_annual"] < 0  # Benefit
+        assert r["adj_op"] > r["op"]  # NWC benefit increases profit
+
+    def test_zero_cost_of_capital_no_carrying_cost(self, base_inputs, alt_factory):
+        """With 0% CoC, delta GIT exists but carrying cost is zero."""
+        r = compute_location(base_inputs, alt_factory,
+                             lead_time_days=35, base_lead_time_days=5,
+                             cost_of_capital=0.0)
+        assert r["delta_lead_time"] == 30
+        assert r["delta_git"] > 0
+        assert r["nwc_carrying_cost_annual"] == 0.0
+        assert r["adj_op"] == r["op"]
+
+    def test_git_value_formula(self, base_inputs, alt_factory):
+        """Verify GIT = (PS x Qty / 365) x transit_days."""
+        r = compute_location(base_inputs, alt_factory,
+                             lead_time_days=20, base_lead_time_days=5)
+        ps = r["ps"]
+        qty = 2_000_000
+        expected = (ps * qty / 365.0) * 20
+        assert r["git_value"] == pytest.approx(expected)
+
+
 # ── Sensitivity analysis ─────────────────────────────────
 class TestSensitivity:
 
@@ -131,14 +210,14 @@ class TestSensitivity:
         steps = [0.5, 0.7, 0.9, 1.1]
         results = compute_sensitivity(base_inputs, alt_factory, "va_ratio", steps)
         assert len(results) == 4
-        # Lower VA ratio → lower cost → higher OP
+        # Lower VA ratio -> lower cost -> higher OP
         assert results[0]["op"] > results[-1]["op"]
 
     def test_vary_material(self, base_inputs, base_factory):
         steps = [15.0, 20.0, 25.0]
         results = compute_sensitivity(base_inputs, base_factory, "material", steps, is_base=True)
         assert len(results) == 3
-        # Lower material → higher OP
+        # Lower material -> higher OP
         assert results[0]["op"] > results[-1]["op"]
 
     def test_invalid_parameter(self, base_inputs, base_factory):

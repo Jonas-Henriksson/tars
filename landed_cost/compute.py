@@ -1,16 +1,23 @@
 """Core computation engine for landed-cost analysis.
 
-The 8-step cost build-up:
-  1. Base costs → Standard Cost (SC) = Material + Variable VA + Fixed VA
+The cost build-up:
+  1. Base costs -> Standard Cost (SC) = Material + Variable VA + Fixed VA
   2. VA Ratio scales Variable & Fixed VA to each location's cost level
-  3. Price Standard (PS) = SC × PS Index
-  4. Actual Cost = PS × (MCL % / 100)  [informational — not used in OP]
-  5. S&A = Net Sales per Unit × S&A %
-  6. Tariff = (TPL / 100) × PS × Tariff %
-  7. Duties = (TPL / 100) × PS × Duties %
-  8. Transportation = PS × Transport %
-  9. Operating Profit = Net Sales − PS − S&A − Tariff − Duties − Transport
+  3. Price Standard (PS) = SC x PS Index
+  4. Actual Cost = PS x (MCL % / 100)  [informational - not used in OP]
+  5. S&A = Net Sales per Unit x S&A %
+  6. Tariff = (TPL / 100) x PS x Tariff %
+  7. Duties = (TPL / 100) x PS x Duties %
+  8. Transportation = PS x Transport %
+  9. Operating Profit = Net Sales - PS - S&A - Tariff - Duties - Transport
  10. Operating Margin = Operating Profit / Net Sales
+
+NWC (Net Working Capital) impact from goods in transit:
+ 11. Goods-in-Transit Value = (PS x Annual Qty / 365) x Transit Days
+ 12. Delta GIT vs Base = GIT(location) - GIT(base)
+ 13. NWC Carrying Cost (annual) = Delta GIT x Cost of Capital %
+ 14. NWC Carrying Cost (per unit) = annual NWC cost / Qty
+ 15. Adjusted OP = OP - NWC carrying cost per unit
 """
 from __future__ import annotations
 from typing import Optional
@@ -22,11 +29,23 @@ def compute_location(
     factory: FactoryAssumptions,
     is_base: bool = False,
     overrides: Optional[dict] = None,
+    lead_time_days: Optional[int] = None,
+    base_lead_time_days: Optional[int] = None,
+    cost_of_capital: float = 0.0,
 ) -> Optional[dict]:
-    """Compute the full landed-cost breakdown for one item × one factory.
+    """Compute the full landed-cost breakdown for one item x one factory.
 
-    Returns a dict with all per-unit metrics, annual metrics, and metadata,
-    or ``None`` when the factory's VA ratio is missing (non-base, no ratio).
+    Args:
+        inputs:              Per-item cost data.
+        factory:             Factory cost assumptions.
+        is_base:             True for the base-case factory.
+        overrides:           Optional per-factory cost overrides.
+        lead_time_days:      Transit days from this factory to target market.
+        base_lead_time_days: Transit days from base factory (for delta calc).
+        cost_of_capital:     Annual cost of capital as a decimal (e.g. 0.08 = 8%).
+
+    Returns a dict with all per-unit metrics, annual metrics, NWC impact,
+    and metadata, or ``None`` when the factory's VA ratio is missing.
     """
     ns = inputs.net_sales_per_unit
 
@@ -60,6 +79,40 @@ def compute_location(
 
     qty = inputs.net_sales_qty
 
+    # ── NWC / Goods-in-Transit Impact ─────────────────────
+    # Inventory in transit is valued at PS (transfer price).
+    # GIT = daily cost flow x transit days = (PS x Qty / 365) x days
+    lt = lead_time_days
+    base_lt = base_lead_time_days
+
+    if lt is not None and qty > 0:
+        git_value = (ps * qty / 365.0) * lt
+    else:
+        git_value = 0.0
+
+    if base_lt is not None and qty > 0:
+        base_git_value = (ps * qty / 365.0) * base_lt if is_base else 0.0
+        # For non-base, base_git is computed with the BASE factory's PS,
+        # but we approximate using this factory's PS for simplicity here.
+        # The caller computes the true delta externally.
+    else:
+        base_git_value = 0.0
+
+    # Delta GIT: additional inventory capital tied up vs. base
+    delta_lt = (lt - base_lt) if (lt is not None and base_lt is not None) else 0
+    # Use this factory's PS for the delta inventory valuation
+    delta_git = (ps * qty / 365.0) * delta_lt if qty > 0 else 0.0
+
+    # Annual carrying cost of the incremental working capital
+    nwc_carrying_cost_annual = delta_git * cost_of_capital
+
+    # Per-unit NWC carrying cost
+    nwc_carrying_cost_per_unit = nwc_carrying_cost_annual / qty if qty > 0 else 0.0
+
+    # Adjusted operating profit (includes NWC cost)
+    adj_op = op - nwc_carrying_cost_per_unit
+    adj_om = adj_op / ns if ns else 0
+
     return {
         "name": factory.name,
         "country": factory.country,
@@ -77,10 +130,21 @@ def compute_location(
         "transport": trn,
         "op": op,
         "om": om,
+        # NWC impact
+        "lead_time_days": lt,
+        "delta_lead_time": delta_lt,
+        "git_value": git_value,
+        "delta_git": delta_git,
+        "nwc_carrying_cost_annual": nwc_carrying_cost_annual,
+        "nwc_carrying_cost_per_unit": nwc_carrying_cost_per_unit,
+        "adj_op": adj_op,
+        "adj_om": adj_om,
         # Annual aggregates
         "annual_rev": ns * qty,
         "annual_cost": (ps + sa + tar + dut + trn) * qty,
         "annual_op": op * qty,
+        "annual_adj_op": adj_op * qty,
+        "annual_nwc_cost": nwc_carrying_cost_annual,
     }
 
 

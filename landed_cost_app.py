@@ -38,7 +38,7 @@ st.set_page_config(page_title="Landed Cost Comparison Model", layout="wide", ini
 # Fixed keys from main() in A5, dynamic item keys matched via attribute selectors
 INPUT_EDITOR_KEYS = [
     "proj_name", "proj_ccy", "proj_tm", "proj_dt",
-    "fc_editor", "bf_editor", "country_editor", "assumption_matrix",
+    "fc_editor", "bf_editor", "coc_editor", "country_editor", "assumption_matrix",
 ]
 _blue_border = f"border-left: 3px solid {INPUT_BLUE} !important; padding-left: 2px;"
 _fixed_rules = "\n".join(f"    .st-key-{k} {{ {_blue_border} }}" for k in INPUT_EDITOR_KEYS)
@@ -194,6 +194,18 @@ def build_cost_table(results, ccy, target_market=None):
     dash = "\u2013"
     dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["om"]-bom)}">{dash if i==0 else fp(r["om"]-bom,1,acct=True)}</td>' for i, r in enumerate(results))
     html += f'<tr class="row-bold"><td><em>Delta Margin vs. Base</em></td>{dc_cells}</tr>'
+    # NWC impact rows (only if cost_of_capital > 0 or any delta_lead_time != 0)
+    has_nwc = any(r.get("nwc_carrying_cost_per_unit", 0) != 0 for r in results)
+    has_lt = any(r.get("lead_time_days") is not None for r in results)
+    if has_lt:
+        html += sep()
+        html += f'<tr class="row-subtotal"><td colspan="{len(results)+1}" style="font-size:0.65rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;padding-top:0.5rem;">Net Working Capital Impact (Goods in Transit)</td></tr>'
+        html += row("NWC Carrying Cost / Unit","nwc_carrying_cost_per_unit",lambda v: fn(v,2,acct=True),"",True)
+        html += row("Adj. Operating Profit","adj_op",lambda v: fn(v,2,acct=True,dz=True),"row-bold")
+        html += row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
+        adj_bom = results[0]["adj_om"]
+        adj_dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["adj_om"]-adj_bom)}">{dash if i==0 else fp(r["adj_om"]-adj_bom,1,acct=True)}</td>' for i, r in enumerate(results))
+        html += f'<tr class="row-bold"><td><em>Adj. Delta Margin vs. Base</em></td>{adj_dc_cells}</tr>'
     # Lead time row
     if target_market:
         base_lt = estimate_lead_time(results[0].get("country",""), target_market)
@@ -232,7 +244,28 @@ def build_annual_table(results, ccy):
     html += row("Operating Margin","om",lambda v: fp(v,1,dz=False),"row-bold")
     dash = "\u2013"
     dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["annual_op"]-bop)}">{dash if i==0 else fi(r["annual_op"]-bop,acct=True)}</td>' for i, r in enumerate(results))
-    html += f'<tr class="row-double-top"><td><em>Delta vs. Base Case (Annual)</em></td>{dc_cells}</tr></tbody></table>'
+    html += f'<tr class="row-double-top"><td><em>Delta vs. Base Case (Annual)</em></td>{dc_cells}</tr>'
+    # NWC annual impact
+    has_lt = any(r.get("lead_time_days") is not None for r in results)
+    if has_lt:
+        def sep():
+            return f'<tr class="row-separator">{"<td></td>" * (len(results)+1)}</tr>'
+        html += sep()
+        html += row("Goods in Transit (GIT)","git_value",lambda v: fi(v,dz=False))
+        base_git = results[0].get("git_value", 0)
+        delta_git_cells = ''.join(
+            f'<td class="{"base-case" if i==0 else dc(-(r.get("delta_git",0)))}">{dash if i==0 else fi(r.get("delta_git",0),acct=True)}</td>'
+            for i, r in enumerate(results))
+        html += f'<tr class="indent"><td>Delta GIT vs. Base</td>{delta_git_cells}</tr>'
+        html += row("NWC Carrying Cost (Annual)","annual_nwc_cost",lambda v: fi(v,acct=True),"",True)
+        html += row("Adj. Annual OP","annual_adj_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
+        html += row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
+        base_adj_op = results[0].get("annual_adj_op", 0)
+        adj_dc_cells = ''.join(
+            f'<td class="{"base-case" if i==0 else dc(r.get("annual_adj_op",0)-base_adj_op)}">{dash if i==0 else fi(r.get("annual_adj_op",0)-base_adj_op,acct=True)}</td>'
+            for i, r in enumerate(results))
+        html += f'<tr class="row-double-top"><td><em>Adj. Delta vs. Base (Annual)</em></td>{adj_dc_cells}</tr>'
+    html += '</tbody></table>'
     return html
 
 def build_charts(results, ccy):
@@ -413,9 +446,31 @@ def build_exec_summary(results, inputs, ccy):
         verdict = f'All locations deliver comparable margins near <strong>{fp(base["om"],1,dz=False)}</strong>. No material cost advantage exists between {base["name"]} and {best["name"]}'
         annual_str = ""
 
+    # NWC / Goods-in-Transit impact narrative
+    has_nwc = any(r.get("lead_time_days") is not None for r in results)
+    nwc_str = ""
+    if has_nwc:
+        adj_ranked = sorted(results[1:], key=lambda r: r.get("adj_om", r["om"]), reverse=True)
+        adj_best = adj_ranked[0]
+        adj_delta_pp = (adj_best.get("adj_om", adj_best["om"]) - base.get("adj_om", base["om"])) * 100
+        nwc_cost = adj_best.get("nwc_carrying_cost_annual", 0)
+        delta_lt = adj_best.get("delta_lead_time", 0)
+
+        if abs(nwc_cost) > 0.5:
+            nwc_dir = "increases" if nwc_cost > 0 else "releases"
+            nwc_impact = f"reduces" if nwc_cost > 0 else "improves"
+            nwc_str = (
+                f' After adjusting for NWC impact from goods-in-transit ({delta_lt:+d} days vs. base), '
+                f'incremental inventory {nwc_dir} <strong>{fi(abs(nwc_cost), dz=False)} {ccy}</strong> in annual carrying cost, '
+                f'which {nwc_impact} the adjusted margin to <strong>{fp(adj_best.get("adj_om", adj_best["om"]),1,dz=False)}</strong> '
+                f'({adj_delta_pp:+.1f}pp vs. base).'
+            )
+        elif delta_lt != 0:
+            nwc_str = f' Lead time differential of {delta_lt:+d} days has negligible NWC impact at current cost of capital.'
+
     return f"""<div class="exec-summary">
 <div class="es-title">Executive Summary</div>
-For {item_desc}, {verdict}{annual_str}.
+For {item_desc}, {verdict}{annual_str}.{nwc_str}
 Analysis covers {len(results)} manufacturing location{"s" if len(results)>1 else ""} with {ccy} reporting.
 </div>"""
 
@@ -493,6 +548,18 @@ def export_excel_project(project_data):
                 ws.write(r,0,lbl_,lb if key_ in ("sc","ns_per_unit","op","om") else lf)
                 for c,res in enumerate(results): ws.write(r,c+1,res[key_],cf_)
                 r+=1
+            # NWC per-unit rows
+            has_lt = any(res.get("lead_time_days") is not None for res in results)
+            if has_lt:
+                r+=1
+                ws.write(r,0,"NWC Carrying Cost/Unit",lf)
+                for c,res in enumerate(results): ws.write(r,c+1,res.get("nwc_carrying_cost_per_unit",0),nf)
+                r+=1
+                ws.write(r,0,"Adj. Operating Profit",lb)
+                for c,res in enumerate(results): ws.write(r,c+1,res.get("adj_op",res["op"]),nb)
+                r+=1
+                ws.write(r,0,"Adj. Operating Margin",lb)
+                for c,res in enumerate(results): ws.write(r,c+1,res.get("adj_om",res["om"]),pf)
             r+=1
             ws.write(r,0,f"Full Year ({inputs['currency']})",hl)
             for c,res in enumerate(results): ws.write(r,c+1,res["name"],hf)
@@ -505,6 +572,27 @@ def export_excel_project(project_data):
             bop_=results[0]["annual_op"]
             ws.write(r,0,"Delta vs Base",lb)
             for c,res in enumerate(results): ws.write(r,c+1,"\u2013" if c==0 else res["annual_op"]-bop_,inb if c>0 else inf_)
+            # NWC annual rows
+            if has_lt:
+                r+=1; r+=1
+                ws.write(r,0,"Goods in Transit (GIT)",lf)
+                for c,res in enumerate(results): ws.write(r,c+1,res.get("git_value",0),inf_)
+                r+=1
+                ws.write(r,0,"Delta GIT vs Base",lf)
+                for c,res in enumerate(results): ws.write(r,c+1,"\u2013" if c==0 else res.get("delta_git",0),inf_ if c==0 else inb)
+                r+=1
+                ws.write(r,0,"NWC Carrying Cost (Annual)",lf)
+                for c,res in enumerate(results): ws.write(r,c+1,res.get("annual_nwc_cost",0),inf_)
+                r+=1
+                ws.write(r,0,"Adj. Annual OP",lb)
+                for c,res in enumerate(results): ws.write(r,c+1,res.get("annual_adj_op",res["annual_op"]),inb)
+                r+=1
+                ws.write(r,0,"Adj. Operating Margin",lb)
+                for c,res in enumerate(results): ws.write(r,c+1,res.get("adj_om",res["om"]),pf)
+                r+=1
+                base_adj_op = results[0].get("annual_adj_op", results[0]["annual_op"])
+                ws.write(r,0,"Adj. Delta vs Base",lb)
+                for c,res in enumerate(results): ws.write(r,c+1,"\u2013" if c==0 else res.get("annual_adj_op",res["annual_op"])-base_adj_op,inb if c>0 else inf_)
 
         # Summary sheet
         if len(project_data) > 1:
@@ -675,7 +763,17 @@ def export_pdf_project(all_results, ccy, project_name):
         cost_rows.append(["Operating Margin"] + [fp_(r["om"]) for r in results])
         bom = results[0]["om"]
         cost_rows.append(["Delta vs Base"] + ["-"] + [fp_(r["om"]-bom) for r in results[1:]])
-        add_table(pdf, headers, cost_rows, col_widths, bold_rows=[3,7,13,14,15])
+        nwc_bold = []
+        has_lt = any(r.get("lead_time_days") is not None for r in results)
+        if has_lt:
+            cost_rows.append([""] * (n+1))
+            cost_rows.append(["NWC Carrying Cost/Unit"] + [f2(r.get("nwc_carrying_cost_per_unit",0)) for r in results])
+            cost_rows.append(["Adj. Operating Profit"] + [f2(r.get("adj_op",r["op"])) for r in results])
+            cost_rows.append(["Adj. Operating Margin"] + [fp_(r.get("adj_om",r["om"])) for r in results])
+            adj_bom = results[0].get("adj_om", results[0]["om"])
+            cost_rows.append(["Adj. Delta vs Base"] + ["-"] + [fp_(r.get("adj_om",r["om"])-adj_bom) for r in results[1:]])
+            nwc_bold = [len(cost_rows)-3, len(cost_rows)-2, len(cost_rows)-1]
+        add_table(pdf, headers, cost_rows, col_widths, bold_rows=[3,7,13,14,15]+nwc_bold)
 
         pdf.ln(4)
         annual_headers = [f"Full Year ({ccy})"] + [r["name"] for r in results]
@@ -687,7 +785,18 @@ def export_pdf_project(all_results, ccy, project_name):
         ]
         bop = results[0]["annual_op"]
         annual_rows.append(["Delta vs Base"] + ["-"] + [fi_(r["annual_op"]-bop) for r in results[1:]])
-        add_table(pdf, annual_headers, annual_rows, col_widths, bold_rows=[2,3,4])
+        nwc_annual_bold = []
+        if has_lt:
+            annual_rows.append([""] * (n+1))
+            annual_rows.append(["Goods in Transit (GIT)"] + [fi_(r.get("git_value",0)) for r in results])
+            annual_rows.append(["Delta GIT vs Base"] + ["-"] + [fi_(r.get("delta_git",0)) for r in results[1:]])
+            annual_rows.append(["NWC Carrying Cost (Annual)"] + [fi_(r.get("annual_nwc_cost",0)) for r in results])
+            annual_rows.append(["Adj. Annual OP"] + [fi_(r.get("annual_adj_op",r["annual_op"])) for r in results])
+            annual_rows.append(["Adj. Operating Margin"] + [fp_(r.get("adj_om",r["om"])) for r in results])
+            base_adj_op = results[0].get("annual_adj_op", results[0]["annual_op"])
+            annual_rows.append(["Adj. Delta vs Base"] + ["-"] + [fi_(r.get("annual_adj_op",r["annual_op"])-base_adj_op) for r in results[1:]])
+            nwc_annual_bold = [len(annual_rows)-3, len(annual_rows)-2, len(annual_rows)-1]
+        add_table(pdf, annual_headers, annual_rows, col_widths, bold_rows=[2,3,4]+nwc_annual_bold)
 
     # Portfolio summary page
     if len(all_results) > 1:
@@ -720,7 +829,31 @@ def export_pdf_project(all_results, ccy, project_name):
         rows.append(["Operating Margin"] + [f"{totals[fn_]/total_rev[fn_]*100:.1f}%" if total_rev[fn_] else "-" for fn_ in all_fnames])
         base_op = totals.get(all_fnames[0], 0) if all_fnames else 0
         rows.append(["Delta vs Base"] + ["-"] + [fi_(totals[fn_]-base_op) for fn_ in all_fnames[1:]])
-        add_table(pdf, headers, rows, col_widths, bold_rows=[len(all_results), len(all_results)+1, len(all_results)+2])
+        base_bold = [len(all_results), len(all_results)+1, len(all_results)+2]
+
+        # NWC-adjusted portfolio rows in PDF
+        has_nwc_portfolio = any(
+            r.get("lead_time_days") is not None
+            for item in all_results for r in item["results"]
+        )
+        nwc_portfolio_bold = []
+        if has_nwc_portfolio:
+            adj_totals_pdf = {fn_: 0.0 for fn_ in all_fnames}
+            nwc_totals_pdf = {fn_: 0.0 for fn_ in all_fnames}
+            for item in all_results:
+                for r in item["results"]:
+                    adj_totals_pdf[r["name"]] += r.get("annual_adj_op", r["annual_op"])
+                    nwc_totals_pdf[r["name"]] += r.get("annual_nwc_cost", 0)
+            rows.append([""] * (n+1))
+            rows.append(["NWC Carrying Cost (Annual)"] + [fi_(nwc_totals_pdf[fn_]) for fn_ in all_fnames])
+            rows.append(["Adj. Total Annual OP"] + [fi_(adj_totals_pdf[fn_]) for fn_ in all_fnames])
+            adj_pct_pdf = {fn_: (adj_totals_pdf[fn_]/total_rev[fn_]*100 if total_rev[fn_] else 0) for fn_ in all_fnames}
+            rows.append(["Adj. Operating Margin"] + [f"{adj_pct_pdf[fn_]:.1f}%" for fn_ in all_fnames])
+            base_adj_pdf = adj_totals_pdf.get(all_fnames[0], 0) if all_fnames else 0
+            rows.append(["Adj. Delta vs Base"] + ["-"] + [fi_(adj_totals_pdf[fn_]-base_adj_pdf) for fn_ in all_fnames[1:]])
+            nwc_portfolio_bold = [len(rows)-3, len(rows)-2, len(rows)-1]
+
+        add_table(pdf, headers, rows, col_widths, bold_rows=base_bold+nwc_portfolio_bold)
 
     buf = io.BytesIO()
     buf.write(pdf.output())
@@ -940,6 +1073,50 @@ def render_portfolio_summary(all_results, ccy):
         for fn_ in all_fnames
     )
     html += f'<tr class="row-bold"><td><em>Delta vs. Base (Total)</em></td>{delta_cells}</tr>'
+
+    # NWC-adjusted portfolio rows
+    has_nwc = any(
+        r.get("lead_time_days") is not None
+        for item in all_results for r in item["results"]
+    )
+    if has_nwc:
+        adj_totals = {fn_: 0.0 for fn_ in all_fnames}
+        nwc_totals = {fn_: 0.0 for fn_ in all_fnames}
+        for item in all_results:
+            for r in item["results"]:
+                adj_totals[r["name"]] += r.get("annual_adj_op", r["annual_op"])
+                nwc_totals[r["name"]] += r.get("annual_nwc_cost", 0)
+        adj_pct = {fn_: (adj_totals[fn_] / total_rev[fn_] * 100 if total_rev[fn_] else 0) for fn_ in all_fnames}
+        base_adj = adj_totals.get(base_fn, 0)
+
+        sep_cells = "<td></td>" * (len(all_fnames) + 1)
+        html += f'<tr class="row-separator">{sep_cells}</tr>'
+        html += f'<tr class="row-subtotal"><td colspan="{len(all_fnames)+1}" style="font-size:0.65rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;padding-top:0.5rem;">NWC Impact (Goods in Transit)</td></tr>'
+
+        nwc_cells = "".join(
+            f'<td class="{"base-case" if fn_==base_fn else ""}">{fi(nwc_totals[fn_], acct=True)}</td>'
+            for fn_ in all_fnames
+        )
+        html += f'<tr><td>NWC Carrying Cost (Annual)</td>{nwc_cells}</tr>'
+
+        adj_op_cells = "".join(
+            f'<td class="{"base-case" if fn_==base_fn else ""}">{fi(adj_totals[fn_], dz=False)}</td>'
+            for fn_ in all_fnames
+        )
+        html += f'<tr class="row-bold"><td><strong>Adj. Total Annual OP</strong></td>{adj_op_cells}</tr>'
+
+        adj_pct_cells = "".join(
+            f'<td class="{"base-case" if fn_==base_fn else ""}">{adj_pct[fn_]:.1f}%</td>'
+            for fn_ in all_fnames
+        )
+        html += f'<tr class="row-bold"><td><strong>Adj. Operating Margin</strong></td>{adj_pct_cells}</tr>'
+
+        adj_delta_cells = "".join(
+            f'<td class="{("base-case" if fn_==base_fn else dc(adj_totals[fn_]-base_adj))}">{dash if fn_==base_fn else fi(adj_totals[fn_]-base_adj, acct=True)}</td>'
+            for fn_ in all_fnames
+        )
+        html += f'<tr class="row-bold"><td><em>Adj. Delta vs. Base (Total)</em></td>{adj_delta_cells}</tr>'
+
     html += "</tbody></table>"
 
     st.markdown(html, unsafe_allow_html=True)
@@ -986,7 +1163,7 @@ def main():
     st.markdown(f"""<div class="ib-header">
         <div class="ib-header-left">
             <h1>Landed Cost Comparison Model</h1>
-            <div class="sub">Multi-Item Project-Based Production Cost &amp; Profitability Analysis &middot; v6.0</div>
+            <div class="sub">Multi-Item Project-Based Production Cost &amp; Profitability Analysis &middot; v7.0</div>
         </div>
         <div>{skf_logo_svg}</div>
     </div>""", unsafe_allow_html=True)
@@ -1024,6 +1201,7 @@ The 8-step cost build-up follows standard industrial cost methodology:
 <strong>7.</strong> Save/Load projects as JSON to resume later
 
 <br><br><strong style="font-size:0.9rem;">Changelog</strong><br>
+<span style="color:{GREY_TEXT};">v7.0</span> &mdash; NWC (Net Working Capital) impact from goods-in-transit: Cost of Capital input, GIT valuation, delta analysis, adjusted OP/margin across all views, portfolio summary, Excel &amp; PDF exports<br>
 <span style="color:{GREY_TEXT};">v6.0</span> &mdash; IB-grade visual refresh: SKF branding, waterfall cost bridge charts, tornado sensitivity, executive summary narrative, refined typography &amp; table styling, confidentiality footer, pitch-book PDF with cover page &amp; page numbers<br>
 <span style="color:{GREY_TEXT};">v5.0</span> &mdash; Extracted core logic into testable library modules; added sensitivity analysis; expanded lead-time matrix with region-based fallback estimation; added input validation; added 48 unit tests<br>
 <span style="color:{GREY_TEXT};">v4.5</span> &mdash; Fixed CSS class prefix: .st-key- (hyphen) not .stkey_ (underscore); blue input borders now render correctly<br>
@@ -1113,12 +1291,22 @@ For questions, feedback, or feature requests:<br>
     num_factories = max(1, min(6, int(edited_fc.loc[0, "Comparison Factories"])))
     st.session_state["num_fac"] = num_factories
 
-    # Base factory name
-    bf_df = pd.DataFrame({"Base Factory Name": [EX_BASE.name if ex else "Base Case"]})
-    edited_bf = st.data_editor(bf_df, use_container_width=False, num_rows="fixed",
-        key="bf_editor", hide_index=True,
-        column_config={"Base Factory Name": st.column_config.TextColumn("Base Factory Name", width=250)})
-    base_factory_name = str(edited_bf.loc[0, "Base Factory Name"] or "Base Case")
+    # Base factory name + Cost of Capital
+    bf_col1, bf_col2 = st.columns([2, 1])
+    with bf_col1:
+        bf_df = pd.DataFrame({"Base Factory Name": [EX_BASE.name if ex else "Base Case"]})
+        edited_bf = st.data_editor(bf_df, use_container_width=False, num_rows="fixed",
+            key="bf_editor", hide_index=True,
+            column_config={"Base Factory Name": st.column_config.TextColumn("Base Factory Name", width=250)})
+        base_factory_name = str(edited_bf.loc[0, "Base Factory Name"] or "Base Case")
+    with bf_col2:
+        coc_df = pd.DataFrame({"Cost of Capital (WACC %)": [8.0 if ex else 8.0]})
+        edited_coc = st.data_editor(coc_df, use_container_width=False, num_rows="fixed",
+            key="coc_editor", hide_index=True,
+            column_config={"Cost of Capital (WACC %)": st.column_config.NumberColumn(
+                "Cost of Capital (WACC %)", min_value=0.0, max_value=30.0, step=0.5, format="%.1f", width=200)})
+        cost_of_capital = float(edited_coc.loc[0, "Cost of Capital (WACC %)"] or 0.0) / 100.0
+        st.session_state["cost_of_capital"] = cost_of_capital
 
     # Factory country assignment
     st.markdown('<div class="sec-sm">Factory Locations</div>', unsafe_allow_html=True)
@@ -1290,13 +1478,22 @@ For questions, feedback, or feature requests:<br>
                 inputs = item_data["inputs"]
                 get_ov = item_data["get_ov"]
 
+                # Resolve lead times for NWC calculation
+                base_country = factory_countries.get(base_factory_name, "")
+                base_lt = estimate_lead_time(base_country, target_market) if target_market else None
+
                 results = []
-                br = compute_location(inputs, base, is_base=True)
+                br = compute_location(inputs, base, is_base=True,
+                    lead_time_days=base_lt, base_lead_time_days=base_lt,
+                    cost_of_capital=cost_of_capital)
                 if br: results.append(br)
                 for f in factories:
                     if f.name:
                         ov = get_ov(f.name)
-                        r = compute_location(inputs, f, overrides=ov)
+                        f_lt = estimate_lead_time(f.country, target_market) if target_market and f.country else None
+                        r = compute_location(inputs, f, overrides=ov,
+                            lead_time_days=f_lt, base_lead_time_days=base_lt,
+                            cost_of_capital=cost_of_capital)
                         if r: results.append(r)
 
                 if results:
@@ -1389,7 +1586,7 @@ For questions, feedback, or feature requests:<br>
     # ── FOOTER ────────────────────────────────────────────────
     st.markdown("---")
     c1,c2,c3 = st.columns([4,1,1])
-    c1.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v6.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} item{'s' if len(st.session_state.project_items)!=1 else ''} &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
+    c1.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v7.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} item{'s' if len(st.session_state.project_items)!=1 else ''} &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
     if all_results:
         c2.download_button("Export Excel", data=export_excel_project(all_results),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.xlsx",
