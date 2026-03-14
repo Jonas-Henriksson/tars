@@ -1910,9 +1910,9 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         if cc_mode == "Company-wide rate":
             cc_data = {
-                "Component": CC_ROWS + ["Total"],
+                "Component": CC_ROWS + ["**Total**"],
                 "Rate (%)": cc_defaults + [sum(cc_defaults)],
-                "Guide": CC_GUIDES + ["Sum of all components — applied to Delta NWC"],
+                "Guide": CC_GUIDES + ["Edit to override component sum — components will be ignored"],
             }
             cc_df = pd.DataFrame(cc_data)
             edited_cc = st.data_editor(
@@ -1923,13 +1923,19 @@ Compares full cost-to-serve across factory locations, including material, labour
                     "Guide": st.column_config.TextColumn("Guide", disabled=True),
                 },
                 disabled=["Component", "Guide"])
-            # Sum the editable component rows (exclude the Total row itself)
-            global_cc_pct = 0.0
+            # Check if Total was manually overridden
+            component_sum = 0.0
             for i, row in edited_cc.iterrows():
-                if row["Component"] != "Total":
+                if row["Component"] != "**Total**":
                     v = row["Rate (%)"]
                     if v is not None and not pd.isna(v):
-                        global_cc_pct += float(v)
+                        component_sum += float(v)
+            total_row_val = float(edited_cc.loc[edited_cc["Component"] == "**Total**", "Rate (%)"].values[0] or 0)
+            if abs(total_row_val - component_sum) > 0.01:
+                global_cc_pct = total_row_val
+                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};margin-top:0.2rem;">Override active — using <strong>{total_row_val:.1f}%</strong> instead of component sum ({component_sum:.1f}%)</div>', unsafe_allow_html=True)
+            else:
+                global_cc_pct = component_sum
             global_cc_rate = global_cc_pct / 100.0
             carrying_cost_rates = {fn_: global_cc_rate for fn_ in all_factory_names_cc}
         else:
@@ -1945,26 +1951,34 @@ Compares full cost-to-serve across factory locations, including material, labour
                 else:
                     vals = list(cc_defaults)
                 cc_cols[fn_] = vals + [sum(vals)]
-            cc_cols["Guide"] = CC_GUIDES + ["Sum of all components — applied to Delta NWC"]
-            cc_rows_with_total = CC_ROWS + ["Total"]
+            cc_cols["Guide"] = CC_GUIDES + ["Edit to override component sum — components will be ignored"]
+            cc_rows_with_total = CC_ROWS + ["**Total**"]
             cc_df = pd.DataFrame(cc_cols, index=cc_rows_with_total)
 
             edited_cc = st.data_editor(
                 cc_df, use_container_width=True, num_rows="fixed", key="coc_editor", hide_index=False,
                 column_config={
                     **{fn_: st.column_config.NumberColumn(fn_, min_value=0.0, max_value=100.0, step=0.5, format="%.1f") for fn_ in all_factory_names_cc},
-                    "Guide": st.column_config.TextColumn("Guide", width=420, disabled=True),
+                    "Guide": st.column_config.TextColumn("Guide", disabled=True),
                 },
                 disabled=["Guide"])
 
             carrying_cost_rates = {}
+            overrides = []
             for fn_ in all_factory_names_cc:
-                total_pct = 0.0
+                component_sum = 0.0
                 for row_name in CC_ROWS:
                     v = edited_cc.loc[row_name, fn_]
                     if v is not None and not pd.isna(v):
-                        total_pct += float(v)
-                carrying_cost_rates[fn_] = total_pct / 100.0
+                        component_sum += float(v)
+                total_val = float(edited_cc.loc["**Total**", fn_] or 0)
+                if abs(total_val - component_sum) > 0.01:
+                    carrying_cost_rates[fn_] = total_val / 100.0
+                    overrides.append(f"{fn_}: {total_val:.1f}% (components: {component_sum:.1f}%)")
+                else:
+                    carrying_cost_rates[fn_] = component_sum / 100.0
+            if overrides:
+                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};margin-top:0.2rem;">Override active — ' + ", ".join(overrides) + '</div>', unsafe_allow_html=True)
 
         st.session_state["_carrying_cost_rates"] = carrying_cost_rates
 
@@ -2300,8 +2314,8 @@ This provides the local risk percentage.</li>
     edited_fc = st.data_editor(fc_df, use_container_width=False, num_rows="fixed",
         key="fc_editor", hide_index=True,
         column_config={"Comparison Factories": st.column_config.SelectboxColumn(
-            "Comparison Factories", options=list(range(1, 9)), width=180)})
-    num_factories = int(edited_fc.loc[0, "Comparison Factories"] or 2)
+            "Comparison Factories", options=list(range(1, 9)), required=True, width=180)})
+    num_factories = max(1, int(edited_fc.loc[0, "Comparison Factories"] or 2))
     st.session_state["num_fac"] = num_factories
 
     # Factory locations — consolidated table (first row = current factory)
