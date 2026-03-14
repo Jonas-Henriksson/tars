@@ -1707,6 +1707,13 @@ def main():
             st.session_state.active_page = key
             st.rerun()
 
+    # Legend at bottom of sidebar
+    st.sidebar.markdown(f"""<div style="margin-top:1.5rem;padding:0.6rem 0.8rem;border-top:1px solid #d4d8e0;font-family:Inter,sans-serif;font-size:0.68rem;line-height:1.7;color:{GREY_TEXT};">
+        <span style="border-left:3px solid {INPUT_BLUE};padding-left:0.3rem;font-weight:600;color:{INPUT_BLUE};">Blue border</span> = editable input<br>
+        <strong style="color:{DARK_TEXT};">Output tables</strong> = calculated results (read-only)<br>
+        <span style="font-style:italic;">Grey italic</span> = guidance notes
+    </div>""", unsafe_allow_html=True)
+
     # ── SIDEBAR CONTENT (Reference pages) ──
     if st.session_state.active_page == "about":
         st.sidebar.markdown("---")
@@ -2190,7 +2197,7 @@ adjust safety stock policies.
         return
 
     # ── COST MODEL PAGE (active_page == "model") ──
-    st.markdown(f'<div class="callout" style="font-size:0.72rem;"><span style="border-left:3px solid {INPUT_BLUE};padding-left:0.35rem;font-weight:600;color:{INPUT_BLUE};">Blue border</span> = editable input fields &nbsp;&middot;&nbsp; <span style="font-weight:600;color:{DARK_TEXT};">Output tables</span> = calculated results (read-only) &nbsp;&middot;&nbsp; <span style="color:{GREY_TEXT};font-style:italic;">Grey italic</span> = guidance notes</div>', unsafe_allow_html=True)
+
 
     ex = st.checkbox("Load example data", value=st.session_state.ex)
     st.session_state.ex = ex
