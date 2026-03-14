@@ -1916,11 +1916,11 @@ Compares full cost-to-serve across factory locations, including material, labour
             }
             cc_df = pd.DataFrame(cc_data)
             edited_cc = st.data_editor(
-                cc_df, use_container_width=False, num_rows="fixed", key="coc_editor", hide_index=True,
+                cc_df, use_container_width=True, num_rows="fixed", key="coc_editor", hide_index=True,
                 column_config={
                     "Component": st.column_config.TextColumn("Component", width=200, disabled=True),
                     "Rate (%)": st.column_config.NumberColumn("Rate (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.1f", width=120),
-                    "Guide": st.column_config.TextColumn("Guide", width=420, disabled=True),
+                    "Guide": st.column_config.TextColumn("Guide", disabled=True),
                 },
                 disabled=["Component", "Guide"])
             # Sum the editable component rows (exclude the Total row itself)
