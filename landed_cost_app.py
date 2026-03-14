@@ -32,7 +32,7 @@ from landed_cost.constants import (
 
 
 # ── PAGE CONFIG ───────────────────────────────────────────
-st.set_page_config(page_title="Landed Cost Comparison Model", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Landed Cost Comparison Model", layout="wide", initial_sidebar_state="expanded")
 
 # ── BLUE INPUT BORDER CSS HELPER ──────────────────────────
 # Builds CSS rules for key-based targeting (.st-key-{key})
