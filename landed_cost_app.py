@@ -531,21 +531,25 @@ def build_tornado_chart(inputs, factory, is_base, ccy, overrides=None):
     ))
     fig.add_vline(x=0, line=dict(color=NAVY, width=1.5, dash="dot"))
 
-    # Add data labels at each bar end showing the OM change value
+    # Add data labels at each bar end: show param direction + OM impact
+    # low = OM change when param at -20%, high = OM change when param at +20%
     for i, (label, low, high, _) in enumerate(bars):
         left_v = min(low, high)
         right_v = max(low, high)
-        # Left label (positioned outside left end of bar)
+        # Determine which scenario is on which side
+        left_is_low = (left_v == low)  # True if -20% scenario is on the left
+        left_lbl = "−20%" if left_is_low else "+20%"
+        right_lbl = "+20%" if left_is_low else "−20%"
+        # Color based on OM impact direction (positive = good = green)
         left_color = GREEN if left_v > 0 else RED if left_v < 0 else GREY_TEXT
+        right_color = GREEN if right_v > 0 else RED if right_v < 0 else GREY_TEXT
         fig.add_annotation(
-            x=left_v, y=label, text=f"{left_v:+.1f}pp",
+            x=left_v, y=label, text=f"{left_lbl}: {left_v:+.1f}pp",
             showarrow=False, xanchor="right", xshift=-4,
             font=dict(size=8, family="Inter", color=left_color),
         )
-        # Right label (positioned outside right end of bar)
-        right_color = GREEN if right_v > 0 else RED if right_v < 0 else GREY_TEXT
         fig.add_annotation(
-            x=right_v, y=label, text=f"{right_v:+.1f}pp",
+            x=right_v, y=label, text=f"{right_lbl}: {right_v:+.1f}pp",
             showarrow=False, xanchor="left", xshift=4,
             font=dict(size=8, family="Inter", color=right_color),
         )
