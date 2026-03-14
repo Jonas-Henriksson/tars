@@ -183,15 +183,20 @@ st.markdown(f"""
     }}
     /* ── Sidebar Nav Buttons ── */
     .nav-sep {{
-        font-size: 0.58rem; font-weight: 700; color: {GREY_TEXT}; text-transform: uppercase;
-        letter-spacing: 0.1em; padding: 0.7rem 0.75rem 0.25rem; margin-top: 0.3rem;
+        font-family: 'Inter', sans-serif; font-size: 0.6rem; font-weight: 700;
+        color: {GREY_TEXT}; text-transform: uppercase; letter-spacing: 0.08em;
+        padding: 0.6rem 0 0.2rem 0; margin-top: 0.15rem;
+    }}
+    section[data-testid="stSidebar"] .stButton {{
+        margin-bottom: -0.35rem !important;
     }}
     section[data-testid="stSidebar"] .stButton > button {{
-        font-family: 'Inter', sans-serif !important; font-size: 0.74rem !important;
-        font-weight: 500 !important; text-align: left !important; padding: 0.45rem 0.75rem !important;
-        border-radius: 4px !important; letter-spacing: 0.01em !important;
-        justify-content: flex-start !important; border: none !important;
-        transition: background 0.15s !important;
+        font-family: 'Inter', sans-serif !important; font-size: 0.76rem !important;
+        font-weight: 400 !important; text-align: left !important;
+        padding: 0.35rem 0.6rem !important; border-radius: 3px !important;
+        letter-spacing: 0.01em !important; justify-content: flex-start !important;
+        border: none !important; transition: background 0.15s !important;
+        line-height: 1.4 !important; min-height: 0 !important; height: auto !important;
     }}
     section[data-testid="stSidebar"] .stButton > button[kind="secondary"] {{
         background: transparent !important; color: {DARK_TEXT} !important;
@@ -1546,12 +1551,9 @@ def main():
     </div>""", unsafe_allow_html=True)
 
     # Navigation buttons
-    def _nav_btn(label, page_key):
-        active = " active" if st.session_state.active_page == page_key else ""
-        return f'<button class="nav-btn{active}" onclick="void(0)">{label}</button>'
-
     nav_pages = [
-        ("Cost Model", "model"),
+        ("Landed Cost Analysis", "model"),
+        ("Transfer Investment", "investment"),
         ("Strategic Context", "strategic"),
     ]
     info_pages = [
@@ -1716,9 +1718,194 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Strategic Context</span>", unsafe_allow_html=True)
         return  # Don't render the model page
 
+    # ── TRANSFER INVESTMENT PAGE ─────────────────────────────
+    if st.session_state.active_page == "investment":
+        all_results = st.session_state.get("_all_results", [])
+        cost_of_capital = st.session_state.get("_cost_of_capital", 0.08)
+        factory_countries = st.session_state.get("_factory_countries", {})
+        currency = st.session_state.get("currency", "SEK")
+        ex = st.session_state.ex
+
+        if not all_results:
+            st.markdown(f'<div class="callout" style="font-size:0.76rem;">No item results available yet. Open <strong>Landed Cost Analysis</strong> first to configure the project and compute results.</div>', unsafe_allow_html=True)
+            return
+
+        st.markdown(f'<div class="callout">Evaluate the investment rationale for transferring production. Enter one-time costs per receiving factory. Annual savings are derived from the NWC-adjusted OP delta vs. base. Leave blank or zero if no investment is required.</div>', unsafe_allow_html=True)
+
+        for item_idx, item_data in enumerate(all_results):
+            results = item_data["results"]
+            inp = item_data["inputs"]
+            item_id = st.session_state.project_items[item_idx]["id"] if item_idx < len(st.session_state.project_items) else item_idx
+
+            if len(results) < 2:
+                continue
+
+            item_label = f"{inp.get('item_number', '')} {inp.get('designation', '')}".strip() or f"Item {item_idx + 1}"
+            st.markdown(f'<div class="sec">Transfer Investment — {item_label}</div>', unsafe_allow_html=True)
+
+            inv_c1, inv_c2 = st.columns([1, 1])
+            with inv_c1:
+                inv_horizon_df = pd.DataFrame({"Analysis Horizon (Years)": [st.session_state.get(f"i{item_id}_inv_hz_val", 10)]})
+                edited_hz = st.data_editor(inv_horizon_df, use_container_width=False, num_rows="fixed",
+                    key=f"i{item_id}_inv_hz", hide_index=True,
+                    column_config={"Analysis Horizon (Years)": st.column_config.NumberColumn(
+                        "Analysis Horizon (Years)", min_value=1, max_value=30, step=1, format="%d", width=200)})
+                inv_horizon = max(1, min(30, int(edited_hz.loc[0, "Analysis Horizon (Years)"] or 10)))
+                st.session_state[f"i{item_id}_inv_hz_val"] = inv_horizon
+            with inv_c2:
+                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};padding-top:0.6rem;">Discount rate uses Cost of Capital (WACC): <strong>{cost_of_capital*100:.1f}%</strong></div>', unsafe_allow_html=True)
+
+            alt_names = [r["name"] for r in results[1:]]
+            INV_ROWS = ["CAPEX (Tooling / Equipment)", "OPEX (Project / Qualification)", "Restructuring (Sending Site)"]
+            inv_cols = {}
+            for an in alt_names:
+                if ex:
+                    if "Asia" in an or "China" in str(factory_countries.get(an, "")):
+                        inv_cols[an] = [8_000_000.0, 2_500_000.0, 1_500_000.0]
+                    elif "Americas" in an or "USA" in str(factory_countries.get(an, "")):
+                        inv_cols[an] = [5_000_000.0, 1_800_000.0, 1_000_000.0]
+                    else:
+                        inv_cols[an] = [3_000_000.0, 1_000_000.0, 500_000.0]
+                else:
+                    inv_cols[an] = [None, None, None]
+            inv_cols["Guide"] = [
+                f"Capital expenditure for tooling / equipment at receiving site ({currency})",
+                f"One-time project, transfer, qualification costs ({currency})",
+                f"Restructuring / severance costs at sending site ({currency})",
+            ]
+            inv_df = pd.DataFrame(inv_cols, index=INV_ROWS)
+
+            edited_inv = st.data_editor(
+                inv_df, use_container_width=True, num_rows="fixed",
+                key=f"i{item_id}_inv_matrix",
+                column_config={
+                    **{an: st.column_config.NumberColumn(an, format="%,.0f", min_value=0) for an in alt_names},
+                    "Guide": st.column_config.TextColumn("Guide", width=380, disabled=True),
+                },
+                disabled=["Guide"])
+
+            # Compute investment cases
+            inv_results = []
+            base_adj_annual_op = results[0].get("annual_adj_op", results[0]["annual_op"])
+            for alt_r in results[1:]:
+                an = alt_r["name"]
+                def _inv_val(row_name, col_name, _df=edited_inv):
+                    v = _df.loc[row_name, col_name]
+                    if v is not None and not pd.isna(v):
+                        return float(v)
+                    return 0.0
+                capex = _inv_val("CAPEX (Tooling / Equipment)", an)
+                opex = _inv_val("OPEX (Project / Qualification)", an)
+                restr = _inv_val("Restructuring (Sending Site)", an)
+                annual_savings = alt_r.get("annual_adj_op", alt_r["annual_op"]) - base_adj_annual_op
+
+                inv_case = compute_investment_case(
+                    annual_savings=annual_savings,
+                    capex=capex, opex=opex, restructuring=restr,
+                    discount_rate=cost_of_capital,
+                    horizon_years=inv_horizon,
+                )
+                inv_case["factory_name"] = an
+                inv_results.append(inv_case)
+
+            # Store investment results back for portfolio/export
+            item_data["investment"] = inv_results
+
+            # Display investment results table
+            has_any_inv = any(ic["total_investment"] > 0 or ic["annual_savings"] != 0 for ic in inv_results)
+            if has_any_inv:
+                dash = "\u2013"
+                inv_hdr = "".join(f'<th>{ic["factory_name"]}</th>' for ic in inv_results)
+                inv_html = f'<table class="ib-table"><thead><tr><th>Transfer Investment ({currency})</th>{inv_hdr}</tr></thead><tbody>'
+
+                def _inv_row(lbl, vals, cls=""):
+                    cells = "".join(f'<td>{v}</td>' for v in vals)
+                    return f'<tr class="{cls}"><td>{lbl}</td>{cells}</tr>'
+
+                inv_html += _inv_row("CAPEX", [fi(ic["capex"], dz=True) for ic in inv_results])
+                inv_html += _inv_row("OPEX", [fi(ic["opex"], dz=True) for ic in inv_results])
+                inv_html += _inv_row("Restructuring", [fi(ic["restructuring"], dz=True) for ic in inv_results])
+                inv_html += _inv_row("Total Investment", [fi(ic["total_investment"], dz=False) for ic in inv_results], "row-subtotal")
+
+                inv_html += f'<tr class="row-separator">{"<td></td>" * (len(inv_results)+1)}</tr>'
+                inv_html += _inv_row("Annual Savings (Adj. OP Delta)", [fi(ic["annual_savings"], acct=True, dz=False) for ic in inv_results])
+                inv_html += _inv_row("Analysis Horizon", [f"{ic['horizon_years']} years" for ic in inv_results])
+                inv_html += _inv_row("Discount Rate (WACC)", [fp(ic['discount_rate'], 1, dz=False) for ic in inv_results])
+
+                inv_html += f'<tr class="row-separator">{"<td></td>" * (len(inv_results)+1)}</tr>'
+
+                # NPV with color coding
+                npv_cells = ""
+                for ic in inv_results:
+                    cls = "delta-pos" if ic["npv"] > 0 else ("delta-neg" if ic["npv"] < 0 else "")
+                    npv_cells += f'<td class="{cls}"><strong>{fi(ic["npv"], acct=True, dz=False)}</strong></td>'
+                inv_html += f'<tr class="row-bold"><td><strong>NPV</strong></td>{npv_cells}</tr>'
+
+                # IRR
+                irr_cells = ""
+                for ic in inv_results:
+                    if ic["irr"] is not None:
+                        cls = "delta-pos" if ic["irr"] > cost_of_capital else "delta-neg"
+                        irr_cells += f'<td class="{cls}"><strong>{ic["irr"]*100:.1f}%</strong></td>'
+                    else:
+                        irr_cells += f'<td>{dash}</td>'
+                inv_html += f'<tr class="row-bold"><td><strong>IRR</strong></td>{irr_cells}</tr>'
+
+                # Payback
+                pb_cells = ""
+                for ic in inv_results:
+                    if ic["simple_payback"] is not None:
+                        cls = "delta-pos" if ic["simple_payback"] <= inv_horizon else "delta-neg"
+                        pb_cells += f'<td class="{cls}">{ic["simple_payback"]:.1f} years</td>'
+                    else:
+                        pb_cells += f'<td>{dash}</td>'
+                inv_html += f'<tr class="row-bold"><td>Simple Payback</td>{pb_cells}</tr>'
+
+                dpb_cells = ""
+                for ic in inv_results:
+                    if ic["discounted_payback"] is not None:
+                        cls = "delta-pos" if ic["discounted_payback"] <= inv_horizon else "delta-neg"
+                        dpb_cells += f'<td class="{cls}">{ic["discounted_payback"]:.1f} years</td>'
+                    else:
+                        dpb_cells += f'<td>{dash}</td>'
+                inv_html += f'<tr class="row-bold"><td>Discounted Payback</td>{dpb_cells}</tr>'
+
+                inv_html += '</tbody></table>'
+                st.markdown(inv_html, unsafe_allow_html=True)
+
+                # Cumulative cash flow chart
+                fig_cf = go.Figure()
+                colors_cycle = [ACCENT_BLUE, GREEN, RED, "#e67e22", "#8e44ad", NAVY]
+                for ci, ic in enumerate(inv_results):
+                    if ic["total_investment"] > 0 or ic["annual_savings"] != 0:
+                        years = list(range(inv_horizon + 1))
+                        color = colors_cycle[ci % len(colors_cycle)]
+                        fig_cf.add_trace(go.Scatter(
+                            x=years, y=ic["cumulative_cf"],
+                            mode="lines+markers", name=ic["factory_name"],
+                            line=dict(color=color, width=2), marker=dict(size=4),
+                            hovertemplate=f"{ic['factory_name']}<br>Year %{{x}}<br>Cumulative: %{{y:,.0f}} {currency}<extra></extra>",
+                        ))
+                fig_cf.add_hline(y=0, line=dict(color=NAVY, width=1.5, dash="dot"))
+                fig_cf.update_layout(
+                    title=dict(text=f"Cumulative Cash Flow ({currency})", font=dict(size=12, family="Inter")),
+                    height=350, margin=dict(l=50, r=30, t=50, b=50),
+                    paper_bgcolor="white", plot_bgcolor="white",
+                    font=dict(family="Inter", size=10, color=DARK_TEXT),
+                    xaxis=dict(title="Year", showgrid=True, gridcolor="#eee", dtick=1),
+                    yaxis=dict(title=currency, showgrid=True, gridcolor="#eee", zeroline=True, zerolinecolor="#ccc"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                )
+                st.plotly_chart(fig_cf, use_container_width=True, config={"displayModeBar": False})
+
+        # Footer for investment page
+        st.markdown("---")
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Transfer Investment Analysis</span>", unsafe_allow_html=True)
+        return
+
     # ── Reference-only pages: show info message ──
     if st.session_state.active_page in ("about", "guide", "changelog"):
-        st.markdown(f'<div class="callout" style="font-size:0.76rem;">Reference content is displayed in the sidebar. Select <strong>Cost Model</strong> or <strong>Strategic Context</strong> from the sidebar to work with the analysis.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.76rem;">Reference content is displayed in the sidebar. Select <strong>Landed Cost Analysis</strong> or <strong>Strategic Context</strong> from the sidebar to work with the analysis.</div>', unsafe_allow_html=True)
         return
 
     # ── COST MODEL PAGE (active_page == "model") ──
@@ -2168,162 +2355,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                         )
                         st.plotly_chart(fig_sa, use_container_width=True, config={"displayModeBar": False})
 
-                    # ── TRANSFER INVESTMENT ANALYSIS (separate section) ──
                     inv_results = []
-                    if len(results) >= 2:
-                        st.markdown(f'<div class="sec">Transfer Investment Analysis</div>', unsafe_allow_html=True)
-                        st.markdown(f'<div class="callout">Evaluate the investment rationale for transferring production. Enter one-time costs per receiving factory. Annual savings are derived from the NWC-adjusted OP delta vs. base. Leave blank or zero if no investment is required.</div>', unsafe_allow_html=True)
-
-                        inv_c1, inv_c2 = st.columns([1, 1])
-                        with inv_c1:
-                            inv_horizon_df = pd.DataFrame({"Analysis Horizon (Years)": [st.session_state.get(f"i{item_def['id']}_inv_hz_val", 10)]})
-                            edited_hz = st.data_editor(inv_horizon_df, use_container_width=False, num_rows="fixed",
-                                key=f"i{item_def['id']}_inv_hz", hide_index=True,
-                                column_config={"Analysis Horizon (Years)": st.column_config.NumberColumn(
-                                    "Analysis Horizon (Years)", min_value=1, max_value=30, step=1, format="%d", width=200)})
-                            inv_horizon = max(1, min(30, int(edited_hz.loc[0, "Analysis Horizon (Years)"] or 10)))
-                            st.session_state[f"i{item_def['id']}_inv_hz_val"] = inv_horizon
-                        with inv_c2:
-                            st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};padding-top:0.6rem;">Discount rate uses Cost of Capital (WACC): <strong>{cost_of_capital*100:.1f}%</strong></div>', unsafe_allow_html=True)
-
-                        alt_names = [r["name"] for r in results[1:]]
-                        INV_ROWS = ["CAPEX (Tooling / Equipment)", "OPEX (Project / Qualification)", "Restructuring (Sending Site)"]
-                        inv_cols = {}
-                        for an in alt_names:
-                            if ex:
-                                if "Asia" in an or "China" in str(factory_countries.get(an, "")):
-                                    inv_cols[an] = [8_000_000.0, 2_500_000.0, 1_500_000.0]
-                                elif "Americas" in an or "USA" in str(factory_countries.get(an, "")):
-                                    inv_cols[an] = [5_000_000.0, 1_800_000.0, 1_000_000.0]
-                                else:
-                                    inv_cols[an] = [3_000_000.0, 1_000_000.0, 500_000.0]
-                            else:
-                                inv_cols[an] = [None, None, None]
-                        inv_cols["Guide"] = [
-                            f"Capital expenditure for tooling / equipment at receiving site ({currency})",
-                            f"One-time project, transfer, qualification costs ({currency})",
-                            f"Restructuring / severance costs at sending site ({currency})",
-                        ]
-                        inv_df = pd.DataFrame(inv_cols, index=INV_ROWS)
-
-                        edited_inv = st.data_editor(
-                            inv_df, use_container_width=True, num_rows="fixed",
-                            key=f"i{item_def['id']}_inv_matrix",
-                            column_config={
-                                **{an: st.column_config.NumberColumn(an, format="%,.0f", min_value=0) for an in alt_names},
-                                "Guide": st.column_config.TextColumn("Guide", width=380, disabled=True),
-                            },
-                            disabled=["Guide"])
-
-                        # Compute investment cases
-                        base_adj_annual_op = results[0].get("annual_adj_op", results[0]["annual_op"])
-                        for alt_r in results[1:]:
-                            an = alt_r["name"]
-                            def _inv_val(row_name, col_name):
-                                v = edited_inv.loc[row_name, col_name]
-                                if v is not None and not pd.isna(v):
-                                    return float(v)
-                                return 0.0
-                            capex = _inv_val("CAPEX (Tooling / Equipment)", an)
-                            opex = _inv_val("OPEX (Project / Qualification)", an)
-                            restr = _inv_val("Restructuring (Sending Site)", an)
-                            annual_savings = alt_r.get("annual_adj_op", alt_r["annual_op"]) - base_adj_annual_op
-
-                            inv_case = compute_investment_case(
-                                annual_savings=annual_savings,
-                                capex=capex, opex=opex, restructuring=restr,
-                                discount_rate=cost_of_capital,
-                                horizon_years=inv_horizon,
-                            )
-                            inv_case["factory_name"] = an
-                            inv_results.append(inv_case)
-
-                        # Display investment results table
-                        has_any_inv = any(ic["total_investment"] > 0 or ic["annual_savings"] != 0 for ic in inv_results)
-                        if has_any_inv:
-                            dash = "\u2013"
-                            inv_hdr = "".join(f'<th>{ic["factory_name"]}</th>' for ic in inv_results)
-                            inv_html = f'<table class="ib-table"><thead><tr><th>Transfer Investment ({currency})</th>{inv_hdr}</tr></thead><tbody>'
-
-                            def _inv_row(lbl, vals, cls=""):
-                                cells = "".join(f'<td>{v}</td>' for v in vals)
-                                return f'<tr class="{cls}"><td>{lbl}</td>{cells}</tr>'
-
-                            inv_html += _inv_row("CAPEX", [fi(ic["capex"], dz=True) for ic in inv_results])
-                            inv_html += _inv_row("OPEX", [fi(ic["opex"], dz=True) for ic in inv_results])
-                            inv_html += _inv_row("Restructuring", [fi(ic["restructuring"], dz=True) for ic in inv_results])
-                            inv_html += _inv_row("Total Investment", [fi(ic["total_investment"], dz=False) for ic in inv_results], "row-subtotal")
-
-                            inv_html += f'<tr class="row-separator">{"<td></td>" * (len(inv_results)+1)}</tr>'
-                            inv_html += _inv_row("Annual Savings (Adj. OP Delta)", [fi(ic["annual_savings"], acct=True, dz=False) for ic in inv_results])
-                            inv_html += _inv_row(f"Analysis Horizon", [f"{ic['horizon_years']} years" for ic in inv_results])
-                            inv_html += _inv_row(f"Discount Rate (WACC)", [fp(ic['discount_rate'], 1, dz=False) for ic in inv_results])
-
-                            inv_html += f'<tr class="row-separator">{"<td></td>" * (len(inv_results)+1)}</tr>'
-
-                            # NPV with color coding
-                            npv_cells = ""
-                            for ic in inv_results:
-                                cls = f"delta-pos" if ic["npv"] > 0 else (f"delta-neg" if ic["npv"] < 0 else "")
-                                npv_cells += f'<td class="{cls}"><strong>{fi(ic["npv"], acct=True, dz=False)}</strong></td>'
-                            inv_html += f'<tr class="row-bold"><td><strong>NPV</strong></td>{npv_cells}</tr>'
-
-                            # IRR
-                            irr_cells = ""
-                            for ic in inv_results:
-                                if ic["irr"] is not None:
-                                    cls = "delta-pos" if ic["irr"] > cost_of_capital else "delta-neg"
-                                    irr_cells += f'<td class="{cls}"><strong>{ic["irr"]*100:.1f}%</strong></td>'
-                                else:
-                                    irr_cells += f'<td>{dash}</td>'
-                            inv_html += f'<tr class="row-bold"><td><strong>IRR</strong></td>{irr_cells}</tr>'
-
-                            # Payback
-                            pb_cells = ""
-                            for ic in inv_results:
-                                if ic["simple_payback"] is not None:
-                                    cls = "delta-pos" if ic["simple_payback"] <= inv_horizon else "delta-neg"
-                                    pb_cells += f'<td class="{cls}">{ic["simple_payback"]:.1f} years</td>'
-                                else:
-                                    pb_cells += f'<td>{dash}</td>'
-                            inv_html += f'<tr class="row-bold"><td>Simple Payback</td>{pb_cells}</tr>'
-
-                            dpb_cells = ""
-                            for ic in inv_results:
-                                if ic["discounted_payback"] is not None:
-                                    cls = "delta-pos" if ic["discounted_payback"] <= inv_horizon else "delta-neg"
-                                    dpb_cells += f'<td class="{cls}">{ic["discounted_payback"]:.1f} years</td>'
-                                else:
-                                    dpb_cells += f'<td>{dash}</td>'
-                            inv_html += f'<tr class="row-bold"><td>Discounted Payback</td>{dpb_cells}</tr>'
-
-                            inv_html += '</tbody></table>'
-                            st.markdown(inv_html, unsafe_allow_html=True)
-
-                            # Cumulative cash flow chart
-                            fig_cf = go.Figure()
-                            colors_cycle = [ACCENT_BLUE, GREEN, RED, "#e67e22", "#8e44ad", NAVY]
-                            for ci, ic in enumerate(inv_results):
-                                if ic["total_investment"] > 0 or ic["annual_savings"] != 0:
-                                    years = list(range(inv_horizon + 1))
-                                    color = colors_cycle[ci % len(colors_cycle)]
-                                    fig_cf.add_trace(go.Scatter(
-                                        x=years, y=ic["cumulative_cf"],
-                                        mode="lines+markers", name=ic["factory_name"],
-                                        line=dict(color=color, width=2), marker=dict(size=4),
-                                        hovertemplate=f"{ic['factory_name']}<br>Year %{{x}}<br>Cumulative: %{{y:,.0f}} {currency}<extra></extra>",
-                                    ))
-                            fig_cf.add_hline(y=0, line=dict(color=NAVY, width=1.5, dash="dot"))
-                            fig_cf.update_layout(
-                                title=dict(text=f"Cumulative Cash Flow ({currency})", font=dict(size=12, family="Inter")),
-                                height=350, margin=dict(l=50, r=30, t=50, b=50),
-                                paper_bgcolor="white", plot_bgcolor="white",
-                                font=dict(family="Inter", size=10, color=DARK_TEXT),
-                                xaxis=dict(title="Year", showgrid=True, gridcolor="#eee", dtick=1),
-                                yaxis=dict(title=currency, showgrid=True, gridcolor="#eee", zeroline=True, zerolinecolor="#ccc"),
-                                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                            )
-                            st.plotly_chart(fig_cf, use_container_width=True, config={"displayModeBar": False})
 
                     # ── QUALITATIVE DATA (read from session state; edited on Strategic Context page) ──
                     qual = {
@@ -2343,6 +2375,11 @@ Compares full cost-to-serve across factory locations, including material, labour
     # Portfolio Summary tab
     with tabs[-1]:
         render_portfolio_summary(all_results, currency, cost_of_capital=cost_of_capital)
+
+    # Store results for investment page
+    st.session_state["_all_results"] = all_results
+    st.session_state["_cost_of_capital"] = cost_of_capital
+    st.session_state["_factory_countries"] = factory_countries
 
     # ── FOOTER ────────────────────────────────────────────────
     st.markdown("---")
