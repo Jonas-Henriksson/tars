@@ -97,7 +97,9 @@ st.markdown(f"""
     /* Main-area buttons (Add Item, Remove Last, etc.) */
     .main .stButton > button,
     .main [data-testid="stButton"] > button,
-    .main button[kind="secondary"] {{
+    .main button[kind="secondary"],
+    .main .stButton button,
+    [data-testid="stMainBlockContainer"] button {{
         font-family: 'Inter', sans-serif !important;
         font-size: 0.76rem !important;
         font-weight: 500 !important;
