@@ -419,11 +419,12 @@ def build_waterfall_chart(result, ccy):
     tar = result["tariff"]
     dut = result["duties"]
     trn = result["transport"]
+    nwc = result.get("nwc_carrying_cost_per_unit", 0)
     op = result["op"]
 
-    labels = ["Net Sales", "Price Std.", "S&A", "Tariff", "Duties", "Transport", "Op. Profit"]
-    values = [ns, -ps, -sa, -tar, -dut, -trn, op]
-    measures = ["absolute", "relative", "relative", "relative", "relative", "relative", "total"]
+    labels = ["Net Sales", "Price Std.", "S&A", "Tariff", "Duties", "Transport", "NWC Cost", "Op. Profit"]
+    values = [ns, -ps, -sa, -tar, -dut, -trn, -nwc, op]
+    measures = ["absolute", "relative", "relative", "relative", "relative", "relative", "relative", "total"]
 
     # Filter out zero-value items (but always keep NS and OP)
     filtered = [(l, v, m) for l, v, m in zip(labels, values, measures) if abs(v) > 0.005 or m in ("absolute", "total")]
