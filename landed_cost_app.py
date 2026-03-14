@@ -105,23 +105,30 @@ st.markdown(f"""
         min-height: 0 !important;
         height: auto !important;
     }}
-    .stCheckbox,
     .stCheckbox label,
-    .stCheckbox label *,
-    [data-testid="stCheckbox"] label,
-    [data-testid="stCheckbox"] label * {{
-        font-family: 'Inter', sans-serif !important;
-        font-size: 0.76rem !important;
+    [data-testid="stCheckbox"] label {{
         display: flex !important;
         align-items: center !important;
+        gap: 0.4rem !important;
+    }}
+    .stCheckbox label span,
+    .stCheckbox label p,
+    [data-testid="stCheckbox"] label span,
+    [data-testid="stCheckbox"] label p {{
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.76rem !important;
+        line-height: 1 !important;
+        padding: 0 !important;
+        margin: 0 !important;
     }}
     /* Square checkbox */
-    .stCheckbox [data-testid="stCheckbox"] input[type="checkbox"],
     .stCheckbox svg,
-    [data-testid="stCheckbox"] svg {{
-        border-radius: 1px !important;
-    }}
-    .stCheckbox label > div:first-child {{
+    [data-testid="stCheckbox"] svg,
+    .stCheckbox label > div:first-child,
+    [data-testid="stCheckbox"] label > div:first-child,
+    [data-testid="stCheckbox"] label > div:first-child > div,
+    [data-baseweb="checkbox"] div[data-testid="stMarkdownContainer"],
+    [data-baseweb="checkbox"] > div {{
         border-radius: 1px !important;
     }}
     header {{background: transparent !important; visibility: hidden;}}
@@ -242,7 +249,6 @@ st.markdown(f"""
     .conf-footer {{ font-size: 0.6rem; color: {MUTED}; text-align: center; padding: 0.5rem 0; margin-top: 0.5rem;
         border-top: 1px solid #eee; letter-spacing: 0.02em; font-style: italic; }}
 
-    .stCheckbox label span {{ font-size: 0.76rem !important; font-family: 'Inter', sans-serif !important; }}
     div[data-testid="stDataEditor"] td:last-child {{
         background-color: #f8f9fa !important; color: #6c757d !important;
         font-style: italic !important; font-size: 0.73rem !important;
