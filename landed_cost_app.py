@@ -1688,8 +1688,6 @@ def main():
             sub_sections = [
                 ("Project Setup", "sec-project-setup"),
                 ("Factory Configuration", "sec-factory-config"),
-                ("Factory Locations", "sec-factory-locations"),
-                ("Assumptions Matrix", "sec-assumptions"),
                 ("Lead Times", "sec-lead-times"),
                 ("NWC Assumptions", "sec-nwc"),
                 ("Item Analysis", "sec-item-analysis"),
