@@ -246,6 +246,16 @@ def build_cost_table(results, ccy, target_market=None):
         c = f'class="{cls} {"indent" if indent else ""}"'
         cells = "".join(f'<td class="{"base-case" if i==0 else ""}">{fmt(r[key])}</td>' for i, r in enumerate(results))
         return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
+    def delta_row(lbl, key, fmt, cls="", invert=False):
+        """Row with conditional red/green formatting on non-base cells."""
+        c = f'class="{cls}"'
+        cells = ""
+        for i, r in enumerate(results):
+            v = r.get(key, 0)
+            color_v = -v if invert else v
+            cell_cls = "base-case" if i == 0 else dc(color_v) if color_v != 0 else ""
+            cells += f'<td class="{cell_cls}">{fmt(v)}</td>'
+        return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
     def sep():
         return f'<tr class="row-separator">{"<td></td>" * (len(results)+1)}</tr>'
     f2 = lambda v: fn(v, 2, dz=False)
@@ -277,10 +287,10 @@ def build_cost_table(results, ccy, target_market=None):
             html += row("Safety Stock","delta_safety_stock",lambda v: fn(v,0,acct=True,dz=True),"",True)
             html += row("Cycle Stock","delta_cycle_stock",lambda v: fn(v,0,acct=True,dz=True),"",True)
             html += row("Payment Terms (DPO)","delta_payables",lambda v: fn(-v,0,acct=True,dz=True),"",True)
-            html += row("Total Delta NWC","delta_nwc",lambda v: fn(v,0,acct=True),"row-subtotal")
-        html += row("NWC Carrying Cost / Unit","nwc_carrying_cost_per_unit",lambda v: fn(v,2,acct=True),"",True)
-        html += row("Adj. Operating Profit","adj_op",lambda v: fn(v,2,acct=True,dz=True),"row-bold")
-        html += row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
+            html += delta_row("Total Delta NWC","delta_nwc",lambda v: fn(v,0,acct=True),"row-subtotal",invert=True)
+        html += delta_row("NWC Carrying Cost / Unit","nwc_carrying_cost_per_unit",lambda v: fn(v,2,acct=True),"indent",invert=True)
+        html += delta_row("Adj. Operating Profit","adj_op",lambda v: fn(v,2,acct=True,dz=True),"row-bold")
+        html += delta_row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
         adj_bom = results[0]["adj_om"]
         adj_dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["adj_om"]-adj_bom)}">{dash if i==0 else fp(r["adj_om"]-adj_bom,1,acct=True)}</td>' for i, r in enumerate(results))
         html += f'<tr class="row-bold"><td><em>Adj. Delta Margin vs. Base</em></td>{adj_dc_cells}</tr>'
@@ -315,10 +325,19 @@ def build_annual_table(results, ccy):
         c = f'class="{cls}"'
         cells = "".join(f'<td class="{"base-case" if i==0 else ""}">{fmt(r[key])}</td>' for i, r in enumerate(results))
         return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
+    def delta_row(lbl, key, fmt, cls="", invert=False):
+        c = f'class="{cls}"'
+        cells = ""
+        for i, r in enumerate(results):
+            v = r.get(key, 0)
+            color_v = -v if invert else v
+            cell_cls = "base-case" if i == 0 else dc(color_v) if color_v != 0 else ""
+            cells += f'<td class="{cell_cls}">{fmt(v)}</td>'
+        return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
     html = f'<table class="ib-table"><thead><tr><th>Full Year ({ccy})</th>{hdr}</tr></thead><tbody>'
     html += row("Annual Revenue","annual_rev",lambda v: fi(v,dz=False))
     html += row("Annual Total Cost","annual_cost",lambda v: fi(v,dz=False))
-    html += row("Annual Operating Profit","annual_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
+    html += delta_row("Annual Operating Profit","annual_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
     html += row("Operating Margin","om",lambda v: fp(v,1,dz=False),"row-bold")
     dash = "\u2013"
     dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["annual_op"]-bop)}">{dash if i==0 else fi(r["annual_op"]-bop,acct=True)}</td>' for i, r in enumerate(results))
@@ -343,9 +362,9 @@ def build_annual_table(results, ccy):
             f'<td class="{"base-case" if i==0 else dc(-(r.get("delta_nwc",0)))}">{dash if i==0 else fi(r.get("delta_nwc",0),acct=True)}</td>'
             for i, r in enumerate(results))
         html += f'<tr class="indent"><td>Delta NWC vs. Base</td>{delta_nwc_cells}</tr>'
-        html += row("NWC Carrying Cost (Annual)","annual_nwc_cost",lambda v: fi(v,acct=True))
-        html += row("Adj. Annual OP","annual_adj_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
-        html += row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
+        html += delta_row("NWC Carrying Cost (Annual)","annual_nwc_cost",lambda v: fi(v,acct=True),"",invert=True)
+        html += delta_row("Adj. Annual OP","annual_adj_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
+        html += delta_row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
         base_adj_op = results[0].get("annual_adj_op", 0)
         adj_dc_cells = ''.join(
             f'<td class="{"base-case" if i==0 else dc(r.get("annual_adj_op",0)-base_adj_op)}">{dash if i==0 else fi(r.get("annual_adj_op",0)-base_adj_op,acct=True)}</td>'
