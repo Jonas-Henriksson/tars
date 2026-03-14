@@ -2276,13 +2276,8 @@ adjust safety stock policies.
         column_config={"Current Factory Name": st.column_config.TextColumn("Current Factory Name", width=250)})
     base_factory_name = str(edited_bf.loc[0, "Current Factory Name"] or "Base Case")
 
-    fc_data = {"Comparison Factories": [4 if ex else st.session_state.get("num_fac", 2)]}
-    fc_df = pd.DataFrame(fc_data)
-    edited_fc = st.data_editor(
-        fc_df, use_container_width=False, num_rows="fixed", key="fc_editor", hide_index=True,
-        column_config={"Comparison Factories": st.column_config.NumberColumn(
-            "Comparison Factories", min_value=1, max_value=6, step=1, format="%d", width=180)})
-    num_factories = max(1, min(6, int(edited_fc.loc[0, "Comparison Factories"])))
+    num_factories = st.selectbox("Comparison Factories", options=list(range(1, 9)),
+        index=(3 if ex else st.session_state.get("num_fac", 2) - 1), key="fc_editor")
     st.session_state["num_fac"] = num_factories
 
     # Factory country assignment
