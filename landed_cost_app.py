@@ -19,6 +19,7 @@ from fpdf import FPDF
 # Import from extracted library modules
 from landed_cost.models import FactoryAssumptions, ItemInputs
 from landed_cost.compute import compute_location, compute_sensitivity
+from landed_cost.investment import compute_investment_case
 from landed_cost.lead_times import get_lead_time, estimate_lead_time, LEAD_TIME_MATRIX
 from landed_cost.formatters import fn, fp, fi, dc
 from landed_cost.constants import (
@@ -38,14 +39,16 @@ st.set_page_config(page_title="Landed Cost Comparison Model", layout="wide", ini
 # Fixed keys from main() in A5, dynamic item keys matched via attribute selectors
 INPUT_EDITOR_KEYS = [
     "proj_name", "proj_ccy", "proj_tm", "proj_dt",
-    "fc_editor", "bf_editor", "country_editor", "assumption_matrix",
+    "fc_editor", "bf_editor", "coc_editor", "country_editor", "assumption_matrix", "nwc_matrix",
 ]
 _blue_border = f"border-left: 3px solid {INPUT_BLUE} !important; padding-left: 2px;"
 _fixed_rules = "\n".join(f"    .st-key-{k} {{ {_blue_border} }}" for k in INPUT_EDITOR_KEYS)
 # Dynamic item keys: i0_txt, i1_ns, i2_ov, etc. — use attribute selectors
 _dynamic_rules = """    [class*="st-key-"][class*="_txt"] { %(bb)s }
     [class*="st-key-"][class*="_ns"] { %(bb)s }
-    [class*="st-key-"][class*="_ov"] { %(bb)s }""" % {"bb": _blue_border}
+    [class*="st-key-"][class*="_ov"] { %(bb)s }
+    [class*="st-key-"][class*="_inv_matrix"] { %(bb)s }
+    [class*="st-key-"][class*="_inv_hz"] { %(bb)s }""" % {"bb": _blue_border}
 
 st.markdown(f"""
 <style>
@@ -131,6 +134,30 @@ st.markdown(f"""
     .exec-summary .es-title {{ font-size: 0.67rem; font-weight: 700; color: {NAVY}; text-transform: uppercase;
         letter-spacing: 0.08em; margin-bottom: 0.4rem; }}
 
+    /* ── User Guide ── */
+    .guide {{ font-family: 'Inter', sans-serif; font-size: 0.8rem; color: {DARK_TEXT}; line-height: 1.75; }}
+    .guide h2 {{ font-size: 0.92rem; font-weight: 700; color: {NAVY}; margin: 1.4rem 0 0.4rem 0;
+        border-bottom: 1px solid {BORDER}; padding-bottom: 0.25rem; text-transform: uppercase;
+        letter-spacing: 0.05em; }}
+    .guide h3 {{ font-size: 0.84rem; font-weight: 600; color: {DARK_TEXT}; margin: 0.9rem 0 0.3rem 0; }}
+    .guide p {{ margin: 0.3rem 0 0.6rem 0; }}
+    .guide .tip {{ background: #e8f4fd; border-left: 3px solid {ACCENT_BLUE}; padding: 0.45rem 0.8rem;
+        margin: 0.4rem 0; font-size: 0.76rem; border-radius: 0 2px 2px 0; }}
+    .guide .tip strong {{ color: {NAVY}; }}
+    .guide .warn {{ background: #fff8e6; border-left: 3px solid #e6a817; padding: 0.45rem 0.8rem;
+        margin: 0.4rem 0; font-size: 0.76rem; border-radius: 0 2px 2px 0; }}
+    .guide .example {{ background: #f0faf3; border-left: 3px solid {GREEN}; padding: 0.45rem 0.8rem;
+        margin: 0.4rem 0; font-size: 0.76rem; border-radius: 0 2px 2px 0; }}
+    .guide .term {{ display: inline-block; background: #f0f2f5; padding: 0.08rem 0.4rem;
+        border-radius: 2px; font-weight: 600; font-size: 0.76rem; color: {NAVY}; margin: 0.05rem 0; }}
+    .guide table {{ width: 100%; border-collapse: collapse; font-size: 0.76rem; margin: 0.4rem 0 0.8rem 0; }}
+    .guide table th {{ background: {NAVY}; color: white; font-weight: 600; padding: 0.35rem 0.6rem;
+        text-align: left; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; }}
+    .guide table td {{ padding: 0.3rem 0.6rem; border-bottom: 1px solid #eef0f2; vertical-align: top; }}
+    .guide table tr:nth-child(even) td {{ background: #fcfcfd; }}
+    .guide ol, .guide ul {{ margin: 0.2rem 0 0.5rem 1.4rem; padding: 0; }}
+    .guide li {{ margin-bottom: 0.25rem; }}
+
     /* ── Confidentiality Footer ── */
     .conf-footer {{ font-size: 0.6rem; color: {MUTED}; text-align: center; padding: 0.5rem 0; margin-top: 0.5rem;
         border-top: 1px solid #eee; letter-spacing: 0.02em; font-style: italic; }}
@@ -194,6 +221,26 @@ def build_cost_table(results, ccy, target_market=None):
     dash = "\u2013"
     dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["om"]-bom)}">{dash if i==0 else fp(r["om"]-bom,1,acct=True)}</td>' for i, r in enumerate(results))
     html += f'<tr class="row-bold"><td><em>Delta Margin vs. Base</em></td>{dc_cells}</tr>'
+    # NWC impact rows
+    has_lt = any(r.get("lead_time_days") is not None for r in results)
+    has_ext_nwc = any(r.get("safety_stock_days", 0) > 0 or r.get("cycle_stock_days", 0) > 0 or r.get("payment_terms_days", 0) > 0 for r in results)
+    has_any_nwc = has_lt or has_ext_nwc
+    if has_any_nwc:
+        html += sep()
+        html += f'<tr class="row-subtotal"><td colspan="{len(results)+1}" style="font-size:0.65rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;padding-top:0.5rem;">Net Working Capital Impact</td></tr>'
+        if has_ext_nwc:
+            # Show component breakdown when extended NWC inputs are used
+            html += row("GIT (Transit)","delta_git",lambda v: fn(v,0,acct=True,dz=True),"",True)
+            html += row("Safety Stock","delta_safety_stock",lambda v: fn(v,0,acct=True,dz=True),"",True)
+            html += row("Cycle Stock","delta_cycle_stock",lambda v: fn(v,0,acct=True,dz=True),"",True)
+            html += row("Payment Terms (DPO)","delta_payables",lambda v: fn(-v,0,acct=True,dz=True),"",True)
+            html += row("Total Delta NWC","delta_nwc",lambda v: fn(v,0,acct=True),"row-subtotal")
+        html += row("NWC Carrying Cost / Unit","nwc_carrying_cost_per_unit",lambda v: fn(v,2,acct=True),"",True)
+        html += row("Adj. Operating Profit","adj_op",lambda v: fn(v,2,acct=True,dz=True),"row-bold")
+        html += row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
+        adj_bom = results[0]["adj_om"]
+        adj_dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["adj_om"]-adj_bom)}">{dash if i==0 else fp(r["adj_om"]-adj_bom,1,acct=True)}</td>' for i, r in enumerate(results))
+        html += f'<tr class="row-bold"><td><em>Adj. Delta Margin vs. Base</em></td>{adj_dc_cells}</tr>'
     # Lead time row
     if target_market:
         base_lt = estimate_lead_time(results[0].get("country",""), target_market)
@@ -232,7 +279,36 @@ def build_annual_table(results, ccy):
     html += row("Operating Margin","om",lambda v: fp(v,1,dz=False),"row-bold")
     dash = "\u2013"
     dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["annual_op"]-bop)}">{dash if i==0 else fi(r["annual_op"]-bop,acct=True)}</td>' for i, r in enumerate(results))
-    html += f'<tr class="row-double-top"><td><em>Delta vs. Base Case (Annual)</em></td>{dc_cells}</tr></tbody></table>'
+    html += f'<tr class="row-double-top"><td><em>Delta vs. Base Case (Annual)</em></td>{dc_cells}</tr>'
+    # NWC annual impact
+    has_lt = any(r.get("lead_time_days") is not None for r in results)
+    has_ext_nwc = any(r.get("safety_stock_days", 0) > 0 or r.get("cycle_stock_days", 0) > 0 or r.get("payment_terms_days", 0) > 0 for r in results)
+    has_any_nwc = has_lt or has_ext_nwc
+    if has_any_nwc:
+        def sep():
+            return f'<tr class="row-separator">{"<td></td>" * (len(results)+1)}</tr>'
+        html += sep()
+        html += f'<tr class="row-subtotal"><td colspan="{len(results)+1}" style="font-size:0.65rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;padding-top:0.5rem;">Net Working Capital</td></tr>'
+        html += row("Goods in Transit (GIT)","git_value",lambda v: fi(v,dz=False))
+        if has_ext_nwc:
+            html += row("Safety Stock","safety_stock_value",lambda v: fi(v,dz=False))
+            html += row("Cycle Stock","cycle_stock_value",lambda v: fi(v,dz=False))
+            html += row("Payables (DPO)","payables_value",lambda v: fi(-v,dz=False))
+        html += row("Total NWC","total_nwc",lambda v: fi(v,dz=False),"row-subtotal")
+        base_nwc_total = results[0].get("total_nwc", 0)
+        delta_nwc_cells = ''.join(
+            f'<td class="{"base-case" if i==0 else dc(-(r.get("delta_nwc",0)))}">{dash if i==0 else fi(r.get("delta_nwc",0),acct=True)}</td>'
+            for i, r in enumerate(results))
+        html += f'<tr class="indent"><td>Delta NWC vs. Base</td>{delta_nwc_cells}</tr>'
+        html += row("NWC Carrying Cost (Annual)","annual_nwc_cost",lambda v: fi(v,acct=True),"",True)
+        html += row("Adj. Annual OP","annual_adj_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
+        html += row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
+        base_adj_op = results[0].get("annual_adj_op", 0)
+        adj_dc_cells = ''.join(
+            f'<td class="{"base-case" if i==0 else dc(r.get("annual_adj_op",0)-base_adj_op)}">{dash if i==0 else fi(r.get("annual_adj_op",0)-base_adj_op,acct=True)}</td>'
+            for i, r in enumerate(results))
+        html += f'<tr class="row-double-top"><td><em>Adj. Delta vs. Base (Annual)</em></td>{adj_dc_cells}</tr>'
+    html += '</tbody></table>'
     return html
 
 def build_charts(results, ccy):
@@ -391,6 +467,27 @@ def build_tornado_chart(inputs, factory, is_base, ccy, overrides=None):
 
 
 # ── EXECUTIVE SUMMARY NARRATIVE ──────────────────────────────
+def build_qualitative_summary(qualitative):
+    """Build HTML block for qualitative strategic context."""
+    if not qualitative:
+        return ""
+    parts = []
+    if qualitative.get("strategic_rationale", "").strip():
+        parts.append(f'<tr><td style="font-weight:600;color:{NAVY};white-space:nowrap;vertical-align:top;padding:0.3rem 0.8rem 0.3rem 0;">Strategic Rationale</td><td style="padding:0.3rem 0;">{qualitative["strategic_rationale"].strip()}</td></tr>')
+    if qualitative.get("purpose", "").strip():
+        parts.append(f'<tr><td style="font-weight:600;color:{NAVY};white-space:nowrap;vertical-align:top;padding:0.3rem 0.8rem 0.3rem 0;">Purpose & Objective</td><td style="padding:0.3rem 0;">{qualitative["purpose"].strip()}</td></tr>')
+    if qualitative.get("risk_of_inaction", "").strip():
+        parts.append(f'<tr><td style="font-weight:600;color:{NAVY};white-space:nowrap;vertical-align:top;padding:0.3rem 0.8rem 0.3rem 0;">Risk of Inaction</td><td style="padding:0.3rem 0;">{qualitative["risk_of_inaction"].strip()}</td></tr>')
+    if qualitative.get("risks", "").strip():
+        parts.append(f'<tr><td style="font-weight:600;color:{NAVY};white-space:nowrap;vertical-align:top;padding:0.3rem 0.8rem 0.3rem 0;">Key Risks</td><td style="padding:0.3rem 0;">{qualitative["risks"].strip()}</td></tr>')
+    if not parts:
+        return ""
+    return f"""<div style="background:#fafbfc;border:1px solid {BORDER};border-left:3px solid {NAVY};border-radius:2px;padding:0.7rem 1rem;margin:0.5rem 0 0.8rem 0;font-family:Inter,sans-serif;font-size:0.78rem;color:{DARK_TEXT};line-height:1.6;">
+<div style="font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:{GREY_TEXT};margin-bottom:0.4rem;">Strategic Context</div>
+<table style="border-collapse:collapse;width:100%;">{"".join(parts)}</table>
+</div>"""
+
+
 def build_exec_summary(results, inputs, ccy):
     """Generate an auto-written executive summary paragraph for IB-style reports."""
     if len(results) < 2:
@@ -413,9 +510,31 @@ def build_exec_summary(results, inputs, ccy):
         verdict = f'All locations deliver comparable margins near <strong>{fp(base["om"],1,dz=False)}</strong>. No material cost advantage exists between {base["name"]} and {best["name"]}'
         annual_str = ""
 
+    # NWC / Goods-in-Transit impact narrative
+    has_nwc = any(r.get("lead_time_days") is not None for r in results)
+    nwc_str = ""
+    if has_nwc:
+        adj_ranked = sorted(results[1:], key=lambda r: r.get("adj_om", r["om"]), reverse=True)
+        adj_best = adj_ranked[0]
+        adj_delta_pp = (adj_best.get("adj_om", adj_best["om"]) - base.get("adj_om", base["om"])) * 100
+        nwc_cost = adj_best.get("nwc_carrying_cost_annual", 0)
+        delta_lt = adj_best.get("delta_lead_time", 0)
+
+        if abs(nwc_cost) > 0.5:
+            nwc_dir = "increases" if nwc_cost > 0 else "releases"
+            nwc_impact = f"reduces" if nwc_cost > 0 else "improves"
+            nwc_str = (
+                f' After adjusting for NWC impact from goods-in-transit ({delta_lt:+d} days vs. base), '
+                f'incremental inventory {nwc_dir} <strong>{fi(abs(nwc_cost), dz=False)} {ccy}</strong> in annual carrying cost, '
+                f'which {nwc_impact} the adjusted margin to <strong>{fp(adj_best.get("adj_om", adj_best["om"]),1,dz=False)}</strong> '
+                f'({adj_delta_pp:+.1f}pp vs. base).'
+            )
+        elif delta_lt != 0:
+            nwc_str = f' Lead time differential of {delta_lt:+d} days has negligible NWC impact at current cost of capital.'
+
     return f"""<div class="exec-summary">
 <div class="es-title">Executive Summary</div>
-For {item_desc}, {verdict}{annual_str}.
+For {item_desc}, {verdict}{annual_str}.{nwc_str}
 Analysis covers {len(results)} manufacturing location{"s" if len(results)>1 else ""} with {ccy} reporting.
 </div>"""
 
@@ -478,7 +597,8 @@ def export_excel_project(project_data):
             w.sheets[sname] = ws
             n = len(results)
             ws.merge_range(0,0,0,n,f"Landed Cost: {inputs['item_number']} - {inputs['designation']}",tf)
-            ws.merge_range(1,0,1,n,f"{inputs['currency']} | Destination: {inputs['destination']}",sf)
+            dc_ = inputs.get("data_classification", "C3 - Confidential")
+            ws.merge_range(1,0,1,n,f"{inputs['currency']} | Destination: {inputs['destination']} | {dc_}",sf)
             ws.set_column(0,0,24)
             for c in range(1,n+1): ws.set_column(c,c,16)
             r=3
@@ -493,6 +613,35 @@ def export_excel_project(project_data):
                 ws.write(r,0,lbl_,lb if key_ in ("sc","ns_per_unit","op","om") else lf)
                 for c,res in enumerate(results): ws.write(r,c+1,res[key_],cf_)
                 r+=1
+            # NWC per-unit rows
+            has_lt = any(res.get("lead_time_days") is not None for res in results)
+            has_ext_nwc = any(res.get("safety_stock_days",0)>0 or res.get("cycle_stock_days",0)>0 or res.get("payment_terms_days",0)>0 for res in results)
+            if has_lt or has_ext_nwc:
+                r+=1
+                if has_ext_nwc:
+                    ws.write(r,0,"  Delta GIT",lf)
+                    for c,res in enumerate(results): ws.write(r,c+1,res.get("delta_git",0),nf)
+                    r+=1
+                    ws.write(r,0,"  Delta Safety Stock",lf)
+                    for c,res in enumerate(results): ws.write(r,c+1,res.get("delta_safety_stock",0),nf)
+                    r+=1
+                    ws.write(r,0,"  Delta Cycle Stock",lf)
+                    for c,res in enumerate(results): ws.write(r,c+1,res.get("delta_cycle_stock",0),nf)
+                    r+=1
+                    ws.write(r,0,"  Delta Payables (DPO)",lf)
+                    for c,res in enumerate(results): ws.write(r,c+1,-res.get("delta_payables",0),nf)
+                    r+=1
+                    ws.write(r,0,"Total Delta NWC",lb)
+                    for c,res in enumerate(results): ws.write(r,c+1,res.get("delta_nwc",0),nb)
+                    r+=1
+                ws.write(r,0,"NWC Carrying Cost/Unit",lf)
+                for c,res in enumerate(results): ws.write(r,c+1,res.get("nwc_carrying_cost_per_unit",0),nf)
+                r+=1
+                ws.write(r,0,"Adj. Operating Profit",lb)
+                for c,res in enumerate(results): ws.write(r,c+1,res.get("adj_op",res["op"]),nb)
+                r+=1
+                ws.write(r,0,"Adj. Operating Margin",lb)
+                for c,res in enumerate(results): ws.write(r,c+1,res.get("adj_om",res["om"]),pf)
             r+=1
             ws.write(r,0,f"Full Year ({inputs['currency']})",hl)
             for c,res in enumerate(results): ws.write(r,c+1,res["name"],hf)
@@ -505,6 +654,97 @@ def export_excel_project(project_data):
             bop_=results[0]["annual_op"]
             ws.write(r,0,"Delta vs Base",lb)
             for c,res in enumerate(results): ws.write(r,c+1,"\u2013" if c==0 else res["annual_op"]-bop_,inb if c>0 else inf_)
+            # NWC annual rows
+            if has_lt or has_ext_nwc:
+                r+=1; r+=1
+                ws.write(r,0,"Goods in Transit (GIT)",lf)
+                for c,res in enumerate(results): ws.write(r,c+1,res.get("git_value",0),inf_)
+                if has_ext_nwc:
+                    r+=1
+                    ws.write(r,0,"Safety Stock",lf)
+                    for c,res in enumerate(results): ws.write(r,c+1,res.get("safety_stock_value",0),inf_)
+                    r+=1
+                    ws.write(r,0,"Cycle Stock",lf)
+                    for c,res in enumerate(results): ws.write(r,c+1,res.get("cycle_stock_value",0),inf_)
+                    r+=1
+                    ws.write(r,0,"Payables (DPO)",lf)
+                    for c,res in enumerate(results): ws.write(r,c+1,-res.get("payables_value",0),inf_)
+                    r+=1
+                    ws.write(r,0,"Total NWC",lb)
+                    for c,res in enumerate(results): ws.write(r,c+1,res.get("total_nwc",0),inb)
+                r+=1
+                delta_key = "delta_nwc" if has_ext_nwc else "delta_git"
+                delta_label = "Delta NWC vs Base" if has_ext_nwc else "Delta GIT vs Base"
+                ws.write(r,0,delta_label,lf)
+                for c,res in enumerate(results): ws.write(r,c+1,"\u2013" if c==0 else res.get(delta_key,0),inf_ if c==0 else inb)
+                r+=1
+                ws.write(r,0,"NWC Carrying Cost (Annual)",lf)
+                for c,res in enumerate(results): ws.write(r,c+1,res.get("annual_nwc_cost",0),inf_)
+                r+=1
+                ws.write(r,0,"Adj. Annual OP",lb)
+                for c,res in enumerate(results): ws.write(r,c+1,res.get("annual_adj_op",res["annual_op"]),inb)
+                r+=1
+                ws.write(r,0,"Adj. Operating Margin",lb)
+                for c,res in enumerate(results): ws.write(r,c+1,res.get("adj_om",res["om"]),pf)
+                r+=1
+                base_adj_op = results[0].get("annual_adj_op", results[0]["annual_op"])
+                ws.write(r,0,"Adj. Delta vs Base",lb)
+                for c,res in enumerate(results): ws.write(r,c+1,"\u2013" if c==0 else res.get("annual_adj_op",res["annual_op"])-base_adj_op,inb if c>0 else inf_)
+
+            # Investment analysis rows
+            inv_data = item.get("investment", [])
+            has_inv_data = any(ic.get("total_investment", 0) > 0 for ic in inv_data)
+            if has_inv_data and len(results) >= 2:
+                r+=2
+                ws.write(r,0,"Transfer Investment",hl)
+                for c,res in enumerate(results): ws.write(r,c+1,res["name"] if c>0 else "",hf if c>0 else hl)
+                r+=1
+                inv_by_name = {ic["factory_name"]: ic for ic in inv_data}
+                for lbl_,key_ in [("CAPEX","capex"),("OPEX","opex"),("Restructuring","restructuring"),("Total Investment","total_investment")]:
+                    ws.write(r,0,lbl_,lb if "Total" in lbl_ else lf)
+                    ws.write(r,1,"\u2013",inf_)
+                    for c,res in enumerate(results[1:],2):
+                        ic = inv_by_name.get(res["name"],{})
+                        ws.write(r,c,ic.get(key_,0),inb if "Total" in lbl_ else inf_)
+                    r+=1
+                r+=1
+                ws.write(r,0,"Annual Savings",lf)
+                ws.write(r,1,"\u2013",inf_)
+                for c,res in enumerate(results[1:],2):
+                    ic = inv_by_name.get(res["name"],{})
+                    ws.write(r,c,ic.get("annual_savings",0),inb)
+                r+=1
+                for lbl_,key_ in [("NPV","npv"),("IRR","irr"),("Simple Payback (yrs)","simple_payback"),("Discounted Payback (yrs)","discounted_payback")]:
+                    ws.write(r,0,lbl_,lb)
+                    ws.write(r,1,"\u2013",inf_)
+                    for c,res in enumerate(results[1:],2):
+                        ic = inv_by_name.get(res["name"],{})
+                        v = ic.get(key_)
+                        if v is not None:
+                            if key_ == "irr":
+                                ws.write(r,c,v,pf)
+                            else:
+                                ws.write(r,c,v,inb if key_=="npv" else nf)
+                        else:
+                            ws.write(r,c,"\u2013",inf_)
+                    r+=1
+
+            # Qualitative context
+            qual = item.get("qualitative", {})
+            has_qual = any(v.strip() for v in qual.values()) if qual else False
+            if has_qual:
+                r+=2
+                wf = wb.add_format({"font_name":"Arial","font_size":9,"text_wrap":True,"font_color":DARK_TEXT,"valign":"top"})
+                ws.write(r,0,"Strategic Context",hl)
+                ws.merge_range(r,1,r,n,"",hl)
+                r+=1
+                for q_key, q_label in [("strategic_rationale","Strategic Rationale"),("purpose","Purpose & Objective"),
+                    ("risk_of_inaction","Risk of Inaction"),("risks","Key Risks & Mitigations")]:
+                    txt = qual.get(q_key, "").strip()
+                    if txt:
+                        ws.write(r,0,q_label,lb)
+                        ws.merge_range(r,1,r,n,txt,wf) if n > 1 else ws.write(r,1,txt,wf)
+                        r+=1
 
         # Summary sheet
         if len(project_data) > 1:
@@ -543,10 +783,11 @@ def export_excel_project(project_data):
 class IBPitchPDF(FPDF):
     """Custom FPDF with IB-style headers and footers."""
 
-    def __init__(self, project_name="", ccy="", **kwargs):
+    def __init__(self, project_name="", ccy="", data_classification="C3 - Confidential", **kwargs):
         super().__init__(orientation="L", unit="mm", format="A4", **kwargs)
         self._project_name = project_name
         self._ccy = ccy
+        self._dc = data_classification
         self.set_auto_page_break(auto=True, margin=20)
 
     def header(self):
@@ -567,12 +808,13 @@ class IBPitchPDF(FPDF):
         self.ln(2)
         self.set_font("Helvetica", "I", 5.5)
         self.set_text_color(153, 153, 153)
-        self.cell(0, 4, "Confidential & Proprietary  -  SKF Group  -  Strategic Planning & Intelligent Hub", align="L")
+        self.cell(0, 4, f"{self._dc}  -  SKF Group  -  Strategic Planning & Intelligent Hub", align="L")
         self.cell(0, 4, f"Page {self.page_no()}", align="R")
 
 
 def export_pdf_project(all_results, ccy, project_name):
-    pdf = IBPitchPDF(project_name=project_name, ccy=ccy)
+    dc_label = all_results[0]["inputs"].get("data_classification", "C3 - Confidential") if all_results else "C3 - Confidential"
+    pdf = IBPitchPDF(project_name=project_name, ccy=ccy, data_classification=dc_label)
     navy_r, navy_g, navy_b = 0, 32, 96
     white_r, white_g, white_b = 255, 255, 255
     dark_r, dark_g, dark_b = 26, 26, 46
@@ -636,8 +878,11 @@ def export_pdf_project(all_results, ccy, project_name):
     pdf.set_line_width(0.8)
     pdf.line(100, pdf.get_y(), 197, pdf.get_y())
     pdf.ln(8)
+    # Data classification from first item (project-level)
+    dc_label = all_results[0]["inputs"].get("data_classification", "C3 - Confidential") if all_results else "C3 - Confidential"
+
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, f"{ccy}  |  {len(all_results)} Item{'s' if len(all_results)!=1 else ''}", align="C", ln=True)
+    pdf.cell(0, 6, f"{ccy}  |  {len(all_results)} Item{'s' if len(all_results)!=1 else ''}  |  {dc_label}", align="C", ln=True)
     pdf.set_font("Helvetica", "", 9)
     pdf.cell(0, 6, date.today().strftime("%B %d, %Y"), align="C", ln=True)
     pdf.ln(20)
@@ -648,15 +893,16 @@ def export_pdf_project(all_results, ccy, project_name):
     pdf.set_text_color(108, 117, 125)
     pdf.cell(0, 5, "Strategic Planning & Intelligent Hub", align="C", ln=True)
 
-    f2 = lambda v: f"{v:,.2f}" if v is not None else "\u2013"
-    fp_ = lambda v: f"{v*100:.1f}%" if v is not None else "\u2013"
-    fi_ = lambda v: f"{v:,.0f}" if v is not None else "\u2013"
+    # PDF-safe formatters: use ASCII hyphen instead of en-dash (Helvetica can't encode \u2013)
+    f2 = lambda v: f"{v:,.2f}" if v is not None else "-"
+    fp_ = lambda v: f"{v*100:.1f}%" if v is not None else "-"
+    fi_ = lambda v: f"{v:,.0f}" if v is not None else "-"
 
     for item in all_results:
         pdf.add_page()
         inp = item["inputs"]
         results = item["results"]
-        add_page_header(pdf, f"{inp['item_number']} \u2013 {inp['designation']}", f"{ccy}  |  Destination: {inp.get('destination','')}")
+        add_page_header(pdf, f"{inp['item_number']} - {inp['designation']}", f"{ccy}  |  Destination: {inp.get('destination','')}")
 
         n = len(results)
         lw = 48
@@ -673,8 +919,27 @@ def export_pdf_project(all_results, ccy, project_name):
             cost_rows.append([lbl] + [f2(r[key]) for r in results])
         cost_rows.append(["Operating Margin"] + [fp_(r["om"]) for r in results])
         bom = results[0]["om"]
-        cost_rows.append(["Delta vs Base"] + ["\u2013"] + [fp_(r["om"]-bom) for r in results[1:]])
-        add_table(pdf, headers, cost_rows, col_widths, bold_rows=[3,7,13,14,15])
+        cost_rows.append(["Delta vs Base"] + ["-"] + [fp_(r["om"]-bom) for r in results[1:]])
+        nwc_bold = []
+        has_lt = any(r.get("lead_time_days") is not None for r in results)
+        has_ext_nwc_pdf = any(r.get("safety_stock_days",0)>0 or r.get("cycle_stock_days",0)>0 or r.get("payment_terms_days",0)>0 for r in results)
+        if has_lt or has_ext_nwc_pdf:
+            cost_rows.append([""] * (n+1))
+            if has_ext_nwc_pdf:
+                cost_rows.append(["  Delta GIT"] + [fi_(r.get("delta_git",0)) for r in results])
+                cost_rows.append(["  Delta Safety Stock"] + [fi_(r.get("delta_safety_stock",0)) for r in results])
+                cost_rows.append(["  Delta Cycle Stock"] + [fi_(r.get("delta_cycle_stock",0)) for r in results])
+                cost_rows.append(["  Delta Payables (DPO)"] + [fi_(-r.get("delta_payables",0)) for r in results])
+                cost_rows.append(["Total Delta NWC"] + [fi_(r.get("delta_nwc",0)) for r in results])
+            cost_rows.append(["NWC Carrying Cost/Unit"] + [f2(r.get("nwc_carrying_cost_per_unit",0)) for r in results])
+            cost_rows.append(["Adj. Operating Profit"] + [f2(r.get("adj_op",r["op"])) for r in results])
+            cost_rows.append(["Adj. Operating Margin"] + [fp_(r.get("adj_om",r["om"])) for r in results])
+            adj_bom = results[0].get("adj_om", results[0]["om"])
+            cost_rows.append(["Adj. Delta vs Base"] + ["-"] + [fp_(r.get("adj_om",r["om"])-adj_bom) for r in results[1:]])
+            nwc_bold = [len(cost_rows)-3, len(cost_rows)-2, len(cost_rows)-1]
+            if has_ext_nwc_pdf:
+                nwc_bold.append(len(cost_rows)-5)  # Total Delta NWC row
+        add_table(pdf, headers, cost_rows, col_widths, bold_rows=[3,7,13,14,15]+nwc_bold)
 
         pdf.ln(4)
         annual_headers = [f"Full Year ({ccy})"] + [r["name"] for r in results]
@@ -685,8 +950,91 @@ def export_pdf_project(all_results, ccy, project_name):
             ["Operating Margin"] + [fp_(r["om"]) for r in results],
         ]
         bop = results[0]["annual_op"]
-        annual_rows.append(["Delta vs Base"] + ["\u2013"] + [fi_(r["annual_op"]-bop) for r in results[1:]])
-        add_table(pdf, annual_headers, annual_rows, col_widths, bold_rows=[2,3,4])
+        annual_rows.append(["Delta vs Base"] + ["-"] + [fi_(r["annual_op"]-bop) for r in results[1:]])
+        nwc_annual_bold = []
+        if has_lt or has_ext_nwc_pdf:
+            annual_rows.append([""] * (n+1))
+            annual_rows.append(["Goods in Transit (GIT)"] + [fi_(r.get("git_value",0)) for r in results])
+            if has_ext_nwc_pdf:
+                annual_rows.append(["Safety Stock"] + [fi_(r.get("safety_stock_value",0)) for r in results])
+                annual_rows.append(["Cycle Stock"] + [fi_(r.get("cycle_stock_value",0)) for r in results])
+                annual_rows.append(["Payables (DPO)"] + [fi_(-r.get("payables_value",0)) for r in results])
+                annual_rows.append(["Total NWC"] + [fi_(r.get("total_nwc",0)) for r in results])
+            delta_key_pdf = "delta_nwc" if has_ext_nwc_pdf else "delta_git"
+            delta_label_pdf = "Delta NWC vs Base" if has_ext_nwc_pdf else "Delta GIT vs Base"
+            annual_rows.append([delta_label_pdf] + ["-"] + [fi_(r.get(delta_key_pdf,0)) for r in results[1:]])
+            annual_rows.append(["NWC Carrying Cost (Annual)"] + [fi_(r.get("annual_nwc_cost",0)) for r in results])
+            annual_rows.append(["Adj. Annual OP"] + [fi_(r.get("annual_adj_op",r["annual_op"])) for r in results])
+            annual_rows.append(["Adj. Operating Margin"] + [fp_(r.get("adj_om",r["om"])) for r in results])
+            base_adj_op = results[0].get("annual_adj_op", results[0]["annual_op"])
+            annual_rows.append(["Adj. Delta vs Base"] + ["-"] + [fi_(r.get("annual_adj_op",r["annual_op"])-base_adj_op) for r in results[1:]])
+            nwc_annual_bold = [len(annual_rows)-3, len(annual_rows)-2, len(annual_rows)-1]
+            if has_ext_nwc_pdf:
+                # Bold the Total NWC row
+                total_nwc_idx = len(annual_rows) - 7  # Total NWC is 7 rows back from end
+                nwc_annual_bold.append(total_nwc_idx)
+        add_table(pdf, annual_headers, annual_rows, col_widths, bold_rows=[2,3,4]+nwc_annual_bold)
+
+        # Investment analysis in PDF
+        inv_data = item.get("investment", [])
+        has_inv_pdf = any(ic.get("total_investment", 0) > 0 for ic in inv_data)
+        if has_inv_pdf and len(results) >= 2:
+            pdf.ln(4)
+            inv_headers = [f"Investment ({ccy})"] + [r["name"] for r in results]
+            inv_rows = []
+            inv_by_name = {ic["factory_name"]: ic for ic in inv_data}
+            for lbl_, key_ in [("CAPEX","capex"),("OPEX","opex"),("Restructuring","restructuring"),("Total Investment","total_investment")]:
+                row_data = [lbl_, "-"]
+                for r in results[1:]:
+                    ic = inv_by_name.get(r["name"],{})
+                    row_data.append(fi_(ic.get(key_,0)))
+                inv_rows.append(row_data)
+            inv_rows.append([""] * (n+1))
+            sav_row = ["Annual Savings", "-"]
+            for r in results[1:]:
+                ic = inv_by_name.get(r["name"],{})
+                sav_row.append(fi_(ic.get("annual_savings",0)))
+            inv_rows.append(sav_row)
+            inv_rows.append([""] * (n+1))
+            # Metrics
+            npv_row = ["NPV", "-"]
+            irr_row = ["IRR", "-"]
+            pb_row = ["Simple Payback", "-"]
+            dpb_row = ["Disc. Payback", "-"]
+            for r in results[1:]:
+                ic = inv_by_name.get(r["name"],{})
+                npv_row.append(fi_(ic.get("npv",0)))
+                irr_v = ic.get("irr")
+                irr_row.append(f"{irr_v*100:.1f}%" if irr_v is not None else "-")
+                pb_v = ic.get("simple_payback")
+                pb_row.append(f"{pb_v:.1f} yrs" if pb_v is not None else "-")
+                dpb_v = ic.get("discounted_payback")
+                dpb_row.append(f"{dpb_v:.1f} yrs" if dpb_v is not None else "-")
+            inv_rows.extend([npv_row, irr_row, pb_row, dpb_row])
+            add_table(pdf, inv_headers, inv_rows, col_widths, bold_rows=[3, 5, 8, 9, 10, 11])
+
+        # Qualitative context in PDF
+        qual = item.get("qualitative", {})
+        has_qual_pdf = any(v.strip() for v in qual.values()) if qual else False
+        if has_qual_pdf:
+            pdf.ln(4)
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.set_fill_color(navy_r, navy_g, navy_b)
+            pdf.set_text_color(white_r, white_g, white_b)
+            pdf.cell(0, 5.5, "Strategic Context", ln=True, fill=True)
+            pdf.set_text_color(dark_r, dark_g, dark_b)
+            for q_key, q_label in [("strategic_rationale","Strategic Rationale"),("purpose","Purpose & Objective"),
+                ("risk_of_inaction","Risk of Inaction"),("risks","Key Risks & Mitigations")]:
+                txt = qual.get(q_key, "").strip()
+                if txt:
+                    pdf.set_font("Helvetica", "B", 6.5)
+                    pdf.cell(45, 4.5, q_label, border=0)
+                    pdf.set_font("Helvetica", "", 6.5)
+                    # Multi-cell for wrapping long text
+                    x_start = pdf.get_x()
+                    y_start = pdf.get_y()
+                    pdf.multi_cell(0, 4.5, txt, border=0)
+                    pdf.ln(0.5)
 
     # Portfolio summary page
     if len(all_results) > 1:
@@ -710,16 +1058,40 @@ def export_pdf_project(all_results, ccy, project_name):
         rows = []
         for item in all_results:
             inp = item["inputs"]
-            row = [f"{inp['item_number']} \u2013 {inp['designation']}"]
+            row = [f"{inp['item_number']} - {inp['designation']}"]
             for fn_ in all_fnames:
                 match = [r for r in item["results"] if r["name"] == fn_]
-                row.append(fi_(match[0]["annual_op"]) if match else "\u2013")
+                row.append(fi_(match[0]["annual_op"]) if match else "-")
             rows.append(row)
         rows.append(["Total Annual OP"] + [fi_(totals[fn_]) for fn_ in all_fnames])
-        rows.append(["Operating Margin"] + [f"{totals[fn_]/total_rev[fn_]*100:.1f}%" if total_rev[fn_] else "\u2013" for fn_ in all_fnames])
+        rows.append(["Operating Margin"] + [f"{totals[fn_]/total_rev[fn_]*100:.1f}%" if total_rev[fn_] else "-" for fn_ in all_fnames])
         base_op = totals.get(all_fnames[0], 0) if all_fnames else 0
-        rows.append(["Delta vs Base"] + ["\u2013"] + [fi_(totals[fn_]-base_op) for fn_ in all_fnames[1:]])
-        add_table(pdf, headers, rows, col_widths, bold_rows=[len(all_results), len(all_results)+1, len(all_results)+2])
+        rows.append(["Delta vs Base"] + ["-"] + [fi_(totals[fn_]-base_op) for fn_ in all_fnames[1:]])
+        base_bold = [len(all_results), len(all_results)+1, len(all_results)+2]
+
+        # NWC-adjusted portfolio rows in PDF
+        has_nwc_portfolio = any(
+            r.get("lead_time_days") is not None
+            for item in all_results for r in item["results"]
+        )
+        nwc_portfolio_bold = []
+        if has_nwc_portfolio:
+            adj_totals_pdf = {fn_: 0.0 for fn_ in all_fnames}
+            nwc_totals_pdf = {fn_: 0.0 for fn_ in all_fnames}
+            for item in all_results:
+                for r in item["results"]:
+                    adj_totals_pdf[r["name"]] += r.get("annual_adj_op", r["annual_op"])
+                    nwc_totals_pdf[r["name"]] += r.get("annual_nwc_cost", 0)
+            rows.append([""] * (n+1))
+            rows.append(["NWC Carrying Cost (Annual)"] + [fi_(nwc_totals_pdf[fn_]) for fn_ in all_fnames])
+            rows.append(["Adj. Total Annual OP"] + [fi_(adj_totals_pdf[fn_]) for fn_ in all_fnames])
+            adj_pct_pdf = {fn_: (adj_totals_pdf[fn_]/total_rev[fn_]*100 if total_rev[fn_] else 0) for fn_ in all_fnames}
+            rows.append(["Adj. Operating Margin"] + [f"{adj_pct_pdf[fn_]:.1f}%" for fn_ in all_fnames])
+            base_adj_pdf = adj_totals_pdf.get(all_fnames[0], 0) if all_fnames else 0
+            rows.append(["Adj. Delta vs Base"] + ["-"] + [fi_(adj_totals_pdf[fn_]-base_adj_pdf) for fn_ in all_fnames[1:]])
+            nwc_portfolio_bold = [len(rows)-3, len(rows)-2, len(rows)-1]
+
+        add_table(pdf, headers, rows, col_widths, bold_rows=base_bold+nwc_portfolio_bold)
 
     buf = io.BytesIO()
     buf.write(pdf.output())
@@ -869,7 +1241,7 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
 
 
 # ── PORTFOLIO SUMMARY ─────────────────────────────────────────
-def render_portfolio_summary(all_results, ccy):
+def render_portfolio_summary(all_results, ccy, cost_of_capital=0.08):
     if not all_results:
         st.markdown('<div class="callout">Complete at least one item analysis to see the portfolio summary.</div>', unsafe_allow_html=True)
         return
@@ -939,6 +1311,50 @@ def render_portfolio_summary(all_results, ccy):
         for fn_ in all_fnames
     )
     html += f'<tr class="row-bold"><td><em>Delta vs. Base (Total)</em></td>{delta_cells}</tr>'
+
+    # NWC-adjusted portfolio rows
+    has_nwc = any(
+        r.get("lead_time_days") is not None
+        for item in all_results for r in item["results"]
+    )
+    if has_nwc:
+        adj_totals = {fn_: 0.0 for fn_ in all_fnames}
+        nwc_totals = {fn_: 0.0 for fn_ in all_fnames}
+        for item in all_results:
+            for r in item["results"]:
+                adj_totals[r["name"]] += r.get("annual_adj_op", r["annual_op"])
+                nwc_totals[r["name"]] += r.get("annual_nwc_cost", 0)
+        adj_pct = {fn_: (adj_totals[fn_] / total_rev[fn_] * 100 if total_rev[fn_] else 0) for fn_ in all_fnames}
+        base_adj = adj_totals.get(base_fn, 0)
+
+        sep_cells = "<td></td>" * (len(all_fnames) + 1)
+        html += f'<tr class="row-separator">{sep_cells}</tr>'
+        html += f'<tr class="row-subtotal"><td colspan="{len(all_fnames)+1}" style="font-size:0.65rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;padding-top:0.5rem;">NWC Impact (Goods in Transit)</td></tr>'
+
+        nwc_cells = "".join(
+            f'<td class="{"base-case" if fn_==base_fn else ""}">{fi(nwc_totals[fn_], acct=True)}</td>'
+            for fn_ in all_fnames
+        )
+        html += f'<tr><td>NWC Carrying Cost (Annual)</td>{nwc_cells}</tr>'
+
+        adj_op_cells = "".join(
+            f'<td class="{"base-case" if fn_==base_fn else ""}">{fi(adj_totals[fn_], dz=False)}</td>'
+            for fn_ in all_fnames
+        )
+        html += f'<tr class="row-bold"><td><strong>Adj. Total Annual OP</strong></td>{adj_op_cells}</tr>'
+
+        adj_pct_cells = "".join(
+            f'<td class="{"base-case" if fn_==base_fn else ""}">{adj_pct[fn_]:.1f}%</td>'
+            for fn_ in all_fnames
+        )
+        html += f'<tr class="row-bold"><td><strong>Adj. Operating Margin</strong></td>{adj_pct_cells}</tr>'
+
+        adj_delta_cells = "".join(
+            f'<td class="{("base-case" if fn_==base_fn else dc(adj_totals[fn_]-base_adj))}">{dash if fn_==base_fn else fi(adj_totals[fn_]-base_adj, acct=True)}</td>'
+            for fn_ in all_fnames
+        )
+        html += f'<tr class="row-bold"><td><em>Adj. Delta vs. Base (Total)</em></td>{adj_delta_cells}</tr>'
+
     html += "</tbody></table>"
 
     st.markdown(html, unsafe_allow_html=True)
@@ -964,6 +1380,111 @@ def render_portfolio_summary(all_results, ccy):
         fig.update_yaxes(title_text=ccy, title_font=dict(size=10))
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
+    # ── INVESTMENT SUMMARY (Portfolio) ────────────────────────
+    has_inv = any(
+        ic.get("total_investment", 0) > 0
+        for item in all_results
+        for ic in item.get("investment", [])
+    )
+    if has_inv:
+        st.markdown(f'<div class="sec-sm">Transfer Investment Summary</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout">Aggregated investment metrics across all items by receiving factory ({ccy}).</div>', unsafe_allow_html=True)
+
+        # Collect alt factory names (exclude base)
+        alt_fnames = [fn_ for fn_ in all_fnames if fn_ != base_fn]
+        if alt_fnames:
+            # Aggregate: total investment, total annual savings, combined NPV
+            agg_inv = {fn_: 0.0 for fn_ in alt_fnames}
+            agg_savings = {fn_: 0.0 for fn_ in alt_fnames}
+            agg_capex = {fn_: 0.0 for fn_ in alt_fnames}
+            agg_opex = {fn_: 0.0 for fn_ in alt_fnames}
+            agg_restr = {fn_: 0.0 for fn_ in alt_fnames}
+            for item in all_results:
+                for ic in item.get("investment", []):
+                    fn_ = ic.get("factory_name", "")
+                    if fn_ in alt_fnames:
+                        agg_inv[fn_] += ic.get("total_investment", 0)
+                        agg_savings[fn_] += ic.get("annual_savings", 0)
+                        agg_capex[fn_] += ic.get("capex", 0)
+                        agg_opex[fn_] += ic.get("opex", 0)
+                        agg_restr[fn_] += ic.get("restructuring", 0)
+
+            # Compute portfolio-level NPV, IRR, payback using aggregated flows
+            agg_cases = {}
+            for fn_ in alt_fnames:
+                agg_cases[fn_] = compute_investment_case(
+                    annual_savings=agg_savings[fn_],
+                    capex=agg_capex[fn_], opex=agg_opex[fn_], restructuring=agg_restr[fn_],
+                    discount_rate=cost_of_capital,
+                    horizon_years=10,
+                )
+
+            inv_p_hdr = "".join(f'<th>{fn_}</th>' for fn_ in alt_fnames)
+            inv_p_html = f'<table class="ib-table"><thead><tr><th>Portfolio Investment ({ccy})</th>{inv_p_hdr}</tr></thead><tbody>'
+
+            def _pr(lbl, vals, cls=""):
+                cells = "".join(f'<td>{v}</td>' for v in vals)
+                return f'<tr class="{cls}"><td>{lbl}</td>{cells}</tr>'
+
+            inv_p_html += _pr("Total CAPEX", [fi(agg_capex[fn_], dz=True) for fn_ in alt_fnames])
+            inv_p_html += _pr("Total OPEX", [fi(agg_opex[fn_], dz=True) for fn_ in alt_fnames])
+            inv_p_html += _pr("Total Restructuring", [fi(agg_restr[fn_], dz=True) for fn_ in alt_fnames])
+            inv_p_html += _pr("Total Investment", [fi(agg_inv[fn_], dz=False) for fn_ in alt_fnames], "row-subtotal")
+            inv_p_html += _pr("Total Annual Savings", [fi(agg_savings[fn_], acct=True, dz=False) for fn_ in alt_fnames])
+
+            sep_cells = "<td></td>" * (len(alt_fnames) + 1)
+            inv_p_html += f'<tr class="row-separator">{sep_cells}</tr>'
+
+            # NPV
+            npv_cells = ""
+            for fn_ in alt_fnames:
+                v = agg_cases[fn_]["npv"]
+                cls = "delta-pos" if v > 0 else ("delta-neg" if v < 0 else "")
+                npv_cells += f'<td class="{cls}"><strong>{fi(v, acct=True, dz=False)}</strong></td>'
+            inv_p_html += f'<tr class="row-bold"><td><strong>NPV (10yr)</strong></td>{npv_cells}</tr>'
+
+            # IRR
+            irr_cells = ""
+            dash = "\u2013"
+            for fn_ in alt_fnames:
+                irr = agg_cases[fn_]["irr"]
+                if irr is not None:
+                    cls = "delta-pos" if irr > cost_of_capital else "delta-neg"
+                    irr_cells += f'<td class="{cls}"><strong>{irr*100:.1f}%</strong></td>'
+                else:
+                    irr_cells += f'<td>{dash}</td>'
+            inv_p_html += f'<tr class="row-bold"><td><strong>IRR</strong></td>{irr_cells}</tr>'
+
+            # Payback
+            pb_cells = ""
+            for fn_ in alt_fnames:
+                pb = agg_cases[fn_]["simple_payback"]
+                if pb is not None:
+                    cls = "delta-pos" if pb <= 10 else "delta-neg"
+                    pb_cells += f'<td class="{cls}">{pb:.1f} years</td>'
+                else:
+                    pb_cells += f'<td>{dash}</td>'
+            inv_p_html += f'<tr class="row-bold"><td>Simple Payback</td>{pb_cells}</tr>'
+
+            inv_p_html += '</tbody></table>'
+            st.markdown(inv_p_html, unsafe_allow_html=True)
+
+    # ── QUALITATIVE CONTEXT (Portfolio) ──────────────────────
+    has_qual = any(
+        any(v.strip() for v in item.get("qualitative", {}).values())
+        for item in all_results
+    )
+    if has_qual:
+        st.markdown(f'<div class="sec-sm">Strategic Context</div>', unsafe_allow_html=True)
+        for item in all_results:
+            qual = item.get("qualitative", {})
+            if not any(v.strip() for v in qual.values()):
+                continue
+            inp = item["inputs"]
+            lbl = f"{inp['item_number']} - {inp['designation']}" if inp.get("item_number") else inp.get("designation", "Item")
+            st.markdown(f'<div style="font-weight:600;font-size:0.8rem;color:{NAVY};margin:0.6rem 0 0.2rem 0;">{lbl}</div>', unsafe_allow_html=True)
+            st.markdown(build_qualitative_summary(qual), unsafe_allow_html=True)
+
 
 # ── SAVE / LOAD ───────────────────────────────────────────────
 def save_project_json():
@@ -981,11 +1502,11 @@ def main():
     init_state()
 
     # SKF logo (inline SVG for the wordmark)
-    skf_logo_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" height="32"><text x="0" y="30" font-family="Inter,Arial,sans-serif" font-size="32" font-weight="800" fill="white" letter-spacing="4">SKF</text></svg>'
+    skf_logo_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2498 587.1" height="36"><path d="m94.4 294.7c-11.5 0-20.7-11.5-20.7-23v-251c0-9.2 9.2-20.7 20.7-20.7h545.6c9.2 0 20.7 11.5 20.7 20.7v103.6c0 11.5-11.5 23-20.7 23h-177.2c-11.5 0-23-11.5-23-23v-36.8c0-6.9-6.9-13.8-13.8-13.8h-117.5c-6.9 0-16.1 6.9-16.1 13.8v117.4c0 6.9 9.2 16.1 16.1 16.1h402.9c16.1 0 23 6.9 23 20.7v324.6c0 11.5-11.5 20.7-23 20.7h-690.7c-11.4.1-20.7-9.1-20.7-20.5 0-.1 0-.1 0-.2v-177.2c0-11.4 9.2-20.7 20.5-20.7h.2 177.3c11.4 0 20.7 9.2 20.7 20.6v.2 110.5c0 6.9 9.2 13.8 16.1 13.8h264.8c6.9 0 13.8-6.9 13.8-13.8v-191.2c0-6.9-6.9-13.8-13.8-13.8zm787.4-59.9v117.4c0 6.9-6.9 11.5-16.1 16.1-13.8 2.3-20.7 9.2-20.7 20.7v177.3c0 11.4 9.2 20.7 20.5 20.7h.2 214.1c11.4 0 20.7-9.2 20.7-20.6 0-.1 0-.1 0-.2v-195.5c0-2.3 4.6-4.6 6.9-2.3l209.5 214.1c4.6 4.6 6.9 4.6 13.8 4.6h262.5c11.5 0 23-9.2 23-20.7v-177.3c0-11.5-11.5-20.7-23-20.7h-191.1c-4.6 0-6.9 0-9.2-4.6l-142.7-140.4c0-2.3-2.3-2.3 0-4.6l69.1-69.1c2.3-2.3 4.6-2.3 9.2-2.3h193.4c9.2 0 20.7-11.5 20.7-23v-103.7c0-9.2-11.5-20.7-20.7-20.7h-191.1c-6.9 0-9.2 2.3-13.8 6.9l-207.2 211.8c-4.6 2.3-9.2 2.3-9.2-2.3v-195.7c0-9.2-9.2-20.7-20.7-20.7h-214.2c-11.5 0-20.7 11.5-20.7 20.7v177.3c0 11.5 6.9 18.4 18.4 20.7 13.8 4.6 18.4 9.2 18.4 16.1zm844.9 331.6c0 11.5 11.5 20.7 23 20.7h211.8c11.5 0 23-9.2 23-20.7v-175c0-11.5-6.9-20.7-20.7-23-11.5-4.6-16.1-6.9-16.1-16.1v-43.7c0-6.9 6.9-13.8 13.8-13.8h80.6c9.2 0 16.1 6.9 16.1 13.8 0 11.5 11.5 23 20.7 23h177.3c11.5 0 23-11.5 23-23v-103.7c0-11.5-11.5-20.7-23-20.7h-177.2c-9.2 0-20.7 9.2-20.7 20.7 0 6.9-6.9 16.1-16.1 16.1h-80.6c-6.9 0-13.8-9.2-13.8-16.1v-117.4c0-6.9 6.9-13.8 13.8-13.8h227.9c6.9 0 16.1 6.9 16.1 13.8v36.8c0 11.5 9.2 23 20.7 23h251c11.5 0 20.7-11.5 20.7-23v-103.6c0-9.2-9.2-20.7-20.7-20.7h-727.5c-11.5 0-23 11.5-23 20.7v177.3c0 11.5 9.2 18.4 20.7 20.7 9.2 2.3 16.1 9.2 16.1 16.1v117.4c0 6.9-4.6 13.8-16.1 16.1-13.8 2.3-20.7 9.2-20.7 20.7z" fill="white"/></svg>'
     st.markdown(f"""<div class="ib-header">
         <div class="ib-header-left">
             <h1>Landed Cost Comparison Model</h1>
-            <div class="sub">Multi-Item Project-Based Production Cost &amp; Profitability Analysis &middot; v6.0</div>
+            <div class="sub">Multi-Item Project-Based Production Cost &amp; Profitability Analysis &middot; v9.0</div>
         </div>
         <div>{skf_logo_svg}</div>
     </div>""", unsafe_allow_html=True)
@@ -1013,16 +1534,51 @@ The 8-step cost build-up follows standard industrial cost methodology:
 <li>Operating Profit = Net Sales - PS - S&A - Tariff - Duties - Transport</li>
 </ol>
 
+<br><strong style="font-size:0.9rem;">NWC Impact (Optional)</strong><br>
+Net Working Capital impact captures the balance sheet cost of inventory tied up across the supply chain:
+<ul style="margin:0.3rem 0 0.3rem 1.2rem;padding:0;">
+<li><strong>Goods in Transit (GIT)</strong> = (PS x Qty / 365) x Transit Days</li>
+<li><strong>Safety Stock</strong> = (PS x Qty / 365) x Safety Stock Days</li>
+<li><strong>Cycle Stock</strong> = (PS x Qty / 365) x Cycle Stock Days</li>
+<li><strong>Payables (DPO)</strong> = (PS x Qty / 365) x Payment Terms Days &mdash; reduces NWC</li>
+<li><strong>Total NWC</strong> = GIT + Safety Stock + Cycle Stock - Payables</li>
+<li><strong>Delta NWC</strong> = NWC(location) - NWC(base)</li>
+<li><strong>NWC Carrying Cost</strong> = Delta NWC x Cost of Capital (WACC %)</li>
+<li><strong>Adjusted OP</strong> = OP - NWC Carrying Cost per unit</li>
+</ul>
+
+<br><strong style="font-size:0.9rem;">Transfer Investment Analysis</strong><br>
+A separate module evaluates the overall investment rationale for each production transfer:
+<ul style="margin:0.3rem 0 0.3rem 1.2rem;padding:0;">
+<li><strong>Total Investment</strong> = CAPEX + OPEX + Restructuring</li>
+<li><strong>Annual Savings</strong> = NWC-Adjusted Annual OP (alternative) - NWC-Adjusted Annual OP (base)</li>
+<li><strong>NPV</strong> = -Investment + &Sigma; [Annual Savings / (1+r)<sup>t</sup>] over the analysis horizon</li>
+<li><strong>IRR</strong> = Discount rate where NPV = 0 (solved numerically)</li>
+<li><strong>Simple Payback</strong> = Total Investment / Annual Savings</li>
+<li><strong>Discounted Payback</strong> = First year where cumulative discounted cash flow &ge; 0</li>
+</ul>
+Investment inputs are per receiving factory and per item. The discount rate defaults to the Cost of Capital (WACC).
+
 <br><strong style="font-size:0.9rem;">How to Use</strong><br>
-<strong>1.</strong> Configure shared factory assumptions in the matrix (applies to all items)<br>
-<strong>2.</strong> Add items using the Item tabs &mdash; enter item details, net sales, and base costs<br>
-<strong>3.</strong> Optionally override specific costs per factory in the Cost Overrides grid<br>
-<strong>4.</strong> Review results: KPI cards, per-unit tables, full-year impact, and charts<br>
-<strong>5.</strong> Use the Portfolio Summary tab to compare across all items<br>
-<strong>6.</strong> Export to Excel or PDF for distribution<br>
-<strong>7.</strong> Save/Load projects as JSON to resume later
+<strong>1.</strong> Set up the project: name, currency, target market, and date<br>
+<strong>2.</strong> Configure shared factory assumptions in the matrix (applies to all items)<br>
+<strong>3.</strong> Assign factory countries to auto-calculate lead times to target market<br>
+<strong>4.</strong> Set Cost of Capital (WACC %) for NWC and investment discount rate<br>
+<strong>5.</strong> Optionally enter NWC assumptions (safety stock, cycle stock, payment terms) in the collapsible section<br>
+<strong>6.</strong> Add items using the Item tabs &mdash; enter item details, net sales, and base costs<br>
+<strong>7.</strong> Optionally override specific costs per factory in the Cost Overrides grid<br>
+<strong>8.</strong> Review results: KPI cards, per-unit tables, full-year impact, NWC impact, and charts<br>
+<strong>9.</strong> Optionally enter transfer investment costs (CAPEX, OPEX, restructuring) per receiving factory to see NPV, IRR, and payback analysis<br>
+<strong>10.</strong> Use the Portfolio Summary tab to compare across all items with aggregated investment metrics<br>
+<strong>11.</strong> Set the Data Classification (C1&ndash;C4) &mdash; defaults to C3 (Confidential). Appears in footer and exports<br>
+<strong>12.</strong> Optionally provide strategic context (rationale, purpose, risk of inaction, key risks) per item &mdash; these appear in the executive summary and are included in all exports<br>
+<strong>13.</strong> Export to Excel or PDF pitch-book for distribution<br>
+<strong>14.</strong> Save/Load projects as JSON to resume later
 
 <br><br><strong style="font-size:0.9rem;">Changelog</strong><br>
+<span style="color:{GREY_TEXT};">v9.0</span> &mdash; Qualitative strategic context inputs (rationale, purpose, risks); Data Classification (C1&ndash;C4); included in executive summary, portfolio overview, Excel &amp; PDF exports<br>
+<span style="color:{GREY_TEXT};">v8.0</span> &mdash; Transfer Investment Analysis module: CAPEX, OPEX, restructuring inputs per receiving factory; NPV, IRR, payback computation; cumulative cash flow charts; portfolio-level investment summary; Excel &amp; PDF export<br>
+<span style="color:{GREY_TEXT};">v7.0</span> &mdash; NWC (Net Working Capital) impact from goods-in-transit: Cost of Capital input, GIT valuation, delta analysis, adjusted OP/margin across all views, portfolio summary, Excel &amp; PDF exports<br>
 <span style="color:{GREY_TEXT};">v6.0</span> &mdash; IB-grade visual refresh: SKF branding, waterfall cost bridge charts, tornado sensitivity, executive summary narrative, refined typography &amp; table styling, confidentiality footer, pitch-book PDF with cover page &amp; page numbers<br>
 <span style="color:{GREY_TEXT};">v5.0</span> &mdash; Extracted core logic into testable library modules; added sensitivity analysis; expanded lead-time matrix with region-based fallback estimation; added input validation; added 48 unit tests<br>
 <span style="color:{GREY_TEXT};">v4.5</span> &mdash; Fixed CSS class prefix: .st-key- (hyphen) not .stkey_ (underscore); blue input borders now render correctly<br>
@@ -1043,6 +1599,200 @@ For questions, feedback, or feature requests:<br>
 </div>
 """, unsafe_allow_html=True)
 
+    with st.expander("User Guide — How to Read & Use This Model", expanded=False):
+        st.markdown(f"""<div class="guide">
+
+<h2>What This Model Does</h2>
+<p>This model helps you answer a simple but important question: <strong>"If we moved production of a product from Factory&nbsp;A to Factory&nbsp;B, would it be more or less profitable?"</strong></p>
+<p>It calculates the full cost of making and delivering a product from each factory location — including material, labour, tariffs, shipping, and the hidden cost of having money tied up in inventory. It then compares these costs side by side so you can see which location offers the best operating profit.</p>
+<p>If a transfer requires investment (new equipment, project costs, restructuring), the model also calculates whether that investment pays off over time.</p>
+
+<h2>Quick Start (5 Minutes)</h2>
+<ol>
+<li><strong>Tick "Load example data"</strong> at the top to see a pre-filled analysis. This is the fastest way to understand the model.</li>
+<li>Look at the <strong>KPI cards</strong> — they instantly show which factory has the best margin.</li>
+<li>Scroll down to the <strong>tables</strong> — they break down exactly where the cost differences come from.</li>
+<li>Open the <strong>Portfolio Summary</strong> tab to see the combined picture across all items.</li>
+</ol>
+<div class="tip"><strong>Tip:</strong> All fields with a <span style="border-left:3px solid {INPUT_BLUE};padding-left:0.3rem;font-weight:600;color:{INPUT_BLUE};">blue left border</span> are editable inputs. Everything else is calculated automatically. The rightmost column in grey italic text provides guidance on what each field means.</div>
+
+<h2>Step-by-Step Walkthrough</h2>
+
+<h3>Step 1 — Project Setup</h3>
+<p>At the top of the page, fill in the basics:</p>
+<table>
+<tr><th>Field</th><th>What to Enter</th><th>Why It Matters</th></tr>
+<tr><td><strong>Project Name</strong></td><td>A descriptive name, e.g. "Bearing Line Transfer Evaluation"</td><td>Appears on exports and PDF cover page</td></tr>
+<tr><td><strong>Currency</strong></td><td>The reporting currency (SEK, EUR, USD, etc.)</td><td>All cost figures and results are in this currency</td></tr>
+<tr><td><strong>Target Market</strong></td><td>The country/region where the product is sold</td><td>Determines shipping distances and lead times from each factory</td></tr>
+<tr><td><strong>Date</strong></td><td>Analysis date</td><td>For documentation and version tracking</td></tr>
+</table>
+
+<h3>Step 2 — Factory Configuration</h3>
+<p>This is where you set up the factories you want to compare. These settings apply to <strong>all items</strong> in the project.</p>
+
+<p><strong>Number of Comparison Factories:</strong> How many alternative factories to compare against the base case (1–6).</p>
+
+<p><strong>Base Factory Name:</strong> The "as-is" factory — the one currently producing the item. All comparisons are measured against this baseline.</p>
+
+<p><strong>Cost of Capital (WACC %):</strong> Your company's weighted average cost of capital. This is used to calculate the financial cost of tying up money in inventory and as the discount rate for investment analysis.</p>
+<div class="tip"><strong>Don't know your WACC?</strong> Ask Finance. A typical industrial company might use 8–12%. The default is 8%. If unsure, leave it at the default — you can always change it later and the model will recalculate instantly.</div>
+
+<h3>Step 3 — Factory Locations</h3>
+<p>Assign each factory to a country. The model uses this to automatically look up shipping lead times to your target market. For example, if your target market is the USA and a factory is in China, the model knows that sea freight takes roughly 35 days.</p>
+
+<h3>Step 4 — Assumptions Matrix</h3>
+<p>This is the core configuration. Each row represents a cost factor, and each column is a factory. Here's what each row means in plain language:</p>
+<table>
+<tr><th>Row</th><th>What It Is</th><th>Plain English</th></tr>
+<tr><td><span class="term">VA Ratio</span></td><td>Value-Added cost multiplier</td><td>How much cheaper or more expensive is labour and manufacturing at this location compared to the base? A ratio of 0.7 means labour costs are 30% lower. The base factory is always 1.0 (itself). <em>This is typically the biggest driver of cost differences.</em></td></tr>
+<tr><td><span class="term">PS Index</span></td><td>Price Standard Index</td><td>A multiplier that converts the factory's standard cost into its transfer price. Typically close to 1.0 (e.g. 1.03 means a 3% markup). Accounts for factory overhead allocation.</td></tr>
+<tr><td><span class="term">MCL %</span></td><td>Manufacturing Cost Loading</td><td>The percentage applied to PS to get the "actual cost" — what the product truly costs to make (including variances). Shown for reference only; does not affect profit calculations.</td></tr>
+<tr><td><span class="term">S&A %</span></td><td>Selling & Administrative</td><td>Overhead costs (sales force, admin, marketing) as a percentage of the product's selling price. Typically 3–5%.</td></tr>
+<tr><td><span class="term">TPL</span></td><td>Transfer Price Level</td><td>The base for tariff and duty calculations. Usually 100 (meaning tariffs apply to 100% of the transfer price). Adjust if tariffs apply to a different base.</td></tr>
+<tr><td><span class="term">Tariff %</span></td><td>Import tariff rate</td><td>The tariff percentage charged when goods cross borders. Set to 0 for same-region transfers (e.g. within the EU).</td></tr>
+<tr><td><span class="term">Duties %</span></td><td>Import duties rate</td><td>Additional import duties beyond tariffs. Set to 0 if not applicable.</td></tr>
+<tr><td><span class="term">Transport %</span></td><td>Transportation cost</td><td>Shipping cost as a percentage of the transfer price. Higher for overseas factories, lower for nearby ones.</td></tr>
+</table>
+<div class="warn"><strong>The base factory's VA Ratio is always blank</strong> — this is intentional. The base case uses actual costs directly. Only comparison factories need a VA Ratio to scale their costs relative to the base.</div>
+
+<h3>Step 5 — NWC Assumptions (Optional)</h3>
+<p>Click to expand this section if you want to account for the cost of money tied up in inventory. This is optional but recommended for overseas transfers where inventory levels differ significantly.</p>
+<table>
+<tr><th>Row</th><th>What It Is</th><th>Plain English</th></tr>
+<tr><td><span class="term">Safety Stock Days</span></td><td>Buffer inventory</td><td>Extra inventory held "just in case" of supply disruptions. A factory further away or less reliable may need more safety stock (e.g. 21 days vs. 14 days).</td></tr>
+<tr><td><span class="term">Cycle Stock Days</span></td><td>Production batch inventory</td><td>Average inventory from production batches. Larger, less frequent batches mean more days of stock sitting in the warehouse.</td></tr>
+<tr><td><span class="term">Payment Terms (DPO)</span></td><td>How long until you pay suppliers</td><td>Days Payable Outstanding — how many days of credit your suppliers give you. Longer payment terms are <em>good</em> because they reduce the money you have tied up. A factory in a region with longer payment norms will show a benefit here.</td></tr>
+</table>
+<div class="example"><strong>Example:</strong> Factory A (Sweden) has 14 days safety stock, 10 days cycle stock, and 30-day payment terms. Factory C (China) needs 21 days safety stock (longer supply chain), 15 days cycle stock (larger batches), but gets 45-day payment terms. The model calculates the net difference and applies the cost of capital to determine the annual carrying cost.</div>
+
+<h3>Step 6 — Item Details</h3>
+<p>Switch to the <strong>Item tabs</strong>. Each tab represents one product (SKU) you want to analyse. Enter:</p>
+<table>
+<tr><th>Field</th><th>What to Enter</th><th>Example</th></tr>
+<tr><td><strong>Item Number</strong></td><td>The product's SKU or part number</td><td>1001</td></tr>
+<tr><td><strong>Designation</strong></td><td>Product name or description</td><td>Bearing Assembly XR-200</td></tr>
+<tr><td><strong>Destination</strong></td><td>Where this product is shipped to</td><td>Northern Europe</td></tr>
+<tr><td><strong>Net Sales (Total Value)</strong></td><td>Total annual revenue from this product (in your chosen currency)</td><td>121,280,000</td></tr>
+<tr><td><strong>Net Sales (Quantity)</strong></td><td>Total annual units sold</td><td>2,570,000</td></tr>
+<tr><td><strong>Material</strong></td><td>Material cost per unit at the base factory</td><td>18.96</td></tr>
+<tr><td><strong>Variable VA</strong></td><td>Variable value-added cost per unit (direct labour, energy, etc.)</td><td>2.26</td></tr>
+<tr><td><strong>Fixed VA</strong></td><td>Fixed value-added cost per unit (depreciation, supervision, etc.)</td><td>2.57</td></tr>
+</table>
+<div class="tip"><strong>Where do I find these numbers?</strong> Material, Variable VA, and Fixed VA typically come from your ERP system's standard cost breakdown (e.g. SAP cost component split). Net Sales comes from the sales plan or budget. Ask your controller or finance business partner if you're not sure.</div>
+
+<p><strong>Cost Overrides (Optional):</strong> If a specific factory uses different raw materials or has a known cost that doesn't follow the VA Ratio pattern, you can override individual cost components per factory. Leave blank to use the standard calculation.</p>
+
+<h3>Step 7 — Reading the Results</h3>
+<p>Once you enter the data, results appear automatically:</p>
+
+<p><strong>Executive Summary</strong> — A one-paragraph narrative that tells you the headline finding: which factory is best, by how much, and whether the NWC impact changes the conclusion.</p>
+
+<p><strong>KPI Cards</strong> — At a glance, see the operating margin for each factory and how they rank.</p>
+
+<p><strong>Per Unit Cost Table</strong> — Shows exactly how costs build up from raw material to operating profit for each factory, line by line. Look at the bottom rows for the key comparison:</p>
+<ul>
+<li><span class="term">Operating Margin</span> — profit as a percentage of sales. Higher is better.</li>
+<li><span class="term">Delta Margin vs. Base</span> — the difference in margin compared to the base factory. <span style="color:{GREEN};">Green = better</span>, <span style="color:{RED};">red = worse</span>.</li>
+<li><span class="term">Adj. Operating Margin</span> — the margin after accounting for NWC (inventory capital) costs. This is the "true" comparison.</li>
+</ul>
+
+<p><strong>Full Year Impact Table</strong> — The same comparison but in absolute annual currency terms. This shows the real money at stake.</p>
+
+<h3>Step 8 — Charts & Deeper Analysis</h3>
+<p><strong>Cost Bridge (Waterfall)</strong> — click to expand. Shows how each cost element contributes from Net Sales down to Operating Profit. Useful for presentations.</p>
+<p><strong>Sensitivity Analysis</strong> — click to expand. "What if the VA Ratio is higher or lower than expected?" — this chart shows how sensitive the conclusion is to changes in key assumptions. The tornado chart shows which factors have the biggest impact.</p>
+
+<h3>Step 9 — Transfer Investment Analysis</h3>
+<p>Click <strong>"Transfer Investment Analysis"</strong> to expand this section. This is where you evaluate whether the savings justify the upfront cost of transferring production.</p>
+<table>
+<tr><th>Field</th><th>What It Is</th><th>Example</th></tr>
+<tr><td><span class="term">CAPEX</span></td><td>Capital expenditure — new tooling, equipment, or production lines needed at the receiving factory</td><td>8,000,000</td></tr>
+<tr><td><span class="term">OPEX</span></td><td>One-time project costs — engineering, qualification, testing, travel, process validation</td><td>2,500,000</td></tr>
+<tr><td><span class="term">Restructuring</span></td><td>Costs at the sending factory — severance, decommissioning, early lease termination</td><td>1,500,000</td></tr>
+<tr><td><span class="term">Analysis Horizon</span></td><td>How many years to evaluate the investment over (typically 5–10 years)</td><td>10</td></tr>
+</table>
+<p>The model calculates:</p>
+<ul>
+<li><span class="term">NPV</span> (Net Present Value) — Is the transfer worth it? A <span style="color:{GREEN};">positive NPV</span> means the savings exceed the investment (accounting for the time value of money). A <span style="color:{RED};">negative NPV</span> means it doesn't pay off within the horizon.</li>
+<li><span class="term">IRR</span> (Internal Rate of Return) — What "interest rate" does the investment earn? Compare this to your WACC: if IRR > WACC, the investment creates value. Higher IRR = more attractive.</li>
+<li><span class="term">Simple Payback</span> — How many years until the cumulative savings equal the investment? Ignores the time value of money. Quick gut-check metric.</li>
+<li><span class="term">Discounted Payback</span> — Same as simple payback but accounts for the time value of money. Always longer than simple payback. More accurate.</li>
+</ul>
+<div class="example"><strong>Example:</strong> A transfer to Factory C costs 12M total (CAPEX 8M + OPEX 2.5M + Restructuring 1.5M) but saves 5M per year in adjusted operating profit. The NPV over 10 years at 8% WACC is positive (~18.5M), the IRR is ~38%, and payback is 2.4 years. This is a strong investment case.</div>
+
+<h3>Step 10 — Strategic Context & Qualitative Assessment</h3>
+<p>Click <strong>"Strategic Context & Qualitative Assessment"</strong> to expand this section. This is where you document the <em>why</em> behind the transfer analysis — the strategic reasoning that goes beyond the numbers.</p>
+<table>
+<tr><th>Field</th><th>What to Enter</th><th>Example</th></tr>
+<tr><td><strong>Strategic Rationale</strong></td><td>Why is this transfer being considered? What strategic objective does it serve?</td><td>"Diversify manufacturing footprint to reduce single-source risk and improve cost competitiveness in growth markets."</td></tr>
+<tr><td><strong>Purpose & Objective</strong></td><td>The specific goal of this evaluation</td><td>"Annual sourcing review for high-volume bearing line as part of 2026 footprint optimisation."</td></tr>
+<tr><td><strong>Risk of Inaction</strong></td><td>What happens if we do nothing?</td><td>"Continued 2-3pp annual margin erosion. Single-source risk limits growth in Americas."</td></tr>
+<tr><td><strong>Key Risks</strong></td><td>Main risks of proceeding with the transfer</td><td>"6-12 month quality ramp-up. Customer re-approval needed for automotive OEM accounts."</td></tr>
+</table>
+<div class="tip"><strong>Why does this matter?</strong> Numbers alone rarely tell the full story. Decision-makers need to understand the strategic context, the urgency, and the risks. This section ensures that the qualitative reasoning is captured alongside the quantitative analysis in a single document — making your business case complete.</div>
+
+<h3>Step 11 — Portfolio Summary</h3>
+<p>The last tab shows the combined picture across all items. This is what you present to leadership:</p>
+<ul>
+<li>Total annual profit by factory location</li>
+<li>Aggregated NWC impact</li>
+<li>Combined investment metrics (NPV, IRR, payback) across all items</li>
+<li>Strategic context for each item (if provided)</li>
+</ul>
+
+<h3>Step 12 — Export & Share</h3>
+<ul>
+<li><strong>Excel</strong> — Full data export with all tables and investment analysis. Good for further analysis or feeding into other models.</li>
+<li><strong>PDF</strong> — A formatted pitch-book with cover page, per-item analysis, and portfolio summary. Ready for management presentations.</li>
+<li><strong>Save Project (JSON)</strong> — Saves all your inputs so you can reload and continue later.</li>
+</ul>
+
+<h2>Glossary of Key Terms</h2>
+<table>
+<tr><th>Term</th><th>Definition</th></tr>
+<tr><td><span class="term">SC</span></td><td><strong>Standard Cost</strong> — Material + Variable VA + Fixed VA. The basic cost of making one unit.</td></tr>
+<tr><td><span class="term">VA</span></td><td><strong>Value Added</strong> — The cost of converting raw materials into a finished product: labour, energy, depreciation, overhead.</td></tr>
+<tr><td><span class="term">VA Ratio</span></td><td>A multiplier that adjusts the VA costs to a different factory's cost level. 0.7 = 30% cheaper, 1.2 = 20% more expensive.</td></tr>
+<tr><td><span class="term">PS</span></td><td><strong>Price Standard</strong> — The internal transfer price. What one factory "charges" another for the product. Calculated as SC &times; PS Index.</td></tr>
+<tr><td><span class="term">MCL</span></td><td><strong>Manufacturing Cost Loading</strong> — Adjusts PS to show actual cost (including production variances). Informational only.</td></tr>
+<tr><td><span class="term">S&A</span></td><td><strong>Selling & Administrative</strong> — Overhead costs not tied to manufacturing: sales teams, offices, marketing. Applied as a % of Net Sales.</td></tr>
+<tr><td><span class="term">OP</span></td><td><strong>Operating Profit</strong> — Revenue minus all costs. The bottom line for each factory location.</td></tr>
+<tr><td><span class="term">OM</span></td><td><strong>Operating Margin</strong> — OP divided by Net Sales, expressed as a percentage. The key comparison metric.</td></tr>
+<tr><td><span class="term">GIT</span></td><td><strong>Goods in Transit</strong> — The value of inventory currently being shipped. Longer shipping routes = more capital tied up.</td></tr>
+<tr><td><span class="term">NWC</span></td><td><strong>Net Working Capital</strong> — Total inventory capital tied up (goods in transit + safety stock + cycle stock, minus supplier credit).</td></tr>
+<tr><td><span class="term">DPO</span></td><td><strong>Days Payable Outstanding</strong> — How many days of credit your suppliers give you. Longer = less cash tied up = good.</td></tr>
+<tr><td><span class="term">WACC</span></td><td><strong>Weighted Average Cost of Capital</strong> — The company's blended cost of debt and equity financing. Used as the discount rate.</td></tr>
+<tr><td><span class="term">CAPEX</span></td><td><strong>Capital Expenditure</strong> — Spending on physical assets: tooling, machines, production lines.</td></tr>
+<tr><td><span class="term">OPEX</span></td><td><strong>Operational Expenditure</strong> — One-time project costs: engineering hours, qualification, testing.</td></tr>
+<tr><td><span class="term">NPV</span></td><td><strong>Net Present Value</strong> — The total value of an investment in today's money. Positive = value-creating, negative = value-destroying.</td></tr>
+<tr><td><span class="term">IRR</span></td><td><strong>Internal Rate of Return</strong> — The annualised return the investment earns. Compare to WACC: IRR &gt; WACC means the investment is worthwhile.</td></tr>
+<tr><td><span class="term">Payback</span></td><td>How many years until cumulative savings equal the initial investment. Shorter = less risky.</td></tr>
+<tr><td><span class="term">C1&ndash;C4</span></td><td><strong>Data Classification</strong> &mdash; C1 (Public), C2 (Internal), C3 (Confidential), C4 (Strictly Confidential). Determines handling requirements. Most analyses default to C3.</td></tr>
+</table>
+
+<h2>Frequently Asked Questions</h2>
+
+<h3>Where do I get the input data?</h3>
+<p>Talk to your <strong>Finance Business Partner</strong> or <strong>Controller</strong>. They can provide standard cost breakdowns (Material, Variable VA, Fixed VA) from the ERP system (typically SAP cost component splits). Net Sales data comes from the sales plan or budget. Tariff rates come from Trade Compliance. VA Ratios may come from a previous benchmarking study or from Industrial Engineering.</p>
+
+<h3>What if I don't know the exact VA Ratio?</h3>
+<p>Start with a rough estimate. Use the <strong>Sensitivity Analysis</strong> to see how much the conclusion changes if the VA Ratio is 10–20% higher or lower. If the conclusion is the same across a wide range, you have a robust answer. If it flips, you need a more precise estimate.</p>
+
+<h3>Should I include NWC and investment analysis?</h3>
+<p>For a quick first look, the basic cost comparison (without NWC or investment) is sufficient. Add NWC assumptions when you're comparing factories with significantly different lead times or inventory policies. Add investment analysis when a transfer requires real money to execute and you need to justify it to leadership.</p>
+
+<h3>What does a negative NPV mean?</h3>
+<p>It means the investment <em>does not pay off</em> within the analysis horizon at the given discount rate. The annual savings are not large enough to justify the upfront costs. Consider: (a) extending the horizon, (b) reducing the investment, (c) finding additional savings, or (d) deciding not to transfer.</p>
+
+<h3>Can I compare more than one item?</h3>
+<p>Yes — click <strong>"Add Item"</strong> to add more products. Each item gets its own tab. The <strong>Portfolio Summary</strong> tab aggregates everything across all items, showing the combined profit impact and investment case.</p>
+
+<h3>How do I share my analysis?</h3>
+<p>Use <strong>Export PDF</strong> for a polished pitch-book suitable for management presentations. Use <strong>Export Excel</strong> for detailed data that others can review or extend. Use <strong>Save Project</strong> to save your inputs as a JSON file that can be reloaded later.</p>
+
+</div>""", unsafe_allow_html=True)
+
     st.markdown(f'<div class="callout" style="font-size:0.72rem;"><span style="border-left:3px solid {INPUT_BLUE};padding-left:0.35rem;font-weight:600;color:{INPUT_BLUE};">Blue border</span> = editable input fields &nbsp;&middot;&nbsp; <span style="font-weight:600;color:{DARK_TEXT};">Output tables</span> = calculated results (read-only) &nbsp;&middot;&nbsp; <span style="color:{GREY_TEXT};font-style:italic;">Grey italic</span> = guidance notes</div>', unsafe_allow_html=True)
 
     ex = st.checkbox("Load example data", value=st.session_state.ex)
@@ -1051,7 +1801,7 @@ For questions, feedback, or feature requests:<br>
     # ── PROJECT HEADER ────────────────────────────────────────
     st.markdown('<div class="sec">Project Setup</div>', unsafe_allow_html=True)
 
-    pc1, pc2, pc3, pc4, pc5 = st.columns([2, 1, 1, 1, 2])
+    pc1, pc2, pc3, pc4, pc4b, pc5 = st.columns([2, 1, 1, 1, 1, 2])
     with pc1:
         proj_df = pd.DataFrame({"Project Name": [st.session_state.project_name]})
         edited_proj = st.data_editor(proj_df, use_container_width=True, num_rows="fixed",
@@ -1080,6 +1830,16 @@ For questions, feedback, or feature requests:<br>
         edited_dt = st.data_editor(dt_df, use_container_width=True, num_rows="fixed",
             key="proj_dt", hide_index=True,
             column_config={"Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY", width=130)})
+
+    with pc4b:
+        DATA_CLASSES = ["C1 - Public", "C2 - Internal", "C3 - Confidential", "C4 - Strictly Confidential"]
+        dc_df = pd.DataFrame({"Data Classification": ["C3 - Confidential"]})
+        edited_dc = st.data_editor(dc_df, use_container_width=True, num_rows="fixed",
+            key="proj_dc", hide_index=True,
+            column_config={"Data Classification": st.column_config.SelectboxColumn(
+                "Data Classification", options=DATA_CLASSES, width=180)})
+        data_classification = str(edited_dc.loc[0, "Data Classification"] or "C3 - Confidential")
+        st.session_state["data_classification"] = data_classification
 
     with pc5:
         sc1, sc2 = st.columns(2)
@@ -1112,12 +1872,22 @@ For questions, feedback, or feature requests:<br>
     num_factories = max(1, min(6, int(edited_fc.loc[0, "Comparison Factories"])))
     st.session_state["num_fac"] = num_factories
 
-    # Base factory name
-    bf_df = pd.DataFrame({"Base Factory Name": [EX_BASE.name if ex else "Base Case"]})
-    edited_bf = st.data_editor(bf_df, use_container_width=False, num_rows="fixed",
-        key="bf_editor", hide_index=True,
-        column_config={"Base Factory Name": st.column_config.TextColumn("Base Factory Name", width=250)})
-    base_factory_name = str(edited_bf.loc[0, "Base Factory Name"] or "Base Case")
+    # Base factory name + Cost of Capital
+    bf_col1, bf_col2 = st.columns([2, 1])
+    with bf_col1:
+        bf_df = pd.DataFrame({"Base Factory Name": [EX_BASE.name if ex else "Base Case"]})
+        edited_bf = st.data_editor(bf_df, use_container_width=False, num_rows="fixed",
+            key="bf_editor", hide_index=True,
+            column_config={"Base Factory Name": st.column_config.TextColumn("Base Factory Name", width=250)})
+        base_factory_name = str(edited_bf.loc[0, "Base Factory Name"] or "Base Case")
+    with bf_col2:
+        coc_df = pd.DataFrame({"Cost of Capital (WACC %)": [8.0 if ex else 8.0]})
+        edited_coc = st.data_editor(coc_df, use_container_width=False, num_rows="fixed",
+            key="coc_editor", hide_index=True,
+            column_config={"Cost of Capital (WACC %)": st.column_config.NumberColumn(
+                "Cost of Capital (WACC %)", min_value=0.0, max_value=30.0, step=0.5, format="%.1f", width=200)})
+        cost_of_capital = float(edited_coc.loc[0, "Cost of Capital (WACC %)"] or 0.0) / 100.0
+        st.session_state["cost_of_capital"] = cost_of_capital
 
     # Factory country assignment
     st.markdown('<div class="sec-sm">Factory Locations</div>', unsafe_allow_html=True)
@@ -1234,6 +2004,56 @@ For questions, feedback, or feature requests:<br>
         lt_html += '</tbody></table>'
         st.markdown(lt_html, unsafe_allow_html=True)
 
+    # ── NWC ASSUMPTIONS (Optional) ──────────────────────────
+    all_factory_names_nwc = [base_factory_name] + factory_col_names
+    with st.expander("NWC Assumptions (Optional)", expanded=False):
+        st.markdown(f'<div class="callout">Optional inputs for extended NWC analysis. Leave blank or zero to exclude. All values in <strong>days</strong>. Applies to all items.</div>', unsafe_allow_html=True)
+        NWC_ROWS = ["Safety Stock Days", "Cycle Stock Days", "Payment Terms (DPO) Days"]
+        NWC_GUIDES = [
+            "Buffer inventory held as safety margin (days of supply)",
+            "Average production cycle inventory (days of supply)",
+            "Supplier payment terms - longer DPO reduces NWC (days)",
+        ]
+        nwc_cols = {}
+        for fn_ in all_factory_names_nwc:
+            if ex:
+                # Example data: base has moderate values, others vary
+                if fn_ == base_factory_name:
+                    nwc_cols[fn_] = [14.0, 10.0, 30.0]
+                elif "Asia" in fn_ or "China" in str(factory_countries.get(fn_, "")):
+                    nwc_cols[fn_] = [21.0, 15.0, 45.0]
+                elif "Americas" in fn_ or "USA" in str(factory_countries.get(fn_, "")):
+                    nwc_cols[fn_] = [14.0, 12.0, 35.0]
+                else:
+                    nwc_cols[fn_] = [14.0, 10.0, 30.0]
+            else:
+                nwc_cols[fn_] = [None, None, None]
+        nwc_cols["Guide"] = NWC_GUIDES
+        nwc_df = pd.DataFrame(nwc_cols, index=NWC_ROWS)
+
+        edited_nwc = st.data_editor(
+            nwc_df, use_container_width=True, num_rows="fixed", key="nwc_matrix",
+            column_config={
+                **{fn_: st.column_config.NumberColumn(fn_, format="%.0f", min_value=0, max_value=365) for fn_ in all_factory_names_nwc},
+                "Guide": st.column_config.TextColumn("Guide", width=320, disabled=True),
+            },
+            disabled=["Guide"])
+
+    # Extract NWC assumptions per factory
+    nwc_assumptions = {}
+    for fn_ in all_factory_names_nwc:
+        def _nwc_val(row_name, col_name):
+            v = edited_nwc.loc[row_name, col_name]
+            if v is not None and not pd.isna(v):
+                return float(v)
+            return 0.0
+        nwc_assumptions[fn_] = {
+            "safety_stock_days": _nwc_val("Safety Stock Days", fn_),
+            "cycle_stock_days": _nwc_val("Cycle Stock Days", fn_),
+            "payment_terms_days": _nwc_val("Payment Terms (DPO) Days", fn_),
+        }
+    base_nwc = nwc_assumptions.get(base_factory_name, {})
+
     # Build factory objects
     base = FactoryAssumptions(
         name=base_factory_name, country=factory_countries.get(base_factory_name, ""), va_ratio=None,
@@ -1289,20 +2109,53 @@ For questions, feedback, or feature requests:<br>
                 inputs = item_data["inputs"]
                 get_ov = item_data["get_ov"]
 
+                # Resolve lead times for NWC calculation
+                base_country = factory_countries.get(base_factory_name, "")
+                base_lt = estimate_lead_time(base_country, target_market) if target_market else None
+
                 results = []
-                br = compute_location(inputs, base, is_base=True)
+                br = compute_location(inputs, base, is_base=True,
+                    lead_time_days=base_lt, base_lead_time_days=base_lt,
+                    cost_of_capital=cost_of_capital,
+                    safety_stock_days=base_nwc.get("safety_stock_days", 0),
+                    base_safety_stock_days=base_nwc.get("safety_stock_days", 0),
+                    cycle_stock_days=base_nwc.get("cycle_stock_days", 0),
+                    base_cycle_stock_days=base_nwc.get("cycle_stock_days", 0),
+                    payment_terms_days=base_nwc.get("payment_terms_days", 0),
+                    base_payment_terms_days=base_nwc.get("payment_terms_days", 0))
                 if br: results.append(br)
                 for f in factories:
                     if f.name:
                         ov = get_ov(f.name)
-                        r = compute_location(inputs, f, overrides=ov)
+                        f_lt = estimate_lead_time(f.country, target_market) if target_market and f.country else None
+                        f_nwc = nwc_assumptions.get(f.name, {})
+                        r = compute_location(inputs, f, overrides=ov,
+                            lead_time_days=f_lt, base_lead_time_days=base_lt,
+                            cost_of_capital=cost_of_capital,
+                            safety_stock_days=f_nwc.get("safety_stock_days", 0),
+                            base_safety_stock_days=base_nwc.get("safety_stock_days", 0),
+                            cycle_stock_days=f_nwc.get("cycle_stock_days", 0),
+                            base_cycle_stock_days=base_nwc.get("cycle_stock_days", 0),
+                            payment_terms_days=f_nwc.get("payment_terms_days", 0),
+                            base_payment_terms_days=base_nwc.get("payment_terms_days", 0))
                         if r: results.append(r)
 
                 if results:
+                    # Qualitative data from session state (persisted from text_area widgets)
+                    qual_from_state = {
+                        key: st.session_state.get(f"i{item_def['id']}_qual_{key}", "")
+                        for key in ("strategic_rationale", "purpose", "risk_of_inaction", "risks")
+                    }
+
                     # Executive summary narrative
                     exec_html = build_exec_summary(results, inputs, currency)
                     if exec_html:
                         st.markdown(exec_html, unsafe_allow_html=True)
+
+                    # Strategic context (qualitative inputs)
+                    qual_html = build_qualitative_summary(qual_from_state)
+                    if qual_html:
+                        st.markdown(qual_html, unsafe_allow_html=True)
 
                     # KPI cards
                     bom = results[0]["om"]
@@ -1375,20 +2228,209 @@ For questions, feedback, or feature requests:<br>
                         )
                         st.plotly_chart(fig_sa, use_container_width=True, config={"displayModeBar": False})
 
+                    # ── TRANSFER INVESTMENT ANALYSIS ──────────────────
+                    inv_results = []
+                    if len(results) >= 2:
+                        with st.expander("Transfer Investment Analysis", expanded=False):
+                            st.markdown(f'<div class="callout">Evaluate the investment rationale for transferring production. Enter one-time costs per receiving factory. Annual savings are derived from the NWC-adjusted OP delta vs. base. Leave blank or zero if no investment is required.</div>', unsafe_allow_html=True)
+
+                            inv_c1, inv_c2 = st.columns([1, 1])
+                            with inv_c1:
+                                inv_horizon_df = pd.DataFrame({"Analysis Horizon (Years)": [10]})
+                                edited_hz = st.data_editor(inv_horizon_df, use_container_width=False, num_rows="fixed",
+                                    key=f"i{item_def['id']}_inv_hz", hide_index=True,
+                                    column_config={"Analysis Horizon (Years)": st.column_config.NumberColumn(
+                                        "Analysis Horizon (Years)", min_value=1, max_value=30, step=1, format="%d", width=200)})
+                                inv_horizon = max(1, min(30, int(edited_hz.loc[0, "Analysis Horizon (Years)"] or 10)))
+                            with inv_c2:
+                                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};padding-top:0.6rem;">Discount rate uses Cost of Capital (WACC): <strong>{cost_of_capital*100:.1f}%</strong></div>', unsafe_allow_html=True)
+
+                            alt_names = [r["name"] for r in results[1:]]
+                            INV_ROWS = ["CAPEX (Tooling / Equipment)", "OPEX (Project / Qualification)", "Restructuring (Sending Site)"]
+                            inv_cols = {}
+                            for an in alt_names:
+                                if ex:
+                                    if "Asia" in an or "China" in str(factory_countries.get(an, "")):
+                                        inv_cols[an] = [8_000_000.0, 2_500_000.0, 1_500_000.0]
+                                    elif "Americas" in an or "USA" in str(factory_countries.get(an, "")):
+                                        inv_cols[an] = [5_000_000.0, 1_800_000.0, 1_000_000.0]
+                                    else:
+                                        inv_cols[an] = [3_000_000.0, 1_000_000.0, 500_000.0]
+                                else:
+                                    inv_cols[an] = [None, None, None]
+                            inv_cols["Guide"] = [
+                                f"Capital expenditure for tooling / equipment at receiving site ({currency})",
+                                f"One-time project, transfer, qualification costs ({currency})",
+                                f"Restructuring / severance costs at sending site ({currency})",
+                            ]
+                            inv_df = pd.DataFrame(inv_cols, index=INV_ROWS)
+
+                            edited_inv = st.data_editor(
+                                inv_df, use_container_width=True, num_rows="fixed",
+                                key=f"i{item_def['id']}_inv_matrix",
+                                column_config={
+                                    **{an: st.column_config.NumberColumn(an, format="%,.0f", min_value=0) for an in alt_names},
+                                    "Guide": st.column_config.TextColumn("Guide", width=380, disabled=True),
+                                },
+                                disabled=["Guide"])
+
+                            # Compute investment cases
+                            base_adj_annual_op = results[0].get("annual_adj_op", results[0]["annual_op"])
+                            for alt_r in results[1:]:
+                                an = alt_r["name"]
+                                def _inv_val(row_name, col_name):
+                                    v = edited_inv.loc[row_name, col_name]
+                                    if v is not None and not pd.isna(v):
+                                        return float(v)
+                                    return 0.0
+                                capex = _inv_val("CAPEX (Tooling / Equipment)", an)
+                                opex = _inv_val("OPEX (Project / Qualification)", an)
+                                restr = _inv_val("Restructuring (Sending Site)", an)
+                                annual_savings = alt_r.get("annual_adj_op", alt_r["annual_op"]) - base_adj_annual_op
+
+                                inv_case = compute_investment_case(
+                                    annual_savings=annual_savings,
+                                    capex=capex, opex=opex, restructuring=restr,
+                                    discount_rate=cost_of_capital,
+                                    horizon_years=inv_horizon,
+                                )
+                                inv_case["factory_name"] = an
+                                inv_results.append(inv_case)
+
+                            # Display investment results table
+                            has_any_inv = any(ic["total_investment"] > 0 or ic["annual_savings"] != 0 for ic in inv_results)
+                            if has_any_inv:
+                                dash = "\u2013"
+                                inv_hdr = "".join(f'<th>{ic["factory_name"]}</th>' for ic in inv_results)
+                                inv_html = f'<table class="ib-table"><thead><tr><th>Transfer Investment ({currency})</th>{inv_hdr}</tr></thead><tbody>'
+
+                                def _inv_row(lbl, vals, cls=""):
+                                    cells = "".join(f'<td>{v}</td>' for v in vals)
+                                    return f'<tr class="{cls}"><td>{lbl}</td>{cells}</tr>'
+
+                                inv_html += _inv_row("CAPEX", [fi(ic["capex"], dz=True) for ic in inv_results])
+                                inv_html += _inv_row("OPEX", [fi(ic["opex"], dz=True) for ic in inv_results])
+                                inv_html += _inv_row("Restructuring", [fi(ic["restructuring"], dz=True) for ic in inv_results])
+                                inv_html += _inv_row("Total Investment", [fi(ic["total_investment"], dz=False) for ic in inv_results], "row-subtotal")
+
+                                inv_html += f'<tr class="row-separator">{"<td></td>" * (len(inv_results)+1)}</tr>'
+                                inv_html += _inv_row("Annual Savings (Adj. OP Delta)", [fi(ic["annual_savings"], acct=True, dz=False) for ic in inv_results])
+                                inv_html += _inv_row(f"Analysis Horizon", [f"{ic['horizon_years']} years" for ic in inv_results])
+                                inv_html += _inv_row(f"Discount Rate (WACC)", [fp(ic['discount_rate'], 1, dz=False) for ic in inv_results])
+
+                                inv_html += f'<tr class="row-separator">{"<td></td>" * (len(inv_results)+1)}</tr>'
+
+                                # NPV with color coding
+                                npv_cells = ""
+                                for ic in inv_results:
+                                    cls = f"delta-pos" if ic["npv"] > 0 else (f"delta-neg" if ic["npv"] < 0 else "")
+                                    npv_cells += f'<td class="{cls}"><strong>{fi(ic["npv"], acct=True, dz=False)}</strong></td>'
+                                inv_html += f'<tr class="row-bold"><td><strong>NPV</strong></td>{npv_cells}</tr>'
+
+                                # IRR
+                                irr_cells = ""
+                                for ic in inv_results:
+                                    if ic["irr"] is not None:
+                                        cls = "delta-pos" if ic["irr"] > cost_of_capital else "delta-neg"
+                                        irr_cells += f'<td class="{cls}"><strong>{ic["irr"]*100:.1f}%</strong></td>'
+                                    else:
+                                        irr_cells += f'<td>{dash}</td>'
+                                inv_html += f'<tr class="row-bold"><td><strong>IRR</strong></td>{irr_cells}</tr>'
+
+                                # Payback
+                                pb_cells = ""
+                                for ic in inv_results:
+                                    if ic["simple_payback"] is not None:
+                                        cls = "delta-pos" if ic["simple_payback"] <= inv_horizon else "delta-neg"
+                                        pb_cells += f'<td class="{cls}">{ic["simple_payback"]:.1f} years</td>'
+                                    else:
+                                        pb_cells += f'<td>{dash}</td>'
+                                inv_html += f'<tr class="row-bold"><td>Simple Payback</td>{pb_cells}</tr>'
+
+                                dpb_cells = ""
+                                for ic in inv_results:
+                                    if ic["discounted_payback"] is not None:
+                                        cls = "delta-pos" if ic["discounted_payback"] <= inv_horizon else "delta-neg"
+                                        dpb_cells += f'<td class="{cls}">{ic["discounted_payback"]:.1f} years</td>'
+                                    else:
+                                        dpb_cells += f'<td>{dash}</td>'
+                                inv_html += f'<tr class="row-bold"><td>Discounted Payback</td>{dpb_cells}</tr>'
+
+                                inv_html += '</tbody></table>'
+                                st.markdown(inv_html, unsafe_allow_html=True)
+
+                                # Cumulative cash flow chart
+                                fig_cf = go.Figure()
+                                colors_cycle = [ACCENT_BLUE, GREEN, RED, "#e67e22", "#8e44ad", NAVY]
+                                for ci, ic in enumerate(inv_results):
+                                    if ic["total_investment"] > 0 or ic["annual_savings"] != 0:
+                                        years = list(range(inv_horizon + 1))
+                                        color = colors_cycle[ci % len(colors_cycle)]
+                                        fig_cf.add_trace(go.Scatter(
+                                            x=years, y=ic["cumulative_cf"],
+                                            mode="lines+markers", name=ic["factory_name"],
+                                            line=dict(color=color, width=2), marker=dict(size=4),
+                                            hovertemplate=f"{ic['factory_name']}<br>Year %{{x}}<br>Cumulative: %{{y:,.0f}} {currency}<extra></extra>",
+                                        ))
+                                fig_cf.add_hline(y=0, line=dict(color=NAVY, width=1.5, dash="dot"))
+                                fig_cf.update_layout(
+                                    title=dict(text=f"Cumulative Cash Flow ({currency})", font=dict(size=12, family="Inter")),
+                                    height=350, margin=dict(l=50, r=30, t=50, b=50),
+                                    paper_bgcolor="white", plot_bgcolor="white",
+                                    font=dict(family="Inter", size=10, color=DARK_TEXT),
+                                    xaxis=dict(title="Year", showgrid=True, gridcolor="#eee", dtick=1),
+                                    yaxis=dict(title=currency, showgrid=True, gridcolor="#eee", zeroline=True, zerolinecolor="#ccc"),
+                                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                                )
+                                st.plotly_chart(fig_cf, use_container_width=True, config={"displayModeBar": False})
+
+                    # ── QUALITATIVE ASSESSMENT ──────────────────────
+                    qual = {}
+                    with st.expander("Strategic Context & Qualitative Assessment", expanded=False):
+                        st.markdown(f'<div class="callout">Provide strategic context and qualitative rationale for this transfer decision. These inputs will appear in the executive summary, portfolio overview, and exported reports.</div>', unsafe_allow_html=True)
+
+                        q_labels = [
+                            ("strategic_rationale", "Strategic Rationale",
+                             "Why is this transfer being considered? What strategic objective does it serve? (e.g. cost competitiveness, capacity, market proximity, risk diversification)"),
+                            ("purpose", "Purpose & Objective",
+                             "What is the specific goal of this evaluation? (e.g. annual sourcing review, new product launch, capacity constraint resolution)"),
+                            ("risk_of_inaction", "What Happens If We Don't Do This?",
+                             "Describe the consequence of maintaining the status quo. (e.g. continued margin erosion, capacity bottleneck, single-source risk, inability to serve key market)"),
+                            ("risks", "Key Risks & Mitigations",
+                             "What are the main risks of this transfer? (e.g. quality ramp-up, customer approval timeline, IP concerns, FX exposure, geopolitical risk)"),
+                        ]
+                        ex_qual = {
+                            "strategic_rationale": "Diversify manufacturing footprint to reduce single-source risk and improve cost competitiveness in key growth markets. Aligns with Group strategy to establish regional production hubs." if ex else "",
+                            "purpose": "Annual sourcing review — evaluate transfer feasibility for high-volume bearing assembly line as part of the 2026 manufacturing footprint optimisation programme." if ex else "",
+                            "risk_of_inaction": "Continued margin erosion of 2-3pp annually due to rising European labour costs. Single-source risk from Factory A capacity constraints limits growth in Americas and Asia-Pacific markets." if ex else "",
+                            "risks": "Quality ramp-up: 6-12 month qualification period at receiving site. Customer re-approval required for automotive OEM accounts (est. 9 months). FX exposure on CNY/SEK if transferring to Asia. Geopolitical risk for China-based production." if ex else "",
+                        }
+
+                        for key, label, help_text in q_labels:
+                            st.markdown(f'<div style="font-size:0.75rem;font-weight:600;color:{DARK_TEXT};margin:0.6rem 0 0.2rem 0;">{label}</div>', unsafe_allow_html=True)
+                            qual[key] = st.text_area(
+                                label, value=ex_qual.get(key, ""),
+                                key=f"i{item_def['id']}_qual_{key}",
+                                height=80, label_visibility="collapsed",
+                                placeholder=help_text)
+
                     all_results.append({
                         "inputs": {"item_number": inputs.item_number, "designation": inputs.designation,
-                                   "currency": currency, "destination": inputs.destination},
+                                   "currency": currency, "destination": inputs.destination,
+                                   "data_classification": data_classification},
                         "results": results,
+                        "investment": inv_results,
+                        "qualitative": qual,
                     })
 
     # Portfolio Summary tab
     with tabs[-1]:
-        render_portfolio_summary(all_results, currency)
+        render_portfolio_summary(all_results, currency, cost_of_capital=cost_of_capital)
 
     # ── FOOTER ────────────────────────────────────────────────
     st.markdown("---")
     c1,c2,c3 = st.columns([4,1,1])
-    c1.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v6.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} item{'s' if len(st.session_state.project_items)!=1 else ''} &middot; {currency} &middot; Market: {target_market}</span>", unsafe_allow_html=True)
+    c1.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} item{'s' if len(st.session_state.project_items)!=1 else ''} &middot; {currency} &middot; Market: {target_market} &middot; {data_classification}</span>", unsafe_allow_html=True)
     if all_results:
         c2.download_button("Export Excel", data=export_excel_project(all_results),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.xlsx",
@@ -1396,7 +2438,8 @@ For questions, feedback, or feature requests:<br>
         c3.download_button("Export PDF", data=export_pdf_project(all_results, currency, st.session_state.project_name),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.pdf",
             mime="application/pdf")
-    st.markdown(f'<div class="conf-footer">Confidential &amp; Proprietary &mdash; SKF Group &mdash; Strategic Planning &amp; Intelligent Hub &mdash; {date.today().strftime("%B %Y")}</div>', unsafe_allow_html=True)
+    dc_short = data_classification.split(" - ")[0] if " - " in data_classification else data_classification
+    st.markdown(f'<div class="conf-footer">{data_classification} &mdash; SKF Group &mdash; Strategic Planning &amp; Intelligent Hub &mdash; {date.today().strftime("%B %Y")}</div>', unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
