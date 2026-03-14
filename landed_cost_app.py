@@ -1513,17 +1513,15 @@ def main():
     </div>""", unsafe_allow_html=True)
 
     # ── SIDEBAR ────────────────────────────────────────────────
-    with st.sidebar:
-        st.markdown(f"""<div style="background:{NAVY};padding:0.8rem 1rem;margin:-1rem -1rem 1rem -1rem;">
-            <div style="font-size:0.9rem;font-weight:700;color:white;letter-spacing:0.02em;">Landed Cost Model</div>
-            <div style="font-size:0.65rem;color:rgba(255,255,255,0.7);margin-top:0.15rem;">v9.0 &middot; SKF Group</div>
-        </div>""", unsafe_allow_html=True)
+    st.sidebar.markdown(f"""<div style="background:{NAVY};padding:0.8rem 1rem;margin:-1rem -1rem 1rem -1rem;">
+        <div style="font-size:0.9rem;font-weight:700;color:white;letter-spacing:0.02em;">Landed Cost Model</div>
+        <div style="font-size:0.65rem;color:rgba(255,255,255,0.7);margin-top:0.15rem;">v9.0 &middot; SKF Group</div>
+    </div>""", unsafe_allow_html=True)
 
-        sidebar_section = st.radio("", ["About & Methodology", "User Guide", "Changelog & Contact"], label_visibility="collapsed")
+    sidebar_section = st.sidebar.radio("Navigation", ["About & Methodology", "User Guide", "Changelog & Contact"], label_visibility="collapsed")
 
     if sidebar_section == "About & Methodology":
-        with st.sidebar:
-            st.markdown(f"""
+        st.sidebar.markdown(f"""
 <div style="font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};line-height:1.6;">
 
 <strong style="font-size:0.82rem;">Purpose</strong><br>
@@ -1591,8 +1589,7 @@ Investment inputs are per receiving factory and per item. The discount rate defa
 """, unsafe_allow_html=True)
 
     elif sidebar_section == "Changelog & Contact":
-        with st.sidebar:
-            st.markdown(f"""
+        st.sidebar.markdown(f"""
 <div style="font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};line-height:1.6;">
 <strong style="font-size:0.82rem;">Changelog</strong><br>
 <span style="color:{GREY_TEXT};">v9.0</span> &mdash; Qualitative context, Data Classification, sidebar nav<br>
@@ -1610,8 +1607,7 @@ Investment inputs are per receiving factory and per item. The discount rate defa
 """, unsafe_allow_html=True)
 
     else:  # User Guide
-        with st.sidebar:
-            st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:0.74rem;color:{DARK_TEXT};line-height:1.55;">
+        st.sidebar.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:0.74rem;color:{DARK_TEXT};line-height:1.55;">
 <strong style="font-size:0.82rem;">What This Model Does</strong><br>
 Compares full cost-to-serve across factory locations, including material, labour, tariffs, shipping, and inventory costs. Shows which location offers the best operating profit.
 
