@@ -2137,7 +2137,7 @@ Compares full cost-to-serve across factory locations, including material, labour
 
     # Factory country assignment
     st.markdown('<div class="sec-sm" id="sec-factory-locations">Factory Locations</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="callout">Assign the <strong>country</strong> where each factory is located. This determines lead time to the target market (<strong>{target_market}</strong>).</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout">Name each factory and assign the <strong>country</strong> where it is located. This determines lead time to the target market (<strong>{target_market}</strong>).</div>', unsafe_allow_html=True)
 
     ex_base_country = "Sweden" if ex else "Sweden"
     ex_factory_countries = ["Germany", "China", "France", "USA"] if ex else []
@@ -2152,14 +2152,16 @@ Compares full cost-to-serve across factory locations, including material, labour
     edited_countries = st.data_editor(
         country_df, use_container_width=False, num_rows="fixed", key="country_editor", hide_index=True,
         column_config={
-            "Factory": st.column_config.TextColumn("Factory", width=200, disabled=True),
+            "Factory": st.column_config.TextColumn("Factory", width=200),
             "Country": st.column_config.SelectboxColumn("Country", options=COUNTRIES, width=180),
         },
-        disabled=["Factory"],
     )
+    # Read back edited factory names (user may have renamed them)
+    edited_factory_names = list(edited_countries["Factory"])
+    base_factory_name = str(edited_factory_names[0] or "Base Case")
     factory_countries = {}
     for _, r in edited_countries.iterrows():
-        factory_countries[r["Factory"]] = str(r["Country"] or "")
+        factory_countries[str(r["Factory"])] = str(r["Country"] or "")
 
     # Assumptions matrix
     ROWS = ["VA Ratio","PS Index","MCL %","S&A %","TPL","Tariff %","Duties %","Transport %"]
@@ -2184,7 +2186,8 @@ Compares full cost-to-serve across factory locations, including material, labour
 
     for i in range(num_factories):
         ex_f = EX_FACTORIES[i] if ex and i < len(EX_FACTORIES) else None
-        col_name = ex_f.name if ex_f else f"Factory {i+2}"
+        # Use edited name from country table if available, otherwise default
+        col_name = str(edited_factory_names[i + 1]) if (i + 1) < len(edited_factory_names) else (ex_f.name if ex_f else f"Factory {i+2}")
         factory_col_names.append(col_name)
         if ex_f:
             factory_cols[col_name] = [ex_f.va_ratio, ex_f.ps_index, ex_f.mcl_pct, ex_f.sa_pct,
