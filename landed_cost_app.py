@@ -146,6 +146,22 @@ st.markdown(f"""
     .stTextInput, .stNumberInput, .stSelectbox {{ margin-bottom: -0.2rem !important; }}
     div[data-testid="stVerticalBlock"] > div {{ gap: 0.25rem; }}
 
+    /* Force Streamlit main containers to allow sticky positioning */
+    section.stMain,
+    section.stMain > div,
+    section.stMain > div > div,
+    section.stMain > div > div > div,
+    .stMainBlockContainer,
+    [data-testid="stMainBlockContainer"],
+    [data-testid="stVerticalBlock"],
+    [data-testid="stVerticalBlockBorderWrapper"],
+    .block-container {{
+        overflow: visible !important;
+    }}
+    /* The actual scrolling container must be the stApp or body */
+    .stApp {{
+        overflow: auto;
+    }}
     /* ── IB Header (sticky) ── */
     .ib-header {{
         background: #f0f2f6;
