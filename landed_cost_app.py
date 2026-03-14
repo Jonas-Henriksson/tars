@@ -1,5 +1,5 @@
 """
-Landed Cost Comparison Model - v6.0
+Manufacturing Location Analyzer - v6.0
 Multi-Item Project-Based Production Cost & Profitability Analysis
 Author: Jonas Henriksson — Head of Strategic Planning & Intelligent Hub
 """
@@ -32,7 +32,7 @@ from landed_cost.constants import (
 
 
 # ── PAGE CONFIG ───────────────────────────────────────────
-st.set_page_config(page_title="Landed Cost Comparison Model", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Manufacturing Location Analyzer", layout="wide", initial_sidebar_state="expanded")
 
 # ── BLUE INPUT BORDER CSS HELPER ──────────────────────────
 # Builds CSS rules for key-based targeting (.st-key-{key})
@@ -169,7 +169,7 @@ st.markdown(f"""
         border-bottom: 1px solid #d4d8e0;
         position: fixed; top: 0; left: 21rem; right: 0; z-index: 999;
     }}
-    .ib-header-spacer {{ height: 3.2rem; }}
+    .ib-header-spacer {{ height: 4.2rem; }}
     .ib-header-left {{ display: flex; flex-direction: column; }}
     .ib-header h1 {{ font-family: 'Inter', sans-serif; font-size: 1.1rem; font-weight: 700; margin: 0 0 0.1rem 0; letter-spacing: -0.01em; color: {NAVY}; }}
     .ib-header .sub {{ font-size: 0.68rem; color: {GREY_TEXT}; letter-spacing: 0.04em; }}
@@ -1698,16 +1698,16 @@ def main():
     skf_logo_svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2498 587.1" height="28"><path d="m94.4 294.7c-11.5 0-20.7-11.5-20.7-23v-251c0-9.2 9.2-20.7 20.7-20.7h545.6c9.2 0 20.7 11.5 20.7 20.7v103.6c0 11.5-11.5 23-20.7 23h-177.2c-11.5 0-23-11.5-23-23v-36.8c0-6.9-6.9-13.8-13.8-13.8h-117.5c-6.9 0-16.1 6.9-16.1 13.8v117.4c0 6.9 9.2 16.1 16.1 16.1h402.9c16.1 0 23 6.9 23 20.7v324.6c0 11.5-11.5 20.7-23 20.7h-690.7c-11.4.1-20.7-9.1-20.7-20.5 0-.1 0-.1 0-.2v-177.2c0-11.4 9.2-20.7 20.5-20.7h.2 177.3c11.4 0 20.7 9.2 20.7 20.6v.2 110.5c0 6.9 9.2 13.8 16.1 13.8h264.8c6.9 0 13.8-6.9 13.8-13.8v-191.2c0-6.9-6.9-13.8-13.8-13.8zm787.4-59.9v117.4c0 6.9-6.9 11.5-16.1 16.1-13.8 2.3-20.7 9.2-20.7 20.7v177.3c0 11.4 9.2 20.7 20.5 20.7h.2 214.1c11.4 0 20.7-9.2 20.7-20.6 0-.1 0-.1 0-.2v-195.5c0-2.3 4.6-4.6 6.9-2.3l209.5 214.1c4.6 4.6 6.9 4.6 13.8 4.6h262.5c11.5 0 23-9.2 23-20.7v-177.3c0-11.5-11.5-20.7-23-20.7h-191.1c-4.6 0-6.9 0-9.2-4.6l-142.7-140.4c0-2.3-2.3-2.3 0-4.6l69.1-69.1c2.3-2.3 4.6-2.3 9.2-2.3h193.4c9.2 0 20.7-11.5 20.7-23v-103.7c0-9.2-11.5-20.7-20.7-20.7h-191.1c-6.9 0-9.2 2.3-13.8 6.9l-207.2 211.8c-4.6 2.3-9.2 2.3-9.2-2.3v-195.7c0-9.2-9.2-20.7-20.7-20.7h-214.2c-11.5 0-20.7 11.5-20.7 20.7v177.3c0 11.5 6.9 18.4 18.4 20.7 13.8 4.6 18.4 9.2 18.4 16.1zm844.9 331.6c0 11.5 11.5 20.7 23 20.7h211.8c11.5 0 23-9.2 23-20.7v-175c0-11.5-6.9-20.7-20.7-23-11.5-4.6-16.1-6.9-16.1-16.1v-43.7c0-6.9 6.9-13.8 13.8-13.8h80.6c9.2 0 16.1 6.9 16.1 13.8 0 11.5 11.5 23 20.7 23h177.3c11.5 0 23-11.5 23-23v-103.7c0-11.5-11.5-20.7-23-20.7h-177.2c-9.2 0-20.7 9.2-20.7 20.7 0 6.9-6.9 16.1-16.1 16.1h-80.6c-6.9 0-13.8-9.2-13.8-16.1v-117.4c0-6.9 6.9-13.8 13.8-13.8h227.9c6.9 0 16.1 6.9 16.1 13.8v36.8c0 11.5 9.2 23 20.7 23h251c11.5 0 20.7-11.5 20.7-23v-103.6c0-9.2-9.2-20.7-20.7-20.7h-727.5c-11.5 0-23 11.5-23 20.7v177.3c0 11.5 9.2 18.4 20.7 20.7 9.2 2.3 16.1 9.2 16.1 16.1v117.4c0 6.9-4.6 13.8-16.1 16.1-13.8 2.3-20.7 9.2-20.7 20.7z" fill="{NAVY}"/></svg>'
     st.markdown(f"""<div class="ib-header">
         <div class="ib-header-left">
-            <h1>Landed Cost Comparison Model</h1>
-            <div class="sub">Multi-Item Project-Based Production Cost &amp; Profitability Analysis &middot; v9.0</div>
+            <h1>Manufacturing Location Analyzer</h1>
+            <div class="sub">Multi-Item Production Cost &amp; Profitability Analysis &middot; v9.0</div>
         </div>
         <div>{skf_logo_svg}</div>
     </div>
     <div class="ib-header-spacer"></div>""", unsafe_allow_html=True)
 
     # ── SIDEBAR ────────────────────────────────────────────────
-    st.sidebar.markdown(f"""<div style="background:{NAVY};padding:0.55rem 1rem;margin:-1rem -1rem 0.8rem -1rem;">
-        <div style="font-family:Inter,sans-serif;font-size:0.72rem;font-weight:600;color:white;letter-spacing:0.04em;text-transform:uppercase;">Navigation</div>
+    st.sidebar.markdown(f"""<div style="padding:0.55rem 1rem 0.4rem 1rem;margin:-1rem -1rem 0.8rem -1rem;border-bottom:2px solid {NAVY};">
+        <div style="font-family:Inter,sans-serif;font-size:0.72rem;font-weight:600;color:{NAVY};letter-spacing:0.04em;text-transform:uppercase;">Navigation</div>
     </div>""", unsafe_allow_html=True)
 
     # Navigation buttons
@@ -1771,7 +1771,7 @@ def main():
 <div style="font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};line-height:1.6;">
 
 <strong style="font-size:0.82rem;">Purpose</strong><br>
-The Landed Cost Comparison Model enables strategic evaluation of manufacturing location alternatives.
+The Manufacturing Location Analyzer enables strategic evaluation of manufacturing location alternatives.
 It compares the full cost-to-serve across multiple production sites, accounting for material costs,
 value-added processing, tariffs, duties, transportation, and selling & administrative expenses.
 The model calculates operating profit and margin impact at both per-unit and full-year levels.
