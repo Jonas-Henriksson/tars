@@ -135,6 +135,8 @@ st.markdown(f"""
     header [data-testid="stDecoration"] {{display: none;}}
     /* Keep sidebar always visible (non-collapsible) */
     [data-testid="collapsedControl"] {{display: none !important;}}
+    section[data-testid="stSidebar"] button[kind="header"] {{display: none !important;}}
+    section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {{display: none !important;}}
     section[data-testid="stSidebar"] {{
         min-width: 21rem !important; max-width: 21rem !important;
         transform: none !important; visibility: visible !important;
@@ -178,9 +180,9 @@ st.markdown(f"""
     /* ── Sections ── */
     .sec {{ font-family: 'Inter', sans-serif; font-size: 0.7rem; font-weight: 700; color: {NAVY};
         text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 2px solid {NAVY};
-        padding-bottom: 0.25rem; margin: 1.6rem 0 0.7rem 0; }}
+        padding-bottom: 0.25rem; margin: 1.6rem 0 0.7rem 0; scroll-margin-top: 5rem; }}
     .sec-sm {{ font-family: 'Inter', sans-serif; font-size: 0.65rem; font-weight: 600; color: {GREY_TEXT};
-        text-transform: uppercase; letter-spacing: 0.08em; margin: 0.7rem 0 0.35rem 0; }}
+        text-transform: uppercase; letter-spacing: 0.08em; margin: 0.7rem 0 0.35rem 0; scroll-margin-top: 5rem; }}
 
     /* ── IB Tables ── */
     .ib-table {{ width: 100%; border-collapse: collapse; font-size: 0.76rem; font-family: 'Inter', sans-serif; }}
