@@ -76,14 +76,34 @@ st.markdown(f"""
         font-size: 0.72rem !important;
     }}
     .stDownloadButton button,
+    [data-testid="stDownloadButton"] button {{
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.76rem !important;
+        font-weight: 500 !important;
+        border-radius: 1px !important;
+        border: 1px solid #ccc !important;
+        padding: 0.3rem 0.9rem !important;
+        min-height: 0 !important;
+        height: auto !important;
+    }}
     .stDownloadButton button *,
     .stDownloadButton button p,
     .stDownloadButton button span,
-    [data-testid="stDownloadButton"] button,
     [data-testid="stDownloadButton"] button * {{
         font-family: 'Inter', sans-serif !important;
         font-size: 0.76rem !important;
         font-weight: 500 !important;
+    }}
+    /* Main-area buttons (Add Item, Remove Last, etc.) */
+    .main .stButton > button {{
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.76rem !important;
+        font-weight: 500 !important;
+        border-radius: 1px !important;
+        border: 1px solid #ccc !important;
+        padding: 0.3rem 0.9rem !important;
+        min-height: 0 !important;
+        height: auto !important;
     }}
     .stCheckbox,
     .stCheckbox label,
@@ -94,6 +114,15 @@ st.markdown(f"""
         font-size: 0.76rem !important;
         display: flex !important;
         align-items: center !important;
+    }}
+    /* Square checkbox */
+    .stCheckbox [data-testid="stCheckbox"] input[type="checkbox"],
+    .stCheckbox svg,
+    [data-testid="stCheckbox"] svg {{
+        border-radius: 1px !important;
+    }}
+    .stCheckbox label > div:first-child {{
+        border-radius: 1px !important;
     }}
     header {{background: transparent !important; visibility: hidden;}}
     header [data-testid="stDecoration"] {{display: none;}}
@@ -117,6 +146,22 @@ st.markdown(f"""
     .stTextInput, .stNumberInput, .stSelectbox {{ margin-bottom: -0.2rem !important; }}
     div[data-testid="stVerticalBlock"] > div {{ gap: 0.25rem; }}
 
+    /* Force Streamlit main containers to allow sticky positioning */
+    section.stMain,
+    section.stMain > div,
+    section.stMain > div > div,
+    section.stMain > div > div > div,
+    .stMainBlockContainer,
+    [data-testid="stMainBlockContainer"],
+    [data-testid="stVerticalBlock"],
+    [data-testid="stVerticalBlockBorderWrapper"],
+    .block-container {{
+        overflow: visible !important;
+    }}
+    /* The actual scrolling container must be the stApp or body */
+    .stApp {{
+        overflow: auto;
+    }}
     /* ── IB Header (sticky) ── */
     .ib-header {{
         background: #f0f2f6;
@@ -1267,7 +1312,7 @@ EXAMPLE_ITEMS = [
 # ── SESSION STATE INIT ──────────────────────────────────────────
 def init_state():
     if "project_name" not in st.session_state:
-        st.session_state.project_name = "New Project"
+        st.session_state.project_name = "New Analysis"
     if "project_items" not in st.session_state:
         st.session_state.project_items = [{"id": 0}]
     if "next_id" not in st.session_state:
@@ -1689,7 +1734,7 @@ def main():
         # Sub-section links appear directly below the active Landed Cost Analysis button
         if key == "model" and st.session_state.active_page == "model":
             sub_sections = [
-                ("Project Setup", "sec-project-setup"),
+                ("Analysis Setup", "sec-project-setup"),
                 ("Factory Configuration", "sec-factory-config"),
                 ("Lead Times", "sec-lead-times"),
                 ("NWC Assumptions", "sec-nwc"),
@@ -1707,8 +1752,13 @@ def main():
             st.session_state.active_page = key
             st.rerun()
 
+    # Example data toggle at bottom of sidebar
+    with st.sidebar:
+        ex = st.checkbox("Load example data", value=st.session_state.ex)
+        st.session_state.ex = ex
+
     # Legend at bottom of sidebar
-    st.sidebar.markdown(f"""<div style="margin-top:1.5rem;padding:0.6rem 0.8rem;border-top:1px solid #d4d8e0;font-family:Inter,sans-serif;font-size:0.68rem;line-height:1.7;color:{GREY_TEXT};">
+    st.sidebar.markdown(f"""<div style="margin-top:0.5rem;padding:0.6rem 0.8rem;border-top:1px solid #d4d8e0;font-family:Inter,sans-serif;font-size:0.68rem;line-height:1.7;color:{GREY_TEXT};">
         <span style="border-left:3px solid {INPUT_BLUE};padding-left:0.3rem;font-weight:600;color:{INPUT_BLUE};">Blue border</span> = editable input<br>
         <strong style="color:{DARK_TEXT};">Bold</strong> = calculated output<br>
         <span style="font-style:italic;">Grey italic</span> = guidance notes
@@ -1804,7 +1854,7 @@ Compares full cost-to-serve across factory locations, including material, labour
 <span style="color:{GREY_TEXT};font-style:italic;">Grey italic</span> = guidance notes
 
 <br><br><strong style="font-size:0.82rem;">Workflow</strong><br>
-<strong>1.</strong> Set project name, currency, target market<br>
+<strong>1.</strong> Set analysis name, currency, target market<br>
 <strong>2.</strong> Configure factory assumptions matrix<br>
 <strong>3.</strong> Assign factory countries for lead times<br>
 <strong>4.</strong> Set Company WACC, carrying cost rates, and NWC assumptions<br>
@@ -1910,26 +1960,32 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         if cc_mode == "Company-wide rate":
             cc_data = {
-                "Component": CC_ROWS + ["Total"],
+                "Component": CC_ROWS + ["**Total**"],
                 "Rate (%)": cc_defaults + [sum(cc_defaults)],
-                "Guide": CC_GUIDES + ["Sum of all components — applied to Delta NWC"],
+                "Guide": CC_GUIDES + ["Edit to override component sum — components will be ignored"],
             }
             cc_df = pd.DataFrame(cc_data)
             edited_cc = st.data_editor(
-                cc_df, use_container_width=False, num_rows="fixed", key="coc_editor", hide_index=True,
+                cc_df, use_container_width=True, num_rows="fixed", key="coc_editor", hide_index=True,
                 column_config={
                     "Component": st.column_config.TextColumn("Component", width=200, disabled=True),
                     "Rate (%)": st.column_config.NumberColumn("Rate (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.1f", width=120),
-                    "Guide": st.column_config.TextColumn("Guide", width=420, disabled=True),
+                    "Guide": st.column_config.TextColumn("Guide", disabled=True),
                 },
                 disabled=["Component", "Guide"])
-            # Sum the editable component rows (exclude the Total row itself)
-            global_cc_pct = 0.0
+            # Check if Total was manually overridden
+            component_sum = 0.0
             for i, row in edited_cc.iterrows():
-                if row["Component"] != "Total":
+                if row["Component"] != "**Total**":
                     v = row["Rate (%)"]
                     if v is not None and not pd.isna(v):
-                        global_cc_pct += float(v)
+                        component_sum += float(v)
+            total_row_val = float(edited_cc.loc[edited_cc["Component"] == "**Total**", "Rate (%)"].values[0] or 0)
+            if abs(total_row_val - component_sum) > 0.01:
+                global_cc_pct = total_row_val
+                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};margin-top:0.2rem;">Override active — using <strong>{total_row_val:.1f}%</strong> instead of component sum ({component_sum:.1f}%)</div>', unsafe_allow_html=True)
+            else:
+                global_cc_pct = component_sum
             global_cc_rate = global_cc_pct / 100.0
             carrying_cost_rates = {fn_: global_cc_rate for fn_ in all_factory_names_cc}
         else:
@@ -1945,26 +2001,34 @@ Compares full cost-to-serve across factory locations, including material, labour
                 else:
                     vals = list(cc_defaults)
                 cc_cols[fn_] = vals + [sum(vals)]
-            cc_cols["Guide"] = CC_GUIDES + ["Sum of all components — applied to Delta NWC"]
-            cc_rows_with_total = CC_ROWS + ["Total"]
+            cc_cols["Guide"] = CC_GUIDES + ["Edit to override component sum — components will be ignored"]
+            cc_rows_with_total = CC_ROWS + ["**Total**"]
             cc_df = pd.DataFrame(cc_cols, index=cc_rows_with_total)
 
             edited_cc = st.data_editor(
                 cc_df, use_container_width=True, num_rows="fixed", key="coc_editor", hide_index=False,
                 column_config={
                     **{fn_: st.column_config.NumberColumn(fn_, min_value=0.0, max_value=100.0, step=0.5, format="%.1f") for fn_ in all_factory_names_cc},
-                    "Guide": st.column_config.TextColumn("Guide", width=420, disabled=True),
+                    "Guide": st.column_config.TextColumn("Guide", disabled=True),
                 },
                 disabled=["Guide"])
 
             carrying_cost_rates = {}
+            overrides = []
             for fn_ in all_factory_names_cc:
-                total_pct = 0.0
+                component_sum = 0.0
                 for row_name in CC_ROWS:
                     v = edited_cc.loc[row_name, fn_]
                     if v is not None and not pd.isna(v):
-                        total_pct += float(v)
-                carrying_cost_rates[fn_] = total_pct / 100.0
+                        component_sum += float(v)
+                total_val = float(edited_cc.loc["**Total**", fn_] or 0)
+                if abs(total_val - component_sum) > 0.01:
+                    carrying_cost_rates[fn_] = total_val / 100.0
+                    overrides.append(f"{fn_}: {total_val:.1f}% (components: {component_sum:.1f}%)")
+                else:
+                    carrying_cost_rates[fn_] = component_sum / 100.0
+            if overrides:
+                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};margin-top:0.2rem;">Override active — ' + ", ".join(overrides) + '</div>', unsafe_allow_html=True)
 
         st.session_state["_carrying_cost_rates"] = carrying_cost_rates
 
@@ -2224,20 +2288,18 @@ This provides the local risk percentage.</li>
 
     # ── COST MODEL PAGE (active_page == "model") ──
 
-
-    ex = st.checkbox("Load example data", value=st.session_state.ex)
-    st.session_state.ex = ex
+    ex = st.session_state.ex
 
     # ── PROJECT HEADER ────────────────────────────────────────
-    st.markdown('<div class="sec" id="sec-project-setup">Project Setup</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec" id="sec-project-setup">Analysis Setup</div>', unsafe_allow_html=True)
 
     pc1, pc2, pc3, pc4, pc4b, pc5 = st.columns([2, 1, 1, 1, 1, 2])
     with pc1:
-        proj_df = pd.DataFrame({"Project Name": [st.session_state.project_name]})
+        proj_df = pd.DataFrame({"Analysis Name": [st.session_state.project_name]})
         edited_proj = st.data_editor(proj_df, use_container_width=True, num_rows="fixed",
             key="proj_name", hide_index=True,
-            column_config={"Project Name": st.column_config.TextColumn("Project Name", width=280)})
-        st.session_state.project_name = str(edited_proj.loc[0, "Project Name"] or "New Project")
+            column_config={"Analysis Name": st.column_config.TextColumn("Analysis Name", width=280)})
+        st.session_state.project_name = str(edited_proj.loc[0, "Analysis Name"] or "New Analysis")
 
     with pc2:
         ccy_df = pd.DataFrame({"Currency": ["SEK"]})
@@ -2275,7 +2337,7 @@ This provides the local risk percentage.</li>
         sc1, sc2 = st.columns(2)
         with sc1:
             save_data = save_project_json()
-            _ = st.download_button("Save Project", data=save_data,
+            _ = st.download_button("Save Analysis", data=save_data,
                 file_name=f"{st.session_state.project_name.replace(' ','_')}.json",
                 mime="application/json", help="Download project as JSON to continue later")
             st.markdown(f'<div style="font-size:0.6rem;font-family:Inter,sans-serif;color:{GREY_TEXT};margin-top:-0.5rem;">Save to continue later</div>', unsafe_allow_html=True)
@@ -2285,7 +2347,7 @@ This provides the local risk percentage.</li>
             if uploaded:
                 try:
                     proj = json.load(uploaded)
-                    st.session_state.project_name = proj.get("project_name", "Loaded Project")
+                    st.session_state.project_name = proj.get("project_name", "Loaded Analysis")
                     st.session_state.project_items = proj.get("project_items", [{"id": 0}])
                     st.session_state.next_id = proj.get("next_id", 1)
                     st.rerun()
@@ -2300,8 +2362,8 @@ This provides the local risk percentage.</li>
     edited_fc = st.data_editor(fc_df, use_container_width=False, num_rows="fixed",
         key="fc_editor", hide_index=True,
         column_config={"Comparison Factories": st.column_config.SelectboxColumn(
-            "Comparison Factories", options=list(range(1, 9)), width=180)})
-    num_factories = int(edited_fc.loc[0, "Comparison Factories"] or 2)
+            "Comparison Factories", options=list(range(1, 9)), required=True, width=180)})
+    num_factories = max(1, int(edited_fc.loc[0, "Comparison Factories"] or 2))
     st.session_state["num_fac"] = num_factories
 
     # Factory locations — consolidated table (first row = current factory)
