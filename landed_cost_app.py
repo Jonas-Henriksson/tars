@@ -1739,7 +1739,7 @@ Net Working Capital impact captures the balance sheet cost of inventory tied up 
 <li><strong>Payables (DPO)</strong> = (PS x Qty / 365) x Payment Terms Days &mdash; reduces NWC</li>
 <li><strong>Total NWC</strong> = GIT + Safety Stock + Cycle Stock - Payables</li>
 <li><strong>Delta NWC</strong> = NWC(location) - NWC(base)</li>
-<li><strong>NWC Carrying Cost</strong> = Delta NWC x Total Carrying Cost %</li>
+<li><strong>NWC Carrying Cost</strong> = Delta NWC x Total Carrying Cost % (per factory: WACC + Risk + Storage + Service)</li>
 <li><strong>Adjusted OP</strong> = OP - NWC Carrying Cost per unit</li>
 </ul>
 
@@ -2295,44 +2295,88 @@ Compares full cost-to-serve across factory locations, including material, labour
     base_nwc = nwc_assumptions.get(base_factory_name, {})
 
     # ── TOTAL CARRYING COSTS ──────────────────────────────────
+    all_factory_names_cc = [base_factory_name] + factory_col_names
     st.markdown('<div class="sec-sm" id="sec-carrying-costs">Total Carrying Costs</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="callout">The annual rate applied to incremental NWC (Delta NWC) to compute carrying cost. Typically <strong>15–30%</strong> of inventory value. WACC (cost of capital) is the largest component — add risk, storage, and service costs for the full picture.</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout">Annual carrying cost rate applied to Delta NWC, <strong>per factory</strong>. Typically <strong>15–30%</strong> of inventory value. Avoid a blanket global rate — isolate the actual cost components per facility to surface optimization opportunities across the footprint.</div>', unsafe_allow_html=True)
 
     CC_ROWS = ["Capital Cost (WACC)", "Risk Cost", "Storage & Handling", "Service Cost"]
     CC_GUIDES = [
-        "Weighted average cost of capital — opportunity cost of tied-up cash (typical: 7–15%)",
-        "Obsolescence, shrinkage, damage, spoilage (typical: 3–9%)",
-        "Warehousing, utilities, direct labor for inventory handling (typical: 2–5%)",
+        "Opportunity cost of tied-up cash — driven by interest rates, tax rates, and network risk profile (typical: 7–15%)",
+        "Write-offs, shrinkage, damage, spoilage — divide trailing 12-mo scrap value by avg inventory value (typical: 3–9%)",
+        "Warehousing rent/depreciation, utilities, direct labor — divide total warehouse spend by avg inventory value (typical: 2–5%)",
         "Insurance, property taxes, inventory management software (typical: 1–3%)",
     ]
     cc_defaults = [8.0, 5.0, 3.0, 2.0]
-    cc_ex_vals = [8.0, 5.0, 3.0, 2.0]
 
-    cc_data = {
-        "Component": CC_ROWS,
-        "Rate (%)": cc_ex_vals if ex else cc_defaults,
-        "Guide": CC_GUIDES,
-    }
-    cc_df = pd.DataFrame(cc_data)
+    cc_cols = {}
+    for fn_ in all_factory_names_cc:
+        if ex:
+            if "Asia" in fn_ or "China" in str(factory_countries.get(fn_, "")):
+                cc_cols[fn_] = [9.0, 7.0, 2.5, 1.5]
+            elif "Americas" in fn_ or "USA" in str(factory_countries.get(fn_, "")):
+                cc_cols[fn_] = [8.5, 4.0, 4.0, 2.5]
+            else:
+                cc_cols[fn_] = [8.0, 5.0, 3.0, 2.0]
+        else:
+            cc_cols[fn_] = list(cc_defaults)
+    cc_cols["Guide"] = CC_GUIDES
+    cc_df = pd.DataFrame(cc_cols, index=CC_ROWS)
 
     edited_cc = st.data_editor(
-        cc_df, use_container_width=False, num_rows="fixed", key="coc_editor", hide_index=True,
+        cc_df, use_container_width=True, num_rows="fixed", key="coc_editor", hide_index=False,
         column_config={
-            "Component": st.column_config.TextColumn("Component", width=200, disabled=True),
-            "Rate (%)": st.column_config.NumberColumn("Rate (%)", min_value=0.0, max_value=50.0, step=0.5, format="%.1f", width=120),
+            **{fn_: st.column_config.NumberColumn(fn_, min_value=0.0, max_value=50.0, step=0.5, format="%.1f") for fn_ in all_factory_names_cc},
             "Guide": st.column_config.TextColumn("Guide", width=420, disabled=True),
         },
-        disabled=["Component", "Guide"])
+        disabled=["Guide"])
 
-    # Sum the components to get total carrying cost rate
-    total_carrying_pct = 0.0
-    for _, row in edited_cc.iterrows():
-        v = row["Rate (%)"]
-        if v is not None and not pd.isna(v):
-            total_carrying_pct += float(v)
-    cost_of_capital = total_carrying_pct / 100.0
+    # Compute per-factory total carrying cost rates
+    carrying_cost_rates = {}
+    cc_summary_parts = []
+    for fn_ in all_factory_names_cc:
+        total_pct = 0.0
+        for row_name in CC_ROWS:
+            v = edited_cc.loc[row_name, fn_]
+            if v is not None and not pd.isna(v):
+                total_pct += float(v)
+        carrying_cost_rates[fn_] = total_pct / 100.0
+        cc_summary_parts.append(f"{fn_}: <strong>{total_pct:.1f}%</strong>")
+    # Use base factory rate as the default discount rate for investment analysis
+    cost_of_capital = carrying_cost_rates.get(base_factory_name, 0.18)
     st.session_state["cost_of_capital"] = cost_of_capital
-    st.markdown(f'<div style="font-size:0.78rem;color:{DARK_TEXT};font-weight:600;margin-top:0.3rem;">Total Carrying Cost Rate: {total_carrying_pct:.1f}%</div>', unsafe_allow_html=True)
+    cc_summary = " &nbsp;|&nbsp; ".join(cc_summary_parts)
+    st.markdown(f'<div style="font-size:0.78rem;color:{DARK_TEXT};font-weight:600;margin-top:0.3rem;">Total Carrying Cost Rate &mdash; {cc_summary}</div>', unsafe_allow_html=True)
+
+    with st.expander("How to calculate your facility-specific rates"):
+        st.markdown(f"""
+<div style="font-size:0.78rem;color:{DARK_TEXT};line-height:1.7;">
+<strong>What drives your specific rate</strong><br>
+Your actual rate fluctuates based on practical factors: current interest rates (cost of debt feeds directly into WACC),
+corporate tax rates (interest on debt is tax-deductible, shifting the effective number), and your network risk profile
+(stable, mature supply networks command lower equity premiums vs. volatile sectors).
+If your planning teams are using a blanket textbook rate without isolating actual WACC and operational costs per facility,
+you are missing clear optimization opportunities across the footprint.
+
+<br><br><strong>Practical approach to isolate per-facility rates</strong>
+<ol style="margin:0.3rem 0 0 1.2rem;padding:0;">
+<li><strong>Isolate the data</strong> &mdash; Pull 12 months of trailing data for each major node in the network.
+Three numbers per facility: average inventory value, total warehousing spend, and total value of written-off or scrapped stock.</li>
+<li><strong>Calculate Storage &amp; Handling</strong> &mdash; Total warehousing spend &divide; average inventory value.
+Include rent/depreciation, utilities, and direct warehouse labor. This gives you the storage percentage for that specific location.</li>
+<li><strong>Calculate Risk Cost</strong> &mdash; Total value of written-off, scrapped, and lost stock &divide; average inventory value.
+This provides the local risk percentage.</li>
+<li><strong>Map the footprint</strong> &mdash; Hand these local percentages to your Network Optimization team.
+Map the variables across the global network to identify outliers. Expect high storage costs in mature markets and high risk costs
+in nodes handling volatile or aging product lines.</li>
+<li><strong>Establish regional benchmarks</strong> &mdash; Move away from a global flat rate.
+Set benchmark carrying cost rates by region or facility type. A central hub in Europe will have a very different cost profile
+than a regional distribution center in Asia.</li>
+</ol>
+<br>
+This approach gives you a true picture of where capital is actually bleeding and highlights exactly where you might need to
+adjust safety stock policies.
+</div>
+""", unsafe_allow_html=True)
 
     # Build factory objects
     base = FactoryAssumptions(
@@ -2394,9 +2438,10 @@ Compares full cost-to-serve across factory locations, including material, labour
                 base_lt = estimate_lead_time(base_country, target_market) if target_market else None
 
                 results = []
+                base_cc_rate = carrying_cost_rates.get(base_factory_name, cost_of_capital)
                 br = compute_location(inputs, base, is_base=True,
                     lead_time_days=base_lt, base_lead_time_days=base_lt,
-                    cost_of_capital=cost_of_capital,
+                    cost_of_capital=base_cc_rate,
                     safety_stock_days=base_nwc.get("safety_stock_days", 0),
                     base_safety_stock_days=base_nwc.get("safety_stock_days", 0),
                     cycle_stock_days=base_nwc.get("cycle_stock_days", 0),
@@ -2409,9 +2454,10 @@ Compares full cost-to-serve across factory locations, including material, labour
                         ov = get_ov(f.name)
                         f_lt = estimate_lead_time(f.country, target_market) if target_market and f.country else None
                         f_nwc = nwc_assumptions.get(f.name, {})
+                        f_cc_rate = carrying_cost_rates.get(f.name, cost_of_capital)
                         r = compute_location(inputs, f, overrides=ov,
                             lead_time_days=f_lt, base_lead_time_days=base_lt,
-                            cost_of_capital=cost_of_capital,
+                            cost_of_capital=f_cc_rate,
                             safety_stock_days=f_nwc.get("safety_stock_days", 0),
                             base_safety_stock_days=base_nwc.get("safety_stock_days", 0),
                             cycle_stock_days=f_nwc.get("cycle_stock_days", 0),
