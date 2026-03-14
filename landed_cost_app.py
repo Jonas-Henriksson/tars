@@ -183,7 +183,7 @@ st.markdown(f"""
     }}
     /* ── Sidebar Nav Buttons ── */
     .nav-sep {{
-        font-family: 'Inter', sans-serif; font-size: 0.6rem; font-weight: 700;
+        font-family: 'Inter', sans-serif; font-size: 0.65rem; font-weight: 700;
         color: {GREY_TEXT}; text-transform: uppercase; letter-spacing: 0.08em;
         padding: 0.6rem 0 0.2rem 0; margin-top: 0.15rem;
     }}
@@ -191,7 +191,7 @@ st.markdown(f"""
         margin-bottom: -0.35rem !important;
     }}
     section[data-testid="stSidebar"] .stButton > button {{
-        font-family: 'Inter', sans-serif !important; font-size: 0.7rem !important;
+        font-family: 'Inter', sans-serif !important; font-size: 0.76rem !important;
         font-weight: 400 !important; text-align: left !important;
         padding: 0.3rem 0.6rem !important; border-radius: 3px !important;
         letter-spacing: 0.01em !important; justify-content: flex-start !important;
@@ -201,7 +201,7 @@ st.markdown(f"""
     section[data-testid="stSidebar"] .stButton > button * {{
         text-align: left !important; justify-content: flex-start !important;
         display: block !important; width: 100% !important;
-        font-family: 'Inter', sans-serif !important; font-size: 0.7rem !important;
+        font-family: 'Inter', sans-serif !important; font-size: 0.76rem !important;
         font-weight: inherit !important;
     }}
     section[data-testid="stSidebar"] .stButton > button[kind="secondary"] {{
@@ -216,7 +216,7 @@ st.markdown(f"""
     }}
     /* Sidebar sub-navigation links */
     .nav-sub {{
-        display: block; font-family: 'Inter', sans-serif; font-size: 0.66rem;
+        display: block; font-family: 'Inter', sans-serif; font-size: 0.72rem;
         color: {GREY_TEXT}; text-decoration: none; padding: 0.2rem 0 0.2rem 1.2rem;
         line-height: 1.4; transition: color 0.15s;
     }}
@@ -246,6 +246,16 @@ def build_cost_table(results, ccy, target_market=None):
         c = f'class="{cls} {"indent" if indent else ""}"'
         cells = "".join(f'<td class="{"base-case" if i==0 else ""}">{fmt(r[key])}</td>' for i, r in enumerate(results))
         return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
+    def delta_row(lbl, key, fmt, cls="", invert=False):
+        """Row with conditional red/green formatting on non-base cells."""
+        c = f'class="{cls}"'
+        cells = ""
+        for i, r in enumerate(results):
+            v = r.get(key, 0)
+            color_v = -v if invert else v
+            cell_cls = "base-case" if i == 0 else dc(color_v) if color_v != 0 else ""
+            cells += f'<td class="{cell_cls}">{fmt(v)}</td>'
+        return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
     def sep():
         return f'<tr class="row-separator">{"<td></td>" * (len(results)+1)}</tr>'
     f2 = lambda v: fn(v, 2, dz=False)
@@ -258,8 +268,8 @@ def build_cost_table(results, ccy, target_market=None):
     html += row("Tariff","tariff",lambda v: fn(v,2,acct=True,dz=True),"",True)
     html += row("Duties","duties",lambda v: fn(v,2,acct=True,dz=True),"",True)
     html += row("Transportation","transport",lambda v: fn(v,2,acct=True,dz=True),"",True) + sep()
-    html += row("Operating Profit","op",lambda v: fn(v,2,acct=True,dz=True),"row-double-top")
-    html += row("Operating Margin","om",lambda v: fp(v,1,dz=False),"row-bold")
+    html += delta_row("Operating Profit","op",lambda v: fn(v,2,acct=True,dz=True),"row-double-top")
+    html += delta_row("Operating Margin","om",lambda v: fp(v,1,dz=False),"row-bold")
     bom = results[0]["om"]
     dash = "\u2013"
     dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["om"]-bom)}">{dash if i==0 else fp(r["om"]-bom,1,acct=True)}</td>' for i, r in enumerate(results))
@@ -277,10 +287,10 @@ def build_cost_table(results, ccy, target_market=None):
             html += row("Safety Stock","delta_safety_stock",lambda v: fn(v,0,acct=True,dz=True),"",True)
             html += row("Cycle Stock","delta_cycle_stock",lambda v: fn(v,0,acct=True,dz=True),"",True)
             html += row("Payment Terms (DPO)","delta_payables",lambda v: fn(-v,0,acct=True,dz=True),"",True)
-            html += row("Total Delta NWC","delta_nwc",lambda v: fn(v,0,acct=True),"row-subtotal")
-        html += row("NWC Carrying Cost / Unit","nwc_carrying_cost_per_unit",lambda v: fn(v,2,acct=True),"",True)
-        html += row("Adj. Operating Profit","adj_op",lambda v: fn(v,2,acct=True,dz=True),"row-bold")
-        html += row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
+            html += delta_row("Total Delta NWC","delta_nwc",lambda v: fn(v,0,acct=True),"row-subtotal",invert=True)
+        html += delta_row("NWC Carrying Cost / Unit","nwc_carrying_cost_per_unit",lambda v: fn(v,2,acct=True),"indent",invert=True)
+        html += delta_row("Adj. Operating Profit","adj_op",lambda v: fn(v,2,acct=True,dz=True),"row-bold")
+        html += delta_row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
         adj_bom = results[0]["adj_om"]
         adj_dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["adj_om"]-adj_bom)}">{dash if i==0 else fp(r["adj_om"]-adj_bom,1,acct=True)}</td>' for i, r in enumerate(results))
         html += f'<tr class="row-bold"><td><em>Adj. Delta Margin vs. Base</em></td>{adj_dc_cells}</tr>'
@@ -315,10 +325,19 @@ def build_annual_table(results, ccy):
         c = f'class="{cls}"'
         cells = "".join(f'<td class="{"base-case" if i==0 else ""}">{fmt(r[key])}</td>' for i, r in enumerate(results))
         return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
+    def delta_row(lbl, key, fmt, cls="", invert=False):
+        c = f'class="{cls}"'
+        cells = ""
+        for i, r in enumerate(results):
+            v = r.get(key, 0)
+            color_v = -v if invert else v
+            cell_cls = "base-case" if i == 0 else dc(color_v) if color_v != 0 else ""
+            cells += f'<td class="{cell_cls}">{fmt(v)}</td>'
+        return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
     html = f'<table class="ib-table"><thead><tr><th>Full Year ({ccy})</th>{hdr}</tr></thead><tbody>'
     html += row("Annual Revenue","annual_rev",lambda v: fi(v,dz=False))
     html += row("Annual Total Cost","annual_cost",lambda v: fi(v,dz=False))
-    html += row("Annual Operating Profit","annual_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
+    html += delta_row("Annual Operating Profit","annual_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
     html += row("Operating Margin","om",lambda v: fp(v,1,dz=False),"row-bold")
     dash = "\u2013"
     dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["annual_op"]-bop)}">{dash if i==0 else fi(r["annual_op"]-bop,acct=True)}</td>' for i, r in enumerate(results))
@@ -343,9 +362,9 @@ def build_annual_table(results, ccy):
             f'<td class="{"base-case" if i==0 else dc(-(r.get("delta_nwc",0)))}">{dash if i==0 else fi(r.get("delta_nwc",0),acct=True)}</td>'
             for i, r in enumerate(results))
         html += f'<tr class="indent"><td>Delta NWC vs. Base</td>{delta_nwc_cells}</tr>'
-        html += row("NWC Carrying Cost (Annual)","annual_nwc_cost",lambda v: fi(v,acct=True))
-        html += row("Adj. Annual OP","annual_adj_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
-        html += row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
+        html += delta_row("NWC Carrying Cost (Annual)","annual_nwc_cost",lambda v: fi(v,acct=True),"",invert=True)
+        html += delta_row("Adj. Annual OP","annual_adj_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
+        html += delta_row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
         base_adj_op = results[0].get("annual_adj_op", 0)
         adj_dc_cells = ''.join(
             f'<td class="{"base-case" if i==0 else dc(r.get("annual_adj_op",0)-base_adj_op)}">{dash if i==0 else fi(r.get("annual_adj_op",0)-base_adj_op,acct=True)}</td>'
@@ -361,18 +380,21 @@ def build_charts(results, ccy):
     colors = [NAVY if i==0 else ACCENT_BLUE for i in range(len(results))]
     fig = make_subplots(rows=1, cols=2, subplot_titles=("Operating Margin by Location", f"Annual Operating Profit ({ccy})"), horizontal_spacing=0.12)
     fig.add_trace(go.Bar(x=names, y=oms, marker_color=colors, text=[f"{v:.1f}%" for v in oms],
-        textposition="outside", textfont=dict(size=11, family="Inter", color=DARK_TEXT),
+        textposition="outside", textfont=dict(size=10, family="Inter", color=DARK_TEXT),
         hovertemplate="%{x}<br>OM: %{y:.1f}%<extra></extra>", showlegend=False), row=1, col=1)
     fig.add_trace(go.Bar(x=names, y=ops, marker_color=colors, text=[fi(v,dz=False) for v in ops],
         textposition="outside", textfont=dict(size=10, family="Inter", color=DARK_TEXT),
         hovertemplate="%{x}<br>OP: %{y:,.0f}<extra></extra>", showlegend=False), row=1, col=2)
     fig.update_layout(height=400, margin=dict(l=40,r=40,t=45,b=60), paper_bgcolor="white",
         plot_bgcolor="white", font=dict(family="Inter", size=10, color=DARK_TEXT))
+    # Style subplot titles to match model typography
+    for ann in fig.layout.annotations:
+        ann.update(font=dict(family="Inter", size=11, color=DARK_TEXT))
     for ax in ["yaxis","yaxis2"]:
         fig.update_layout(**{ax: dict(showgrid=True, gridcolor="#eee", zeroline=True, zerolinecolor="#ccc")})
-    fig.update_xaxes(tickangle=0, tickfont=dict(size=11, family="Inter", color=DARK_TEXT))
-    fig.update_yaxes(title_text="Margin (%)", row=1, col=1, ticksuffix="%", title_font=dict(size=10))
-    fig.update_yaxes(title_text=ccy, row=1, col=2, title_font=dict(size=10))
+    fig.update_xaxes(tickangle=0, tickfont=dict(size=10, family="Inter", color=DARK_TEXT))
+    fig.update_yaxes(title_text="Margin (%)", row=1, col=1, ticksuffix="%", title_font=dict(size=10, family="Inter"))
+    fig.update_yaxes(title_text=ccy, row=1, col=2, title_font=dict(size=10, family="Inter"))
     return fig
 
 
@@ -412,12 +434,12 @@ def build_waterfall_chart(result, ccy):
         textfont=dict(size=9, family="Inter", color=DARK_TEXT),
     ))
     fig.update_layout(
-        title=dict(text=f"Cost Bridge: {result['name']} ({ccy}/unit)", font=dict(size=11, family="Inter", weight=600)),
+        title=dict(text=f"Cost Bridge: {result['name']} ({ccy}/unit)", font=dict(size=11, family="Inter", color=DARK_TEXT)),
         height=360, margin=dict(l=40, r=30, t=45, b=50),
         paper_bgcolor="white", plot_bgcolor="white",
         font=dict(family="Inter", size=9, color=DARK_TEXT),
-        yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title=f"{ccy} per unit", title_font=dict(size=9)),
-        xaxis=dict(tickfont=dict(size=9)),
+        yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title=f"{ccy} per unit", title_font=dict(size=9, family="Inter")),
+        xaxis=dict(tickfont=dict(size=9, family="Inter")),
         showlegend=False,
     )
     return fig
@@ -497,7 +519,7 @@ def build_tornado_chart(inputs, factory, is_base, ccy, overrides=None):
     ))
     fig.add_vline(x=0, line=dict(color=NAVY, width=1.5, dash="dot"))
     fig.update_layout(
-        title=dict(text=f"Tornado: OM Sensitivity to ±20% ({factory.name})", font=dict(size=11, family="Inter", weight=600)),
+        title=dict(text=f"Tornado: OM Sensitivity to ±20% ({factory.name})", font=dict(size=11, family="Inter", color=DARK_TEXT)),
         height=max(250, 50 * len(bars) + 80), barmode="overlay",
         margin=dict(l=100, r=30, t=45, b=40),
         paper_bgcolor="white", plot_bgcolor="white",
@@ -604,7 +626,7 @@ def build_sensitivity_chart(inputs, factories, base_factory, param_name, param_l
         ))
 
     fig.update_layout(
-        title=dict(text=f"Sensitivity: Operating Margin vs. {param_label}", font=dict(size=12, family="Inter")),
+        title=dict(text=f"Sensitivity: Operating Margin vs. {param_label}", font=dict(size=11, family="Inter", color=DARK_TEXT)),
         height=380, margin=dict(l=50, r=30, t=50, b=50),
         paper_bgcolor="white", plot_bgcolor="white",
         font=dict(family="Inter", size=10, color=DARK_TEXT),
@@ -1416,7 +1438,7 @@ def render_portfolio_summary(all_results, ccy, cost_of_capital=0.08):
             textfont=dict(size=11, family="Inter", color=DARK_TEXT),
         ))
         fig.update_layout(
-            title=dict(text=f"Total Annual OP by Location ({ccy})", font=dict(size=12, family="Inter")),
+            title=dict(text=f"Total Annual OP by Location ({ccy})", font=dict(size=11, family="Inter", color=DARK_TEXT)),
             height=400, margin=dict(l=40,r=40,t=50,b=60),
             paper_bgcolor="white", plot_bgcolor="white",
             font=dict(family="Inter", size=10, color=DARK_TEXT),
@@ -1917,7 +1939,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                         ))
                 fig_cf.add_hline(y=0, line=dict(color=NAVY, width=1.5, dash="dot"))
                 fig_cf.update_layout(
-                    title=dict(text=f"Cumulative Cash Flow ({currency})", font=dict(size=12, family="Inter")),
+                    title=dict(text=f"Cumulative Cash Flow ({currency})", font=dict(size=11, family="Inter", color=DARK_TEXT)),
                     height=350, margin=dict(l=50, r=30, t=50, b=50),
                     paper_bgcolor="white", plot_bgcolor="white",
                     font=dict(family="Inter", size=10, color=DARK_TEXT),
