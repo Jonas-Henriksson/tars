@@ -39,7 +39,8 @@ st.set_page_config(page_title="Landed Cost Comparison Model", layout="wide", ini
 # Fixed keys from main() in A5, dynamic item keys matched via attribute selectors
 INPUT_EDITOR_KEYS = [
     "proj_name", "proj_ccy", "proj_tm", "proj_dt",
-    "fc_editor", "bf_editor", "wacc_editor", "coc_editor", "country_editor", "assumption_matrix", "nwc_matrix",
+    "fc_editor", "bf_editor", "wacc_editor", "target_pb_editor", "target_om_editor",
+    "coc_editor", "country_editor", "assumption_matrix", "nwc_matrix",
 ]
 _blue_border = f"border-left: 3px solid {INPUT_BLUE} !important; padding-left: 2px;"
 _fixed_rules = "\n".join(f"    .st-key-{k} {{ {_blue_border} }}" for k in INPUT_EDITOR_KEYS)
@@ -1386,7 +1387,7 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
 
 
 # ── PORTFOLIO SUMMARY ─────────────────────────────────────────
-def render_portfolio_summary(all_results, ccy, company_wacc=0.08):
+def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback=3, target_om=0.20):
     if not all_results:
         st.markdown('<div class="callout">Complete at least one item analysis to see the portfolio summary.</div>', unsafe_allow_html=True)
         return
@@ -1605,11 +1606,11 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08):
             for fn_ in alt_fnames:
                 pb = agg_cases[fn_]["simple_payback"]
                 if pb is not None:
-                    cls = "delta-pos" if pb <= 10 else "delta-neg"
+                    cls = "delta-pos" if pb <= target_payback else "delta-neg"
                     pb_cells += f'<td class="{cls}">{pb:.1f} years</td>'
                 else:
                     pb_cells += f'<td>{dash}</td>'
-            inv_p_html += f'<tr class="row-bold"><td>Simple Payback</td>{pb_cells}</tr>'
+            inv_p_html += f'<tr class="row-bold"><td>Simple Payback (target &le; {target_payback}yr)</td>{pb_cells}</tr>'
 
             inv_p_html += '</tbody></table>'
             st.markdown(inv_p_html, unsafe_allow_html=True)
@@ -1690,7 +1691,7 @@ def main():
                 ("Assumptions Matrix", "sec-assumptions"),
                 ("Lead Times", "sec-lead-times"),
                 ("NWC Assumptions", "sec-nwc"),
-                ("Total Carrying Costs", "sec-carrying-costs"),
+                ("Financial Configuration", "sec-financial-config"),
                 ("Item Analysis", "sec-item-analysis"),
             ]
             links_html = "".join(
@@ -1851,6 +1852,8 @@ Compares full cost-to-serve across factory locations, including material, labour
     if st.session_state.active_page == "investment":
         all_results = st.session_state.get("_all_results", [])
         company_wacc = st.session_state.get("_company_wacc", 0.08)
+        target_payback = st.session_state.get("target_payback", 3)
+        target_om = st.session_state.get("target_om", 0.20)
         factory_countries = st.session_state.get("_factory_countries", {})
         currency = st.session_state.get("currency", "SEK")
         ex = st.session_state.ex
@@ -1980,24 +1983,24 @@ Compares full cost-to-serve across factory locations, including material, labour
                         irr_cells += f'<td>{dash}</td>'
                 inv_html += f'<tr class="row-bold"><td><strong>IRR</strong></td>{irr_cells}</tr>'
 
-                # Payback
+                # Payback (compared against target payback)
                 pb_cells = ""
                 for ic in inv_results:
                     if ic["simple_payback"] is not None:
-                        cls = "delta-pos" if ic["simple_payback"] <= inv_horizon else "delta-neg"
+                        cls = "delta-pos" if ic["simple_payback"] <= target_payback else "delta-neg"
                         pb_cells += f'<td class="{cls}">{ic["simple_payback"]:.1f} years</td>'
                     else:
                         pb_cells += f'<td>{dash}</td>'
-                inv_html += f'<tr class="row-bold"><td>Simple Payback</td>{pb_cells}</tr>'
+                inv_html += f'<tr class="row-bold"><td>Simple Payback (target &le; {target_payback}yr)</td>{pb_cells}</tr>'
 
                 dpb_cells = ""
                 for ic in inv_results:
                     if ic["discounted_payback"] is not None:
-                        cls = "delta-pos" if ic["discounted_payback"] <= inv_horizon else "delta-neg"
+                        cls = "delta-pos" if ic["discounted_payback"] <= target_payback else "delta-neg"
                         dpb_cells += f'<td class="{cls}">{ic["discounted_payback"]:.1f} years</td>'
                     else:
                         dpb_cells += f'<td>{dash}</td>'
-                inv_html += f'<tr class="row-bold"><td>Discounted Payback</td>{dpb_cells}</tr>'
+                inv_html += f'<tr class="row-bold"><td>Discounted Payback (target &le; {target_payback}yr)</td>{dpb_cells}</tr>'
 
                 inv_html += '</tbody></table>'
                 st.markdown(inv_html, unsafe_allow_html=True)
@@ -2119,22 +2122,12 @@ Compares full cost-to-serve across factory locations, including material, labour
     num_factories = max(1, min(6, int(edited_fc.loc[0, "Comparison Factories"])))
     st.session_state["num_fac"] = num_factories
 
-    # Base factory name + Company WACC
-    bf_col1, bf_col2 = st.columns([2, 1])
-    with bf_col1:
-        bf_df = pd.DataFrame({"Current Factory Name": [EX_BASE.name if ex else "Base Case"]})
-        edited_bf = st.data_editor(bf_df, use_container_width=False, num_rows="fixed",
-            key="bf_editor", hide_index=True,
-            column_config={"Current Factory Name": st.column_config.TextColumn("Current Factory Name", width=250)})
-        base_factory_name = str(edited_bf.loc[0, "Current Factory Name"] or "Base Case")
-    with bf_col2:
-        wacc_df = pd.DataFrame({"Company WACC (%)": [8.0 if ex else 8.0]})
-        edited_wacc = st.data_editor(wacc_df, use_container_width=False, num_rows="fixed",
-            key="wacc_editor", hide_index=True,
-            column_config={"Company WACC (%)": st.column_config.NumberColumn(
-                "Company WACC (%)", min_value=0.0, max_value=30.0, step=0.5, format="%.1f", width=200)})
-        company_wacc = float(edited_wacc.loc[0, "Company WACC (%)"] or 0.0) / 100.0
-        st.session_state["company_wacc"] = company_wacc
+    # Base factory name
+    bf_df = pd.DataFrame({"Current Factory Name": [EX_BASE.name if ex else "Base Case"]})
+    edited_bf = st.data_editor(bf_df, use_container_width=False, num_rows="fixed",
+        key="bf_editor", hide_index=True,
+        column_config={"Current Factory Name": st.column_config.TextColumn("Current Factory Name", width=250)})
+    base_factory_name = str(edited_bf.loc[0, "Current Factory Name"] or "Base Case")
 
     # Factory country assignment
     st.markdown('<div class="sec-sm" id="sec-factory-locations">Factory Locations</div>', unsafe_allow_html=True)
@@ -2304,7 +2297,37 @@ Compares full cost-to-serve across factory locations, including material, labour
         }
     base_nwc = nwc_assumptions.get(base_factory_name, {})
 
-    # ── TOTAL CARRYING COSTS ──────────────────────────────────
+    # ── FINANCIAL CONFIGURATION ──────────────────────────────
+    st.markdown('<div class="sec-sm" id="sec-financial-config">Financial Configuration</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout">Company-wide financial parameters for investment analysis and performance benchmarking.</div>', unsafe_allow_html=True)
+
+    fin_col1, fin_col2, fin_col3 = st.columns([1, 1, 1])
+    with fin_col1:
+        wacc_df = pd.DataFrame({"Company WACC (%)": [8.0 if ex else 8.0]})
+        edited_wacc = st.data_editor(wacc_df, use_container_width=False, num_rows="fixed",
+            key="wacc_editor", hide_index=True,
+            column_config={"Company WACC (%)": st.column_config.NumberColumn(
+                "Company WACC (%)", min_value=0.0, max_value=30.0, step=0.5, format="%.1f", width=200)})
+        company_wacc = float(edited_wacc.loc[0, "Company WACC (%)"] or 0.0) / 100.0
+        st.session_state["company_wacc"] = company_wacc
+    with fin_col2:
+        pb_df = pd.DataFrame({"Target Payback (Years)": [3 if ex else 3]})
+        edited_pb = st.data_editor(pb_df, use_container_width=False, num_rows="fixed",
+            key="target_pb_editor", hide_index=True,
+            column_config={"Target Payback (Years)": st.column_config.NumberColumn(
+                "Target Payback (Years)", min_value=1, max_value=15, step=1, format="%d", width=200)})
+        target_payback = max(1, int(edited_pb.loc[0, "Target Payback (Years)"] or 3))
+        st.session_state["target_payback"] = target_payback
+    with fin_col3:
+        om_df = pd.DataFrame({"Target Op. Margin (%)": [20.0 if ex else 20.0]})
+        edited_om = st.data_editor(om_df, use_container_width=False, num_rows="fixed",
+            key="target_om_editor", hide_index=True,
+            column_config={"Target Op. Margin (%)": st.column_config.NumberColumn(
+                "Target Op. Margin (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.1f", width=200)})
+        target_om = float(edited_om.loc[0, "Target Op. Margin (%)"] or 0.0) / 100.0
+        st.session_state["target_om"] = target_om
+
+    # ── Total Carrying Costs (sub-section)
     all_factory_names_cc = [base_factory_name] + factory_col_names
     st.markdown('<div class="sec-sm" id="sec-carrying-costs">Total Carrying Costs</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="callout">Annual carrying cost rate applied to Delta NWC. Typically <strong>15–30%</strong> of inventory value. Use a company-wide rate for simplicity, or per-factory rates to isolate cost differences across the footprint.</div>', unsafe_allow_html=True)
@@ -2621,7 +2644,8 @@ adjust safety stock policies.
 
     # Portfolio Summary tab
     with tabs[-1]:
-        render_portfolio_summary(all_results, currency, company_wacc=company_wacc)
+        render_portfolio_summary(all_results, currency, company_wacc=company_wacc,
+                                target_payback=target_payback, target_om=target_om)
 
     # Store results for investment page
     st.session_state["_all_results"] = all_results
