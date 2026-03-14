@@ -19,7 +19,8 @@ NWC (Net Working Capital) impact:
  14. Payables (DPO) = (PS x Qty / 365) x Payment Terms Days  [reduces NWC]
  15. Total NWC = GIT + Safety Stock + Cycle Stock - Payables
  16. Delta NWC = NWC(location) - NWC(base)
- 17. NWC Carrying Cost (annual) = Delta NWC x Cost of Capital %
+ 17. NWC Carrying Cost (annual) = Delta NWC x Total Carrying Cost %
+     Total Carrying Cost % = Capital Cost (WACC) + Risk Cost + Storage & Handling + Service Cost
  18. NWC Carrying Cost (per unit) = annual NWC cost / Qty
  19. Adjusted OP = OP - NWC carrying cost per unit
 """
@@ -52,7 +53,7 @@ def compute_location(
         overrides:               Optional per-factory cost overrides.
         lead_time_days:          Transit days from this factory to target market.
         base_lead_time_days:     Transit days from base factory (for delta calc).
-        cost_of_capital:         Annual cost of capital as a decimal (e.g. 0.08 = 8%).
+        cost_of_capital:         Total annual carrying cost rate as a decimal (e.g. 0.18 = 18%).
         safety_stock_days:       Days of safety stock held for this factory.
         base_safety_stock_days:  Days of safety stock for the base factory.
         cycle_stock_days:        Average production cycle stock in days.
