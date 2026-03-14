@@ -181,6 +181,29 @@ st.markdown(f"""
         padding: 0.45rem 1.1rem; border-radius: 0; text-transform: uppercase;
         letter-spacing: 0.03em;
     }}
+    /* ── Sidebar Nav Buttons ── */
+    .nav-sep {{
+        font-size: 0.58rem; font-weight: 700; color: {GREY_TEXT}; text-transform: uppercase;
+        letter-spacing: 0.1em; padding: 0.7rem 0.75rem 0.25rem; margin-top: 0.3rem;
+    }}
+    section[data-testid="stSidebar"] .stButton > button {{
+        font-family: 'Inter', sans-serif !important; font-size: 0.74rem !important;
+        font-weight: 500 !important; text-align: left !important; padding: 0.45rem 0.75rem !important;
+        border-radius: 4px !important; letter-spacing: 0.01em !important;
+        justify-content: flex-start !important; border: none !important;
+        transition: background 0.15s !important;
+    }}
+    section[data-testid="stSidebar"] .stButton > button[kind="secondary"] {{
+        background: transparent !important; color: {DARK_TEXT} !important;
+    }}
+    section[data-testid="stSidebar"] .stButton > button[kind="secondary"]:hover {{
+        background: #f0f2f5 !important;
+    }}
+    section[data-testid="stSidebar"] .stButton > button[kind="primary"] {{
+        background: #e8edf4 !important; color: {NAVY} !important;
+        font-weight: 600 !important; border-left: 3px solid {NAVY} !important;
+    }}
+
     /* Print optimizations */
     @media print {{
         .stApp {{ background: white !important; }}
@@ -1130,6 +1153,8 @@ def init_state():
         st.session_state.next_id = 1
     if "ex" not in st.session_state:
         st.session_state.ex = False
+    if "active_page" not in st.session_state:
+        st.session_state.active_page = "model"
 
 
 # ── ITEM ANALYSIS RENDERER ───────────────────────────────────────
@@ -1520,9 +1545,38 @@ def main():
         <div style="font-size:0.65rem;color:rgba(255,255,255,0.7);margin-top:0.15rem;">v9.0 &middot; SKF Group</div>
     </div>""", unsafe_allow_html=True)
 
-    sidebar_section = st.sidebar.radio("Navigation", ["About & Methodology", "User Guide", "Changelog & Contact"], label_visibility="collapsed")
+    # Navigation buttons
+    def _nav_btn(label, page_key):
+        active = " active" if st.session_state.active_page == page_key else ""
+        return f'<button class="nav-btn{active}" onclick="void(0)">{label}</button>'
 
-    if sidebar_section == "About & Methodology":
+    nav_pages = [
+        ("Cost Model", "model"),
+        ("Strategic Context", "strategic"),
+    ]
+    info_pages = [
+        ("About & Methodology", "about"),
+        ("User Guide", "guide"),
+        ("Changelog & Contact", "changelog"),
+    ]
+
+    st.sidebar.markdown(f'<div class="nav-sep">Analysis</div>', unsafe_allow_html=True)
+    for label, key in nav_pages:
+        if st.sidebar.button(label, key=f"nav_{key}", use_container_width=True,
+                             type="primary" if st.session_state.active_page == key else "secondary"):
+            st.session_state.active_page = key
+            st.rerun()
+
+    st.sidebar.markdown(f'<div class="nav-sep">Reference</div>', unsafe_allow_html=True)
+    for label, key in info_pages:
+        if st.sidebar.button(label, key=f"nav_{key}", use_container_width=True,
+                             type="primary" if st.session_state.active_page == key else "secondary"):
+            st.session_state.active_page = key
+            st.rerun()
+
+    # ── SIDEBAR CONTENT (Reference pages) ──
+    if st.session_state.active_page == "about":
+        st.sidebar.markdown("---")
         st.sidebar.markdown(f"""
 <div style="font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};line-height:1.6;">
 
@@ -1570,27 +1624,11 @@ A separate module evaluates the overall investment rationale for each production
 </ul>
 Investment inputs are per receiving factory and per item. The discount rate defaults to the Cost of Capital (WACC).
 
-<br><strong style="font-size:0.9rem;">How to Use</strong><br>
-<strong>1.</strong> Set up the project: name, currency, target market, and date<br>
-<strong>2.</strong> Configure shared factory assumptions in the matrix (applies to all items)<br>
-<strong>3.</strong> Assign factory countries to auto-calculate lead times to target market<br>
-<strong>4.</strong> Set Cost of Capital (WACC %) for NWC and investment discount rate<br>
-<strong>5.</strong> Optionally enter NWC assumptions (safety stock, cycle stock, payment terms) in the collapsible section<br>
-<strong>6.</strong> Add items using the Item tabs &mdash; enter item details, net sales, and base costs<br>
-<strong>7.</strong> Optionally override specific costs per factory in the Cost Overrides grid<br>
-<strong>8.</strong> Review results: KPI cards, per-unit tables, full-year impact, NWC impact, and charts<br>
-<strong>9.</strong> Optionally enter transfer investment costs (CAPEX, OPEX, restructuring) per receiving factory to see NPV, IRR, and payback analysis<br>
-<strong>10.</strong> Use the Portfolio Summary tab to compare across all items with aggregated investment metrics<br>
-<strong>11.</strong> Set the Data Classification (C1&ndash;C4) &mdash; defaults to C3 (Confidential). Appears in footer and exports<br>
-<strong>12.</strong> Optionally provide strategic context (rationale, purpose, risk of inaction, key risks) per item &mdash; these appear in the executive summary and are included in all exports<br>
-<strong>13.</strong> Export to Excel or PDF pitch-book for distribution<br>
-<strong>14.</strong> Save/Load projects as JSON to resume later
-
-
 </div>
 """, unsafe_allow_html=True)
 
-    elif sidebar_section == "Changelog & Contact":
+    elif st.session_state.active_page == "changelog":
+        st.sidebar.markdown("---")
         st.sidebar.markdown(f"""
 <div style="font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};line-height:1.6;">
 <strong style="font-size:0.82rem;">Changelog</strong><br>
@@ -1608,7 +1646,8 @@ Investment inputs are per receiving factory and per item. The discount rate defa
 </div>
 """, unsafe_allow_html=True)
 
-    else:  # User Guide
+    elif st.session_state.active_page == "guide":
+        st.sidebar.markdown("---")
         st.sidebar.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:0.74rem;color:{DARK_TEXT};line-height:1.55;">
 <strong style="font-size:0.82rem;">What This Model Does</strong><br>
 Compares full cost-to-serve across factory locations, including material, labour, tariffs, shipping, and inventory costs. Shows which location offers the best operating profit.
@@ -1634,6 +1673,55 @@ Compares full cost-to-serve across factory locations, including material, labour
 <strong>7.</strong> Add strategic context per item<br>
 <strong>8.</strong> Export PDF or Excel
 </div>""", unsafe_allow_html=True)
+    # ── STRATEGIC CONTEXT PAGE ─────────────────────────────────
+    if st.session_state.active_page == "strategic":
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Provide strategic context and qualitative rationale for each item\'s transfer decision. These inputs appear in the executive summary, portfolio overview, and exported reports.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec">Strategic Context & Qualitative Assessment</div>', unsafe_allow_html=True)
+
+        for idx, item_def in enumerate(st.session_state.project_items):
+            item_label = f"Item {idx + 1}"
+            st.markdown(f'<div class="sec-sm">{item_label}</div>', unsafe_allow_html=True)
+
+            q_labels = [
+                ("strategic_rationale", "Strategic Rationale",
+                 "Why is this transfer being considered? What strategic objective does it serve? (e.g. cost competitiveness, capacity, market proximity, risk diversification)"),
+                ("purpose", "Purpose & Objective",
+                 "What is the specific goal of this evaluation? (e.g. annual sourcing review, new product launch, capacity constraint resolution)"),
+                ("risk_of_inaction", "What Happens If We Don't Do This?",
+                 "Describe the consequence of maintaining the status quo. (e.g. continued margin erosion, capacity bottleneck, single-source risk, inability to serve key market)"),
+                ("risks", "Key Risks & Mitigations",
+                 "What are the main risks of this transfer? (e.g. quality ramp-up, customer approval timeline, IP concerns, FX exposure, geopolitical risk)"),
+            ]
+            ex_qual = {}
+            if st.session_state.ex:
+                ex_qual = {
+                    "strategic_rationale": "Diversify manufacturing footprint to reduce single-source risk and improve cost competitiveness in key growth markets. Aligns with Group strategy to establish regional production hubs.",
+                    "purpose": "Annual sourcing review — evaluate transfer feasibility for high-volume bearing assembly line as part of the 2026 manufacturing footprint optimisation programme.",
+                    "risk_of_inaction": "Continued margin erosion of 2-3pp annually due to rising European labour costs. Single-source risk from Factory A capacity constraints limits growth in Americas and Asia-Pacific markets.",
+                    "risks": "Quality ramp-up: 6-12 month qualification period at receiving site. Customer re-approval required for automotive OEM accounts (est. 9 months). FX exposure on CNY/SEK if transferring to Asia. Geopolitical risk for China-based production.",
+                }
+
+            col1, col2 = st.columns(2)
+            for qi, (key, label, help_text) in enumerate(q_labels):
+                with col1 if qi % 2 == 0 else col2:
+                    st.markdown(f'<div style="font-size:0.75rem;font-weight:600;color:{DARK_TEXT};margin:0.6rem 0 0.2rem 0;">{label}</div>', unsafe_allow_html=True)
+                    st.text_area(
+                        label, value=ex_qual.get(key, ""),
+                        key=f"i{item_def['id']}_qual_{key}",
+                        height=100, label_visibility="collapsed",
+                        placeholder=help_text)
+
+        # Footer for strategic context page
+        st.markdown("---")
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Strategic Context</span>", unsafe_allow_html=True)
+        return  # Don't render the model page
+
+    # ── Reference-only pages: show info message ──
+    if st.session_state.active_page in ("about", "guide", "changelog"):
+        st.markdown(f'<div class="callout" style="font-size:0.76rem;">Reference content is displayed in the sidebar. Select <strong>Cost Model</strong> or <strong>Strategic Context</strong> from the sidebar to work with the analysis.</div>', unsafe_allow_html=True)
+        return
+
+    # ── COST MODEL PAGE (active_page == "model") ──
     st.markdown(f'<div class="callout" style="font-size:0.72rem;"><span style="border-left:3px solid {INPUT_BLUE};padding-left:0.35rem;font-weight:600;color:{INPUT_BLUE};">Blue border</span> = editable input fields &nbsp;&middot;&nbsp; <span style="font-weight:600;color:{DARK_TEXT};">Output tables</span> = calculated results (read-only) &nbsp;&middot;&nbsp; <span style="color:{GREY_TEXT};font-style:italic;">Grey italic</span> = guidance notes</div>', unsafe_allow_html=True)
 
     ex = st.checkbox("Load example data", value=st.session_state.ex)
@@ -2023,10 +2111,8 @@ Compares full cost-to-serve across factory locations, including material, labour
                     if len(results) >= 2:
                         st.plotly_chart(build_charts(results, currency), use_container_width=True, config={"displayModeBar": False})
 
-                    # ── SUB-TABS: Cost Bridge | Sensitivity | Investment ──
+                    # ── SUB-TABS: Cost Bridge | Sensitivity ──
                     sub_tab_labels = ["Cost Bridge", "Sensitivity Analysis"]
-                    if len(results) >= 2:
-                        sub_tab_labels.append("Transfer Investment")
                     sub_tabs = st.tabs(sub_tab_labels)
 
                     # ── Cost Bridge tab ──
@@ -2082,10 +2168,10 @@ Compares full cost-to-serve across factory locations, including material, labour
                         )
                         st.plotly_chart(fig_sa, use_container_width=True, config={"displayModeBar": False})
 
-                    # ── TRANSFER INVESTMENT ANALYSIS ──────────────────
+                    # ── TRANSFER INVESTMENT ANALYSIS (separate section) ──
                     inv_results = []
                     if len(results) >= 2:
-                      with sub_tabs[2]:
+                        st.markdown(f'<div class="sec">Transfer Investment Analysis</div>', unsafe_allow_html=True)
                         st.markdown(f'<div class="callout">Evaluate the investment rationale for transferring production. Enter one-time costs per receiving factory. Annual savings are derived from the NWC-adjusted OP delta vs. base. Leave blank or zero if no investment is required.</div>', unsafe_allow_html=True)
 
                         inv_c1, inv_c2 = st.columns([1, 1])
@@ -2239,35 +2325,11 @@ Compares full cost-to-serve across factory locations, including material, labour
                             )
                             st.plotly_chart(fig_cf, use_container_width=True, config={"displayModeBar": False})
 
-                    # ── QUALITATIVE ASSESSMENT (at top of item, inputs persisted via session state) ──
-                    qual = {}
-                    with st.expander("Strategic Context & Qualitative Assessment", expanded=False):
-                        st.markdown(f'<div class="callout">Provide strategic context and qualitative rationale for this transfer decision. These inputs will appear in the executive summary, portfolio overview, and exported reports.</div>', unsafe_allow_html=True)
-
-                        q_labels = [
-                            ("strategic_rationale", "Strategic Rationale",
-                             "Why is this transfer being considered? What strategic objective does it serve? (e.g. cost competitiveness, capacity, market proximity, risk diversification)"),
-                            ("purpose", "Purpose & Objective",
-                             "What is the specific goal of this evaluation? (e.g. annual sourcing review, new product launch, capacity constraint resolution)"),
-                            ("risk_of_inaction", "What Happens If We Don't Do This?",
-                             "Describe the consequence of maintaining the status quo. (e.g. continued margin erosion, capacity bottleneck, single-source risk, inability to serve key market)"),
-                            ("risks", "Key Risks & Mitigations",
-                             "What are the main risks of this transfer? (e.g. quality ramp-up, customer approval timeline, IP concerns, FX exposure, geopolitical risk)"),
-                        ]
-                        ex_qual = {
-                            "strategic_rationale": "Diversify manufacturing footprint to reduce single-source risk and improve cost competitiveness in key growth markets. Aligns with Group strategy to establish regional production hubs." if ex else "",
-                            "purpose": "Annual sourcing review — evaluate transfer feasibility for high-volume bearing assembly line as part of the 2026 manufacturing footprint optimisation programme." if ex else "",
-                            "risk_of_inaction": "Continued margin erosion of 2-3pp annually due to rising European labour costs. Single-source risk from Factory A capacity constraints limits growth in Americas and Asia-Pacific markets." if ex else "",
-                            "risks": "Quality ramp-up: 6-12 month qualification period at receiving site. Customer re-approval required for automotive OEM accounts (est. 9 months). FX exposure on CNY/SEK if transferring to Asia. Geopolitical risk for China-based production." if ex else "",
-                        }
-
-                        for key, label, help_text in q_labels:
-                            st.markdown(f'<div style="font-size:0.75rem;font-weight:600;color:{DARK_TEXT};margin:0.6rem 0 0.2rem 0;">{label}</div>', unsafe_allow_html=True)
-                            qual[key] = st.text_area(
-                                label, value=ex_qual.get(key, ""),
-                                key=f"i{item_def['id']}_qual_{key}",
-                                height=80, label_visibility="collapsed",
-                                placeholder=help_text)
+                    # ── QUALITATIVE DATA (read from session state; edited on Strategic Context page) ──
+                    qual = {
+                        key: st.session_state.get(f"i{item_def['id']}_qual_{key}", "")
+                        for key in ("strategic_rationale", "purpose", "risk_of_inaction", "risks")
+                    }
 
                     all_results.append({
                         "inputs": {"item_number": inputs.item_number, "designation": inputs.designation,
