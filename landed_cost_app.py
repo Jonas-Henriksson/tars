@@ -1690,6 +1690,7 @@ def main():
                 ("Assumptions Matrix", "sec-assumptions"),
                 ("Lead Times", "sec-lead-times"),
                 ("NWC Assumptions", "sec-nwc"),
+                ("Total Carrying Costs", "sec-carrying-costs"),
                 ("Item Analysis", "sec-item-analysis"),
             ]
             links_html = "".join(
@@ -1738,7 +1739,7 @@ Net Working Capital impact captures the balance sheet cost of inventory tied up 
 <li><strong>Payables (DPO)</strong> = (PS x Qty / 365) x Payment Terms Days &mdash; reduces NWC</li>
 <li><strong>Total NWC</strong> = GIT + Safety Stock + Cycle Stock - Payables</li>
 <li><strong>Delta NWC</strong> = NWC(location) - NWC(base)</li>
-<li><strong>NWC Carrying Cost</strong> = Delta NWC x Cost of Capital (WACC %)</li>
+<li><strong>NWC Carrying Cost</strong> = Delta NWC x Total Carrying Cost %</li>
 <li><strong>Adjusted OP</strong> = OP - NWC Carrying Cost per unit</li>
 </ul>
 
@@ -1752,7 +1753,7 @@ A separate module evaluates the overall investment rationale for each production
 <li><strong>Simple Payback</strong> = Total Investment / Annual Savings</li>
 <li><strong>Discounted Payback</strong> = First year where cumulative discounted cash flow &ge; 0</li>
 </ul>
-Investment inputs are per receiving factory and per item. The discount rate defaults to the Cost of Capital (WACC).
+Investment inputs are per receiving factory and per item. The discount rate defaults to the Total Carrying Cost rate.
 
 </div>
 """, unsafe_allow_html=True)
@@ -1797,7 +1798,7 @@ Compares full cost-to-serve across factory locations, including material, labour
 <strong>1.</strong> Set project name, currency, target market<br>
 <strong>2.</strong> Configure factory assumptions matrix<br>
 <strong>3.</strong> Assign factory countries for lead times<br>
-<strong>4.</strong> Set WACC % and NWC assumptions<br>
+<strong>4.</strong> Set carrying cost rate and NWC assumptions<br>
 <strong>5.</strong> Add items with costs and overrides<br>
 <strong>6.</strong> Review results, sensitivity, investment<br>
 <strong>7.</strong> Add strategic context per item<br>
@@ -1881,7 +1882,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                 inv_horizon = max(1, min(30, int(edited_hz.loc[0, "Analysis Horizon (Years)"] or 10)))
                 st.session_state[f"i{item_id}_inv_hz_val"] = inv_horizon
             with inv_c2:
-                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};padding-top:0.6rem;">Discount rate uses Cost of Capital (WACC): <strong>{cost_of_capital*100:.1f}%</strong></div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};padding-top:0.6rem;">Discount rate uses Total Carrying Cost: <strong>{cost_of_capital*100:.1f}%</strong></div>', unsafe_allow_html=True)
 
             alt_names = [r["name"] for r in results[1:]]
             INV_ROWS = ["CAPEX (Tooling / Equipment)", "OPEX (Project / Qualification)", "Restructuring (Sending Site)"]
@@ -1958,7 +1959,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                 inv_html += f'<tr class="row-separator">{"<td></td>" * (len(inv_results)+1)}</tr>'
                 inv_html += _inv_row("Annual Savings (Adj. OP Delta)", [fi(ic["annual_savings"], acct=True, dz=False) for ic in inv_results])
                 inv_html += _inv_row("Analysis Horizon", [f"{ic['horizon_years']} years" for ic in inv_results])
-                inv_html += _inv_row("Discount Rate (WACC)", [fp(ic['discount_rate'], 1, dz=False) for ic in inv_results])
+                inv_html += _inv_row("Discount Rate (Carrying Cost)", [fp(ic['discount_rate'], 1, dz=False) for ic in inv_results])
 
                 inv_html += f'<tr class="row-separator">{"<td></td>" * (len(inv_results)+1)}</tr>'
 
@@ -2118,22 +2119,12 @@ Compares full cost-to-serve across factory locations, including material, labour
     num_factories = max(1, min(6, int(edited_fc.loc[0, "Comparison Factories"])))
     st.session_state["num_fac"] = num_factories
 
-    # Base factory name + Cost of Capital
-    bf_col1, bf_col2 = st.columns([2, 1])
-    with bf_col1:
-        bf_df = pd.DataFrame({"Current Factory Name": [EX_BASE.name if ex else "Base Case"]})
-        edited_bf = st.data_editor(bf_df, use_container_width=False, num_rows="fixed",
-            key="bf_editor", hide_index=True,
-            column_config={"Current Factory Name": st.column_config.TextColumn("Current Factory Name", width=250)})
-        base_factory_name = str(edited_bf.loc[0, "Current Factory Name"] or "Base Case")
-    with bf_col2:
-        coc_df = pd.DataFrame({"Cost of Capital (WACC %)": [8.0 if ex else 8.0]})
-        edited_coc = st.data_editor(coc_df, use_container_width=False, num_rows="fixed",
-            key="coc_editor", hide_index=True,
-            column_config={"Cost of Capital (WACC %)": st.column_config.NumberColumn(
-                "Cost of Capital (WACC %)", min_value=0.0, max_value=30.0, step=0.5, format="%.1f", width=200)})
-        cost_of_capital = float(edited_coc.loc[0, "Cost of Capital (WACC %)"] or 0.0) / 100.0
-        st.session_state["cost_of_capital"] = cost_of_capital
+    # Base factory name
+    bf_df = pd.DataFrame({"Current Factory Name": [EX_BASE.name if ex else "Base Case"]})
+    edited_bf = st.data_editor(bf_df, use_container_width=False, num_rows="fixed",
+        key="bf_editor", hide_index=True,
+        column_config={"Current Factory Name": st.column_config.TextColumn("Current Factory Name", width=250)})
+    base_factory_name = str(edited_bf.loc[0, "Current Factory Name"] or "Base Case")
 
     # Factory country assignment
     st.markdown('<div class="sec-sm" id="sec-factory-locations">Factory Locations</div>', unsafe_allow_html=True)
@@ -2302,6 +2293,46 @@ Compares full cost-to-serve across factory locations, including material, labour
             "payment_terms_days": _nwc_val("Payment Terms (DPO) Days", fn_),
         }
     base_nwc = nwc_assumptions.get(base_factory_name, {})
+
+    # ── TOTAL CARRYING COSTS ──────────────────────────────────
+    st.markdown('<div class="sec-sm" id="sec-carrying-costs">Total Carrying Costs</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout">The annual rate applied to incremental NWC (Delta NWC) to compute carrying cost. Typically <strong>15–30%</strong> of inventory value. WACC (cost of capital) is the largest component — add risk, storage, and service costs for the full picture.</div>', unsafe_allow_html=True)
+
+    CC_ROWS = ["Capital Cost (WACC)", "Risk Cost", "Storage & Handling", "Service Cost"]
+    CC_GUIDES = [
+        "Weighted average cost of capital — opportunity cost of tied-up cash (typical: 7–15%)",
+        "Obsolescence, shrinkage, damage, spoilage (typical: 3–9%)",
+        "Warehousing, utilities, direct labor for inventory handling (typical: 2–5%)",
+        "Insurance, property taxes, inventory management software (typical: 1–3%)",
+    ]
+    cc_defaults = [8.0, 5.0, 3.0, 2.0]
+    cc_ex_vals = [8.0, 5.0, 3.0, 2.0]
+
+    cc_data = {
+        "Component": CC_ROWS,
+        "Rate (%)": cc_ex_vals if ex else cc_defaults,
+        "Guide": CC_GUIDES,
+    }
+    cc_df = pd.DataFrame(cc_data)
+
+    edited_cc = st.data_editor(
+        cc_df, use_container_width=False, num_rows="fixed", key="coc_editor", hide_index=True,
+        column_config={
+            "Component": st.column_config.TextColumn("Component", width=200, disabled=True),
+            "Rate (%)": st.column_config.NumberColumn("Rate (%)", min_value=0.0, max_value=50.0, step=0.5, format="%.1f", width=120),
+            "Guide": st.column_config.TextColumn("Guide", width=420, disabled=True),
+        },
+        disabled=["Component", "Guide"])
+
+    # Sum the components to get total carrying cost rate
+    total_carrying_pct = 0.0
+    for _, row in edited_cc.iterrows():
+        v = row["Rate (%)"]
+        if v is not None and not pd.isna(v):
+            total_carrying_pct += float(v)
+    cost_of_capital = total_carrying_pct / 100.0
+    st.session_state["cost_of_capital"] = cost_of_capital
+    st.markdown(f'<div style="font-size:0.78rem;color:{DARK_TEXT};font-weight:600;margin-top:0.3rem;">Total Carrying Cost Rate: {total_carrying_pct:.1f}%</div>', unsafe_allow_html=True)
 
     # Build factory objects
     base = FactoryAssumptions(
