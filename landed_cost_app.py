@@ -74,17 +74,25 @@ st.markdown(f"""
         font-family: 'Inter', sans-serif !important;
         font-size: 0.72rem !important;
     }}
-    .stDownloadButton > button,
-    .stDownloadButton > button * {{
-        font-family: 'Inter', sans-serif !important;
-        font-size: 0.72rem !important;
-        padding: 0.3rem 0.8rem !important;
-    }}
-    .stCheckbox label,
-    .stCheckbox label span,
-    .stCheckbox label p {{
+    .stDownloadButton button,
+    .stDownloadButton button *,
+    .stDownloadButton button p,
+    .stDownloadButton button span,
+    [data-testid="stDownloadButton"] button,
+    [data-testid="stDownloadButton"] button * {{
         font-family: 'Inter', sans-serif !important;
         font-size: 0.76rem !important;
+        font-weight: 500 !important;
+    }}
+    .stCheckbox,
+    .stCheckbox label,
+    .stCheckbox label *,
+    [data-testid="stCheckbox"] label,
+    [data-testid="stCheckbox"] label * {{
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.76rem !important;
+        display: flex !important;
+        align-items: center !important;
     }}
     header {{background: transparent !important;}}
     header [data-testid="stDecoration"] {{display: none;}}
