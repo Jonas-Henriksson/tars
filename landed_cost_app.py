@@ -300,7 +300,7 @@ def build_annual_table(results, ccy):
             f'<td class="{"base-case" if i==0 else dc(-(r.get("delta_nwc",0)))}">{dash if i==0 else fi(r.get("delta_nwc",0),acct=True)}</td>'
             for i, r in enumerate(results))
         html += f'<tr class="indent"><td>Delta NWC vs. Base</td>{delta_nwc_cells}</tr>'
-        html += row("NWC Carrying Cost (Annual)","annual_nwc_cost",lambda v: fi(v,acct=True),"",True)
+        html += row("NWC Carrying Cost (Annual)","annual_nwc_cost",lambda v: fi(v,acct=True))
         html += row("Adj. Annual OP","annual_adj_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
         html += row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
         base_adj_op = results[0].get("annual_adj_op", 0)
