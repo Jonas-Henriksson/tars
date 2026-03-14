@@ -1910,52 +1910,54 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         if cc_mode == "Company-wide rate":
             cc_data = {
-                "Component": CC_ROWS,
-                "Rate (%)": cc_defaults,
-                "Guide": CC_GUIDES,
+                "Component": CC_ROWS + ["Total"],
+                "Rate (%)": cc_defaults + [sum(cc_defaults)],
+                "Guide": CC_GUIDES + ["Sum of all components — applied to Delta NWC"],
             }
             cc_df = pd.DataFrame(cc_data)
             edited_cc = st.data_editor(
                 cc_df, use_container_width=False, num_rows="fixed", key="coc_editor", hide_index=True,
                 column_config={
                     "Component": st.column_config.TextColumn("Component", width=200, disabled=True),
-                    "Rate (%)": st.column_config.NumberColumn("Rate (%)", min_value=0.0, max_value=50.0, step=0.5, format="%.1f", width=120),
+                    "Rate (%)": st.column_config.NumberColumn("Rate (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.1f", width=120),
                     "Guide": st.column_config.TextColumn("Guide", width=420, disabled=True),
                 },
                 disabled=["Component", "Guide"])
+            # Sum the editable component rows (exclude the Total row itself)
             global_cc_pct = 0.0
-            for _, row in edited_cc.iterrows():
-                v = row["Rate (%)"]
-                if v is not None and not pd.isna(v):
-                    global_cc_pct += float(v)
+            for i, row in edited_cc.iterrows():
+                if row["Component"] != "Total":
+                    v = row["Rate (%)"]
+                    if v is not None and not pd.isna(v):
+                        global_cc_pct += float(v)
             global_cc_rate = global_cc_pct / 100.0
             carrying_cost_rates = {fn_: global_cc_rate for fn_ in all_factory_names_cc}
-            st.markdown(f'<div style="font-size:0.78rem;color:{DARK_TEXT};font-weight:600;margin-top:0.3rem;">Total Carrying Cost Rate: {global_cc_pct:.1f}% (all factories)</div>', unsafe_allow_html=True)
         else:
             cc_cols = {}
             for fn_ in all_factory_names_cc:
                 if ex:
                     if "Asia" in fn_ or "China" in str(factory_countries.get(fn_, "")):
-                        cc_cols[fn_] = [9.0, 7.0, 2.5, 1.5]
+                        vals = [9.0, 7.0, 2.5, 1.5]
                     elif "Americas" in fn_ or "USA" in str(factory_countries.get(fn_, "")):
-                        cc_cols[fn_] = [8.5, 4.0, 4.0, 2.5]
+                        vals = [8.5, 4.0, 4.0, 2.5]
                     else:
-                        cc_cols[fn_] = [8.0, 5.0, 3.0, 2.0]
+                        vals = [8.0, 5.0, 3.0, 2.0]
                 else:
-                    cc_cols[fn_] = list(cc_defaults)
-            cc_cols["Guide"] = CC_GUIDES
-            cc_df = pd.DataFrame(cc_cols, index=CC_ROWS)
+                    vals = list(cc_defaults)
+                cc_cols[fn_] = vals + [sum(vals)]
+            cc_cols["Guide"] = CC_GUIDES + ["Sum of all components — applied to Delta NWC"]
+            cc_rows_with_total = CC_ROWS + ["Total"]
+            cc_df = pd.DataFrame(cc_cols, index=cc_rows_with_total)
 
             edited_cc = st.data_editor(
                 cc_df, use_container_width=True, num_rows="fixed", key="coc_editor", hide_index=False,
                 column_config={
-                    **{fn_: st.column_config.NumberColumn(fn_, min_value=0.0, max_value=50.0, step=0.5, format="%.1f") for fn_ in all_factory_names_cc},
+                    **{fn_: st.column_config.NumberColumn(fn_, min_value=0.0, max_value=100.0, step=0.5, format="%.1f") for fn_ in all_factory_names_cc},
                     "Guide": st.column_config.TextColumn("Guide", width=420, disabled=True),
                 },
                 disabled=["Guide"])
 
             carrying_cost_rates = {}
-            cc_summary_parts = []
             for fn_ in all_factory_names_cc:
                 total_pct = 0.0
                 for row_name in CC_ROWS:
@@ -1963,9 +1965,6 @@ Compares full cost-to-serve across factory locations, including material, labour
                     if v is not None and not pd.isna(v):
                         total_pct += float(v)
                 carrying_cost_rates[fn_] = total_pct / 100.0
-                cc_summary_parts.append(f"{fn_}: <strong>{total_pct:.1f}%</strong>")
-            cc_summary = " &nbsp;|&nbsp; ".join(cc_summary_parts)
-            st.markdown(f'<div style="font-size:0.78rem;color:{DARK_TEXT};font-weight:600;margin-top:0.3rem;">Total Carrying Cost Rate &mdash; {cc_summary}</div>', unsafe_allow_html=True)
 
         st.session_state["_carrying_cost_rates"] = carrying_cost_rates
 
