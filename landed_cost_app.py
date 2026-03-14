@@ -2762,51 +2762,42 @@ This provides the local risk percentage.</li>
     if target_market:
         st.markdown(f'<div class="sec-sm" id="sec-lead-times">Lead Time to {target_market}</div>', unsafe_allow_html=True)
         all_factory_names = [base_factory_name] + factory_col_names
-        lt_data = []
         base_country = factory_countries.get(base_factory_name, "")
         base_lt_est = estimate_lead_time(base_country, target_market)
-        has_any_override = False
+
+        # Build editable transit days via data_editor (single row, column per factory)
+        lt_defaults = {}
         for fn_ in all_factory_names:
             ctry = factory_countries.get(fn_, "")
             est = estimate_lead_time(ctry, target_market)
+            lt_defaults[fn_] = {"est": est, "country": ctry}
+
+        lt_edit_data = {}
+        for fn_ in all_factory_names:
             ov_key = f"lt_override_{fn_}"
-            ov_val = st.session_state.get(ov_key)
-            is_overridden = ov_val is not None and ov_val != est
-            if is_overridden:
-                has_any_override = True
-            lt = ov_val if ov_val is not None else est
-            base_lt_final = st.session_state.get(f"lt_override_{base_factory_name}", base_lt_est) or base_lt_est
-            delta = (lt - base_lt_final) if (lt is not None and base_lt_final is not None) else None
-            lt_data.append({"Factory": fn_, "Country": ctry,
-                "Route": f"{ctry} \u2192 {target_market}" if ctry else "\u2013",
-                "Estimated": est, "Transit Days": lt,
-                "Delta vs Base": delta if delta is not None and fn_ != base_factory_name else None,
-                "overridden": is_overridden})
+            est = lt_defaults[fn_]["est"]
+            lt_edit_data[fn_] = [st.session_state.get(ov_key, est if est is not None else 0)]
 
-        # Editable transit days row
-        st.markdown(f'<div class="callout">Transit days are estimated from the lead time matrix. Override any value below to use a manual estimate instead.</div>', unsafe_allow_html=True)
-        lt_cols = st.columns(len(all_factory_names) + 1)
-        lt_cols[0].markdown(f'<div style="font-size:0.68rem;font-weight:600;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.04em;padding-top:0.5rem;">Transit Days</div>', unsafe_allow_html=True)
-        for i, r in enumerate(lt_data):
-            default_val = r["Estimated"] if r["Estimated"] is not None else 0
-            ov_key = f"lt_override_{r['Factory']}"
-            val = lt_cols[i+1].number_input(
-                r["Factory"], min_value=0, value=st.session_state.get(ov_key, default_val) or default_val,
-                step=1, key=ov_key, label_visibility="collapsed")
+        lt_edit_df = pd.DataFrame(lt_edit_data)
+        lt_col_config = {fn_: st.column_config.NumberColumn(fn_, min_value=0, step=1, format="%d") for fn_ in all_factory_names}
+        edited_lt = st.data_editor(lt_edit_df, column_config=lt_col_config, hide_index=True, use_container_width=True, key="lt_editor")
 
-        # Re-read after input
+        # Persist edited values
+        for fn_ in all_factory_names:
+            ov_key = f"lt_override_{fn_}"
+            st.session_state[ov_key] = int(edited_lt[fn_].iloc[0]) if pd.notna(edited_lt[fn_].iloc[0]) else lt_defaults[fn_]["est"]
+
+        # Build display table (Route, Transit Days with override indicator, Delta)
+        has_any_override = False
         lt_data_final = []
         base_lt_final = st.session_state.get(f"lt_override_{base_factory_name}", base_lt_est) or base_lt_est
-        has_any_override = False
         for fn_ in all_factory_names:
-            ctry = factory_countries.get(fn_, "")
-            est = estimate_lead_time(ctry, target_market)
-            ov_key = f"lt_override_{fn_}"
-            ov_val = st.session_state.get(ov_key)
-            is_overridden = ov_val is not None and ov_val != est
+            ctry = lt_defaults[fn_]["country"]
+            est = lt_defaults[fn_]["est"]
+            lt = st.session_state.get(f"lt_override_{fn_}", est)
+            is_overridden = lt is not None and est is not None and lt != est
             if is_overridden:
                 has_any_override = True
-            lt = ov_val if ov_val is not None else est
             delta = (lt - base_lt_final) if (lt is not None and base_lt_final is not None) else None
             lt_data_final.append({"Factory": fn_, "Country": ctry,
                 "Route": f"{ctry} \u2192 {target_market}" if ctry else "\u2013",
@@ -2822,7 +2813,7 @@ This provides the local risk percentage.</li>
             cls = "base-case" if i == 0 else ""
             val_str = str(r["Transit Days"]) if r["Transit Days"] is not None else dash
             if r["overridden"]:
-                val_str = f'<span style="color:{ACCENT_BLUE};font-weight:700;" title="Manual override (estimated: {r["Estimated"]})">{val_str} *</span>'
+                val_str = f'<span style="color:{ACCENT_BLUE};font-weight:700;" title="Estimated: {r["Estimated"]} days">{val_str} *</span>'
             days_cells += f'<td class="{cls}">{val_str}</td>'
         delta_cells = ""
         for i, r in enumerate(lt_data_final):
@@ -2834,8 +2825,6 @@ This provides the local risk percentage.</li>
                     sign = "+" if d > 0 else ""
                     cls = "delta-neg" if d > 0 else "delta-pos"
                     delta_cells += f'<td class="{cls}">{sign}{d} days</td>'
-                elif d is not None:
-                    delta_cells += f'<td>{dash}</td>'
                 else:
                     delta_cells += f'<td>{dash}</td>'
         lt_html = f'<table class="ib-table"><thead><tr><th>Lead Time</th>{hdr}</tr></thead><tbody>'
@@ -2844,7 +2833,7 @@ This provides the local risk percentage.</li>
         lt_html += f'<tr class="row-bold"><td><em>Delta vs. Base</em></td>{delta_cells}</tr>'
         lt_html += '</tbody></table>'
         if has_any_override:
-            lt_html += f'<div style="font-size:0.68rem;color:{ACCENT_BLUE};margin-top:0.3rem;font-style:italic;">* Manual override applied — estimated value from lead time matrix has been replaced.</div>'
+            lt_html += f'<div style="font-size:0.68rem;color:{ACCENT_BLUE};margin-top:0.3rem;font-style:italic;">* Manual override \u2014 estimated value from lead time matrix has been replaced.</div>'
         st.markdown(lt_html, unsafe_allow_html=True)
 
     # ── NWC inventory & payment terms ──────────────────────
