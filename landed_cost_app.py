@@ -1678,6 +1678,8 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
     )
 
     def get_ov(cn):
+        if cn not in edited_ov.columns:
+            return None
         ov = {}
         for key, row_name in [("material","Material"),("variable_va","Variable VA"),("fixed_va","Fixed VA")]:
             v = edited_ov.loc[row_name, cn]
