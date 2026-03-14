@@ -715,8 +715,54 @@ def save_project_json():
 def main():
     init_state()
 
-    st.markdown("""<div class="ib-header"><h1>Landed Cost Comparison Model</h1>
+    st.markdown("""<div class="ib-header" style="position:relative;"><h1>Landed Cost Comparison Model</h1>
         <div class="sub">Multi-Item Project-Based Production Cost & Profitability Analysis &middot; v4.0</div></div>""", unsafe_allow_html=True)
+
+    with st.expander("About this model", expanded=False):
+        st.markdown(f"""
+<div style="font-family:Inter,sans-serif;font-size:0.82rem;color:{DARK_TEXT};line-height:1.7;">
+
+<strong style="font-size:0.9rem;">Purpose</strong><br>
+The Landed Cost Comparison Model enables strategic evaluation of manufacturing location alternatives.
+It compares the full cost-to-serve across multiple production sites, accounting for material costs,
+value-added processing, tariffs, duties, transportation, and selling & administrative expenses.
+The model calculates operating profit and margin impact at both per-unit and full-year levels.
+
+<br><br><strong style="font-size:0.9rem;">Methodology</strong><br>
+The 8-step cost build-up follows standard industrial cost methodology:
+<ol style="margin:0.3rem 0 0.3rem 1.2rem;padding:0;">
+<li>Base case costs (Material + Variable VA + Fixed VA) define the Standard Cost (SC)</li>
+<li>VA Ratio scales Variable and Fixed VA to each location's cost level</li>
+<li>PS Index converts SC to Price Standard (PS)</li>
+<li>MCL % determines Actual Cost from PS</li>
+<li>S&A is applied as a percentage of Net Sales</li>
+<li>Tariffs and Duties are calculated on (TPL/100) x PS</li>
+<li>Transportation is applied directly on PS</li>
+<li>Operating Profit = Net Sales - PS - S&A - Tariff - Duties - Transport</li>
+</ol>
+
+<br><strong style="font-size:0.9rem;">How to Use</strong><br>
+<strong>1.</strong> Configure shared factory assumptions in the matrix (applies to all items)<br>
+<strong>2.</strong> Add items using the Item tabs &mdash; enter item details, net sales, and base costs<br>
+<strong>3.</strong> Optionally override specific costs per factory in the Cost Overrides grid<br>
+<strong>4.</strong> Review results: KPI cards, per-unit tables, full-year impact, and charts<br>
+<strong>5.</strong> Use the Portfolio Summary tab to compare across all items<br>
+<strong>6.</strong> Export to Excel or PDF for distribution<br>
+<strong>7.</strong> Save/Load projects as JSON to resume later
+
+<br><br><strong style="font-size:0.9rem;">Changelog</strong><br>
+<span style="color:{GREY_TEXT};">v4.0</span> &mdash; Multi-item project mode, portfolio summary, PDF export, save/load projects<br>
+<span style="color:{GREY_TEXT};">v3.0</span> &mdash; Cost overrides per factory, base factory naming<br>
+<span style="color:{GREY_TEXT};">v2.0</span> &mdash; Matrix input UX, sequential flow, IB styling overhaul<br>
+<span style="color:{GREY_TEXT};">v1.0</span> &mdash; Initial release with core cost comparison engine
+
+<br><br><strong style="font-size:0.9rem;">Contact</strong><br>
+For questions, feedback, or feature requests:<br>
+<strong>Jonas Henriksson</strong> &mdash; Head of Strategic Planning & Intelligent Hub<br>
+<a href="mailto:jonas.henriksson@skf.com" style="color:{ACCENT_BLUE};text-decoration:none;">jonas.henriksson@skf.com</a>
+
+</div>
+""", unsafe_allow_html=True)
 
     ex = st.checkbox("Load example data", value=st.session_state.ex)
     st.session_state.ex = ex
@@ -947,3 +993,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
