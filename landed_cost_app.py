@@ -191,12 +191,15 @@ st.markdown(f"""
         margin-bottom: -0.35rem !important;
     }}
     section[data-testid="stSidebar"] .stButton > button {{
-        font-family: 'Inter', sans-serif !important; font-size: 0.72rem !important;
+        font-family: 'Inter', sans-serif !important; font-size: 0.7rem !important;
         font-weight: 400 !important; text-align: left !important;
         padding: 0.3rem 0.6rem !important; border-radius: 3px !important;
         letter-spacing: 0.01em !important; justify-content: flex-start !important;
         border: none !important; transition: background 0.15s !important;
         line-height: 1.4 !important; min-height: 0 !important; height: auto !important;
+    }}
+    section[data-testid="stSidebar"] .stButton > button p {{
+        text-align: left !important; width: 100% !important;
     }}
     section[data-testid="stSidebar"] .stButton > button[kind="secondary"] {{
         background: transparent !important; color: {DARK_TEXT} !important;
@@ -1569,27 +1572,28 @@ def main():
     ]
 
     st.sidebar.markdown(f'<div class="nav-sep">Analysis</div>', unsafe_allow_html=True)
+
+    # Render nav buttons with sub-section links after active page
     for label, key in nav_pages:
         if st.sidebar.button(label, key=f"nav_{key}", use_container_width=True,
                              type="primary" if st.session_state.active_page == key else "secondary"):
             st.session_state.active_page = key
             st.rerun()
-
-    # Sub-section links when on Landed Cost Analysis page
-    if st.session_state.active_page == "model":
-        sub_sections = [
-            ("Project Setup", "sec-project-setup"),
-            ("Factory Configuration", "sec-factory-config"),
-            ("Factory Locations", "sec-factory-locations"),
-            ("Assumptions Matrix", "sec-assumptions"),
-            ("Lead Times", "sec-lead-times"),
-            ("NWC Assumptions", "sec-nwc"),
-            ("Item Analysis", "sec-item-analysis"),
-        ]
-        links_html = "".join(
-            f'<a class="nav-sub" href="#{anchor}">{lbl}</a>' for lbl, anchor in sub_sections
-        )
-        st.sidebar.markdown(links_html, unsafe_allow_html=True)
+        # Sub-section links appear directly below the active Landed Cost Analysis button
+        if key == "model" and st.session_state.active_page == "model":
+            sub_sections = [
+                ("Project Setup", "sec-project-setup"),
+                ("Factory Configuration", "sec-factory-config"),
+                ("Factory Locations", "sec-factory-locations"),
+                ("Assumptions Matrix", "sec-assumptions"),
+                ("Lead Times", "sec-lead-times"),
+                ("NWC Assumptions", "sec-nwc"),
+                ("Item Analysis", "sec-item-analysis"),
+            ]
+            links_html = "".join(
+                f'<a class="nav-sub" href="#{anchor}">{lbl}</a>' for lbl, anchor in sub_sections
+            )
+            st.sidebar.markdown(links_html, unsafe_allow_html=True)
 
     st.sidebar.markdown(f'<div class="nav-sep">Reference</div>', unsafe_allow_html=True)
     for label, key in info_pages:
