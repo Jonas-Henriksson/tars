@@ -182,9 +182,9 @@ st.markdown(f"""
     /* ── Sections ── */
     .sec {{ font-family: 'Inter', sans-serif; font-size: 0.7rem; font-weight: 700; color: {NAVY};
         text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 2px solid {NAVY};
-        padding-bottom: 0.25rem; margin: 1.6rem 0 0.7rem 0; scroll-margin-top: 5rem; }}
+        padding-bottom: 0.25rem; margin: 1.6rem 0 0.7rem 0; scroll-margin-top: 6rem; }}
     .sec-sm {{ font-family: 'Inter', sans-serif; font-size: 0.65rem; font-weight: 600; color: {GREY_TEXT};
-        text-transform: uppercase; letter-spacing: 0.08em; margin: 0.7rem 0 0.35rem 0; scroll-margin-top: 5rem; }}
+        text-transform: uppercase; letter-spacing: 0.08em; margin: 0.7rem 0 0.35rem 0; scroll-margin-top: 6rem; }}
 
     /* ── IB Tables ── */
     .ib-table {{ width: 100%; border-collapse: collapse; font-size: 0.76rem; font-family: 'Inter', sans-serif; }}
