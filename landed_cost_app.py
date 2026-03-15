@@ -5766,12 +5766,13 @@ Compares full cost-to-serve across factory locations, including material, labour
         # ── RECOMMENDATION ─────────────────────────────────────
         st.markdown(f'<div class="sec">Recommendation</div>', unsafe_allow_html=True)
 
-        # Auto-calculate financials
+        # Auto-calculate financials (filtered to recommended factory)
         auto_inv = 0.0
-        if all_results:
+        if all_results and _prop_rec_fn:
             for item_data in all_results:
                 for ic in item_data.get("investment_cases", []):
-                    auto_inv += ic.get("total_investment", 0)
+                    if ic.get("factory_name") == _prop_rec_fn:
+                        auto_inv += ic.get("total_investment", 0)
         _ss_prop = st.session_state.get("sending_site_costs", {})
         auto_inv += sum(v for v in _ss_prop.values() if isinstance(v, (int, float)))
         auto_inv_m = auto_inv / 1e6 if auto_inv else 0.0
