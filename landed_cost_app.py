@@ -2260,7 +2260,14 @@ def init_state():
     # ── PROPOSAL COMMUNICATION PLAN ───────────────────────────
     if "prop_comm_plan" not in st.session_state:
         st.session_state.prop_comm_plan = [
-            {"Stakeholder": "", "What": "", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Sending Site Management", "What": "Transfer decision & timeline", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Sending Site Workforce", "What": "Impact assessment, redeployment options", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Works Council / Union (Sending)", "What": "Formal consultation per local labour law", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Receiving Site Management", "What": "Capacity plan, resource requirements", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Receiving Site Workforce", "What": "Hiring plan, training schedule", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Customers", "What": "Requalification plan, supply continuity", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Key Suppliers", "What": "Sourcing changes, new delivery points", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Group / Division Leadership", "What": "Business case, governance approval", "When": "", "Channel": "", "Owner": ""},
         ]
     if "prop_direction" not in st.session_state:
         st.session_state.prop_direction = ""
