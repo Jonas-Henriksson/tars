@@ -4404,17 +4404,14 @@ This provides the local risk percentage.</li>
             item_label = f"{inp.get('item_number', '')} {inp.get('designation', '')}".strip() or f"Item {item_idx + 1}"
             st.markdown(f'<div class="sec">Required Investments — {item_label}</div>', unsafe_allow_html=True)
 
-            inv_c1, inv_c2 = st.columns([1, 1])
-            with inv_c1:
-                inv_horizon_df = pd.DataFrame({"Analysis Horizon (Years)": [st.session_state.get(f"i{item_id}_inv_hz_val", 10)]})
-                edited_hz = st.data_editor(inv_horizon_df, use_container_width=False, num_rows="fixed",
-                    key=f"i{item_id}_inv_hz", hide_index=True,
-                    column_config={"Analysis Horizon (Years)": st.column_config.NumberColumn(
-                        "Analysis Horizon (Years)", min_value=1, max_value=30, step=1, format="%d", width=200)})
-                inv_horizon = max(1, min(30, int(edited_hz.loc[0, "Analysis Horizon (Years)"] or 10)))
-                st.session_state[f"i{item_id}_inv_hz_val"] = inv_horizon
-            with inv_c2:
-                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};padding-top:0.6rem;">Discount rate uses Company WACC: <strong>{company_wacc*100:.1f}%</strong></div>', unsafe_allow_html=True)
+            inv_horizon_df = pd.DataFrame({"Analysis Horizon (Years)": [st.session_state.get(f"i{item_id}_inv_hz_val", 10)]})
+            edited_hz = st.data_editor(inv_horizon_df, use_container_width=False, num_rows="fixed",
+                key=f"i{item_id}_inv_hz", hide_index=True,
+                column_config={"Analysis Horizon (Years)": st.column_config.NumberColumn(
+                    "Analysis Horizon (Years)", min_value=1, max_value=30, step=1, format="%d", width=200)})
+            inv_horizon = max(1, min(30, int(edited_hz.loc[0, "Analysis Horizon (Years)"] or 10)))
+            st.session_state[f"i{item_id}_inv_hz_val"] = inv_horizon
+            st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};margin-top:-0.6rem;font-style:italic;">Discount rate: Company WACC {company_wacc*100:.1f}%</div>', unsafe_allow_html=True)
 
             alt_names = [r["name"] for r in results[1:]]
             INV_ROWS = ["CAPEX (Tooling / Equipment)", "OPEX (Project / Qualification)", "Restructuring (Sending Site)"]
