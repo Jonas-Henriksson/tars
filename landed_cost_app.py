@@ -5502,10 +5502,8 @@ Compares full cost-to-serve across factory locations, including material, labour
         currency = st.session_state.get("currency", "SEK")
         all_results = st.session_state.get("_all_results", [])
 
-        st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
-            Proposal <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
-        </div>""", unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Decision summary for governance review. Includes structured recommendation, quantified risk exposure, milestone tracking, and formal approval log. Financial figures are auto-populated from the Required Investments analysis where available.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="sec">Proposal — {project_name}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Decision summary for governance review. Financial figures and sourcing map are auto-populated from the analysis. All fields are editable.</div>', unsafe_allow_html=True)
 
         # ── CLASSIFICATION-AWARE CALLOUT (PROPOSAL) ───────────
         _has_restr_prop = False
@@ -5522,13 +5520,170 @@ Compares full cost-to-serve across factory locations, including material, labour
             _c4h = "" if _is_c4_prop else " Consider upgrading from the project header."
             st.markdown(f'<div style="background:#fef9f0;border-left:4px solid {_c4b};padding:0.5rem 1rem;margin:0.2rem 0 0.6rem 0;font-family:Inter,sans-serif;font-size:0.72rem;"><strong style="color:{_c4b};">{_c4l}</strong> — Restructuring or workforce impact detected. Restrict distribution to named recipients.{_c4h}</div>', unsafe_allow_html=True)
 
-        # ── RECOMMENDATION ─────────────────────────────────────
-        st.markdown(f'<div class="sec">Recommendation</div>', unsafe_allow_html=True)
-
-        # Pull conclusion from Analysis Summary if available
+        # ── PROPOSAL SUMMARY HEADER (mirrors Analysis Summary) ──
+        factory_countries = st.session_state.get("_factory_countries", {})
+        target_market = st.session_state.get("target_market", "")
         conclusion_opt = st.session_state.get("conclusion_selected_option", "")
+
+        # Auto-populate direction from conclusion
         if conclusion_opt and not st.session_state.prop_direction.strip():
             st.session_state.prop_direction = f"Recommended location: {conclusion_opt}"
+
+        # Gather factory names
+        _prop_all_fnames = []
+        for _item in all_results:
+            for _r in _item["results"]:
+                if _r["name"] not in _prop_all_fnames:
+                    _prop_all_fnames.append(_r["name"])
+        _prop_base_fn = _prop_all_fnames[0] if _prop_all_fnames else None
+        _prop_rec_fn = conclusion_opt if conclusion_opt else None
+
+        if all_results and _prop_base_fn:
+            # Project metadata strip
+            _prop_n_items = len(all_results)
+            _prop_date = date.today().strftime("%d %B %Y")
+            st.markdown(f'''<div style="display:flex;gap:2rem;flex-wrap:wrap;font-family:Inter,sans-serif;font-size:0.7rem;color:{GREY_TEXT};margin:0.2rem 0 0.6rem 0;padding:0.5rem 0.9rem;background:#fafbfc;border:1px solid {BORDER};border-radius:2px;">
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Project</span><br>{project_name}</div>
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Date</span><br>{_prop_date}</div>
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Currency</span><br>{currency}</div>
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Target Market</span><br>{target_market or "N/A"}</div>
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Current Factory</span><br>{_prop_base_fn}</div>
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Recommended</span><br>{_prop_rec_fn or "—"}</div>
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Classification</span><br>{data_classification}</div>
+            </div>''', unsafe_allow_html=True)
+
+            # ── Focused map (base + recommended + target only) ────
+            _prop_show_fns = [_prop_base_fn]
+            if _prop_rec_fn and _prop_rec_fn != _prop_base_fn:
+                _prop_show_fns.append(_prop_rec_fn)
+
+            _pm_lats, _pm_lons, _pm_labels, _pm_hover, _pm_colors, _pm_sizes, _pm_symbols = [], [], [], [], [], [], []
+            if target_market and target_market in _COUNTRY_COORDS:
+                _tla, _tlo = _COUNTRY_COORDS[target_market]
+                _pm_lats.append(_tla); _pm_lons.append(_tlo)
+                _pm_labels.append(target_market); _pm_hover.append(f"Target Market: {target_market}")
+                _pm_colors.append("#e67e22"); _pm_sizes.append(18); _pm_symbols.append("star")
+
+            _base_ctry = factory_countries.get(_prop_base_fn, "")
+            if _base_ctry and _base_ctry in _COUNTRY_COORDS:
+                _bla, _blo = _COUNTRY_COORDS[_base_ctry]
+                _pm_lats.append(_bla); _pm_lons.append(_blo)
+                _pm_labels.append(_prop_base_fn); _pm_hover.append(f"Current: {_prop_base_fn} ({_base_ctry})")
+                _pm_colors.append(NAVY); _pm_sizes.append(16); _pm_symbols.append("circle")
+
+            if _prop_rec_fn and _prop_rec_fn != _prop_base_fn:
+                _rec_ctry = factory_countries.get(_prop_rec_fn, "")
+                if _rec_ctry and _rec_ctry in _COUNTRY_COORDS:
+                    _rla, _rlo = _COUNTRY_COORDS[_rec_ctry]
+                    _pm_lats.append(_rla); _pm_lons.append(_rlo)
+                    _pm_labels.append(_prop_rec_fn); _pm_hover.append(f"Recommended: {_prop_rec_fn} ({_rec_ctry})")
+                    _pm_colors.append(GREEN); _pm_sizes.append(16); _pm_symbols.append("diamond")
+
+            if len(_pm_lats) >= 2:
+                _fig_pmap = go.Figure()
+                # Current sourcing line
+                if _base_ctry and _base_ctry in _COUNTRY_COORDS and target_market and target_market in _COUNTRY_COORDS:
+                    _bla2, _blo2 = _COUNTRY_COORDS[_base_ctry]
+                    _tla2, _tlo2 = _COUNTRY_COORDS[target_market]
+                    _fig_pmap.add_trace(go.Scattergeo(
+                        lat=[_bla2, _tla2], lon=[_blo2, _tlo2], mode="lines", name="Current sourcing",
+                        line=dict(width=3, color=NAVY, dash="solid"), showlegend=True, hoverinfo="skip"))
+                # Recommended sourcing line
+                if _prop_rec_fn and _prop_rec_fn != _prop_base_fn:
+                    _rec_ctry2 = factory_countries.get(_prop_rec_fn, "")
+                    if _rec_ctry2 and _rec_ctry2 in _COUNTRY_COORDS and target_market and target_market in _COUNTRY_COORDS:
+                        _rla2, _rlo2 = _COUNTRY_COORDS[_rec_ctry2]
+                        _tla3, _tlo3 = _COUNTRY_COORDS[target_market]
+                        _fig_pmap.add_trace(go.Scattergeo(
+                            lat=[_rla2, _tla3], lon=[_rlo2, _tlo3], mode="lines", name=f"Proposed: {_prop_rec_fn}",
+                            line=dict(width=2.5, color=GREEN, dash="solid"), showlegend=True, hoverinfo="skip"))
+
+                # Markers with smart positioning
+                _pm_used_pos = []
+                _pm_pos_opts = ["top center", "bottom center", "top right", "bottom right", "top left", "bottom left", "middle right", "middle left"]
+                for _mi in range(len(_pm_lats)):
+                    _best_pos = "top center"
+                    for _pi, _pos in enumerate(_pm_pos_opts):
+                        _conflict = False
+                        for _ula, _ulo, _upos in _pm_used_pos:
+                            if abs(_pm_lats[_mi] - _ula) < 8 and abs(_pm_lons[_mi] - _ulo) < 15 and _pos == _upos:
+                                _conflict = True; break
+                        if not _conflict:
+                            _best_pos = _pos; break
+                    _pm_used_pos.append((_pm_lats[_mi], _pm_lons[_mi], _best_pos))
+                    _fig_pmap.add_trace(go.Scattergeo(
+                        lat=[_pm_lats[_mi]], lon=[_pm_lons[_mi]], mode="markers+text",
+                        text=[_pm_labels[_mi]], customdata=[_pm_hover[_mi]], textposition=_best_pos,
+                        textfont=dict(size=11, family="Inter, sans-serif", color=_pm_colors[_mi], weight="bold"),
+                        marker=dict(size=[_pm_sizes[_mi]], color=[_pm_colors[_mi]], symbol=[_pm_symbols[_mi]],
+                                    line=dict(width=1.5, color="white")),
+                        showlegend=False, hovertemplate="%{customdata}<extra></extra>"))
+
+                _fig_pmap.update_geos(
+                    showcountries=True, countrycolor="#d4d8e0", showcoastlines=True, coastlinecolor="#b0b8c4",
+                    showland=True, landcolor="#f7f8fa", showocean=True, oceancolor="#eaf2fb", showlakes=False,
+                    projection_type="natural earth", lataxis_range=[-55, 75], lonaxis_range=[-140, 170])
+                _fig_pmap.update_layout(
+                    height=350, margin=dict(l=0, r=0, t=30, b=0), paper_bgcolor="white",
+                    font=dict(family="Inter, sans-serif", size=10, color=DARK_TEXT),
+                    legend=dict(orientation="h", yanchor="top", y=-0.02, xanchor="center", x=0.5, font=dict(size=10)),
+                    title=dict(text=f"Proposed Sourcing — {target_market}" if target_market else "Proposed Sourcing",
+                               font=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT), x=0.5))
+                plotly_chart(_fig_pmap)
+
+            # ── Key financial metrics (base vs recommended) ───────
+            _prop_adj_totals = {fn_: 0.0 for fn_ in _prop_all_fnames}
+            _prop_rev_totals = {fn_: 0.0 for fn_ in _prop_all_fnames}
+            for _item in all_results:
+                for _r in _item["results"]:
+                    _prop_adj_totals[_r["name"]] += _r.get("annual_adj_op", _r["annual_op"])
+                    _prop_rev_totals[_r["name"]] += _r["annual_rev"]
+
+            _base_op_p = _prop_adj_totals.get(_prop_base_fn, 0)
+            _base_rev_p = _prop_rev_totals.get(_prop_base_fn, 0)
+            _base_om_p = _base_op_p / _base_rev_p * 100 if _base_rev_p else 0
+
+            if _prop_rec_fn and _prop_rec_fn != _prop_base_fn:
+                _rec_op_p = _prop_adj_totals.get(_prop_rec_fn, 0)
+                _rec_rev_p = _prop_rev_totals.get(_prop_rec_fn, 0)
+                _rec_om_p = _rec_op_p / _rec_rev_p * 100 if _rec_rev_p else 0
+                _delta_op_p = _rec_op_p - _base_op_p
+                _is_better = _delta_op_p > 0
+                _delta_color = GREEN if _is_better else RED
+                _delta_sign = "+" if _delta_op_p > 0 else ""
+
+                _kpi_cols = st.columns(3)
+                _kpi_cols[0].markdown(f'''<div style="background:{BASE_CASE_BG};border:1px solid {BORDER};border-radius:2px;padding:0.7rem 0.9rem;text-align:center;">
+                    <div style="font-size:0.62rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.15rem;">Current (Base Case)</div>
+                    <div style="font-size:1.1rem;font-weight:700;color:{DARK_TEXT};">{fi(_base_op_p, dz=False)} {currency}</div>
+                    <div style="font-size:0.78rem;font-weight:600;color:{DARK_TEXT};margin-top:0.1rem;">{_prop_base_fn}</div>
+                    <div style="font-size:0.68rem;color:{MUTED};margin-top:0.05rem;">OM {_base_om_p:.1f}%</div>
+                </div>''', unsafe_allow_html=True)
+                _kpi_cols[1].markdown(f'''<div style="background:#fafafa;border:1px solid {BORDER};border-left:3px solid {_delta_color};border-radius:2px;padding:0.7rem 0.9rem;text-align:center;">
+                    <div style="font-size:0.62rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.15rem;">Proposed</div>
+                    <div style="font-size:1.1rem;font-weight:700;color:{DARK_TEXT};">{fi(_rec_op_p, dz=False)} {currency}</div>
+                    <div style="font-size:0.78rem;font-weight:600;color:{DARK_TEXT};margin-top:0.1rem;">{_prop_rec_fn}</div>
+                    <div style="font-size:0.68rem;color:{_delta_color};font-weight:600;margin-top:0.05rem;">{_delta_sign}{fi(_delta_op_p, acct=True)} vs base | OM {_rec_om_p:.1f}%</div>
+                </div>''', unsafe_allow_html=True)
+                # Delta card
+                _delta_pp = _rec_om_p - _base_om_p
+                _kpi_cols[2].markdown(f'''<div style="background:#fafafa;border:1px solid {BORDER};border-radius:2px;padding:0.7rem 0.9rem;text-align:center;">
+                    <div style="font-size:0.62rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.15rem;">Annual OP Delta</div>
+                    <div style="font-size:1.1rem;font-weight:700;color:{_delta_color};">{_delta_sign}{fi(_delta_op_p, acct=True)} {currency}</div>
+                    <div style="font-size:0.78rem;font-weight:600;color:{_delta_color};margin-top:0.1rem;">{_delta_pp:+.1f}pp margin</div>
+                    <div style="font-size:0.68rem;color:{MUTED};margin-top:0.05rem;">{_prop_n_items} item{"s" if _prop_n_items > 1 else ""} analysed</div>
+                </div>''', unsafe_allow_html=True)
+            else:
+                # No alternative selected — show base only
+                st.markdown(f'''<div style="background:{BASE_CASE_BG};border:1px solid {BORDER};border-radius:2px;padding:0.7rem 0.9rem;text-align:center;max-width:350px;">
+                    <div style="font-size:0.62rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.15rem;">Current (Base Case)</div>
+                    <div style="font-size:1.1rem;font-weight:700;color:{DARK_TEXT};">{fi(_base_op_p, dz=False)} {currency}</div>
+                    <div style="font-size:0.78rem;font-weight:600;color:{DARK_TEXT};margin-top:0.1rem;">{_prop_base_fn}</div>
+                    <div style="font-size:0.68rem;color:{MUTED};margin-top:0.05rem;">OM {_base_om_p:.1f}%</div>
+                </div>''', unsafe_allow_html=True)
+
+        # ── RECOMMENDATION ─────────────────────────────────────
+        st.markdown(f'<div class="sec">Recommendation</div>', unsafe_allow_html=True)
 
         # Auto-calculate financials
         auto_inv = 0.0
