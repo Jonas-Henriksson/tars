@@ -56,6 +56,7 @@ INPUT_EDITOR_KEYS = [
     "td_base_editor", "td_commercial_editor", "td_supply_editor", "td_financial_editor",
     # Analysis Conclusion & Proposal enhancements
     "prop_rexp_editor", "prop_milestones_editor", "prop_approvals_editor",
+    "prop_impl_editor", "prop_comm_editor",
 ]
 _blue_border = f"border-left: 3px solid {INPUT_BLUE} !important; padding-left: 2px;"
 _fixed_rules = "\n".join(f"    .st-key-{k} {{ {_blue_border} }}" for k in INPUT_EDITOR_KEYS)
@@ -2014,6 +2015,39 @@ def init_state():
             "Pre-study Finalized": "", "Pre-study to FC": "",
             "IRE Submission": "", "IRE to IC": "", "Project Execution Start": "",
         }
+    # ── PRE-STUDY WORKFORCE IMPACT ────────────────────────────
+    if "ps_workforce_headcount_from" not in st.session_state:
+        st.session_state.ps_workforce_headcount_from = 0
+    if "ps_workforce_headcount_to" not in st.session_state:
+        st.session_state.ps_workforce_headcount_to = 0
+    if "ps_workforce_consultation_required" not in st.session_state:
+        st.session_state.ps_workforce_consultation_required = ""
+    if "ps_workforce_social_plan" not in st.session_state:
+        st.session_state.ps_workforce_social_plan = ""
+    if "ps_workforce_notes" not in st.session_state:
+        st.session_state.ps_workforce_notes = ""
+    # ── PROPOSAL IMPLEMENTATION STRATEGY ──────────────────────
+    if "prop_impl_phases" not in st.session_state:
+        st.session_state.prop_impl_phases = [
+            {"Phase": "Pilot / Qualification", "Description": "", "Go/No-Go Criteria": "", "Duration": "", "Status": "Pending"},
+            {"Phase": "Ramp-up", "Description": "", "Go/No-Go Criteria": "", "Duration": "", "Status": "Pending"},
+            {"Phase": "Full Transfer", "Description": "", "Go/No-Go Criteria": "", "Duration": "", "Status": "Pending"},
+            {"Phase": "Decommission (Sending)", "Description": "", "Go/No-Go Criteria": "", "Duration": "", "Status": "Pending"},
+        ]
+    # ── PROPOSAL WORKFORCE IMPACT ─────────────────────────────
+    if "prop_severance_cost" not in st.session_state:
+        st.session_state.prop_severance_cost = 0.0
+    if "prop_retraining_cost" not in st.session_state:
+        st.session_state.prop_retraining_cost = 0.0
+    if "prop_workforce_timeline" not in st.session_state:
+        st.session_state.prop_workforce_timeline = ""
+    if "prop_workforce_notes" not in st.session_state:
+        st.session_state.prop_workforce_notes = ""
+    # ── PROPOSAL COMMUNICATION PLAN ───────────────────────────
+    if "prop_comm_plan" not in st.session_state:
+        st.session_state.prop_comm_plan = [
+            {"Stakeholder": "", "What": "", "When": "", "Channel": "", "Owner": ""},
+        ]
     if "prop_direction" not in st.session_state:
         st.session_state.prop_direction = ""
     if "prop_benefits" not in st.session_state:
@@ -3185,6 +3219,18 @@ def save_project_json():
         "prop_risk_exposure": st.session_state.get("prop_risk_exposure", []),
         "prop_milestones": st.session_state.get("prop_milestones", []),
         "prop_approvals": st.session_state.get("prop_approvals", []),
+        "prop_impl_phases": st.session_state.get("prop_impl_phases", []),
+        "prop_severance_cost": st.session_state.get("prop_severance_cost", 0.0),
+        "prop_retraining_cost": st.session_state.get("prop_retraining_cost", 0.0),
+        "prop_workforce_timeline": st.session_state.get("prop_workforce_timeline", ""),
+        "prop_workforce_notes": st.session_state.get("prop_workforce_notes", ""),
+        "prop_comm_plan": st.session_state.get("prop_comm_plan", []),
+        # Governance — Pre-study Workforce
+        "ps_workforce_headcount_from": st.session_state.get("ps_workforce_headcount_from", 0),
+        "ps_workforce_headcount_to": st.session_state.get("ps_workforce_headcount_to", 0),
+        "ps_workforce_consultation_required": st.session_state.get("ps_workforce_consultation_required", ""),
+        "ps_workforce_social_plan": st.session_state.get("ps_workforce_social_plan", ""),
+        "ps_workforce_notes": st.session_state.get("ps_workforce_notes", ""),
         # Governance — Transfer Feasibility
         "td_transfer_to": st.session_state.get("td_transfer_to", ""),
         "td_transfer_from": st.session_state.get("td_transfer_from", ""),
@@ -3896,6 +3942,32 @@ Compares full cost-to-serve across factory locations, including material, labour
         </div>""", unsafe_allow_html=True)
         st.markdown(f'<div class="callout" style="font-size:0.72rem;">Structured evaluation framework for the pre-study phase. Captures strategic rationale, current set-up, key questions, dependencies, and team. Complete this document before submitting a formal proposal to the Factory Council.</div>', unsafe_allow_html=True)
 
+        # ── CLASSIFICATION-AWARE CALLOUT ──────────────────────
+        _has_restructuring = False
+        _all_res_ps = st.session_state.get("_all_results", [])
+        for _item_res in _all_res_ps:
+            for _ic in _item_res.get("investment_cases", []):
+                if _ic.get("restructuring", 0) > 0:
+                    _has_restructuring = True
+                    break
+        _is_c4 = "C4" in data_classification
+        _wf_headcount = st.session_state.get("ps_workforce_headcount_from", 0)
+        if _has_restructuring or _is_c4 or _wf_headcount > 0:
+            _warn_parts = []
+            if _has_restructuring:
+                _warn_parts.append("restructuring costs are included in the investment case")
+            if _wf_headcount > 0:
+                _warn_parts.append(f"workforce impact has been identified ({_wf_headcount} FTE at sending site)")
+            _trigger_text = " and ".join(_warn_parts) if _warn_parts else "the project classification is C4"
+            _c4_border = RED if _is_c4 else "#e6a817"
+            st.markdown(f'''<div style="background:#fef9f0;border:1px solid {_c4_border};border-left:4px solid {_c4_border};padding:0.6rem 1rem;margin:0.4rem 0 0.7rem 0;font-family:Inter,sans-serif;font-size:0.72rem;">
+                <strong style="color:{_c4_border};">{"C4 — Strictly Confidential" if _is_c4 else "Classification Review Recommended"}</strong><br>
+                This analysis indicates {_trigger_text}. Manufacturing transfers with workforce implications
+                typically warrant <strong>C4 — Strictly Confidential</strong> classification to protect employee privacy
+                and comply with works-council/union notification requirements.
+                {"" if _is_c4 else f'<br><span style="color:{GREY_TEXT};font-size:0.68rem;">Consider upgrading the data classification from the project header.</span>'}
+            </div>''', unsafe_allow_html=True)
+
         ps_left, ps_right = st.columns([3, 2])
         with ps_left:
             # Strategic Rationale (merged from Strategic Context page)
@@ -3968,6 +4040,41 @@ Compares full cost-to-serve across factory locations, including material, labour
                 placeholder="Explain the rationale for factory inclusion/exclusion:\n\n- Why were certain factories included? (e.g. existing capability, capacity headroom, strategic corridor)\n- Why were others excluded? (e.g. no relevant capability, at capacity, geopolitical risk, no established supply chain, technology mismatch)\n- Any constraints that narrowed the scope (e.g. customer proximity requirements, regulatory barriers)")
 
         with ps_right:
+            # ── WORKFORCE & ORGANIZATIONAL IMPACT ─────────────
+            st.markdown(f'<div class="sec-sm">Workforce & Organizational Impact</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:0.68rem;color:{GREY_TEXT};margin-bottom:0.4rem;font-family:Inter,sans-serif;">Preliminary assessment of headcount implications. If FTEs are affected, consider upgrading to C4 classification.</div>', unsafe_allow_html=True)
+            wf_c1, wf_c2 = st.columns(2)
+            with wf_c1:
+                st.session_state.ps_workforce_headcount_from = st.number_input(
+                    "FTE Impact — Sending Site", value=st.session_state.ps_workforce_headcount_from,
+                    min_value=0, step=1, key="ps_wf_from_input",
+                    help="Estimated FTEs affected at the sending factory (reductions, redeployments)")
+            with wf_c2:
+                st.session_state.ps_workforce_headcount_to = st.number_input(
+                    "FTE Impact — Receiving Site", value=st.session_state.ps_workforce_headcount_to,
+                    min_value=0, step=1, key="ps_wf_to_input",
+                    help="Estimated new FTEs required at the receiving factory (hiring, training)")
+            wf_consult_opts = ["", "Yes — Works council / union", "Yes — Local labor authority", "Not required", "To be determined"]
+            wf_consult_idx = 0
+            if st.session_state.ps_workforce_consultation_required in wf_consult_opts:
+                wf_consult_idx = wf_consult_opts.index(st.session_state.ps_workforce_consultation_required)
+            st.session_state.ps_workforce_consultation_required = st.selectbox(
+                "Formal Consultation Required?", options=wf_consult_opts, index=wf_consult_idx,
+                key="ps_wf_consult_input",
+                format_func=lambda x: x if x else "— Select —")
+            sp_opts = ["", "Yes — social plan required", "No — natural attrition / redeployment", "To be assessed"]
+            sp_idx = 0
+            if st.session_state.ps_workforce_social_plan in sp_opts:
+                sp_idx = sp_opts.index(st.session_state.ps_workforce_social_plan)
+            st.session_state.ps_workforce_social_plan = st.selectbox(
+                "Social Plan / Severance Obligation?", options=sp_opts, index=sp_idx,
+                key="ps_wf_social_input",
+                format_func=lambda x: x if x else "— Select —")
+            st.session_state.ps_workforce_notes = st.text_area(
+                "Workforce Notes", value=st.session_state.ps_workforce_notes,
+                key="ps_wf_notes_input", height=60, label_visibility="visible",
+                placeholder="Additional context: retention risk, key-person dependencies, knowledge transfer plan, local labor market conditions...")
+
             # Cross-functional dependencies
             st.markdown(f'<div class="sec-sm">Cross-functional Dependencies & How to Manage</div>', unsafe_allow_html=True)
             dep_df = pd.DataFrame(st.session_state.ps_dependencies)
@@ -4016,6 +4123,7 @@ Compares full cost-to-serve across factory locations, including material, labour
             "Risk of Inaction": bool(st.session_state.ps_risk_of_inaction.strip()),
             "Key Risks": bool(st.session_state.ps_key_risks.strip()),
             "Factory Scoping": bool(st.session_state.ps_scoping_rationale.strip()),
+            "Workforce Impact": bool(st.session_state.ps_workforce_headcount_from > 0 or st.session_state.ps_workforce_headcount_to > 0 or st.session_state.ps_workforce_consultation_required),
             "Initiative Sponsor": bool(st.session_state.ps_sponsor.strip()),
             "Initiative Lead": bool(st.session_state.ps_lead.strip()),
         }
@@ -4269,6 +4377,23 @@ Compares full cost-to-serve across factory locations, including material, labour
         </div>""", unsafe_allow_html=True)
         st.markdown(f'<div class="callout" style="font-size:0.72rem;">Decision summary for the Factory Council. Includes structured recommendation, quantified risk exposure, milestone tracking, and formal approval log. Financial figures are auto-populated from the Required Investments analysis where available.</div>', unsafe_allow_html=True)
 
+        # ── CLASSIFICATION-AWARE CALLOUT (PROPOSAL) ───────────
+        _has_restr_prop = False
+        for _item_res in all_results:
+            for _ic in _item_res.get("investment_cases", []):
+                if _ic.get("restructuring", 0) > 0:
+                    _has_restr_prop = True
+                    break
+        _is_c4_prop = "C4" in data_classification
+        _wf_hc_prop = st.session_state.get("ps_workforce_headcount_from", 0)
+        if _has_restr_prop or _is_c4_prop or _wf_hc_prop > 0:
+            _c4b = RED if _is_c4_prop else "#e6a817"
+            st.markdown(f'''<div style="background:#fef9f0;border:1px solid {_c4b};border-left:4px solid {_c4b};padding:0.6rem 1rem;margin:0.2rem 0 0.7rem 0;font-family:Inter,sans-serif;font-size:0.72rem;">
+                <strong style="color:{_c4b};">{"C4 — Strictly Confidential" if _is_c4_prop else "Classification Review Recommended"}</strong>
+                &mdash; This proposal involves workforce restructuring. Restrict distribution to named recipients only.
+                {"" if _is_c4_prop else f' Consider upgrading data classification from the project header.'}
+            </div>''', unsafe_allow_html=True)
+
         # ── RECOMMENDATION ─────────────────────────────────────
         st.markdown(f'<div class="sec">Recommendation</div>', unsafe_allow_html=True)
 
@@ -4425,6 +4550,97 @@ Compares full cost-to-serve across factory locations, including material, labour
             )
             st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};margin:0.3rem 0 0.6rem 0;padding:0.4rem 0.8rem;background:#fafbfc;border:1px solid {BORDER};border-radius:2px;">{ms_parts}</div>', unsafe_allow_html=True)
 
+        # ── IMPLEMENTATION STRATEGY ────────────────────────────
+        st.markdown(f'<div class="sec">Implementation Strategy</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Phase-gate execution plan. Each phase requires explicit go/no-go approval before proceeding. Define clear criteria so the Factory Council can monitor progress and intervene early if gates are not met.</div>', unsafe_allow_html=True)
+
+        impl_df = pd.DataFrame(st.session_state.prop_impl_phases)
+        if "Phase" not in impl_df.columns:
+            impl_df = pd.DataFrame([{"Phase": "", "Description": "", "Go/No-Go Criteria": "", "Duration": "", "Status": "Pending"}])
+        edited_impl = st.data_editor(
+            impl_df, use_container_width=True, num_rows="dynamic", key="prop_impl_editor",
+            hide_index=True,
+            column_config={
+                "Phase": st.column_config.TextColumn("Phase", width=170),
+                "Description": st.column_config.TextColumn("Key Activities", width=200),
+                "Go/No-Go Criteria": st.column_config.TextColumn("Go/No-Go Criteria", width=220),
+                "Duration": st.column_config.TextColumn("Duration", width=90),
+                "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "In Progress", "Complete", "At Risk", "Blocked"], width=100),
+            })
+        st.session_state.prop_impl_phases = edited_impl.to_dict("records")
+
+        # Phase summary bar
+        ph_counts = {"Pending": 0, "In Progress": 0, "Complete": 0, "At Risk": 0, "Blocked": 0}
+        for ph in st.session_state.prop_impl_phases:
+            s = ph.get("Status", "Pending")
+            if s in ph_counts:
+                ph_counts[s] += 1
+        total_ph = sum(ph_counts.values())
+        if total_ph > 0 and any(ph.get("Phase", "").strip() for ph in st.session_state.prop_impl_phases):
+            ph_colors = {"Complete": GREEN, "In Progress": ACCENT_BLUE, "Pending": GREY_TEXT, "At Risk": "#e6a817", "Blocked": RED}
+            ph_parts = " ".join(
+                f'<span style="color:{ph_colors.get(k, GREY_TEXT)};font-weight:600;">{v} {k}</span>'
+                for k, v in ph_counts.items() if v > 0
+            )
+            st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};margin:0.3rem 0 0.6rem 0;padding:0.4rem 0.8rem;background:#fafbfc;border:1px solid {BORDER};border-radius:2px;">{ph_parts}</div>', unsafe_allow_html=True)
+
+        # ── WORKFORCE IMPACT (PROPOSAL) ───────────────────────
+        st.markdown(f'<div class="sec">Workforce & Organizational Impact</div>', unsafe_allow_html=True)
+        _wf_from = st.session_state.get("ps_workforce_headcount_from", 0)
+        _wf_to = st.session_state.get("ps_workforce_headcount_to", 0)
+        _wf_consult = st.session_state.get("ps_workforce_consultation_required", "")
+        _wf_social = st.session_state.get("ps_workforce_social_plan", "")
+        if _wf_from > 0 or _wf_to > 0:
+            st.markdown(f'''<div style="display:flex;gap:1.5rem;margin:0.2rem 0 0.5rem 0;font-family:Inter,sans-serif;">
+                <div class="kpi" style="flex:1;"><div class="lbl">FTE Reduction (Sending)</div><div class="val" style="color:{RED};">{_wf_from}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">FTE Addition (Receiving)</div><div class="val" style="color:{GREEN};">{_wf_to}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Net FTE Impact</div><div class="val">{_wf_to - _wf_from:+d}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Consultation Required</div><div class="val" style="font-size:0.82rem;">{_wf_consult or "—"}</div></div>
+            </div>''', unsafe_allow_html=True)
+            if _wf_social:
+                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-family:Inter,sans-serif;margin-bottom:0.3rem;"><strong>Social Plan:</strong> {_wf_social}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-style:italic;font-family:Inter,sans-serif;">No workforce impact data entered. Complete the Workforce & Organizational Impact section on the Pre-study page.</div>', unsafe_allow_html=True)
+
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Estimated financial impact of workforce changes. Include severance, retraining, recruitment, and relocation costs as applicable.</div>', unsafe_allow_html=True)
+        wfp_c1, wfp_c2, wfp_c3 = st.columns(3)
+        with wfp_c1:
+            st.session_state.prop_severance_cost = st.number_input(
+                f"Severance / Social Plan (M{currency})", value=st.session_state.prop_severance_cost,
+                min_value=0.0, step=0.1, format="%.1f", key="prop_sev_input")
+        with wfp_c2:
+            st.session_state.prop_retraining_cost = st.number_input(
+                f"Retraining / Recruitment (M{currency})", value=st.session_state.prop_retraining_cost,
+                min_value=0.0, step=0.1, format="%.1f", key="prop_retrain_input")
+        with wfp_c3:
+            st.session_state.prop_workforce_timeline = st.text_input(
+                "Notification Timeline", value=st.session_state.prop_workforce_timeline,
+                key="prop_wf_timeline_input",
+                placeholder="e.g. Q2 '25 — works council, Q3 '25 — individual notices")
+        st.session_state.prop_workforce_notes = st.text_area(
+            "Workforce Implementation Notes", value=st.session_state.prop_workforce_notes,
+            key="prop_wf_notes_input", height=60,
+            placeholder="Knowledge transfer plan, retention incentives for key personnel, redeployment options within the group...")
+
+        # ── COMMUNICATION PLAN ────────────────────────────────
+        st.markdown(f'<div class="sec">Communication Plan</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Stakeholder communication matrix. Factory restructuring is highly sensitive — premature disclosure can trigger talent flight, supplier disruption, and media risk. Define who can know what, when, and through which channel.</div>', unsafe_allow_html=True)
+
+        comm_df = pd.DataFrame(st.session_state.prop_comm_plan)
+        if "Stakeholder" not in comm_df.columns:
+            comm_df = pd.DataFrame([{"Stakeholder": "", "What": "", "When": "", "Channel": "", "Owner": ""}])
+        edited_comm = st.data_editor(
+            comm_df, use_container_width=True, num_rows="dynamic", key="prop_comm_editor",
+            hide_index=True,
+            column_config={
+                "Stakeholder": st.column_config.TextColumn("Stakeholder Group", width=170),
+                "What": st.column_config.TextColumn("Key Message / Scope", width=200),
+                "When": st.column_config.TextColumn("Timing", width=120),
+                "Channel": st.column_config.SelectboxColumn("Channel", options=["1:1 Meeting", "Town Hall", "Written Notice", "Email", "Board Memo", "Press Release", "Works Council Session"], width=140),
+                "Owner": st.column_config.TextColumn("Owner", width=120),
+            })
+        st.session_state.prop_comm_plan = edited_comm.to_dict("records")
+
         # ── DEPENDENCIES, RISKS & MITIGATIONS (legacy) ─────────
         st.markdown(f'<div class="sec-sm">Dependencies, Risks & Mitigations</div>', unsafe_allow_html=True)
         st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-bottom:0.3rem;font-family:Inter,sans-serif;">Qualitative risk register. For quantified impact assessment, use the Risk Exposure section above.</div>', unsafe_allow_html=True)
@@ -4506,6 +4722,8 @@ Compares full cost-to-serve across factory locations, including material, labour
             "Time Plan": bool(st.session_state.prop_timeplan.strip()),
             "Risk Exposure": any(r.get("Risk", "").strip() for r in st.session_state.prop_risk_exposure),
             "Milestones": any(m.get("Milestone", "").strip() for m in st.session_state.prop_milestones),
+            "Implementation Strategy": any(ph.get("Description", "").strip() for ph in st.session_state.prop_impl_phases),
+            "Communication Plan": any(c.get("Stakeholder", "").strip() for c in st.session_state.prop_comm_plan),
             "Approval Log": any(a.get("Approver", "").strip() for a in st.session_state.prop_approvals),
             "Team": bool(st.session_state.ps_sponsor.strip()),
         }
@@ -4601,11 +4819,15 @@ Compares full cost-to-serve across factory locations, including material, labour
                                "conclusion_decision", "conclusion_conditions",
                                "conclusion_decided_by", "conclusion_decided_date",
                                "td_transfer_to", "td_transfer_from", "td_product_line",
-                               "td_material_family", "td_transfer_volume", "td_indicative_timing"):
+                               "td_material_family", "td_transfer_volume", "td_indicative_timing",
+                               "prop_workforce_timeline", "prop_workforce_notes",
+                               "ps_workforce_consultation_required", "ps_workforce_social_plan",
+                               "ps_workforce_notes"):
                         if gk in proj:
                             st.session_state[gk] = proj[gk]
                     for gk_obj in ("ps_dependencies", "ps_timeline", "prop_risks",
                                    "prop_risk_exposure", "prop_milestones", "prop_approvals",
+                                   "prop_impl_phases", "prop_comm_plan",
                                    "td_requirements"):
                         if gk_obj in proj:
                             st.session_state[gk_obj] = proj[gk_obj]
@@ -4613,6 +4835,12 @@ Compares full cost-to-serve across factory locations, including material, labour
                         st.session_state.prop_total_investment = proj["prop_total_investment"]
                     if "prop_cash_out" in proj:
                         st.session_state.prop_cash_out = proj["prop_cash_out"]
+                    for nk in ("prop_severance_cost", "prop_retraining_cost"):
+                        if nk in proj:
+                            st.session_state[nk] = float(proj[nk] or 0)
+                    for nk_int in ("ps_workforce_headcount_from", "ps_workforce_headcount_to"):
+                        if nk_int in proj:
+                            st.session_state[nk_int] = int(proj[nk_int] or 0)
                     st.rerun()
                 except Exception:
                     st.error("Invalid project file.")
