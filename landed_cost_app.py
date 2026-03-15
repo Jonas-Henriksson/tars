@@ -5808,6 +5808,52 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.session_state.prop_timeplan = str(_r1_edited.iloc[0]["Time Plan"] or "")
         recommendation = st.session_state.prop_recommendation
 
+        # Auto-populate benefits from analysis data if empty
+        if not st.session_state.prop_benefits.strip() and all_results and _prop_rec_fn and _prop_base_fn:
+            # Compute totals for benefits text
+            _ben_adj = {fn_: 0.0 for fn_ in _prop_all_fnames}
+            _ben_rev = {fn_: 0.0 for fn_ in _prop_all_fnames}
+            for _item_b2 in all_results:
+                for _r_b2 in _item_b2["results"]:
+                    _ben_adj[_r_b2["name"]] += _r_b2.get("annual_adj_op", _r_b2["annual_op"])
+                    _ben_rev[_r_b2["name"]] += _r_b2["annual_rev"]
+            _ben_parts = []
+            # Financial delta
+            if _prop_rec_fn != _prop_base_fn:
+                _b_rec_op = _ben_adj.get(_prop_rec_fn, 0)
+                _b_base_op = _ben_adj.get(_prop_base_fn, 0)
+                _b_delta = _b_rec_op - _b_base_op
+                _b_rec_rev = _ben_rev.get(_prop_rec_fn, 0)
+                _b_base_rev = _ben_rev.get(_prop_base_fn, 0)
+                _b_rec_om = _b_rec_op / _b_rec_rev * 100 if _b_rec_rev else 0
+                _b_base_om = _b_base_op / _b_base_rev * 100 if _b_base_rev else 0
+                _b_delta_pp = _b_rec_om - _b_base_om
+                if abs(_b_delta) > 0.5:
+                    _b_sign = "+" if _b_delta > 0 else ""
+                    _ben_parts.append(f"Annual OP impact: {_b_sign}{fi(_b_delta, acct=True)} {currency} ({_b_delta_pp:+.1f}pp margin vs base)")
+            # Investment
+            if auto_inv_m > 0:
+                _ben_parts.append(f"Total investment: {auto_inv_m:.1f} M{currency}")
+            # Strategic rationale from pre-study
+            _ps_strat = st.session_state.get("ps_strategic_rationale", "").strip()
+            if _ps_strat:
+                _ben_parts.append(f"Strategic rationale: {_ps_strat[:200]}")
+            # Reason to change from pre-study
+            _ps_reason = st.session_state.get("ps_reason", "").strip()
+            if _ps_reason and not _ps_strat:
+                _ben_parts.append(f"Reason to change: {_ps_reason[:200]}")
+            # NWC impact
+            for _item_b in all_results:
+                for _r_b in _item_b.get("results", []):
+                    if _r_b.get("name") == _prop_rec_fn:
+                        _nwc = _r_b.get("nwc_carrying_cost_annual", 0)
+                        if abs(_nwc) > 0.5:
+                            _nwc_dir = "increase" if _nwc > 0 else "release"
+                            _ben_parts.append(f"NWC impact: {fi(abs(_nwc), dz=False)} {currency} annual carrying cost {_nwc_dir}")
+                        break
+            if _ben_parts:
+                st.session_state.prop_benefits = " | ".join(_ben_parts)
+
         # ── Row 2: Direction, Benefits, Conditions (single-row data_editor)
         _r2_data = {
             "Direction": st.session_state.prop_direction,
