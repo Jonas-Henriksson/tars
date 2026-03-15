@@ -21,7 +21,7 @@ from landed_cost.models import FactoryAssumptions, ItemInputs
 from landed_cost.compute import compute_location, compute_sensitivity
 from landed_cost.investment import compute_investment_case
 from landed_cost.lead_times import get_lead_time, estimate_lead_time, LEAD_TIME_MATRIX
-from landed_cost.formatters import fn, fp, fi, dc
+from landed_cost.formatters import fn, fp, fi, fa, dc
 from landed_cost.constants import (
     NAVY, DARK_TEXT, GREY_TEXT, ACCENT_BLUE, BASE_CASE_BG, BORDER,
     GREEN, RED, MUTED, INPUT_BLUE, CURRENCIES, COUNTRIES,
@@ -486,7 +486,7 @@ def build_charts(results, ccy):
     fig.add_trace(go.Bar(x=names, y=oms, marker_color=colors, text=[f"{v:.1f}%" for v in oms],
         textposition="outside", textfont=dict(size=10, family="Inter, sans-serif", color=DARK_TEXT),
         hovertemplate="%{x}<br>OM: %{y:.1f}%<extra></extra>", showlegend=False), row=1, col=1)
-    fig.add_trace(go.Bar(x=names, y=ops, marker_color=colors, text=[fi(v,dz=False) for v in ops],
+    fig.add_trace(go.Bar(x=names, y=ops, marker_color=colors, text=[fa(v) for v in ops],
         textposition="outside", textfont=dict(size=10, family="Inter, sans-serif", color=DARK_TEXT),
         hovertemplate="%{x}<br>OP: %{y:,.0f}<extra></extra>", showlegend=False), row=1, col=2)
     fig.update_layout(height=400, margin=dict(l=40,r=40,t=45,b=60), paper_bgcolor="white",
@@ -535,7 +535,7 @@ def build_waterfall_chart(result, ccy):
         decreasing=dict(marker=dict(color="#ffebee", line=dict(color=RED, width=1))),
         totals=dict(marker=dict(color=NAVY if op >= 0 else RED, line=dict(color=NAVY if op >= 0 else RED, width=1))),
         textposition="outside",
-        text=[fn(abs(v), 2, dz=False) for v in values],
+        text=[fa(abs(v)) for v in values],
         textfont=dict(size=9, family="Inter, sans-serif", color=DARK_TEXT),
     ))
     fig.update_layout(
@@ -807,7 +807,7 @@ def build_portfolio_waterfall(all_results, factory_name, ccy):
         decreasing=dict(marker=dict(color="#ffebee", line=dict(color=RED, width=1))),
         totals=dict(marker=dict(color=NAVY if total_op >= 0 else RED, line=dict(color=NAVY if total_op >= 0 else RED, width=1))),
         textposition="outside",
-        text=[fi(abs(v), dz=False) for v in values],
+        text=[fa(abs(v)) for v in values],
         textfont=dict(size=9, family="Inter, sans-serif", color=DARK_TEXT),
     ))
     fig.update_layout(
@@ -823,11 +823,14 @@ def build_portfolio_waterfall(all_results, factory_name, ccy):
 
 
 # ── PORTFOLIO TORNADO CHART ──────────────────────────────────
-def build_portfolio_tornado(all_results, factory_name, ccy):
-    """Build a tornado chart showing portfolio-level OM sensitivity for one factory."""
-    # Compute base portfolio OM for this factory
-    base_rev = sum(r["annual_rev"] for item in all_results for r in item["results"] if r["name"] == factory_name)
-    base_op = sum(r["annual_op"] for item in all_results for r in item["results"] if r["name"] == factory_name)
+def build_portfolio_tornado(all_results, all_fnames, ccy):
+    """Build a tornado chart showing how ±20% parameter changes affect total portfolio OM."""
+    from dataclasses import replace
+    factory_attrs = {"va_ratio", "ps_index", "mcl_pct", "sa_pct", "tpl", "tariff_pct", "duties_pct", "transport_pct"}
+
+    # Compute base portfolio OM (all factories, all items)
+    base_rev = sum(r["annual_rev"] for item in all_results for r in item["results"])
+    base_op = sum(r["annual_op"] for item in all_results for r in item["results"])
     if base_rev == 0:
         return None
     base_om = base_op / base_rev * 100
@@ -841,42 +844,33 @@ def build_portfolio_tornado(all_results, factory_name, ccy):
         ("Duties %", "duties_pct", True),
     ]
 
-    factory_attrs = {"va_ratio", "ps_index", "mcl_pct", "sa_pct", "tpl", "tariff_pct", "duties_pct", "transport_pct"}
-    from dataclasses import replace
-
     bars = []
     for label, param, is_pct in params:
-        # Get current value from first item's factory
-        first_factory = None
+        # Check if any factory has a non-zero value for this param
+        has_value = False
         for item in all_results:
-            dc_inputs = item.get("_inputs_dc")
             base_f = item.get("_base_factory")
             facs = item.get("_factories", [])
-            target_f = base_f if base_f and base_f.name == factory_name else next((f for f in facs if f.name == factory_name), None)
-            if target_f:
-                first_factory = target_f
+            for f in ([base_f] if base_f else []) + list(facs):
+                if f and getattr(f, param, None) not in (None, 0):
+                    has_value = True
+                    break
+            if has_value:
                 break
-        if not first_factory:
+        if not has_value:
             continue
 
-        current = getattr(first_factory, param, None)
-        if current is None or current == 0:
-            continue
-        if param == "va_ratio" and first_factory.name == all_results[0]["results"][0]["name"]:
-            continue  # skip VA ratio for base
-
-        low_val = current * 0.8
-        high_val = current * 1.2
-
-        # Recompute all items with tweaked parameter
-        om_low = _portfolio_om_with_tweak(all_results, factory_name, param, low_val, factory_attrs)
-        om_high = _portfolio_om_with_tweak(all_results, factory_name, param, high_val, factory_attrs)
+        # Recompute entire portfolio with ±20% on this param across ALL factories
+        om_low = _portfolio_om_all_tweaked(all_results, all_fnames, param, 0.8, factory_attrs)
+        om_high = _portfolio_om_all_tweaked(all_results, all_fnames, param, 1.2, factory_attrs)
         if om_low is None or om_high is None:
             continue
 
         d_low = om_low - base_om
         d_high = om_high - base_om
         spread = abs(d_high - d_low)
+        if spread < 0.001:
+            continue
         bars.append((label, d_low, d_high, spread))
 
     if not bars:
@@ -913,7 +907,7 @@ def build_portfolio_tornado(all_results, factory_name, ccy):
             showarrow=False, xanchor="left", xshift=4, font=dict(size=8, family="Inter, sans-serif", color=right_color))
 
     fig.update_layout(
-        title=dict(text=f"Portfolio Tornado: OM Sensitivity to \u00b120% ({factory_name})<br><span style='font-size:9px;color:#666;font-weight:normal'>Impact on portfolio Operating Margin when a shared parameter is changed by \u00b120%</span>", font=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT)),
+        title=dict(text=f"Portfolio Tornado: OM Sensitivity to \u00b120%<br><span style='font-size:9px;color:#666;font-weight:normal'>Impact on total portfolio Operating Margin when each shared parameter is changed by \u00b120% across all factories</span>", font=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT)),
         height=max(250, 50 * len(bars) + 80), barmode="overlay",
         margin=dict(l=120, r=60, t=60, b=40),
         paper_bgcolor="white", plot_bgcolor="white",
@@ -926,8 +920,8 @@ def build_portfolio_tornado(all_results, factory_name, ccy):
     return fig
 
 
-def _portfolio_om_with_tweak(all_results, factory_name, param, value, factory_attrs):
-    """Recompute portfolio OM for a factory with one parameter tweaked."""
+def _portfolio_om_all_tweaked(all_results, all_fnames, param, multiplier, factory_attrs):
+    """Recompute total portfolio OM with one parameter scaled by multiplier across ALL factories."""
     from dataclasses import replace
     total_rev = 0.0
     total_op = 0.0
@@ -938,21 +932,24 @@ def _portfolio_om_with_tweak(all_results, factory_name, param, value, factory_at
         get_ov = item.get("_get_ov")
         if not dc_inputs:
             continue
-
-        is_base = (base_f and base_f.name == factory_name)
-        target_f = base_f if is_base else next((f for f in facs if f.name == factory_name), None)
-        if not target_f:
-            continue
-
-        if param in factory_attrs:
-            tweaked_f = replace(target_f, **{param: value})
-            r = compute_location(dc_inputs, tweaked_f, is_base=is_base, overrides=get_ov(factory_name) if get_ov else None)
-        else:
-            tweaked_inputs = replace(dc_inputs, **{param: value})
-            r = compute_location(tweaked_inputs, target_f, is_base=is_base, overrides=get_ov(factory_name) if get_ov else None)
-        if r:
-            total_rev += r["annual_rev"]
-            total_op += r["annual_op"]
+        for fn_ in all_fnames:
+            is_base = (base_f and base_f.name == fn_)
+            target_f = base_f if is_base else next((f for f in facs if f.name == fn_), None)
+            if not target_f:
+                continue
+            current = getattr(target_f, param, None) if param in factory_attrs else getattr(dc_inputs, param, None)
+            if current is None:
+                # No tweak possible, use original
+                r = compute_location(dc_inputs, target_f, is_base=is_base, overrides=get_ov(fn_) if get_ov else None)
+            elif param in factory_attrs:
+                tweaked_f = replace(target_f, **{param: current * multiplier})
+                r = compute_location(dc_inputs, tweaked_f, is_base=is_base, overrides=get_ov(fn_) if get_ov else None)
+            else:
+                tweaked_inputs = replace(dc_inputs, **{param: current * multiplier})
+                r = compute_location(tweaked_inputs, target_f, is_base=is_base, overrides=get_ov(fn_) if get_ov else None)
+            if r:
+                total_rev += r["annual_rev"]
+                total_op += r["annual_op"]
     return (total_op / total_rev * 100) if total_rev else None
 
 
@@ -1681,10 +1678,13 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
         if cn not in edited_ov.columns:
             return None
         ov = {}
-        for key, row_name in [("material","Material"),("variable_va","Variable VA"),("fixed_va","Fixed VA")]:
-            v = edited_ov.loc[row_name, cn]
-            if v is not None and not pd.isna(v):
-                ov[key] = float(v)
+        try:
+            for key, row_name in [("material","Material"),("variable_va","Variable VA"),("fixed_va","Fixed VA")]:
+                v = edited_ov.loc[row_name, cn]
+                if v is not None and not pd.isna(v):
+                    ov[key] = float(v)
+        except KeyError:
+            return None
         return ov if ov else None
 
     return {"inputs": inputs, "get_ov": get_ov}
@@ -1815,7 +1815,7 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
         fig = go.Figure(go.Bar(
             x=all_fnames, y=[totals[fn_] for fn_ in all_fnames],
             marker_color=colors,
-            text=[fi(totals[fn_], dz=False) for fn_ in all_fnames],
+            text=[fa(totals[fn_]) for fn_ in all_fnames],
             textposition="outside",
             textfont=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT),
         ))
@@ -1851,15 +1851,10 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
         with sub_tabs[1]:
             st.markdown(f'<div class="callout">Explore how changes in a single parameter affect portfolio-level operating margin. The <strong>tornado chart</strong> shows the impact on OM when each cost parameter is individually changed by \u00b120%. The <strong>line chart</strong> below sweeps a single parameter across all factories.</div>', unsafe_allow_html=True)
 
-            # Tornado chart with factory selector
-            tornado_fnames = all_fnames[1:]  # exclude base
-            if tornado_fnames:
-                tc1, tc2 = st.columns([1, 3])
-                with tc1:
-                    tornado_sel = st.selectbox("Tornado Factory", tornado_fnames, key="portfolio_tornado_fac")
-                tornado_fig = build_portfolio_tornado(all_results, tornado_sel, ccy)
-                if tornado_fig:
-                    st.plotly_chart(tornado_fig, use_container_width=True, config=plotly_cfg)
+            # Tornado chart (portfolio-wide, all factories)
+            tornado_fig = build_portfolio_tornado(all_results, all_fnames, ccy)
+            if tornado_fig:
+                st.plotly_chart(tornado_fig, use_container_width=True, config=plotly_cfg)
 
             # Parameter sweep
             sa_params = {

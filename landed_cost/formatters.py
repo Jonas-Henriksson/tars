@@ -69,6 +69,27 @@ def format_integer(v, accounting: bool = False, dash_zero: bool = True) -> str:
     return f"{v:,.0f}"
 
 
+def format_abbreviated(v) -> str:
+    """Format a number with K/M suffix to match chart axis labels."""
+    if v is None:
+        return "\u2013"
+    av = abs(v)
+    sign = "" if v >= 0 else "-"
+    if av >= 1_000_000:
+        return f"{sign}{av / 1_000_000:,.1f}M"
+    elif av >= 1_000:
+        return f"{sign}{av / 1_000:,.0f}K"
+    elif av >= 1:
+        return f"{sign}{av:,.0f}"
+    else:
+        return f"{sign}{av:,.2f}"
+
+
+def fa(v) -> str:
+    """Short alias for format_abbreviated."""
+    return format_abbreviated(v)
+
+
 def delta_class(v) -> str:
     """Return a CSS class name ('delta-pos' / 'delta-neg') for coloring deltas."""
     if v is None or abs(v) < 0.0001:
