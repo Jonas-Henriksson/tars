@@ -5185,7 +5185,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                     if _fld in _row:
                         _row[_fld] = _row[_fld].replace("(Q)", "(Quantity)")
 
-        # Build a flat table per section for data_editor, then handle follow-ups separately
+        # Compact data_editor matrix per section
         for section_name, rows in td_reqs.items():
             style = _section_styles.get(section_name, f"background:{NAVY};color:#fff;")
             st.markdown(f"""<div style="{style}padding:0.25rem 0.6rem;border-radius:2px 2px 0 0;margin-top:0.5rem;font-family:Inter,sans-serif;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
@@ -5194,85 +5194,83 @@ Compares full cost-to-serve across factory locations, including material, labour
 
             sec_key = section_name.lower().replace(" ", "_").replace("&", "and")
 
-            # Column header row
-            _hdr_cols = st.columns([3.0, 1.8, 1.2, 1.0, 1.0])
-            for _ci, _lbl in enumerate(["Requirement", "Value / Answer", "Approver", "Date", "Status"]):
-                with _hdr_cols[_ci]:
-                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.6rem;font-weight:600;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.04em;padding:0.2rem 0;border-bottom:1px solid {BORDER};'>{_lbl}</div>", unsafe_allow_html=True)
-
-            # Render each requirement row with appropriate input types
+            # Build flat df rows: main requirements + follow-up sub-rows
+            df_rows = []
+            row_map = []  # (source_row_index, "main" | "followup" | "followup_no")
             for ri, row in enumerate(rows):
-                req = row["Requirement"]
                 follow_up = row.get("Follow-up", "")
                 condition = row.get("Condition", "")
-                is_yn = row.get("Input Type") == "yes_no"
-                has_inline_followup = follow_up and condition != "if_no"
+                _date_val = row.get("Date", "")
+                _parsed = None
+                if _date_val:
+                    try:
+                        from datetime import datetime as _dt
+                        _parsed = _dt.strptime(str(_date_val), "%Y-%m-%d").date()
+                    except (ValueError, TypeError):
+                        _parsed = None
+                df_rows.append({
+                    "Requirement": row["Requirement"],
+                    "Value / Answer": row.get("Value", ""),
+                    "Approver": row.get("Approver", ""),
+                    "Date": _parsed,
+                    "Status": row.get("Status", "Pending"),
+                })
+                row_map.append((ri, "main"))
 
-                rc = st.columns([3.0, 1.8, 1.2, 1.0, 1.0])
-                with rc[0]:
-                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.72rem;color:{DARK_TEXT};padding:0.55rem 0 0.2rem 0;'>{req}</div>", unsafe_allow_html=True)
-                with rc[1]:
-                    if is_yn:
-                        _yn_opts = ["", "Yes", "No"]
-                        _yn_cur = row.get("Value", "")
-                        _yn_idx = _yn_opts.index(_yn_cur) if _yn_cur in _yn_opts else 0
-                        row["Value"] = st.selectbox(
-                            f"val_{sec_key}_{ri}", options=_yn_opts, index=_yn_idx,
-                            key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed",
-                            format_func=lambda x: x if x else "— Select —")
-                    else:
-                        row["Value"] = st.text_input(
-                            f"val_{sec_key}_{ri}", value=row.get("Value", ""),
-                            key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed")
-                with rc[2]:
-                    row["Approver"] = st.text_input(
-                        f"app_{sec_key}_{ri}", value=row.get("Approver", ""),
-                        key=f"td_{sec_key}_{ri}_app", label_visibility="collapsed")
-                with rc[3]:
-                    _date_val = row.get("Date", "")
-                    _parsed_date = None
-                    if _date_val:
-                        try:
-                            from datetime import datetime as _dt
-                            _parsed_date = _dt.strptime(str(_date_val), "%Y-%m-%d").date()
-                        except (ValueError, TypeError):
-                            _parsed_date = None
-                    _date_result = st.date_input(
-                        f"dt_{sec_key}_{ri}", value=_parsed_date,
-                        key=f"td_{sec_key}_{ri}_dt", label_visibility="collapsed")
-                    row["Date"] = str(_date_result) if _date_result else ""
-                with rc[4]:
-                    _st_opts = ["Pending", "Approved", "Rejected"]
-                    _st_cur = row.get("Status", "Pending")
-                    _st_idx = _st_opts.index(_st_cur) if _st_cur in _st_opts else 0
-                    _st_color_map = {"Pending": ("#e6a817", "#fef9e7"), "Approved": (GREEN, "#e8f5e9"), "Rejected": (RED, "#fdecea")}
-                    row["Status"] = st.selectbox(
-                        f"st_{sec_key}_{ri}", options=_st_opts, index=_st_idx,
-                        key=f"td_{sec_key}_{ri}_st", label_visibility="collapsed")
-                    _sc_fg, _sc_bg = _st_color_map.get(row["Status"], ("#333", "#f5f5f5"))
-                    st.markdown(f"<div style='font-size:0.65rem;font-weight:700;color:{_sc_fg};background:{_sc_bg};border-radius:4px;padding:2px 8px;text-align:center;margin-top:-0.5rem;'>{row['Status']}</div>", unsafe_allow_html=True)
+                # Inline follow-up (always visible)
+                if follow_up and condition != "if_no":
+                    df_rows.append({
+                        "Requirement": f"  ↳ {follow_up}",
+                        "Value / Answer": row.get("Follow-up Answer", ""),
+                        "Approver": "",
+                        "Date": None,
+                        "Status": "",
+                    })
+                    row_map.append((ri, "followup"))
 
-                # Inline follow-up (non-conditional) — show on same row below
-                if has_inline_followup:
-                    fu_cols = st.columns([3.0, 1.8, 3.2])
-                    with fu_cols[0]:
-                        st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};padding:0 0 0.3rem 1rem;font-style:italic;'>{follow_up}</div>", unsafe_allow_html=True)
-                    with fu_cols[1]:
-                        row["Follow-up Answer"] = st.text_input(
-                            f"fua_{sec_key}_{ri}", value=row.get("Follow-up Answer", ""),
-                            key=f"td_{sec_key}_{ri}_fua", label_visibility="collapsed")
-
-                # Conditional follow-up (if_no) — only show when answer is No
+                # Conditional follow-up (if_no) — only when answer is No
                 if condition == "if_no" and follow_up:
                     main_val = (row.get("Value", "") or "").strip().lower()
                     if main_val in ("no", "n"):
-                        fu_cols2 = st.columns([3.0, 1.8, 3.2])
-                        with fu_cols2[0]:
-                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{RED};padding:0 0 0.3rem 1rem;font-style:italic;'>If no: {follow_up}</div>", unsafe_allow_html=True)
-                        with fu_cols2[1]:
-                            row["Follow-up Answer"] = st.text_input(
-                                "fua_no", value=row.get("Follow-up Answer", ""),
-                                key=f"td_{sec_key}_{ri}_fua_no", label_visibility="collapsed")
+                        df_rows.append({
+                            "Requirement": f"  ↳ If no: {follow_up}",
+                            "Value / Answer": row.get("Follow-up Answer", ""),
+                            "Approver": "",
+                            "Date": None,
+                            "Status": "",
+                        })
+                        row_map.append((ri, "followup_no"))
+
+            df = pd.DataFrame(df_rows)
+
+            edited = st.data_editor(
+                df,
+                use_container_width=True,
+                num_rows="fixed",
+                hide_index=True,
+                key=f"td_matrix_{sec_key}",
+                column_config={
+                    "Requirement": st.column_config.TextColumn("Requirement", width=280, disabled=True),
+                    "Value / Answer": st.column_config.TextColumn("Value / Answer", width=140),
+                    "Approver": st.column_config.TextColumn("Approver", width=120),
+                    "Date": st.column_config.DateColumn("Date", width=100),
+                    "Status": st.column_config.SelectboxColumn("Status", options=["", "Pending", "Approved", "Rejected"], width=100),
+                },
+            )
+
+            # Write edited values back to source rows
+            for di, (ri, kind) in enumerate(row_map):
+                if di >= len(edited):
+                    break
+                erow = edited.iloc[di]
+                if kind == "main":
+                    rows[ri]["Value"] = str(erow["Value / Answer"] or "")
+                    rows[ri]["Approver"] = str(erow["Approver"] or "")
+                    _d = erow["Date"]
+                    rows[ri]["Date"] = str(_d) if _d is not None and str(_d) != "NaT" else ""
+                    rows[ri]["Status"] = erow["Status"] if erow["Status"] else "Pending"
+                elif kind in ("followup", "followup_no"):
+                    rows[ri]["Follow-up Answer"] = str(erow["Value / Answer"] or "")
 
         st.session_state.td_requirements = td_reqs
 
