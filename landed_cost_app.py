@@ -5236,13 +5236,13 @@ Compares full cost-to-serve across factory locations, including material, labour
                     _st_opts = ["Pending", "Approved", "Rejected"]
                     _st_cur = row.get("Status", "Pending")
                     _st_idx = _st_opts.index(_st_cur) if _st_cur in _st_opts else 0
-                    _st_colors = {"Pending": f"color:#e6a817;", "Approved": f"color:{GREEN};", "Rejected": f"color:{RED};"}
+                    _st_color_map = {"Pending": "#e6a817", "Approved": GREEN, "Rejected": RED}
                     row["Status"] = st.selectbox(
                         f"st_{sec_key}_{ri}", options=_st_opts, index=_st_idx,
                         key=f"td_{sec_key}_{ri}_st", label_visibility="collapsed")
-                    # Color badge below selectbox
-                    _sc = _st_colors.get(row["Status"], "")
-                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.6rem;font-weight:700;{_sc}margin-top:-0.7rem;'>{row['Status']}</div>", unsafe_allow_html=True)
+                    # Tint the selectbox text colour via scoped CSS
+                    _sc_hex = _st_color_map.get(row["Status"], "#333")
+                    st.markdown(f"<style>[data-testid='stSelectbox']:has(#td_{sec_key}_{ri}_st) div[data-baseweb='select'] span {{color:{_sc_hex} !important;font-weight:600;}}</style>", unsafe_allow_html=True)
 
                 # Inline follow-up (non-conditional) — show on same row below
                 if has_inline_followup:
