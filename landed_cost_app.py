@@ -1294,24 +1294,6 @@ def export_excel_project(project_data):
         for ms, dt in st.session_state.get("ps_timeline", {}).items():
             ws.write(r, 0, ms, lf); ws.write(r, 1, str(dt), lf); r += 1
 
-        # Proposal sheet
-        ws = wb.add_worksheet("Proposal")
-        w.sheets["Proposal"] = ws
-        ws.set_column(0, 0, 28)
-        ws.set_column(1, 1, 50)
-        ws.merge_range(0, 0, 0, 1, f"Proposal | {st.session_state.get('project_name', '')}", tf)
-        r = 2
-        for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits"),
-                           ("Time Plan", "prop_timeplan")]:
-            ws.write(r, 0, label, hl)
-            ws.write(r, 1, st.session_state.get(key, ""), lf)
-            r += 1
-        r += 1
-        ws.write(r, 0, "Team", hl); ws.write(r, 1, "", hl); r += 1
-        for label, key in [("Initiative Sponsor", "ps_sponsor"), ("Initiative Lead", "ps_lead"),
-                           ("Main Entity(s)", "ps_main_entity"), ("Pre-study Team", "ps_team")]:
-            ws.write(r, 0, label, lf); ws.write(r, 1, st.session_state.get(key, ""), lf); r += 1
-
         # Transfer Feasibility sheet
         ws = wb.add_worksheet("Transfer Feasibility")
         w.sheets["Transfer Feasibility"] = ws
@@ -1337,6 +1319,24 @@ def export_excel_project(project_data):
                     ws.write(r, ci, str(row.get(col, "")), lf)
                 r += 1
             r += 1
+
+        # Proposal sheet
+        ws = wb.add_worksheet("Proposal")
+        w.sheets["Proposal"] = ws
+        ws.set_column(0, 0, 28)
+        ws.set_column(1, 1, 50)
+        ws.merge_range(0, 0, 0, 1, f"Proposal | {st.session_state.get('project_name', '')}", tf)
+        r = 2
+        for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits"),
+                           ("Time Plan", "prop_timeplan")]:
+            ws.write(r, 0, label, hl)
+            ws.write(r, 1, st.session_state.get(key, ""), lf)
+            r += 1
+        r += 1
+        ws.write(r, 0, "Team", hl); ws.write(r, 1, "", hl); r += 1
+        for label, key in [("Initiative Sponsor", "ps_sponsor"), ("Initiative Lead", "ps_lead"),
+                           ("Main Entity(s)", "ps_main_entity"), ("Pre-study Team", "ps_team")]:
+            ws.write(r, 0, label, lf); ws.write(r, 1, st.session_state.get(key, ""), lf); r += 1
 
     buf.seek(0)
     return buf
@@ -1705,24 +1705,6 @@ def export_pdf_project(all_results, ccy, project_name):
                 pdf.set_font("Helvetica", "", 6.5)
                 pdf.cell(0, 4.5, _safe(val), ln=True)
 
-    # Proposal page
-    prop_dir = st.session_state.get("prop_direction", "")
-    prop_ben = st.session_state.get("prop_benefits", "")
-    if any(s.strip() for s in (prop_dir, prop_ben)):
-        pdf.add_page()
-        add_page_header(pdf, f"Proposal | {project_name}", f"{ccy}")
-        for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits")]:
-            txt = st.session_state.get(key, "")
-            if txt.strip():
-                pdf.set_font("Helvetica", "B", 8)
-                pdf.set_fill_color(navy_r, navy_g, navy_b)
-                pdf.set_text_color(white_r, white_g, white_b)
-                pdf.cell(0, 5.5, label, ln=True, fill=True)
-                pdf.set_text_color(dark_r, dark_g, dark_b)
-                pdf.set_font("Helvetica", "", 7)
-                pdf.multi_cell(0, 4, _safe(txt))
-                pdf.ln(2)
-
     # Transfer Feasibility page
     td_reqs = st.session_state.get("td_requirements", {})
     has_td = any(r.get("Value", "").strip() or r.get("Status", "") != "Pending"
@@ -1772,6 +1754,24 @@ def export_pdf_project(all_results, ccy, project_name):
                         pdf.cell(td_col_w[ci], 4.5, "", border=1)
                     pdf.ln()
             pdf.ln(2)
+
+    # Proposal page
+    prop_dir = st.session_state.get("prop_direction", "")
+    prop_ben = st.session_state.get("prop_benefits", "")
+    if any(s.strip() for s in (prop_dir, prop_ben)):
+        pdf.add_page()
+        add_page_header(pdf, f"Proposal | {project_name}", f"{ccy}")
+        for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits")]:
+            txt = st.session_state.get(key, "")
+            if txt.strip():
+                pdf.set_font("Helvetica", "B", 8)
+                pdf.set_fill_color(navy_r, navy_g, navy_b)
+                pdf.set_text_color(white_r, white_g, white_b)
+                pdf.cell(0, 5.5, label, ln=True, fill=True)
+                pdf.set_text_color(dark_r, dark_g, dark_b)
+                pdf.set_font("Helvetica", "", 7)
+                pdf.multi_cell(0, 4, _safe(txt))
+                pdf.ln(2)
 
     buf = io.BytesIO()
     buf.write(pdf.output())
@@ -3023,8 +3023,8 @@ def main():
     # ── GOVERNANCE NAV ──────────────────────────────────────────
     gov_pages = [
         ("Pre-study", "prestudy"),
-        ("Proposal", "proposal"),
         ("Transfer Feasibility", "transfer"),
+        ("Proposal", "proposal"),
     ]
     st.sidebar.markdown(f'<div class="nav-sep">Governance</div>', unsafe_allow_html=True)
     for label, key in gov_pages:
@@ -3686,126 +3686,6 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Pre-study</span>", unsafe_allow_html=True)
         return
 
-    # ── PROPOSAL PAGE ──────────────────────────────────────────
-    if st.session_state.active_page == "proposal":
-        project_name = st.session_state.project_name
-        data_classification = st.session_state.get("data_classification", "C3 - Confidential")
-        currency = st.session_state.get("currency", "SEK")
-        all_results = st.session_state.get("_all_results", [])
-
-        st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
-            Proposal <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
-        </div>""", unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">One-page decision summary for the Factory Council. Financial figures are auto-populated from the Required Investments analysis where available.</div>', unsafe_allow_html=True)
-
-        # Auto-generate direction from model results if not already set
-        if not st.session_state.prop_direction.strip() and all_results:
-            try:
-                best_name, best_delta = "", 0.0
-                base_om = 0.0
-                for item_data in all_results:
-                    results = item_data.get("results", [])
-                    if len(results) >= 2:
-                        base_om = results[0].get("operating_margin_pct", 0)
-                        for r in results[1:]:
-                            delta = r.get("operating_margin_pct", 0) - base_om
-                            if delta > best_delta:
-                                best_delta = delta
-                                best_name = r.get("name", "")
-                if best_name:
-                    base_name = all_results[0]["results"][0].get("name", "Base") if all_results[0].get("results") else "Base"
-                    st.session_state.prop_direction = (
-                        f"Transfer production from {base_name} to {best_name}, "
-                        f"achieving {best_delta:+.1f}pp operating margin improvement."
-                    )
-            except (KeyError, IndexError):
-                pass
-
-        prop_left, prop_right = st.columns([2, 3])
-        with prop_left:
-            st.markdown(f'<div class="sec-sm">Direction</div>', unsafe_allow_html=True)
-            st.session_state.prop_direction = st.text_area(
-                "Direction", value=st.session_state.prop_direction,
-                key="prop_direction_input", height=160, label_visibility="collapsed",
-                placeholder="Describe the recommended direction and key rationale...")
-
-        with prop_right:
-            # Benefits & Key Details (bundled)
-            st.markdown(f'<div class="sec-sm">Benefits & Key Details</div>', unsafe_allow_html=True)
-            st.session_state.prop_benefits = st.text_area(
-                "Benefits", value=st.session_state.prop_benefits,
-                key="prop_benefits_input", height=140, label_visibility="collapsed",
-                placeholder="List key benefits and relevant details (use bullet points):\n- Margin improvement of X.Xpp\n  - Lower VA cost at receiving site\n- Risk diversification\n- Relevant technical / market details...")
-
-            # Financials & Time Plan — proper numeric inputs
-            st.markdown(f'<div class="sec-sm">Financials & Time Plan</div>', unsafe_allow_html=True)
-            # Auto-populate investment total from model
-            auto_inv = 0.0
-            if all_results:
-                for item_data in all_results:
-                    for ic in item_data.get("investment_cases", []):
-                        auto_inv += ic.get("total_investment", 0)
-            auto_inv_m = auto_inv / 1e6 if auto_inv else 0.0
-
-            fc1, fc2, fc3 = st.columns(3)
-            with fc1:
-                inv_val = st.session_state.prop_total_investment if st.session_state.prop_total_investment is not None else (auto_inv_m if auto_inv_m else None)
-                new_inv = st.number_input(
-                    f"Total Investment (M{currency})", value=inv_val,
-                    min_value=0.0, step=0.5, format="%.1f", key="prop_inv_input")
-                st.session_state.prop_total_investment = new_inv
-                if auto_inv_m > 0:
-                    st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};margin-top:-0.5rem;font-style:italic;">Auto-calculated: {auto_inv_m:.1f} M{currency}</div>', unsafe_allow_html=True)
-            with fc2:
-                new_cash = st.number_input(
-                    f"Cash Out (M{currency})", value=st.session_state.prop_cash_out or 0.0,
-                    min_value=0.0, step=0.5, format="%.1f", key="prop_cash_input")
-                st.session_state.prop_cash_out = new_cash
-            with fc3:
-                st.session_state.prop_timeplan = st.text_input(
-                    "Time Plan", value=st.session_state.prop_timeplan,
-                    key="prop_timeplan_input",
-                    placeholder="e.g. May '25 — Dec '26")
-
-        # Dependencies, Risks & Mitigations (full width)
-        st.markdown(f'<div class="sec-sm">Dependencies, Risks & Mitigations</div>', unsafe_allow_html=True)
-        risk_df = pd.DataFrame(st.session_state.prop_risks)
-        if "Risk" not in risk_df.columns:
-            risk_df = pd.DataFrame([{"Risk": "", "Mitigation": ""}])
-        edited_risks = st.data_editor(
-            risk_df, use_container_width=True, num_rows="dynamic", key="prop_risks_editor",
-            hide_index=True,
-            column_config={
-                "Risk": st.column_config.TextColumn("Risk / Dependency", width=280),
-                "Mitigation": st.column_config.TextColumn("Mitigation", width=320),
-            })
-        st.session_state.prop_risks = edited_risks.to_dict("records")
-
-        # Team — read-only reference from Pre-study
-        st.markdown(f'<div class="sec-sm">Team</div>', unsafe_allow_html=True)
-        team_data = {
-            "Role": ["Initiative Sponsor", "Initiative Lead", "Main Entity(s)", "Pre-study Team"],
-            "Name": [
-                st.session_state.ps_sponsor or "—",
-                st.session_state.ps_lead or "—",
-                st.session_state.ps_main_entity or "—",
-                st.session_state.ps_team.replace("\n", ", ") if st.session_state.ps_team else "—",
-            ],
-        }
-        has_team = any(v != "—" for v in team_data["Name"])
-        if has_team:
-            team_html = '<table class="ib-table"><thead><tr><th>Role</th><th>Name</th></tr></thead><tbody>'
-            for role, name in zip(team_data["Role"], team_data["Name"]):
-                team_html += f'<tr><td>{role}</td><td>{name}</td></tr>'
-            team_html += '</tbody></table>'
-            st.markdown(team_html, unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-style:italic;">Complete the Team section on the Pre-study page to populate this table.</div>', unsafe_allow_html=True)
-
-        st.markdown("---")
-        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Proposal</span>", unsafe_allow_html=True)
-        return
-
     # ── TRANSFER FEASIBILITY PAGE ──────────────────────────────────
     if st.session_state.active_page == "transfer":
         project_name = st.session_state.project_name
@@ -3996,6 +3876,126 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         st.markdown("---")
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Transfer Feasibility</span>", unsafe_allow_html=True)
+        return
+
+    # ── PROPOSAL PAGE ──────────────────────────────────────────
+    if st.session_state.active_page == "proposal":
+        project_name = st.session_state.project_name
+        data_classification = st.session_state.get("data_classification", "C3 - Confidential")
+        currency = st.session_state.get("currency", "SEK")
+        all_results = st.session_state.get("_all_results", [])
+
+        st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
+            Proposal <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
+        </div>""", unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">One-page decision summary for the Factory Council. Financial figures are auto-populated from the Required Investments analysis where available.</div>', unsafe_allow_html=True)
+
+        # Auto-generate direction from model results if not already set
+        if not st.session_state.prop_direction.strip() and all_results:
+            try:
+                best_name, best_delta = "", 0.0
+                base_om = 0.0
+                for item_data in all_results:
+                    results = item_data.get("results", [])
+                    if len(results) >= 2:
+                        base_om = results[0].get("operating_margin_pct", 0)
+                        for r in results[1:]:
+                            delta = r.get("operating_margin_pct", 0) - base_om
+                            if delta > best_delta:
+                                best_delta = delta
+                                best_name = r.get("name", "")
+                if best_name:
+                    base_name = all_results[0]["results"][0].get("name", "Base") if all_results[0].get("results") else "Base"
+                    st.session_state.prop_direction = (
+                        f"Transfer production from {base_name} to {best_name}, "
+                        f"achieving {best_delta:+.1f}pp operating margin improvement."
+                    )
+            except (KeyError, IndexError):
+                pass
+
+        prop_left, prop_right = st.columns([2, 3])
+        with prop_left:
+            st.markdown(f'<div class="sec-sm">Direction</div>', unsafe_allow_html=True)
+            st.session_state.prop_direction = st.text_area(
+                "Direction", value=st.session_state.prop_direction,
+                key="prop_direction_input", height=160, label_visibility="collapsed",
+                placeholder="Describe the recommended direction and key rationale...")
+
+        with prop_right:
+            # Benefits & Key Details (bundled)
+            st.markdown(f'<div class="sec-sm">Benefits & Key Details</div>', unsafe_allow_html=True)
+            st.session_state.prop_benefits = st.text_area(
+                "Benefits", value=st.session_state.prop_benefits,
+                key="prop_benefits_input", height=140, label_visibility="collapsed",
+                placeholder="List key benefits and relevant details (use bullet points):\n- Margin improvement of X.Xpp\n  - Lower VA cost at receiving site\n- Risk diversification\n- Relevant technical / market details...")
+
+            # Financials & Time Plan — proper numeric inputs
+            st.markdown(f'<div class="sec-sm">Financials & Time Plan</div>', unsafe_allow_html=True)
+            # Auto-populate investment total from model
+            auto_inv = 0.0
+            if all_results:
+                for item_data in all_results:
+                    for ic in item_data.get("investment_cases", []):
+                        auto_inv += ic.get("total_investment", 0)
+            auto_inv_m = auto_inv / 1e6 if auto_inv else 0.0
+
+            fc1, fc2, fc3 = st.columns(3)
+            with fc1:
+                inv_val = st.session_state.prop_total_investment if st.session_state.prop_total_investment is not None else (auto_inv_m if auto_inv_m else None)
+                new_inv = st.number_input(
+                    f"Total Investment (M{currency})", value=inv_val,
+                    min_value=0.0, step=0.5, format="%.1f", key="prop_inv_input")
+                st.session_state.prop_total_investment = new_inv
+                if auto_inv_m > 0:
+                    st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};margin-top:-0.5rem;font-style:italic;">Auto-calculated: {auto_inv_m:.1f} M{currency}</div>', unsafe_allow_html=True)
+            with fc2:
+                new_cash = st.number_input(
+                    f"Cash Out (M{currency})", value=st.session_state.prop_cash_out or 0.0,
+                    min_value=0.0, step=0.5, format="%.1f", key="prop_cash_input")
+                st.session_state.prop_cash_out = new_cash
+            with fc3:
+                st.session_state.prop_timeplan = st.text_input(
+                    "Time Plan", value=st.session_state.prop_timeplan,
+                    key="prop_timeplan_input",
+                    placeholder="e.g. May '25 — Dec '26")
+
+        # Dependencies, Risks & Mitigations (full width)
+        st.markdown(f'<div class="sec-sm">Dependencies, Risks & Mitigations</div>', unsafe_allow_html=True)
+        risk_df = pd.DataFrame(st.session_state.prop_risks)
+        if "Risk" not in risk_df.columns:
+            risk_df = pd.DataFrame([{"Risk": "", "Mitigation": ""}])
+        edited_risks = st.data_editor(
+            risk_df, use_container_width=True, num_rows="dynamic", key="prop_risks_editor",
+            hide_index=True,
+            column_config={
+                "Risk": st.column_config.TextColumn("Risk / Dependency", width=280),
+                "Mitigation": st.column_config.TextColumn("Mitigation", width=320),
+            })
+        st.session_state.prop_risks = edited_risks.to_dict("records")
+
+        # Team — read-only reference from Pre-study
+        st.markdown(f'<div class="sec-sm">Team</div>', unsafe_allow_html=True)
+        team_data = {
+            "Role": ["Initiative Sponsor", "Initiative Lead", "Main Entity(s)", "Pre-study Team"],
+            "Name": [
+                st.session_state.ps_sponsor or "—",
+                st.session_state.ps_lead or "—",
+                st.session_state.ps_main_entity or "—",
+                st.session_state.ps_team.replace("\n", ", ") if st.session_state.ps_team else "—",
+            ],
+        }
+        has_team = any(v != "—" for v in team_data["Name"])
+        if has_team:
+            team_html = '<table class="ib-table"><thead><tr><th>Role</th><th>Name</th></tr></thead><tbody>'
+            for role, name in zip(team_data["Role"], team_data["Name"]):
+                team_html += f'<tr><td>{role}</td><td>{name}</td></tr>'
+            team_html += '</tbody></table>'
+            st.markdown(team_html, unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-style:italic;">Complete the Team section on the Pre-study page to populate this table.</div>', unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Proposal</span>", unsafe_allow_html=True)
         return
 
     # ── COST MODEL PAGE (active_page == "model") ──
