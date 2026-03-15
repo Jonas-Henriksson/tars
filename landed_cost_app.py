@@ -2140,6 +2140,8 @@ def init_state():
     # ── ANALYSIS CONCLUSION GATE ────────────────────────────
     if "conclusion_selected_option" not in st.session_state:
         st.session_state.conclusion_selected_option = ""
+    if "conclusion_option_statuses" not in st.session_state:
+        st.session_state.conclusion_option_statuses = {}  # {factory_name: "Recommended" | "Alternative" | "Excluded"}
     if "conclusion_rationale" not in st.session_state:
         st.session_state.conclusion_rationale = ""
     if "conclusion_decision" not in st.session_state:
@@ -3661,94 +3663,127 @@ def render_executive_summary_page():
         fx_data[fn_] = {"cost_currency": rec.get("Cost Currency", ""), "hedge_assumption": rec.get("Hedge Assumption", ""), "notes": rec.get("Notes", "")}
     st.session_state.fx_exposures = fx_data
 
-    # ── SCENARIO COMPARISON TABLE ────────────────────────────
-    st.markdown(f'<div class="sec-sm">Scenario Comparison — Side-by-Side</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Transfer decisions often compare 2\u20133 credible options. Use this table to capture trade-off commentary beyond the financial metrics.</div>', unsafe_allow_html=True)
-
-    sc_data = st.session_state.scenario_comparison
-    if not sc_data:
-        # Auto-populate from top alternatives
-        for fn_ in all_fnames:
-            sc_data.append({"Factory": fn_, "Pros": "", "Cons": "", "Trade-offs": ""})
-        st.session_state.scenario_comparison = sc_data
-
-    sc_df = pd.DataFrame(sc_data)
-    edited_sc = st.data_editor(
-        sc_df, use_container_width=True, num_rows="fixed", key="sc_editor",
-        hide_index=True,
-        column_config={
-            "Factory": st.column_config.TextColumn("Option", disabled=True, width=160),
-            "Pros": st.column_config.TextColumn("Pros / Strengths", width=220),
-            "Cons": st.column_config.TextColumn("Cons / Weaknesses", width=220),
-            "Trade-offs": st.column_config.TextColumn("Key Trade-offs", width=200),
-        },
-        disabled=["Factory"])
-    st.session_state.scenario_comparison = edited_sc.to_dict("records")
-
-    # ── ANALYSIS CONCLUSION GATE ─────────────────────────────
+    # ── ANALYSIS CONCLUSION — OPTION SELECTION ────────────────
     st.markdown(f'<div class="sec">Analysis Conclusion — Option Selection</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Record the recommended option and rationale. The formal decision (Go / No-Go) and decision record are captured on the Proposal page.</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Set each option\'s status: <strong>Recommended</strong> (one), <strong>Alternative</strong> (kept for sensitivity / fallback in Proposal), or <strong>Excluded</strong> (discarded from further analysis). Add trade-off commentary to support your rationale.</div>', unsafe_allow_html=True)
 
-    # Auto-populate recommended option from model results if not set
-    if not st.session_state.conclusion_selected_option.strip() and all_results:
+    # Auto-populate statuses if empty
+    _opt_statuses = st.session_state.conclusion_option_statuses
+    if not _opt_statuses and all_results:
+        # Auto-assign: best alt = Recommended (if positive delta), base = Alternative, rest = blank
         if ranked_for_verdict:
             v_best = ranked_for_verdict[0]
             v_delta = adj_totals[v_best] - base_adj_op
             if v_delta > 0:
-                st.session_state.conclusion_selected_option = v_best
+                _opt_statuses[v_best] = "Recommended"
+                _opt_statuses[base_fn] = "Alternative"
+        st.session_state.conclusion_option_statuses = _opt_statuses
 
-    conc_c1, conc_c2 = st.columns([1, 1])
-    with conc_c1:
-        # Option selector — all factories
-        option_choices = [""] + all_fnames
-        current_idx = 0
-        if st.session_state.conclusion_selected_option in option_choices:
-            current_idx = option_choices.index(st.session_state.conclusion_selected_option)
-        selected = st.selectbox(
-            "Recommended Manufacturing Location",
-            options=option_choices,
-            index=current_idx,
-            key="conclusion_option_select",
-            format_func=lambda x: x if x else "— Select recommended option —",
-        )
-        st.session_state.conclusion_selected_option = selected
+    # Build scenario comparison table with Status column
+    sc_data = st.session_state.scenario_comparison
+    if not sc_data:
+        for fn_ in all_fnames:
+            sc_data.append({"Factory": fn_, "Pros": "", "Cons": "", "Trade-offs": ""})
+        st.session_state.scenario_comparison = sc_data
 
-        # Show key metrics for selected option
-        if selected and selected in all_fnames:
-            sel_op = adj_totals.get(selected, 0)
-            sel_rev = total_rev.get(selected, 0)
-            sel_om = sel_op / sel_rev * 100 if sel_rev else 0
-            delta_vs_base = sel_op - adj_totals.get(base_fn, 0)
-            is_base_selected = (selected == base_fn)
-            metric_color = NAVY if is_base_selected else (GREEN if delta_vs_base > 0 else RED)
-            st.markdown(f'''<div style="background:#f8f9fb;border:1px solid {BORDER};border-left:3px solid {metric_color};padding:0.6rem 0.9rem;margin:0.3rem 0;font-family:Inter,sans-serif;font-size:0.76rem;">
-                <strong>{selected}</strong> — Annual OP: <strong>{fi(sel_op, dz=False)} {currency}</strong> | OM: <strong>{sel_om:.1f}%</strong>
-                {f' | Delta vs Base: <span style="color:{GREEN if delta_vs_base > 0 else RED};font-weight:600;">{fi(delta_vs_base, acct=True)} {currency}</span>' if not is_base_selected else ' (Base Case)'}
-            </div>''', unsafe_allow_html=True)
+    # Merge status into scenario rows
+    _sc_rows = []
+    for fn_ in all_fnames:
+        existing = next((s for s in sc_data if s.get("Factory") == fn_), {})
+        _fn_op = adj_totals.get(fn_, 0)
+        _fn_rev = total_rev.get(fn_, 0)
+        _fn_om = _fn_op / _fn_rev * 100 if _fn_rev else 0
+        _fn_delta = _fn_op - adj_totals.get(base_fn, 0)
+        _is_base = (fn_ == base_fn)
+        _metrics = f"OM {_fn_om:.1f}%" + ("" if _is_base else f" | {'+' if _fn_delta > 0 else ''}{fi(_fn_delta, acct=True)} vs base")
+        _sc_rows.append({
+            "Factory": fn_,
+            "Status": _opt_statuses.get(fn_, ""),
+            "Annual OP": _fn_op,
+            "Metrics": _metrics,
+            "Pros": existing.get("Pros", ""),
+            "Cons": existing.get("Cons", ""),
+            "Trade-offs": existing.get("Trade-offs", ""),
+        })
 
-    with conc_c2:
-        st.markdown(f'<div class="sec-sm">Rationale</div>', unsafe_allow_html=True)
-        st.session_state.conclusion_rationale = st.text_area(
-            "Rationale", value=st.session_state.conclusion_rationale,
-            key="conclusion_rationale_input", height=200, label_visibility="collapsed",
-            placeholder="Explain why this option was selected over alternatives:\n\n- Financial advantage (OP uplift, margin improvement)\n- Strategic fit (capacity, market proximity, risk diversification)\n- NWC impact assessment\n- Key trade-offs and risks accepted\n- Factors that ruled out other options...")
+    _sc_df = pd.DataFrame(_sc_rows)
+    _edited_sc = st.data_editor(
+        _sc_df, use_container_width=True, num_rows="fixed", key="sc_editor",
+        hide_index=True,
+        column_config={
+            "Factory": st.column_config.TextColumn("Option", disabled=True, width=150),
+            "Status": st.column_config.SelectboxColumn("Status", options=["Recommended", "Alternative", "Excluded"], width=130),
+            "Annual OP": st.column_config.NumberColumn(f"Annual OP ({currency})", format="%,.0f", disabled=True, width=140),
+            "Metrics": st.column_config.TextColumn("Key Metrics", disabled=True, width=180),
+            "Pros": st.column_config.TextColumn("Pros / Strengths", width=180),
+            "Cons": st.column_config.TextColumn("Cons / Weaknesses", width=180),
+            "Trade-offs": st.column_config.TextColumn("Key Trade-offs", width=160),
+        },
+        disabled=["Factory", "Annual OP", "Metrics"])
 
-        # Completeness check
-        conc_complete = bool(
-            st.session_state.conclusion_selected_option
-            and st.session_state.conclusion_rationale.strip()
-        )
-        if conc_complete:
-            st.markdown(f'''<div style="background:#f0faf3;border:1px solid {GREEN};border-left:3px solid {GREEN};padding:0.5rem 0.8rem;margin:0.4rem 0;font-family:Inter,sans-serif;font-size:0.73rem;color:{GREEN};">
-                Analysis Conclusion complete — ready to proceed to Transfer Feasibility.
-            </div>''', unsafe_allow_html=True)
-        else:
-            missing = []
-            if not st.session_state.conclusion_selected_option: missing.append("Recommended Option")
-            if not st.session_state.conclusion_rationale.strip(): missing.append("Rationale")
-            st.markdown(f'''<div style="background:#fff8e6;border:1px solid #e6a817;border-left:3px solid #e6a817;padding:0.5rem 0.8rem;margin:0.4rem 0;font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};">
-                Incomplete — missing: {", ".join(missing)}
-            </div>''', unsafe_allow_html=True)
+    # Persist statuses and scenario data
+    _new_statuses = {}
+    _new_sc_data = []
+    for i, fn_ in enumerate(all_fnames):
+        row = _edited_sc.iloc[i]
+        _status_val = str(row.get("Status", "") or "")
+        if _status_val:
+            _new_statuses[fn_] = _status_val
+        _new_sc_data.append({
+            "Factory": fn_,
+            "Pros": str(row.get("Pros", "") or ""),
+            "Cons": str(row.get("Cons", "") or ""),
+            "Trade-offs": str(row.get("Trade-offs", "") or ""),
+        })
+    st.session_state.conclusion_option_statuses = _new_statuses
+    st.session_state.scenario_comparison = _new_sc_data
+
+    # Derive recommended option from statuses
+    _recommended_fns = [fn_ for fn_, s in _new_statuses.items() if s == "Recommended"]
+    _alternative_fns = [fn_ for fn_, s in _new_statuses.items() if s == "Alternative"]
+    _excluded_fns = [fn_ for fn_, s in _new_statuses.items() if s == "Excluded"]
+
+    # Enforce single recommendation
+    if len(_recommended_fns) > 1:
+        st.markdown(f'<div style="background:#fff8e6;border:1px solid #e6a817;border-left:3px solid #e6a817;padding:0.4rem 0.8rem;margin:0.3rem 0;font-family:Inter,sans-serif;font-size:0.72rem;color:{GREY_TEXT};">Multiple options marked as Recommended — please select only one.</div>', unsafe_allow_html=True)
+
+    st.session_state.conclusion_selected_option = _recommended_fns[0] if len(_recommended_fns) == 1 else ""
+
+    # Status summary badges
+    if _recommended_fns or _alternative_fns or _excluded_fns:
+        _badge_parts = []
+        if _recommended_fns:
+            _badge_parts.append(f'<span style="background:{GREEN};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-weight:600;font-size:0.7rem;">{_recommended_fns[0]}</span>')
+        for _afn in _alternative_fns:
+            _badge_parts.append(f'<span style="background:{ACCENT_BLUE};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-weight:600;font-size:0.7rem;">{_afn}</span>')
+        if _excluded_fns:
+            _excl_names = ", ".join(_excluded_fns)
+            _badge_parts.append(f'<span style="background:{MUTED};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-size:0.68rem;">Excluded: {_excl_names}</span>')
+        st.markdown(f'<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin:0.4rem 0 0.6rem 0;font-family:Inter,sans-serif;">{"".join(_badge_parts)}</div>', unsafe_allow_html=True)
+
+    # Rationale
+    st.markdown(f'<div class="sec-sm">Rationale</div>', unsafe_allow_html=True)
+    st.session_state.conclusion_rationale = st.text_area(
+        "Rationale", value=st.session_state.conclusion_rationale,
+        key="conclusion_rationale_input", height=150, label_visibility="collapsed",
+        placeholder="Explain why this option was selected over alternatives:\n\n- Financial advantage (OP uplift, margin improvement)\n- Strategic fit (capacity, market proximity, risk diversification)\n- Why alternatives were kept or excluded...")
+
+    # Completeness check
+    conc_complete = bool(
+        st.session_state.conclusion_selected_option
+        and st.session_state.conclusion_rationale.strip()
+    )
+    if conc_complete:
+        st.markdown(f'''<div style="background:#f0faf3;border:1px solid {GREEN};border-left:3px solid {GREEN};padding:0.5rem 0.8rem;margin:0.4rem 0;font-family:Inter,sans-serif;font-size:0.73rem;color:{GREEN};">
+            Analysis Conclusion complete — ready to proceed to Transfer Feasibility.
+        </div>''', unsafe_allow_html=True)
+    else:
+        missing = []
+        if not st.session_state.conclusion_selected_option: missing.append("Recommended Option (set exactly one)")
+        if not st.session_state.conclusion_rationale.strip(): missing.append("Rationale")
+        st.markdown(f'''<div style="background:#fff8e6;border:1px solid #e6a817;border-left:3px solid #e6a817;padding:0.5rem 0.8rem;margin:0.4rem 0;font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};">
+            Incomplete — missing: {", ".join(missing)}
+        </div>''', unsafe_allow_html=True)
 
     # Footer
     st.markdown(f'<div style="margin-top:1.5rem;padding-top:0.5rem;border-top:1px solid {BORDER};font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};text-align:center;">{data_classification} | {project_name} | Generated by Manufacturing Location Analyzer</div>', unsafe_allow_html=True)
@@ -3776,6 +3811,7 @@ def save_project_json():
         # Analysis Conclusion
         "conclusion_selected_option": st.session_state.get("conclusion_selected_option", ""),
         "conclusion_rationale": st.session_state.get("conclusion_rationale", ""),
+        "conclusion_option_statuses": st.session_state.get("conclusion_option_statuses", {}),
         "conclusion_decision": st.session_state.get("conclusion_decision", ""),
         "conclusion_conditions": st.session_state.get("conclusion_conditions", ""),
         "conclusion_decided_by": st.session_state.get("conclusion_decided_by", ""),
@@ -5524,6 +5560,8 @@ Compares full cost-to-serve across factory locations, including material, labour
         factory_countries = st.session_state.get("_factory_countries", {})
         target_market = st.session_state.get("target_market", "")
         conclusion_opt = st.session_state.get("conclusion_selected_option", "")
+        _opt_statuses = st.session_state.get("conclusion_option_statuses", {})
+        _prop_alt_fns = [fn_ for fn_, s in _opt_statuses.items() if s == "Alternative"]
 
         # Auto-populate direction from conclusion
         if conclusion_opt and not st.session_state.prop_direction.strip():
@@ -5542,6 +5580,7 @@ Compares full cost-to-serve across factory locations, including material, labour
             # Project metadata strip
             _prop_n_items = len(all_results)
             _prop_date = date.today().strftime("%d %B %Y")
+            _alt_label = ", ".join(_prop_alt_fns) if _prop_alt_fns else "—"
             st.markdown(f'''<div style="display:flex;gap:2rem;flex-wrap:wrap;font-family:Inter,sans-serif;font-size:0.7rem;color:{GREY_TEXT};margin:0.2rem 0 0.6rem 0;padding:0.5rem 0.9rem;background:#fafbfc;border:1px solid {BORDER};border-radius:2px;">
                 <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Project</span><br>{project_name}</div>
                 <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Date</span><br>{_prop_date}</div>
@@ -5549,14 +5588,11 @@ Compares full cost-to-serve across factory locations, including material, labour
                 <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Target Market</span><br>{target_market or "N/A"}</div>
                 <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Current Factory</span><br>{_prop_base_fn}</div>
                 <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Recommended</span><br>{_prop_rec_fn or "—"}</div>
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Alternative{"s" if len(_prop_alt_fns) > 1 else ""}</span><br>{_alt_label}</div>
                 <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Classification</span><br>{data_classification}</div>
             </div>''', unsafe_allow_html=True)
 
-            # ── Focused map (base + recommended + target only) ────
-            _prop_show_fns = [_prop_base_fn]
-            if _prop_rec_fn and _prop_rec_fn != _prop_base_fn:
-                _prop_show_fns.append(_prop_rec_fn)
-
+            # ── Focused map (base + recommended + alternatives + target) ──
             _pm_lats, _pm_lons, _pm_labels, _pm_hover, _pm_colors, _pm_sizes, _pm_symbols = [], [], [], [], [], [], []
             if target_market and target_market in _COUNTRY_COORDS:
                 _tla, _tlo = _COUNTRY_COORDS[target_market]
@@ -5579,6 +5615,14 @@ Compares full cost-to-serve across factory locations, including material, labour
                     _pm_labels.append(_prop_rec_fn); _pm_hover.append(f"Recommended: {_prop_rec_fn} ({_rec_ctry})")
                     _pm_colors.append(GREEN); _pm_sizes.append(16); _pm_symbols.append("diamond")
 
+            for _afn in _prop_alt_fns:
+                _actry = factory_countries.get(_afn, "")
+                if _actry and _actry in _COUNTRY_COORDS:
+                    _ala, _alo = _COUNTRY_COORDS[_actry]
+                    _pm_lats.append(_ala); _pm_lons.append(_alo)
+                    _pm_labels.append(_afn); _pm_hover.append(f"Alternative: {_afn} ({_actry})")
+                    _pm_colors.append(ACCENT_BLUE); _pm_sizes.append(13); _pm_symbols.append("diamond")
+
             if len(_pm_lats) >= 2:
                 _fig_pmap = go.Figure()
                 # Current sourcing line
@@ -5597,6 +5641,15 @@ Compares full cost-to-serve across factory locations, including material, labour
                         _fig_pmap.add_trace(go.Scattergeo(
                             lat=[_rla2, _tla3], lon=[_rlo2, _tlo3], mode="lines", name=f"Proposed: {_prop_rec_fn}",
                             line=dict(width=2.5, color=GREEN, dash="solid"), showlegend=True, hoverinfo="skip"))
+                # Alternative sourcing lines (dashed)
+                for _afn in _prop_alt_fns:
+                    _actry2 = factory_countries.get(_afn, "")
+                    if _actry2 and _actry2 in _COUNTRY_COORDS and target_market and target_market in _COUNTRY_COORDS:
+                        _ala2, _alo2 = _COUNTRY_COORDS[_actry2]
+                        _tla4, _tlo4 = _COUNTRY_COORDS[target_market]
+                        _fig_pmap.add_trace(go.Scattergeo(
+                            lat=[_ala2, _tla4], lon=[_alo2, _tlo4], mode="lines", name=f"Alternative: {_afn}",
+                            line=dict(width=1.5, color=ACCENT_BLUE, dash="dot"), showlegend=True, hoverinfo="skip"))
 
                 # Markers with smart positioning
                 _pm_used_pos = []
@@ -5631,7 +5684,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                                font=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT), x=0.5))
                 plotly_chart(_fig_pmap)
 
-            # ── Key financial metrics (base vs recommended) ───────
+            # ── Key financial metrics (base vs recommended + alternatives) ──
             _prop_adj_totals = {fn_: 0.0 for fn_ in _prop_all_fnames}
             _prop_rev_totals = {fn_: 0.0 for fn_ in _prop_all_fnames}
             for _item in all_results:
@@ -5643,43 +5696,53 @@ Compares full cost-to-serve across factory locations, including material, labour
             _base_rev_p = _prop_rev_totals.get(_prop_base_fn, 0)
             _base_om_p = _base_op_p / _base_rev_p * 100 if _base_rev_p else 0
 
+            # Build KPI card list: base + recommended + alternatives
+            _kpi_cards = []
+            _kpi_cards.append(("Current (Base Case)", _prop_base_fn, _base_op_p, _base_om_p, None, BASE_CASE_BG, NAVY))
+
             if _prop_rec_fn and _prop_rec_fn != _prop_base_fn:
                 _rec_op_p = _prop_adj_totals.get(_prop_rec_fn, 0)
                 _rec_rev_p = _prop_rev_totals.get(_prop_rec_fn, 0)
                 _rec_om_p = _rec_op_p / _rec_rev_p * 100 if _rec_rev_p else 0
                 _delta_op_p = _rec_op_p - _base_op_p
-                _is_better = _delta_op_p > 0
-                _delta_color = GREEN if _is_better else RED
-                _delta_sign = "+" if _delta_op_p > 0 else ""
+                _kpi_cards.append(("Recommended", _prop_rec_fn, _rec_op_p, _rec_om_p, _delta_op_p, "#fafafa", GREEN))
 
-                _kpi_cols = st.columns(3)
-                _kpi_cols[0].markdown(f'''<div style="background:{BASE_CASE_BG};border:1px solid {BORDER};border-radius:2px;padding:0.7rem 0.9rem;text-align:center;">
-                    <div style="font-size:0.62rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.15rem;">Current (Base Case)</div>
-                    <div style="font-size:1.1rem;font-weight:700;color:{DARK_TEXT};">{fi(_base_op_p, dz=False)} {currency}</div>
-                    <div style="font-size:0.78rem;font-weight:600;color:{DARK_TEXT};margin-top:0.1rem;">{_prop_base_fn}</div>
-                    <div style="font-size:0.68rem;color:{MUTED};margin-top:0.05rem;">OM {_base_om_p:.1f}%</div>
+            for _afn in _prop_alt_fns:
+                _a_op = _prop_adj_totals.get(_afn, 0)
+                _a_rev = _prop_rev_totals.get(_afn, 0)
+                _a_om = _a_op / _a_rev * 100 if _a_rev else 0
+                _a_delta = _a_op - _base_op_p
+                _kpi_cards.append(("Alternative", _afn, _a_op, _a_om, _a_delta, "#fafafa", ACCENT_BLUE))
+
+            _kpi_cols = st.columns(len(_kpi_cards))
+            for _ci, (_lbl, _fn, _op, _om, _delta, _bg, _accent) in enumerate(_kpi_cards):
+                _delta_html = ""
+                _bdr = f"border:1px solid {BORDER};"
+                if _delta is not None:
+                    _d_color = GREEN if _delta > 0 else RED
+                    _d_sign = "+" if _delta > 0 else ""
+                    _delta_html = f'<div style="font-size:0.68rem;color:{_d_color};font-weight:600;margin-top:0.05rem;">{_d_sign}{fi(_delta, acct=True)} vs base | OM {_om:.1f}%</div>'
+                    _bdr = f"border:1px solid {BORDER};border-left:3px solid {_accent};"
+                else:
+                    _delta_html = f'<div style="font-size:0.68rem;color:{MUTED};margin-top:0.05rem;">OM {_om:.1f}%</div>'
+                _kpi_cols[_ci].markdown(f'''<div style="background:{_bg};{_bdr}border-radius:2px;padding:0.7rem 0.9rem;text-align:center;">
+                    <div style="font-size:0.62rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.15rem;">{_lbl}</div>
+                    <div style="font-size:1.05rem;font-weight:700;color:{DARK_TEXT};">{fi(_op, dz=False)} {currency}</div>
+                    <div style="font-size:0.78rem;font-weight:600;color:{DARK_TEXT};margin-top:0.1rem;">{_fn}</div>
+                    {_delta_html}
                 </div>''', unsafe_allow_html=True)
-                _kpi_cols[1].markdown(f'''<div style="background:#fafafa;border:1px solid {BORDER};border-left:3px solid {_delta_color};border-radius:2px;padding:0.7rem 0.9rem;text-align:center;">
-                    <div style="font-size:0.62rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.15rem;">Proposed</div>
-                    <div style="font-size:1.1rem;font-weight:700;color:{DARK_TEXT};">{fi(_rec_op_p, dz=False)} {currency}</div>
-                    <div style="font-size:0.78rem;font-weight:600;color:{DARK_TEXT};margin-top:0.1rem;">{_prop_rec_fn}</div>
-                    <div style="font-size:0.68rem;color:{_delta_color};font-weight:600;margin-top:0.05rem;">{_delta_sign}{fi(_delta_op_p, acct=True)} vs base | OM {_rec_om_p:.1f}%</div>
-                </div>''', unsafe_allow_html=True)
-                # Delta card
-                _delta_pp = _rec_om_p - _base_om_p
-                _kpi_cols[2].markdown(f'''<div style="background:#fafafa;border:1px solid {BORDER};border-radius:2px;padding:0.7rem 0.9rem;text-align:center;">
-                    <div style="font-size:0.62rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.15rem;">Annual OP Delta</div>
-                    <div style="font-size:1.1rem;font-weight:700;color:{_delta_color};">{_delta_sign}{fi(_delta_op_p, acct=True)} {currency}</div>
-                    <div style="font-size:0.78rem;font-weight:600;color:{_delta_color};margin-top:0.1rem;">{_delta_pp:+.1f}pp margin</div>
-                    <div style="font-size:0.68rem;color:{MUTED};margin-top:0.05rem;">{_prop_n_items} item{"s" if _prop_n_items > 1 else ""} analysed</div>
-                </div>''', unsafe_allow_html=True)
-            else:
-                # No alternative selected — show base only
-                st.markdown(f'''<div style="background:{BASE_CASE_BG};border:1px solid {BORDER};border-radius:2px;padding:0.7rem 0.9rem;text-align:center;max-width:350px;">
-                    <div style="font-size:0.62rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.15rem;">Current (Base Case)</div>
-                    <div style="font-size:1.1rem;font-weight:700;color:{DARK_TEXT};">{fi(_base_op_p, dz=False)} {currency}</div>
-                    <div style="font-size:0.78rem;font-weight:600;color:{DARK_TEXT};margin-top:0.1rem;">{_prop_base_fn}</div>
-                    <div style="font-size:0.68rem;color:{MUTED};margin-top:0.05rem;">OM {_base_om_p:.1f}%</div>
+
+            # ── Alternatives callout ──────────────────────────────
+            if _prop_alt_fns and _prop_rec_fn:
+                _alt_summary_parts = []
+                for _afn in _prop_alt_fns:
+                    _a_op = _prop_adj_totals.get(_afn, 0)
+                    _a_om = _a_op / _prop_rev_totals.get(_afn, 1) * 100 if _prop_rev_totals.get(_afn, 0) else 0
+                    _a_delta = _a_op - _base_op_p
+                    _alt_summary_parts.append(f"<strong>{_afn}</strong> ({fi(_a_op, dz=False)} {currency}, OM {_a_om:.1f}%)")
+                st.markdown(f'''<div style="background:#f8f9fb;border:1px solid {BORDER};border-left:3px solid {ACCENT_BLUE};padding:0.6rem 0.9rem;margin:0.5rem 0 0.8rem 0;font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};line-height:1.5;">
+                    <span style="font-weight:700;color:{NAVY};font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;">Fallback Option{"s" if len(_prop_alt_fns) > 1 else ""}</span><br>
+                    If {_prop_rec_fn} is not feasible, {" or ".join(_alt_summary_parts)} {"remain" if len(_prop_alt_fns) > 1 else "remains"} viable and could be explored as {"alternatives" if len(_prop_alt_fns) > 1 else "an alternative"}.
                 </div>''', unsafe_allow_html=True)
 
         # ── RECOMMENDATION ─────────────────────────────────────
@@ -6240,6 +6303,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                                    "td_customer_requalification", "td_tax_transfer_pricing",
                                    "td_esg", "td_steady_state",
                                    "fx_exposures", "scenario_comparison",
+                                   "conclusion_option_statuses",
                                    "actuals_vs_plan", "version_history"):
                         if gk_obj in proj:
                             st.session_state[gk_obj] = proj[gk_obj]
