@@ -4768,9 +4768,8 @@ Compares full cost-to-serve across factory locations, including material, labour
     if st.session_state.active_page == "prestudy":
         project_name = st.session_state.project_name
         data_classification = st.session_state.get("data_classification", "C3 - Confidential")
-        st.markdown(f"""<div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.8rem;">
-            <div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};">Pre-study <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}</div>
-            <div style="background:{NAVY};color:#fff;font-size:0.62rem;font-weight:600;padding:0.2rem 0.7rem;border-radius:2px;text-transform:uppercase;letter-spacing:0.06em;">Footprint Optimization</div>
+        st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
+            Pre-study <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
         </div>""", unsafe_allow_html=True)
         st.markdown(f'<div class="callout" style="font-size:0.72rem;">Structured evaluation framework for the pre-study phase. Captures strategic rationale, current set-up, key questions, dependencies, and team. Complete this document before submitting a formal proposal to the Factory Council.</div>', unsafe_allow_html=True)
 
@@ -4790,150 +4789,171 @@ Compares full cost-to-serve across factory locations, including material, labour
             _c4_hint = "" if _is_c4 else " Consider upgrading from the project header."
             st.markdown(f'<div style="background:#fef9f0;border-left:4px solid {_c4_border};padding:0.5rem 1rem;margin:0.2rem 0 0.6rem 0;font-family:Inter,sans-serif;font-size:0.72rem;"><strong style="color:{_c4_border};">{_c4_label}</strong> — Restructuring or workforce impact detected. Typically warrants C4 to protect employee privacy.{_c4_hint}</div>', unsafe_allow_html=True)
 
-        ps_left, ps_right = st.columns([3, 2])
-        with ps_left:
-            # Strategic Rationale (merged from Strategic Context page)
-            st.markdown(f'<div class="sec-sm">Strategic Rationale</div>', unsafe_allow_html=True)
-            st.session_state.ps_strategic_rationale = st.text_area(
-                "Strategic Rationale", value=st.session_state.ps_strategic_rationale,
-                key="ps_strat_input", height=100, label_visibility="collapsed",
-                placeholder="Why is this transfer being considered? What strategic objective does it serve? (e.g. cost competitiveness, capacity, market proximity, risk diversification)")
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # SECTION 1 — PURPOSE & BACKGROUND
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        st.markdown(f'<div class="sec">Purpose & Background</div>', unsafe_allow_html=True)
 
-            st.markdown(f'<div class="sec-sm">Purpose & Objective</div>', unsafe_allow_html=True)
-            st.session_state.ps_purpose = st.text_area(
-                "Purpose", value=st.session_state.ps_purpose,
-                key="ps_purpose_input", height=80, label_visibility="collapsed",
-                placeholder="What is the specific goal of this evaluation? (e.g. annual sourcing review, new product launch, capacity constraint resolution)")
+        st.markdown(f'<div class="sec-sm">Strategic Rationale</div>', unsafe_allow_html=True)
+        st.session_state.ps_strategic_rationale = st.text_area(
+            "Strategic Rationale", value=st.session_state.ps_strategic_rationale,
+            key="ps_strat_input", height=100, label_visibility="collapsed",
+            placeholder="Why is this transfer being considered? What strategic objective does it serve? (e.g. cost competitiveness, capacity, market proximity, risk diversification)")
 
-            st.markdown(f'<div class="sec-sm">Background & Current Set-up</div>', unsafe_allow_html=True)
-            st.session_state.ps_background = st.text_area(
-                "Background", value=st.session_state.ps_background,
-                key="ps_bg_input", height=100, label_visibility="collapsed",
-                placeholder="Describe the current manufacturing set-up, volumes, and relevant context...")
+        st.markdown(f'<div class="sec-sm">Purpose & Objective</div>', unsafe_allow_html=True)
+        st.session_state.ps_purpose = st.text_area(
+            "Purpose", value=st.session_state.ps_purpose,
+            key="ps_purpose_input", height=80, label_visibility="collapsed",
+            placeholder="What is the specific goal of this evaluation? (e.g. annual sourcing review, new product launch, capacity constraint resolution)")
 
-            st.markdown(f'<div class="sec-sm">Reason to Change Current Set-up</div>', unsafe_allow_html=True)
-            st.session_state.ps_reason = st.text_area(
-                "Reason", value=st.session_state.ps_reason,
-                key="ps_reason_input", height=100, label_visibility="collapsed",
-                placeholder="Why is a change being considered? What triggers this evaluation?...")
+        st.markdown(f'<div class="sec-sm">Background & Current Set-up</div>', unsafe_allow_html=True)
+        st.session_state.ps_background = st.text_area(
+            "Background", value=st.session_state.ps_background,
+            key="ps_bg_input", height=100, label_visibility="collapsed",
+            placeholder="Describe the current manufacturing set-up, volumes, and relevant context...")
 
-            st.markdown(f'<div class="sec-sm">What Happens If We Don\'t Do This?</div>', unsafe_allow_html=True)
-            st.session_state.ps_risk_of_inaction = st.text_area(
-                "Risk of Inaction", value=st.session_state.ps_risk_of_inaction,
-                key="ps_inaction_input", height=80, label_visibility="collapsed",
-                placeholder="Describe the consequence of maintaining the status quo. (e.g. continued margin erosion, capacity bottleneck, single-source risk)")
+        st.markdown(f'<div class="sec-sm">Reason to Change Current Set-up</div>', unsafe_allow_html=True)
+        st.session_state.ps_reason = st.text_area(
+            "Reason", value=st.session_state.ps_reason,
+            key="ps_reason_input", height=100, label_visibility="collapsed",
+            placeholder="Why is a change being considered? What triggers this evaluation?...")
 
-            st.markdown(f'<div class="sec-sm">Key Risks & Mitigations</div>', unsafe_allow_html=True)
-            st.session_state.ps_key_risks = st.text_area(
-                "Key Risks", value=st.session_state.ps_key_risks,
-                key="ps_risks_input", height=80, label_visibility="collapsed",
-                placeholder="What are the main risks? (e.g. quality ramp-up, customer approval timeline, IP concerns, FX exposure, geopolitical risk)")
+        st.markdown(f'<div class="sec-sm">What Happens If We Don\'t Do This?</div>', unsafe_allow_html=True)
+        st.session_state.ps_risk_of_inaction = st.text_area(
+            "Risk of Inaction", value=st.session_state.ps_risk_of_inaction,
+            key="ps_inaction_input", height=80, label_visibility="collapsed",
+            placeholder="Describe the consequence of maintaining the status quo. (e.g. continued margin erosion, capacity bottleneck, single-source risk)")
 
-            st.markdown(f'<div class="sec-sm">Key Questions to Review</div>', unsafe_allow_html=True)
-            st.session_state.ps_questions = st.text_area(
-                "Questions", value=st.session_state.ps_questions,
-                key="ps_questions_input", height=100, label_visibility="collapsed",
-                placeholder="List the key questions that need to be answered during the pre-study phase...")
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # SECTION 2 — RISK ASSESSMENT
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        st.markdown(f'<div class="sec">Risk Assessment</div>', unsafe_allow_html=True)
 
-            # ── FACTORY SCOPING RATIONALE ──────────────────────
-            st.markdown(f'<div class="sec-sm">Factory Scoping — Included & Excluded</div>', unsafe_allow_html=True)
-            st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-bottom:0.3rem;font-family:Inter,sans-serif;">Document which factories were included in the analysis and, critically, which were excluded and why. This ensures the evaluation scope is transparent and auditable.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="sec-sm">Key Risks & Mitigations</div>', unsafe_allow_html=True)
+        st.session_state.ps_key_risks = st.text_area(
+            "Key Risks", value=st.session_state.ps_key_risks,
+            key="ps_risks_input", height=80, label_visibility="collapsed",
+            placeholder="What are the main risks? (e.g. quality ramp-up, customer approval timeline, IP concerns, FX exposure, geopolitical risk)")
 
-            # Auto-populate from model if available
-            all_factory_names_ps = st.session_state.get("_all_factory_names", [])
-            if all_factory_names_ps and not st.session_state.ps_factories_included.strip():
-                st.session_state.ps_factories_included = ", ".join(all_factory_names_ps)
+        st.markdown(f'<div class="sec-sm">Key Questions to Review</div>', unsafe_allow_html=True)
+        st.session_state.ps_questions = st.text_area(
+            "Questions", value=st.session_state.ps_questions,
+            key="ps_questions_input", height=100, label_visibility="collapsed",
+            placeholder="List the key questions that need to be answered during the pre-study phase...")
 
-            scope_c1, scope_c2 = st.columns(2)
-            with scope_c1:
-                st.session_state.ps_factories_included = st.text_area(
-                    "Factories Included", value=st.session_state.ps_factories_included,
-                    key="ps_incl_input", height=70, label_visibility="visible",
-                    placeholder="e.g. Gothenburg (base), Shanghai, Pune")
-            with scope_c2:
-                st.session_state.ps_factories_excluded = st.text_area(
-                    "Factories Excluded", value=st.session_state.ps_factories_excluded,
-                    key="ps_excl_input", height=70, label_visibility="visible",
-                    placeholder="e.g. Schweinfurt, Dalian, Guadalajara")
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # SECTION 3 — FACTORY SCOPE
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        st.markdown(f'<div class="sec">Factory Scope</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-bottom:0.3rem;font-family:Inter,sans-serif;">Document which factories were included in the analysis and, critically, which were excluded and why. This ensures the evaluation scope is transparent and auditable.</div>', unsafe_allow_html=True)
 
-            st.session_state.ps_scoping_rationale = st.text_area(
-                "Scoping Rationale", value=st.session_state.ps_scoping_rationale,
-                key="ps_scope_rationale_input", height=100, label_visibility="visible",
-                placeholder="Explain the rationale for factory inclusion/exclusion:\n\n- Why were certain factories included? (e.g. existing capability, capacity headroom, strategic corridor)\n- Why were others excluded? (e.g. no relevant capability, at capacity, geopolitical risk, no established supply chain, technology mismatch)\n- Any constraints that narrowed the scope (e.g. customer proximity requirements, regulatory barriers)")
+        # Auto-populate from model if available
+        all_factory_names_ps = st.session_state.get("_all_factory_names", [])
+        if all_factory_names_ps and not st.session_state.ps_factories_included.strip():
+            st.session_state.ps_factories_included = ", ".join(all_factory_names_ps)
 
-        with ps_right:
-            # ── WORKFORCE & ORGANIZATIONAL IMPACT ─────────────
-            st.markdown(f'<div class="sec-sm">Workforce & Organizational Impact</div>', unsafe_allow_html=True)
-            wf_c1, wf_c2 = st.columns(2)
-            with wf_c1:
-                st.session_state.ps_workforce_headcount_from = st.number_input(
-                    "FTE Sending Site", value=st.session_state.ps_workforce_headcount_from,
-                    min_value=0, step=1, key="ps_wf_from_input",
-                    help="Estimated FTEs affected at sending factory")
-            with wf_c2:
-                st.session_state.ps_workforce_headcount_to = st.number_input(
-                    "FTE Receiving Site", value=st.session_state.ps_workforce_headcount_to,
-                    min_value=0, step=1, key="ps_wf_to_input",
-                    help="New FTEs required at receiving factory")
-            wf_consult_opts = ["", "Yes — Works council / union", "Yes — Labor authority", "Not required", "To be determined"]
-            wf_consult_idx = 0
-            if st.session_state.ps_workforce_consultation_required in wf_consult_opts:
-                wf_consult_idx = wf_consult_opts.index(st.session_state.ps_workforce_consultation_required)
-            st.session_state.ps_workforce_consultation_required = st.selectbox(
-                "Consultation Required", options=wf_consult_opts, index=wf_consult_idx,
-                key="ps_wf_consult_input",
-                format_func=lambda x: x if x else "— Select —")
-            sp_opts = ["", "Yes — social plan required", "No — attrition / redeployment", "To be assessed"]
-            sp_idx = 0
-            if st.session_state.ps_workforce_social_plan in sp_opts:
-                sp_idx = sp_opts.index(st.session_state.ps_workforce_social_plan)
-            st.session_state.ps_workforce_social_plan = st.selectbox(
-                "Social Plan / Severance", options=sp_opts, index=sp_idx,
-                key="ps_wf_social_input",
-                format_func=lambda x: x if x else "— Select —")
-            st.session_state.ps_workforce_notes = st.text_area(
-                "Workforce Notes", value=st.session_state.ps_workforce_notes,
-                key="ps_wf_notes_input", height=50, label_visibility="visible",
-                placeholder="Retention risk, key-person dependencies, knowledge transfer plan...")
+        scope_c1, scope_c2 = st.columns(2)
+        with scope_c1:
+            st.session_state.ps_factories_included = st.text_area(
+                "Factories Included", value=st.session_state.ps_factories_included,
+                key="ps_incl_input", height=70, label_visibility="visible",
+                placeholder="e.g. Gothenburg (base), Shanghai, Pune")
+        with scope_c2:
+            st.session_state.ps_factories_excluded = st.text_area(
+                "Factories Excluded", value=st.session_state.ps_factories_excluded,
+                key="ps_excl_input", height=70, label_visibility="visible",
+                placeholder="e.g. Schweinfurt, Dalian, Guadalajara")
 
-            # Cross-functional dependencies
-            st.markdown(f'<div class="sec-sm">Cross-functional Dependencies & How to Manage</div>', unsafe_allow_html=True)
-            dep_df = pd.DataFrame(st.session_state.ps_dependencies)
-            if "Dependency" not in dep_df.columns:
-                dep_df = pd.DataFrame([{"Dependency": "", "How to Manage": ""}])
-            edited_deps = st.data_editor(
-                dep_df, use_container_width=True, num_rows="dynamic", key="ps_dep_editor",
-                hide_index=True,
-                column_config={
-                    "Dependency": st.column_config.TextColumn("Dependency", width=180),
-                    "How to Manage": st.column_config.TextColumn("How to Manage", width=260),
-                })
-            st.session_state.ps_dependencies = edited_deps.to_dict("records")
+        st.session_state.ps_scoping_rationale = st.text_area(
+            "Scoping Rationale", value=st.session_state.ps_scoping_rationale,
+            key="ps_scope_rationale_input", height=100, label_visibility="visible",
+            placeholder="Explain the rationale for factory inclusion/exclusion:\n\n- Why were certain factories included? (e.g. existing capability, capacity headroom, strategic corridor)\n- Why were others excluded? (e.g. no relevant capability, at capacity, geopolitical risk, no established supply chain, technology mismatch)\n- Any constraints that narrowed the scope (e.g. customer proximity requirements, regulatory barriers)")
 
-            # Team
-            st.markdown(f'<div class="sec-sm">Team</div>', unsafe_allow_html=True)
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # SECTION 4 — WORKFORCE & ORGANIZATIONAL IMPACT
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        st.markdown(f'<div class="sec">Workforce & Organizational Impact</div>', unsafe_allow_html=True)
+
+        wf_c1, wf_c2 = st.columns(2)
+        with wf_c1:
+            st.session_state.ps_workforce_headcount_from = st.number_input(
+                "FTE Sending Site", value=st.session_state.ps_workforce_headcount_from,
+                min_value=0, step=1, key="ps_wf_from_input",
+                help="Estimated FTEs affected at sending factory")
+        with wf_c2:
+            st.session_state.ps_workforce_headcount_to = st.number_input(
+                "FTE Receiving Site", value=st.session_state.ps_workforce_headcount_to,
+                min_value=0, step=1, key="ps_wf_to_input",
+                help="New FTEs required at receiving factory")
+        wf_consult_opts = ["", "Yes — Works council / union", "Yes — Labor authority", "Not required", "To be determined"]
+        wf_consult_idx = 0
+        if st.session_state.ps_workforce_consultation_required in wf_consult_opts:
+            wf_consult_idx = wf_consult_opts.index(st.session_state.ps_workforce_consultation_required)
+        st.session_state.ps_workforce_consultation_required = st.selectbox(
+            "Consultation Required", options=wf_consult_opts, index=wf_consult_idx,
+            key="ps_wf_consult_input",
+            format_func=lambda x: x if x else "— Select —")
+        sp_opts = ["", "Yes — social plan required", "No — attrition / redeployment", "To be assessed"]
+        sp_idx = 0
+        if st.session_state.ps_workforce_social_plan in sp_opts:
+            sp_idx = sp_opts.index(st.session_state.ps_workforce_social_plan)
+        st.session_state.ps_workforce_social_plan = st.selectbox(
+            "Social Plan / Severance", options=sp_opts, index=sp_idx,
+            key="ps_wf_social_input",
+            format_func=lambda x: x if x else "— Select —")
+        st.session_state.ps_workforce_notes = st.text_area(
+            "Workforce Notes", value=st.session_state.ps_workforce_notes,
+            key="ps_wf_notes_input", height=50, label_visibility="visible",
+            placeholder="Retention risk, key-person dependencies, knowledge transfer plan...")
+
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # SECTION 5 — DEPENDENCIES
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        st.markdown(f'<div class="sec">Cross-functional Dependencies</div>', unsafe_allow_html=True)
+
+        dep_df = pd.DataFrame(st.session_state.ps_dependencies)
+        if "Dependency" not in dep_df.columns:
+            dep_df = pd.DataFrame([{"Dependency": "", "How to Manage": ""}])
+        edited_deps = st.data_editor(
+            dep_df, use_container_width=True, num_rows="dynamic", key="ps_dep_editor",
+            hide_index=True,
+            column_config={
+                "Dependency": st.column_config.TextColumn("Dependency", width=280),
+                "How to Manage": st.column_config.TextColumn("How to Manage", width=400),
+            })
+        st.session_state.ps_dependencies = edited_deps.to_dict("records")
+
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # SECTION 6 — TEAM & GOVERNANCE
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        st.markdown(f'<div class="sec">Team & Governance</div>', unsafe_allow_html=True)
+
+        team_c1, team_c2 = st.columns(2)
+        with team_c1:
             st.session_state.ps_sponsor = st.text_input("Initiative Sponsor", value=st.session_state.ps_sponsor, key="ps_sponsor_input")
+        with team_c2:
             st.session_state.ps_lead = st.text_input("Initiative Lead", value=st.session_state.ps_lead, key="ps_lead_input")
-            st.session_state.ps_main_entity = st.text_input("Main Entity(s)", value=st.session_state.ps_main_entity, key="ps_entity_input")
-            st.session_state.ps_impact_entities = st.text_input("Impact Assessment on Other Entity(s)", value=st.session_state.ps_impact_entities, key="ps_impact_input")
-            st.session_state.ps_team = st.text_area(
-                "Pre-study Team", value=st.session_state.ps_team,
-                key="ps_team_input", height=80, label_visibility="visible",
-                placeholder="Team members and their roles / regions...")
+        st.session_state.ps_team = st.text_area(
+            "Pre-study Team", value=st.session_state.ps_team,
+            key="ps_team_input", height=80, label_visibility="visible",
+            placeholder="Team members and their roles / regions...")
 
-            # Time Plan
-            st.markdown(f'<div class="sec-sm">Time Plan</div>', unsafe_allow_html=True)
-            tl = st.session_state.ps_timeline
-            tl_df = pd.DataFrame({"Milestone": list(tl.keys()), "Target Date": list(tl.values())})
-            edited_tl = st.data_editor(
-                tl_df, use_container_width=True, num_rows="fixed", key="ps_timeline_editor",
-                hide_index=True,
-                column_config={
-                    "Milestone": st.column_config.TextColumn("Milestone", disabled=True, width=200),
-                    "Target Date": st.column_config.TextColumn("Target Date", width=160),
-                },
-                disabled=["Milestone"])
-            st.session_state.ps_timeline = dict(zip(edited_tl["Milestone"], edited_tl["Target Date"].fillna("")))
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # SECTION 7 — TIME PLAN
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        st.markdown(f'<div class="sec">Time Plan</div>', unsafe_allow_html=True)
+
+        tl = st.session_state.ps_timeline
+        tl_df = pd.DataFrame({"Milestone": list(tl.keys()), "Target Date": list(tl.values())})
+        edited_tl = st.data_editor(
+            tl_df, use_container_width=True, num_rows="fixed", key="ps_timeline_editor",
+            hide_index=True,
+            column_config={
+                "Milestone": st.column_config.TextColumn("Milestone", disabled=True, width=300),
+                "Target Date": st.column_config.TextColumn("Target Date", width=200),
+            },
+            disabled=["Milestone"])
+        st.session_state.ps_timeline = dict(zip(edited_tl["Milestone"], edited_tl["Target Date"].fillna("")))
 
         # ── PRE-STUDY COMPLETENESS ─────────────────────────────
         ps_fields = {
