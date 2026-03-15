@@ -4137,13 +4137,33 @@ This provides the local risk percentage.</li>
 
                 # ── STRESS-TESTED NPV ──────────────────────────────
                 st.markdown(f'<div class="sec-sm">Stress-Tested NPV — Scenario Analysis</div>', unsafe_allow_html=True)
-                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};margin-bottom:0.5rem;font-family:Inter,sans-serif;">Base case uses model inputs. Downside applies -20% to annual savings and +20% to investment. Upside applies +20% to savings and -10% to investment.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};margin-bottom:0.5rem;font-family:Inter,sans-serif;">Base case uses model inputs. Downside reduces savings magnitude by 20% and increases investment by 20%. Upside increases savings magnitude by 20% and reduces investment by 10%. Adjustments work on the absolute value of savings, so the direction is always correct even when savings are negative.</div>', unsafe_allow_html=True)
 
+                # Scenarios: (label, savings_adjustment, cost_adjustment)
+                # When savings are negative (alternative is worse than base), the
+                # "worse NPV" direction is *more* negative savings.  We want the
+                # Downside row to always show the worse NPV and Upside the better
+                # one.  To achieve this we adjust the *magnitude* of savings and
+                # apply the directional sign back, so the multiplier works
+                # correctly regardless of savings sign.
                 scenarios = [
-                    ("Downside (-20% savings, +20% cost)", -0.20, 0.20),
+                    ("Downside", -0.20, 0.20),
                     ("Base Case", 0.0, 0.0),
-                    ("Upside (+20% savings, -10% cost)", 0.20, -0.10),
+                    ("Upside", 0.20, -0.10),
                 ]
+
+                def _stress_savings(savings_list, adj):
+                    """Adjust savings by adj on the magnitude, preserving sign direction.
+
+                    For positive savings +20% means more savings (better).
+                    For negative savings +20% means less negative (also better).
+                    This avoids the paradox where +20% on a negative number
+                    makes it *more* negative (worse).
+                    """
+                    if adj == 0.0:
+                        return list(savings_list)
+                    return [s + abs(s) * adj if s != 0 else 0.0 for s in savings_list]
+
                 sc_hdr = "".join(f'<th>{ic["factory_name"]}</th>' for ic in inv_results if ic["total_investment"] > 0 or ic["annual_savings"] != 0)
                 sc_tbl = f'<table class="ib-table"><thead><tr><th>Scenario</th>{sc_hdr}</tr></thead><tbody>'
 
@@ -4152,16 +4172,23 @@ This provides the local risk percentage.</li>
                     for ic in inv_results:
                         if ic["total_investment"] == 0 and ic["annual_savings"] == 0:
                             continue
-                        adj_savings = [s * (1 + savings_adj) for s in ic["annual_savings_by_year"]]
+                        adj_savings = _stress_savings(ic["annual_savings_by_year"], savings_adj)
                         adj_investment = ic["total_investment"] * (1 + cost_adj)
                         adj_cf = [-adj_investment] + adj_savings
                         sc_npv = compute_npv(adj_cf, company_wacc)
                         cls = "delta-pos" if sc_npv > 0 else ("delta-neg" if sc_npv < 0 else "")
                         is_base = savings_adj == 0.0 and cost_adj == 0.0
                         weight = "font-weight:700;" if is_base else ""
+                        # Build descriptive label for the first factory only (all share same adjustments)
+                        if sc_label == "Downside":
+                            desc = f"Downside (savings {savings_adj*100:+.0f}% magnitude, cost {cost_adj*100:+.0f}%)"
+                        elif sc_label == "Upside":
+                            desc = f"Upside (savings {savings_adj*100:+.0f}% magnitude, cost {cost_adj*100:+.0f}%)"
+                        else:
+                            desc = sc_label
                         sc_cells += f'<td class="{cls}" style="{weight}">{fi(sc_npv, acct=True, dz=False)}</td>'
                     row_cls = "row-bold" if savings_adj == 0.0 else ""
-                    sc_tbl += f'<tr class="{row_cls}"><td>{sc_label}</td>{sc_cells}</tr>'
+                    sc_tbl += f'<tr class="{row_cls}"><td>{desc}</td>{sc_cells}</tr>'
 
                 # Add IRR row per scenario
                 sc_tbl += f'<tr class="row-separator">{"<td></td>" * (1 + sum(1 for ic in inv_results if ic["total_investment"] > 0 or ic["annual_savings"] != 0))}</tr>'
@@ -4170,19 +4197,17 @@ This provides the local risk percentage.</li>
                     for ic in inv_results:
                         if ic["total_investment"] == 0 and ic["annual_savings"] == 0:
                             continue
-                        _compute_irr = compute_irr
-                        adj_savings = [s * (1 + savings_adj) for s in ic["annual_savings_by_year"]]
+                        adj_savings = _stress_savings(ic["annual_savings_by_year"], savings_adj)
                         adj_investment = ic["total_investment"] * (1 + cost_adj)
                         adj_cf = [-adj_investment] + adj_savings
-                        sc_irr = _compute_irr(adj_cf)
+                        sc_irr = compute_irr(adj_cf)
                         if sc_irr is not None:
                             cls = "delta-pos" if sc_irr > company_wacc else "delta-neg"
                             sc_cells += f'<td class="{cls}">{sc_irr*100:.1f}%</td>'
                         else:
                             sc_cells += f'<td>{dash}</td>'
                     row_cls = "row-bold" if savings_adj == 0.0 else ""
-                    irr_label = sc_label.replace("NPV", "IRR") if "NPV" in sc_label else sc_label
-                    sc_tbl += f'<tr class="{row_cls}"><td>IRR: {sc_label.split("(")[0].strip()}</td>{sc_cells}</tr>'
+                    sc_tbl += f'<tr class="{row_cls}"><td>IRR: {sc_label}</td>{sc_cells}</tr>'
 
                 sc_tbl += '</tbody></table>'
                 st.markdown(sc_tbl, unsafe_allow_html=True)
@@ -4190,8 +4215,10 @@ This provides the local risk percentage.</li>
                     f'<div class="callout" style="margin-top:0.5rem;">'
                     f'<strong>How to read the scenarios:</strong> '
                     f'The <em>Base Case</em> uses your input assumptions as-is. '
-                    f'<em>Downside</em> stress-tests the investment by reducing annual savings by 20 % and increasing capex by 20 %. '
-                    f'<em>Upside</em> applies a 20 % savings uplift with a 10 % capex reduction.<br>'
+                    f'<em>Downside</em> stress-tests by reducing the magnitude of annual savings by 20 % and increasing investment cost by 20 %. '
+                    f'<em>Upside</em> increases savings magnitude by 20 % with a 10 % investment reduction. '
+                    f'Adjustments are applied to the absolute value of savings, so Upside always produces a better NPV than Downside — '
+                    f'even when the base-case savings are negative (i.e. when the alternative is costlier than the base).<br>'
                     f'<span style="font-size:0.75rem;color:{MUTED};">'
                     f'If the downside NPV turns negative, the investment is highly sensitive to savings assumptions — '
                     f'consider phased execution, risk-sharing arrangements, or additional due diligence before committing. '
