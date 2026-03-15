@@ -113,7 +113,7 @@ def compute_discounted_payback(
 
 
 def compute_investment_case(
-    annual_savings: float,
+    annual_savings,
     capex: float = 0.0,
     opex: float = 0.0,
     restructuring: float = 0.0,
@@ -124,6 +124,10 @@ def compute_investment_case(
 
     Args:
         annual_savings:  Annual OP improvement vs. base (NWC-adjusted).
+                         Can be a single float (flat savings every year) or a
+                         list of floats (one per year, e.g. from a sales
+                         projection).  If the list is shorter than
+                         ``horizon_years``, the last value is repeated.
         capex:           Capital expenditure at receiving site (tooling, etc.).
         opex:            One-time operational costs (project, qualification).
         restructuring:   One-time restructuring costs at sending site.
@@ -133,11 +137,25 @@ def compute_investment_case(
     Returns a dict with all investment metrics.
     """
     total_investment = capex + opex + restructuring
-    cash_flows = [-total_investment] + [annual_savings] * horizon_years
+
+    # Build per-year savings list
+    if isinstance(annual_savings, (int, float)):
+        savings_list = [float(annual_savings)] * horizon_years
+    else:
+        savings_list = [float(s) for s in annual_savings]
+        # Extend to horizon by repeating last value
+        if len(savings_list) < horizon_years:
+            last = savings_list[-1] if savings_list else 0.0
+            savings_list.extend([last] * (horizon_years - len(savings_list)))
+        savings_list = savings_list[:horizon_years]
+
+    cash_flows = [-total_investment] + savings_list
 
     npv = compute_npv(cash_flows, discount_rate)
     irr = compute_irr(cash_flows)
-    simple_payback = compute_payback(total_investment, annual_savings)
+    # Simple payback uses average annual savings
+    avg_savings = sum(savings_list) / len(savings_list) if savings_list else 0.0
+    simple_payback = compute_payback(total_investment, avg_savings)
     disc_payback = compute_discounted_payback(cash_flows, discount_rate)
 
     # Cumulative undiscounted cash flows per year (for charting)
@@ -152,7 +170,8 @@ def compute_investment_case(
         "opex": opex,
         "restructuring": restructuring,
         "total_investment": total_investment,
-        "annual_savings": annual_savings,
+        "annual_savings": avg_savings,
+        "annual_savings_by_year": savings_list,
         "discount_rate": discount_rate,
         "horizon_years": horizon_years,
         "cash_flows": cash_flows,

@@ -160,3 +160,36 @@ class TestInvestmentCase:
         short = compute_investment_case(annual_savings=1000, capex=5000, horizon_years=3)
         long = compute_investment_case(annual_savings=1000, capex=5000, horizon_years=20)
         assert long["npv"] > short["npv"]
+
+    def test_variable_annual_savings(self):
+        """Year-by-year savings from sales projections."""
+        savings = [1_000_000, 1_200_000, 1_500_000, 1_800_000, 2_000_000]
+        result = compute_investment_case(
+            annual_savings=savings,
+            capex=5_000_000,
+            discount_rate=0.08,
+            horizon_years=10,
+        )
+        # First 5 years use provided values, years 6-10 repeat last value
+        assert result["cash_flows"][1] == 1_000_000
+        assert result["cash_flows"][5] == 2_000_000
+        assert result["cash_flows"][6] == 2_000_000  # extended
+        assert len(result["cash_flows"]) == 11
+        assert result["annual_savings_by_year"] == savings + [2_000_000] * 5
+        # Average savings
+        avg = sum(result["annual_savings_by_year"]) / 10
+        assert result["annual_savings"] == pytest.approx(avg)
+        # NPV should be higher than flat at min savings
+        flat_result = compute_investment_case(
+            annual_savings=1_000_000, capex=5_000_000, discount_rate=0.08, horizon_years=10)
+        assert result["npv"] > flat_result["npv"]
+
+    def test_short_savings_list_extended(self):
+        """Savings list shorter than horizon is extended with last value."""
+        result = compute_investment_case(
+            annual_savings=[100, 200],
+            capex=500,
+            horizon_years=5,
+        )
+        assert result["cash_flows"] == [-500, 100, 200, 200, 200, 200]
+        assert result["annual_savings_by_year"] == [100, 200, 200, 200, 200]

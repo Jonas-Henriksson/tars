@@ -1588,10 +1588,24 @@ EX_FACTORIES = [
 EXAMPLE_ITEMS = [
     {"item_number":"1001","designation":"Bearing Assembly XR-200","destination":"Northern Europe",
      "comment":"Annual sourcing review","net_sales_value":121280000.0,"net_sales_qty":2570000,
-     "material":18.96,"variable_va":2.26,"fixed_va":2.57},
+     "material":18.96,"variable_va":2.26,"fixed_va":2.57,
+     "sales_projection":[
+         {"year":1,"value":121280000.0,"qty":2570000},
+         {"year":2,"value":125720000.0,"qty":2660000},
+         {"year":3,"value":130400000.0,"qty":2760000},
+         {"year":4,"value":135200000.0,"qty":2850000},
+         {"year":5,"value":140400000.0,"qty":2950000},
+     ]},
     {"item_number":"2045","designation":"Seal Kit HT-500","destination":"Northern Europe",
      "comment":"New product launch evaluation","net_sales_value":45600000.0,"net_sales_qty":1200000,
-     "material":12.50,"variable_va":1.80,"fixed_va":1.95},
+     "material":12.50,"variable_va":1.80,"fixed_va":1.95,
+     "sales_projection":[
+         {"year":1,"value":45600000.0,"qty":1200000},
+         {"year":2,"value":49400000.0,"qty":1300000},
+         {"year":3,"value":53200000.0,"qty":1400000},
+         {"year":4,"value":57000000.0,"qty":1500000},
+         {"year":5,"value":60800000.0,"qty":1600000},
+     ]},
 ]
 
 
@@ -1648,30 +1662,73 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
     destination = str(edited_txt.loc["Destination", "Value"] or "")
     comment = str(edited_txt.loc["Comment", "Value"] or "")
 
-    # Net sales + base costs
-    st.markdown('<div class="sec-sm">Net Sales & Base Costs (Per Unit)</div>', unsafe_allow_html=True)
+    # Sales projection (3-5 year)
+    st.markdown('<div class="sec-sm">Sales Projection</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};margin:-0.3rem 0 0.4rem 0;font-style:italic;">Year 1 (base year) is used for item cost comparisons. Full projection feeds the investment case.</div>', unsafe_allow_html=True)
 
-    ns_data = {
-        "Field": ["Net Sales (Total Value)", "Net Sales (Quantity)", "Material", "Variable VA", "Fixed VA"],
+    n_proj_years = st.session_state.get(f"{pfx}n_proj_years", 5)
+    n_proj_years = st.selectbox("Projection years", [3, 4, 5], index=[3, 4, 5].index(n_proj_years), key=f"{pfx}n_proj_years_sel")
+    st.session_state[f"{pfx}n_proj_years"] = n_proj_years
+
+    # Build projection table
+    ex_proj = ex_item.get("sales_projection", []) if ex_item else []
+    proj_data = {"Year": [f"Y{y}" for y in range(1, n_proj_years + 1)]}
+    proj_vals = []
+    proj_qtys = []
+    for y in range(1, n_proj_years + 1):
+        ex_row = next((p for p in ex_proj if p["year"] == y), None) if ex_proj else None
+        if ex_row:
+            proj_vals.append(float(ex_row["value"]))
+            proj_qtys.append(float(ex_row["qty"]))
+        elif y == 1 and ex_item:
+            proj_vals.append(float(ex_item["net_sales_value"]))
+            proj_qtys.append(float(ex_item["net_sales_qty"]))
+        else:
+            proj_vals.append(0.0)
+            proj_qtys.append(0.0)
+    proj_data["Net Sales (Value)"] = proj_vals
+    proj_data["Net Sales (Qty)"] = proj_qtys
+    proj_df = pd.DataFrame(proj_data).set_index("Year")
+
+    edited_proj = st.data_editor(
+        proj_df, use_container_width=True, num_rows="fixed", key=f"{pfx}proj",
+        column_config={
+            "Net Sales (Value)": st.column_config.NumberColumn("Net Sales (Value)", format="%,.0f", width=200),
+            "Net Sales (Qty)": st.column_config.NumberColumn("Net Sales (Qty)", format="%,.0f", width=200),
+        },
+    )
+
+    # Extract projection and base year values
+    sales_projection = []
+    for y in range(1, n_proj_years + 1):
+        row_label = f"Y{y}"
+        v = float(edited_proj.loc[row_label, "Net Sales (Value)"] or 0)
+        q = int(edited_proj.loc[row_label, "Net Sales (Qty)"] or 0)
+        sales_projection.append({"year": y, "value": v, "qty": q})
+
+    net_sales_value = sales_projection[0]["value"] if sales_projection else 0.0
+    net_sales_qty = sales_projection[0]["qty"] if sales_projection else 0
+
+    # Base costs (per unit)
+    st.markdown('<div class="sec-sm">Base Costs (Per Unit)</div>', unsafe_allow_html=True)
+
+    bc_data = {
+        "Field": ["Material", "Variable VA", "Fixed VA"],
         "Value": [
-            ex_item["net_sales_value"] if ex_item else 0.0,
-            ex_item["net_sales_qty"] if ex_item else 0.0,
             ex_item["material"] if ex_item else 0.0,
             ex_item["variable_va"] if ex_item else 0.0,
             ex_item["fixed_va"] if ex_item else 0.0,
         ],
         "Guide": [
-            "Total annual revenue for this item",
-            "Total annual units produced/sold",
             "Direct material cost per unit at base case",
             "Variable VA cost per unit at base case",
             "Fixed VA cost per unit at base case",
         ]
     }
-    ns_df = pd.DataFrame(ns_data).set_index("Field")
+    bc_df = pd.DataFrame(bc_data).set_index("Field")
 
-    edited_ns = st.data_editor(
-        ns_df, use_container_width=True, num_rows="fixed", key=f"{pfx}ns",
+    edited_bc = st.data_editor(
+        bc_df, use_container_width=True, num_rows="fixed", key=f"{pfx}bc",
         column_config={
             "Value": st.column_config.NumberColumn("Value", format="%,.2f", width=200),
             "Guide": st.column_config.TextColumn("Guide", width=300, disabled=True),
@@ -1679,18 +1736,16 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
         disabled=["Guide"],
     )
 
-    net_sales_value = float(edited_ns.loc["Net Sales (Total Value)", "Value"] or 0)
-    net_sales_qty = int(edited_ns.loc["Net Sales (Quantity)", "Value"] or 0)
-    material = float(edited_ns.loc["Material", "Value"] or 0)
-    variable_va = float(edited_ns.loc["Variable VA", "Value"] or 0)
-    fixed_va = float(edited_ns.loc["Fixed VA", "Value"] or 0)
+    material = float(edited_bc.loc["Material", "Value"] or 0)
+    variable_va = float(edited_bc.loc["Variable VA", "Value"] or 0)
+    fixed_va = float(edited_bc.loc["Fixed VA", "Value"] or 0)
 
     inputs = ItemInputs(item_number, designation, st.session_state.get("currency","SEK"),
                         destination, "", comment, net_sales_value, net_sales_qty,
-                        material, variable_va, fixed_va)
+                        material, variable_va, fixed_va, sales_projection)
 
     if inputs.net_sales_qty == 0 or inputs.net_sales_value == 0:
-        st.markdown('<div class="callout">Enter Net Sales values to see results.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="callout">Enter Year 1 Net Sales values to see results.</div>', unsafe_allow_html=True)
         return None
 
     # Cost overrides
@@ -1927,9 +1982,9 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
         # Collect alt factory names (exclude base)
         alt_fnames = [fn_ for fn_ in all_fnames if fn_ != base_fn]
         if alt_fnames:
-            # Aggregate: total investment, total annual savings, combined NPV
+            # Aggregate: total investment, year-by-year savings, combined NPV
             agg_inv = {fn_: 0.0 for fn_ in alt_fnames}
-            agg_savings = {fn_: 0.0 for fn_ in alt_fnames}
+            agg_savings_by_year = {fn_: [] for fn_ in alt_fnames}
             agg_capex = {fn_: 0.0 for fn_ in alt_fnames}
             agg_opex = {fn_: 0.0 for fn_ in alt_fnames}
             agg_restr = {fn_: 0.0 for fn_ in alt_fnames}
@@ -1938,16 +1993,24 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
                     fn_ = ic.get("factory_name", "")
                     if fn_ in alt_fnames:
                         agg_inv[fn_] += ic.get("total_investment", 0)
-                        agg_savings[fn_] += ic.get("annual_savings", 0)
                         agg_capex[fn_] += ic.get("capex", 0)
                         agg_opex[fn_] += ic.get("opex", 0)
                         agg_restr[fn_] += ic.get("restructuring", 0)
+                        yr_savings = ic.get("annual_savings_by_year", [ic.get("annual_savings", 0)])
+                        # Sum year-by-year savings across items
+                        for yi, sv in enumerate(yr_savings):
+                            if yi < len(agg_savings_by_year[fn_]):
+                                agg_savings_by_year[fn_][yi] += sv
+                            else:
+                                agg_savings_by_year[fn_].append(sv)
+            agg_savings = {fn_: (sum(v) / len(v) if v else 0.0) for fn_, v in agg_savings_by_year.items()}
 
             # Compute portfolio-level NPV, IRR, payback using aggregated flows
             agg_cases = {}
             for fn_ in alt_fnames:
+                savings_input = agg_savings_by_year[fn_] if agg_savings_by_year[fn_] else agg_savings[fn_]
                 agg_cases[fn_] = compute_investment_case(
-                    annual_savings=agg_savings[fn_],
+                    annual_savings=savings_input,
                     capex=agg_capex[fn_], opex=agg_opex[fn_], restructuring=agg_restr[fn_],
                     discount_rate=company_wacc,
                     horizon_years=10,
@@ -2404,9 +2467,13 @@ This provides the local risk percentage.</li>
                 },
                 disabled=["Guide"])
 
-            # Compute investment cases
+            # Compute investment cases with year-by-year savings from projection
             inv_results = []
-            base_adj_annual_op = results[0].get("annual_adj_op", results[0]["annual_op"])
+            dc_inputs = item_data.get("_inputs_dc")
+            base_factory = item_data.get("_base_factory")
+            factories_list = item_data.get("_factories", [])
+            get_ov_fn = item_data.get("_get_ov")
+
             for alt_r in results[1:]:
                 an = alt_r["name"]
                 def _inv_val(row_name, col_name, _df=edited_inv):
@@ -2417,7 +2484,35 @@ This provides the local risk percentage.</li>
                 capex = _inv_val("CAPEX (Tooling / Equipment)", an)
                 opex = _inv_val("OPEX (Project / Qualification)", an)
                 restr = _inv_val("Restructuring (Sending Site)", an)
-                annual_savings = alt_r.get("annual_adj_op", alt_r["annual_op"]) - base_adj_annual_op
+
+                # Build year-by-year savings from sales projection
+                alt_factory = next((f for f in factories_list if f.name == an), None)
+                projection = dc_inputs.sales_projection if dc_inputs else []
+                if projection and dc_inputs and alt_factory and base_factory:
+                    from dataclasses import replace
+                    savings_by_year = []
+                    for p in projection:
+                        yr_inputs = replace(dc_inputs,
+                                               net_sales_value=float(p["value"]),
+                                               net_sales_qty=int(p["qty"]))
+                        base_lt = get_lead_time(factory_countries.get(base_factory.name, ""),
+                                                factory_countries.get(base_factory.name, ""))
+                        alt_lt = get_lead_time(factory_countries.get(base_factory.name, ""),
+                                               factory_countries.get(an, ""))
+                        ov = get_ov_fn(an) if get_ov_fn else {}
+                        base_r = compute_location(yr_inputs, base_factory, is_base=True,
+                                                  lead_time_days=base_lt,
+                                                  company_wacc=company_wacc)
+                        alt_r_yr = compute_location(yr_inputs, alt_factory, overrides=ov,
+                                                    lead_time_days=alt_lt,
+                                                    company_wacc=company_wacc)
+                        base_op = base_r.get("annual_adj_op", base_r["annual_op"])
+                        alt_op = alt_r_yr.get("annual_adj_op", alt_r_yr["annual_op"])
+                        savings_by_year.append(alt_op - base_op)
+                    annual_savings = savings_by_year
+                else:
+                    base_adj_annual_op = results[0].get("annual_adj_op", results[0]["annual_op"])
+                    annual_savings = alt_r.get("annual_adj_op", alt_r["annual_op"]) - base_adj_annual_op
 
                 inv_case = compute_investment_case(
                     annual_savings=annual_savings,

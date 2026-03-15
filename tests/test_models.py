@@ -30,6 +30,37 @@ class TestItemInputs:
         errors = item.validate()
         assert any("material" in e.lower() for e in errors)
 
+    def test_sales_projection_default_empty(self):
+        item = ItemInputs()
+        assert item.sales_projection == []
+
+    def test_get_projection_for_year(self):
+        proj = [
+            {"year": 1, "value": 100_000.0, "qty": 1000},
+            {"year": 2, "value": 120_000.0, "qty": 1100},
+            {"year": 3, "value": 140_000.0, "qty": 1200},
+        ]
+        item = ItemInputs(net_sales_value=100_000.0, net_sales_qty=1000,
+                          sales_projection=proj)
+        assert item.get_projection_for_year(1) == (100_000.0, 1000)
+        assert item.get_projection_for_year(2) == (120_000.0, 1100)
+        assert item.get_projection_for_year(3) == (140_000.0, 1200)
+
+    def test_get_projection_beyond_range(self):
+        """Years beyond projection use last available year."""
+        proj = [
+            {"year": 1, "value": 100_000.0, "qty": 1000},
+            {"year": 2, "value": 120_000.0, "qty": 1100},
+        ]
+        item = ItemInputs(net_sales_value=100_000.0, net_sales_qty=1000,
+                          sales_projection=proj)
+        assert item.get_projection_for_year(5) == (120_000.0, 1100)
+
+    def test_get_projection_no_projection(self):
+        """Falls back to base year values if no projection."""
+        item = ItemInputs(net_sales_value=100_000.0, net_sales_qty=1000)
+        assert item.get_projection_for_year(1) == (100_000.0, 1000)
+
 
 class TestFactoryAssumptions:
 
