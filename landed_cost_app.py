@@ -184,15 +184,11 @@ st.markdown(f"""
     }}
     header {{background: transparent !important; height: 0 !important; min-height: 0 !important; padding: 0 !important;}}
     header [data-testid="stDecoration"] {{display: none;}}
-    /* Sidebar toggle — navy button with white arrow, fixed top-left */
+    /* Sidebar always visible — hide collapse/expand controls */
     [data-testid="collapsedControl"],
-    [data-testid="stSidebarCollapseButton"] {{position: fixed; top: 0.5rem; left: 0.5rem; z-index: 999; background: {NAVY}; border-radius: 4px; padding: 0.25rem;}}
-    [data-testid="collapsedControl"] svg,
-    [data-testid="stSidebarCollapseButton"] svg {{fill: white !important; color: white !important; stroke: white !important;}}
-    [data-testid="stSidebarCollapseButton"] button {{background: transparent !important; border: none !important; color: white !important;}}
-    /* Close button inside expanded sidebar */
-    section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {{position: static; background: {NAVY}; border-radius: 4px; padding: 0.25rem;}}
-    section[data-testid="stSidebar"] button[kind="header"] {{color: white !important; background: {NAVY} !important; border: none !important;}}
+    [data-testid="stSidebarCollapseButton"] {{display: none !important;}}
+    section[data-testid="stSidebar"] button[kind="header"] {{display: none !important;}}
+    section[data-testid="stSidebar"] {{transform: none !important; position: relative !important;}}
     section[data-testid="stSidebar"] {{
         min-width: 21rem !important; max-width: 21rem !important;
         background: #f0f2f6 !important;
