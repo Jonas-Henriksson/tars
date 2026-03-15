@@ -1402,12 +1402,6 @@ def export_excel_project(project_data):
         prop_rec = st.session_state.get("prop_recommendation", "")
         if prop_rec:
             ws.write(r, 0, "Recommendation", hl); ws.write(r, 1, prop_rec, lb); r += 1
-        _dec_by = st.session_state.get("conclusion_decided_by", "")
-        _dec_date = st.session_state.get("conclusion_decided_date", "")
-        if _dec_by:
-            ws.write(r, 0, "Decided By", hl); ws.write(r, 1, _dec_by, lf); r += 1
-        if _dec_date:
-            ws.write(r, 0, "Decision Date", hl); ws.write(r, 1, _dec_date, lf); r += 1
         for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits"),
                            ("Time Plan", "prop_timeplan")]:
             ws.write(r, 0, label, hl)
@@ -1913,18 +1907,6 @@ def export_pdf_project(all_results, ccy, project_name):
             pdf.set_text_color(*rc)
             pdf.cell(0, 7, f"Recommendation: {prop_rec}", ln=True)
             pdf.set_text_color(dark_r, dark_g, dark_b)
-            pdf.ln(2)
-        _pdf_dec_by = st.session_state.get("conclusion_decided_by", "")
-        _pdf_dec_date = st.session_state.get("conclusion_decided_date", "")
-        if _pdf_dec_by or _pdf_dec_date:
-            pdf.set_font("Helvetica", "B", 7)
-            pdf.cell(30, 5, "Decided By:", border=0)
-            pdf.set_font("Helvetica", "", 7)
-            pdf.cell(60, 5, _safe(_pdf_dec_by or "—"), border=0)
-            pdf.set_font("Helvetica", "B", 7)
-            pdf.cell(30, 5, "Decision Date:", border=0)
-            pdf.set_font("Helvetica", "", 7)
-            pdf.cell(0, 5, _safe(_pdf_dec_date or "—"), ln=True, border=0)
             pdf.ln(2)
         for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits")]:
             txt = st.session_state.get(key, "")
@@ -3818,7 +3800,7 @@ def save_project_json():
     history.append({
         "version": next_ver,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "author": st.session_state.get("conclusion_decided_by", ""),
+        "author": next((a.get("Approver", "") for a in st.session_state.get("prop_approvals", []) if a.get("Approver", "").strip()), ""),
         "summary": f"Save #{next_ver}",
     })
     st.session_state.version_history = history
@@ -5850,19 +5832,6 @@ Compares full cost-to-serve across factory locations, including material, labour
         if recommendation == "Conditional Go":
             st.session_state.prop_conditions = str(_r2_edited.iloc[0].get("Conditions", "") or "")
 
-        # Decision record
-        _dec_c1, _dec_c2 = st.columns(2)
-        with _dec_c1:
-            st.session_state.conclusion_decided_by = st.text_input(
-                "Decided By", value=st.session_state.conclusion_decided_by,
-                key="prop_decided_by_input",
-                placeholder="Name / role of decision maker")
-        with _dec_c2:
-            st.session_state.conclusion_decided_date = st.text_input(
-                "Decision Date", value=st.session_state.conclusion_decided_date,
-                key="prop_decided_date_input",
-                placeholder="e.g. 2025-03-15")
-
         # ── QUANTIFIED RISK EXPOSURE ───────────────────────────
         st.markdown(f'<div class="sec">Risk Exposure</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="callout" style="font-size:0.72rem;">Quantify each risk with probability and financial impact. This enables the decision board to weigh the total risk-adjusted exposure against the expected benefits.</div>', unsafe_allow_html=True)
@@ -6042,7 +6011,7 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         # ── APPROVAL LOG ───────────────────────────────────────
         st.markdown(f'<div class="sec">Approval & Decision Log</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Record formal approvals from each decision-maker. This creates an auditable trail for the governance process.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Record formal Go / No-Go decisions and approvals from each decision-maker. This is the single auditable record of who approved, when, and under what conditions.</div>', unsafe_allow_html=True)
 
         appr_df = pd.DataFrame(st.session_state.prop_approvals)
         if "Approver" not in appr_df.columns:
@@ -6100,7 +6069,6 @@ Compares full cost-to-serve across factory locations, including material, labour
         # ── PROPOSAL COMPLETENESS ──────────────────────────────
         prop_fields = {
             "Recommendation": bool(st.session_state.prop_recommendation),
-            "Decided By": bool(st.session_state.conclusion_decided_by.strip()),
             "Direction": bool(st.session_state.prop_direction.strip()),
             "Benefits": bool(st.session_state.prop_benefits.strip()),
             "Total Investment": bool(st.session_state.prop_total_investment and st.session_state.prop_total_investment > 0),
