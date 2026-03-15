@@ -381,7 +381,7 @@ st.markdown(f"""
 
 
 # ── TABLE BUILDERS ────────────────────────────────────────
-def build_cost_table(results, ccy, target_market=None):
+def build_cost_table(results, ccy, target_market=None, target_om=None):
     if not results: return ""
     hdr = "".join(f'<th>{r["name"]}</th>' for r in results)
     def row(lbl, key, fmt, cls="", indent=False):
@@ -403,6 +403,20 @@ def build_cost_table(results, ccy, target_market=None):
                 cell_cls = dc(color_diff) if color_diff != 0 else ""
                 cells += f'<td class="{cell_cls}">{fmt(v)}</td>'
         return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
+    def threshold_row(lbl, key, fmt, cls="", threshold=None):
+        """Row with color-coding against an absolute threshold (green if >= threshold)."""
+        c = f'class="{cls}"'
+        cells = ""
+        for i, r in enumerate(results):
+            v = r.get(key, 0)
+            if threshold is not None:
+                cls_cell = "delta-pos" if v >= threshold else "delta-neg"
+                if i == 0:
+                    cls_cell = f"base-case {cls_cell}"
+                cells += f'<td class="{cls_cell}">{fmt(v)}</td>'
+            else:
+                cells += f'<td class="{"base-case" if i==0 else ""}">{fmt(v)}</td>'
+        return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
     def sep():
         return f'<tr class="row-separator">{"<td></td>" * (len(results)+1)}</tr>'
     f2 = lambda v: fn(v, 2, dz=False)
@@ -416,7 +430,8 @@ def build_cost_table(results, ccy, target_market=None):
     html += row("Duties","duties",lambda v: fn(v,2,acct=True,dz=True),"",True)
     html += row("Transportation","transport",lambda v: fn(v,2,acct=True,dz=True),"",True) + sep()
     html += delta_row("Operating Profit","op",lambda v: fn(v,2,acct=True,dz=True),"row-double-top")
-    html += delta_row("Operating Margin","om",lambda v: fp(v,1,dz=False),"row-bold")
+    _om_label = f'Operating Margin{f" (target {target_om*100:.0f}%)" if target_om is not None else ""}'
+    html += threshold_row(_om_label,"om",lambda v: fp(v,1,dz=False),"row-bold", threshold=target_om)
     bom = results[0]["om"]
     dash = "\u2013"
     dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["om"]-bom)}">{dash if i==0 else fp(r["om"]-bom,1,acct=True)}</td>' for i, r in enumerate(results))
@@ -437,7 +452,8 @@ def build_cost_table(results, ccy, target_market=None):
             html += delta_row("Total Delta NWC","delta_nwc",lambda v: fn(v,0,acct=True),"row-subtotal",invert=True)
         html += delta_row("NWC Carrying Cost / Unit","nwc_carrying_cost_per_unit",lambda v: fn(v,2,acct=True),"indent",invert=True)
         html += delta_row("Adj. Operating Profit","adj_op",lambda v: fn(v,2,acct=True,dz=True),"row-bold")
-        html += delta_row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
+        _adj_om_label = f'Adj. Operating Margin{f" (target {target_om*100:.0f}%)" if target_om is not None else ""}'
+        html += threshold_row(_adj_om_label,"adj_om",lambda v: fp(v,1,dz=False),"row-bold", threshold=target_om)
         adj_bom = results[0]["adj_om"]
         adj_dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["adj_om"]-adj_bom)}">{dash if i==0 else fp(r["adj_om"]-adj_bom,1,acct=True)}</td>' for i, r in enumerate(results))
         html += f'<tr class="row-bold"><td><em>Adj. Delta Margin vs. Base</em></td>{adj_dc_cells}</tr>'
@@ -464,7 +480,7 @@ def build_cost_table(results, ccy, target_market=None):
     html += '</tbody></table>'
     return html
 
-def build_annual_table(results, ccy):
+def build_annual_table(results, ccy, target_om=None):
     if not results: return ""
     hdr = "".join(f'<th>{r["name"]}</th>' for r in results)
     bop = results[0]["annual_op"]
@@ -486,11 +502,25 @@ def build_annual_table(results, ccy):
                 cell_cls = dc(color_diff) if color_diff != 0 else ""
                 cells += f'<td class="{cell_cls}">{fmt(v)}</td>'
         return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
+    def threshold_row(lbl, key, fmt, cls="", threshold=None):
+        c = f'class="{cls}"'
+        cells = ""
+        for i, r in enumerate(results):
+            v = r.get(key, 0)
+            if threshold is not None:
+                cls_cell = "delta-pos" if v >= threshold else "delta-neg"
+                if i == 0:
+                    cls_cell = f"base-case {cls_cell}"
+                cells += f'<td class="{cls_cell}">{fmt(v)}</td>'
+            else:
+                cells += f'<td class="{"base-case" if i==0 else ""}">{fmt(v)}</td>'
+        return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
     html = f'<table class="ib-table"><thead><tr><th>Full Year ({ccy})</th>{hdr}</tr></thead><tbody>'
     html += row("Annual Revenue","annual_rev",lambda v: fi(v,dz=False))
     html += row("Annual Total Cost","annual_cost",lambda v: fi(v,dz=False))
     html += delta_row("Annual Operating Profit","annual_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
-    html += row("Operating Margin","om",lambda v: fp(v,1,dz=False),"row-bold")
+    _om_label = f'Operating Margin{f" (target {target_om*100:.0f}%)" if target_om is not None else ""}'
+    html += threshold_row(_om_label,"om",lambda v: fp(v,1,dz=False),"row-bold", threshold=target_om)
     dash = "\u2013"
     dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["annual_op"]-bop)}">{dash if i==0 else fi(r["annual_op"]-bop,acct=True)}</td>' for i, r in enumerate(results))
     html += f'<tr class="row-double-top"><td><em>Delta vs. Base Case (Annual)</em></td>{dc_cells}</tr>'
@@ -516,7 +546,8 @@ def build_annual_table(results, ccy):
         html += f'<tr class="indent"><td>Delta NWC vs. Base</td>{delta_nwc_cells}</tr>'
         html += delta_row("NWC Carrying Cost (Annual)","annual_nwc_cost",lambda v: fi(v,acct=True),"",invert=True)
         html += delta_row("Adj. Annual OP","annual_adj_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
-        html += delta_row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
+        _adj_om_label2 = f'Adj. Operating Margin{f" (target {target_om*100:.0f}%)" if target_om is not None else ""}'
+        html += threshold_row(_adj_om_label2,"adj_om",lambda v: fp(v,1,dz=False),"row-bold", threshold=target_om)
         base_adj_op = results[0].get("annual_adj_op", 0)
         adj_dc_cells = ''.join(
             f'<td class="{"base-case" if i==0 else dc(r.get("annual_adj_op",0)-base_adj_op)}">{dash if i==0 else fi(r.get("annual_adj_op",0)-base_adj_op,acct=True)}</td>'
@@ -525,7 +556,7 @@ def build_annual_table(results, ccy):
     html += '</tbody></table>'
     return html
 
-def build_charts(results, ccy):
+def build_charts(results, ccy, target_om=None):
     names = [r["name"] for r in results]
     oms = [r["om"]*100 for r in results]
     ops = [r["annual_op"] for r in results]
@@ -547,11 +578,20 @@ def build_charts(results, ccy):
     fig.update_xaxes(tickangle=0, tickfont=dict(size=10, family="Inter, sans-serif", color=DARK_TEXT))
     fig.update_yaxes(title_text="Margin (%)", row=1, col=1, ticksuffix="%", title_font=dict(size=10, family="Inter, sans-serif"))
     fig.update_yaxes(title_text=ccy, row=1, col=2, title_font=dict(size=10, family="Inter, sans-serif"))
+    # Target OM reference line on the margin subplot
+    if target_om is not None:
+        fig.add_hline(
+            y=target_om * 100, line=dict(color=MUTED, width=1.5, dash="dash"),
+            annotation_text=f"Target ({target_om*100:.0f}%)",
+            annotation_font=dict(size=9, family="Inter, sans-serif", color=MUTED),
+            annotation_position="top right",
+            row=1, col=1,
+        )
     return fig
 
 
 # ── WATERFALL (COST BRIDGE) CHART ─────────────────────────────
-def build_waterfall_chart(result, ccy):
+def build_waterfall_chart(result, ccy, target_om=None):
     """Build an IB-style waterfall from Net Sales down to Operating Profit."""
     ns = result["ns_per_unit"]
     ps = result["ps"]
@@ -570,12 +610,6 @@ def build_waterfall_chart(result, ccy):
     filtered = [(l, v, m) for l, v, m in zip(labels, values, measures) if abs(v) > 0.005 or m in ("absolute", "total")]
     labels, values, measures = zip(*filtered) if filtered else (labels, values, measures)
 
-    colors = {
-        "increasing": "#e8f5e9",
-        "decreasing": "#ffebee",
-        "totals": NAVY if op >= 0 else RED,
-    }
-
     fig = go.Figure(go.Waterfall(
         x=list(labels), y=list(values), measure=list(measures),
         connector=dict(line=dict(color="#ccc", width=1)),
@@ -585,10 +619,20 @@ def build_waterfall_chart(result, ccy):
         textposition="outside",
         text=[fa(abs(v)) for v in values],
         textfont=dict(size=9, family="Inter, sans-serif", color=DARK_TEXT),
+        hovertemplate="%{x}<br>%{y:,.2f} " + ccy + "<extra></extra>",
     ))
+    # Target OM reference line (shows the OP level needed to hit target margin)
+    if target_om is not None and ns > 0:
+        target_op = ns * target_om
+        fig.add_hline(
+            y=target_op, line=dict(color=MUTED, width=1.5, dash="dash"),
+            annotation_text=f"Target OP ({target_om*100:.0f}% OM = {fa(target_op)})",
+            annotation_font=dict(size=8, family="Inter, sans-serif", color=MUTED),
+            annotation_position="top right",
+        )
     fig.update_layout(
-        title=dict(text=""),
-        height=340, margin=dict(l=40, r=30, t=20, b=50),
+        title=dict(text=f"{result['name']} — Cost Bridge ({ccy}/unit)", font=dict(size=10, family="Inter, sans-serif", color=DARK_TEXT)),
+        height=340, margin=dict(l=40, r=30, t=35, b=50),
         paper_bgcolor="white", plot_bgcolor="white",
         font=dict(family="Inter, sans-serif", size=9, color=DARK_TEXT),
         yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title=f"{ccy} per unit", title_font=dict(size=9, family="Inter, sans-serif")),
@@ -784,7 +828,7 @@ Analysis covers {len(results)} manufacturing location{"s" if len(results)>1 else
 
 
 # ── SENSITIVITY CHART ────────────────────────────────────────
-def build_sensitivity_chart(inputs, factories, base_factory, param_name, param_label, steps, ccy, is_pct=False):
+def build_sensitivity_chart(inputs, factories, base_factory, param_name, param_label, steps, ccy, is_pct=False, target_om=None):
     """Build a line chart showing how OM changes as *param_name* varies across factories."""
     fig = go.Figure()
     colors_cycle = [NAVY, ACCENT_BLUE, GREEN, RED, "#e67e22", "#8e44ad"]
@@ -813,11 +857,19 @@ def build_sensitivity_chart(inputs, factories, base_factory, param_name, param_l
         yaxis=dict(title="Operating Margin (%)", showgrid=True, gridcolor="#eee", ticksuffix="%"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
+    # Target OM reference line
+    if target_om is not None:
+        fig.add_hline(
+            y=target_om * 100, line=dict(color=MUTED, width=1.5, dash="dash"),
+            annotation_text=f"Target OM ({target_om*100:.0f}%)",
+            annotation_font=dict(size=9, family="Inter, sans-serif", color=MUTED),
+            annotation_position="top right",
+        )
     return fig
 
 
 # ── PORTFOLIO WATERFALL (COST BRIDGE) ─────────────────────────
-def build_portfolio_waterfall(all_results, factory_name, ccy):
+def build_portfolio_waterfall(all_results, factory_name, ccy, target_om=None):
     """Build a waterfall chart aggregating annual cost components across all items for one factory."""
     total_rev = 0.0
     total_ps = 0.0
@@ -857,10 +909,20 @@ def build_portfolio_waterfall(all_results, factory_name, ccy):
         textposition="outside",
         text=[fa(abs(v)) for v in values],
         textfont=dict(size=9, family="Inter, sans-serif", color=DARK_TEXT),
+        hovertemplate="%{x}<br>%{y:,.0f} " + ccy + "<extra></extra>",
     ))
+    # Target OM reference line
+    if target_om is not None and total_rev > 0:
+        target_op = total_rev * target_om
+        fig.add_hline(
+            y=target_op, line=dict(color=MUTED, width=1.5, dash="dash"),
+            annotation_text=f"Target OP ({target_om*100:.0f}% OM = {fa(target_op)})",
+            annotation_font=dict(size=8, family="Inter, sans-serif", color=MUTED),
+            annotation_position="top right",
+        )
     fig.update_layout(
-        title=dict(text=""),
-        height=340, margin=dict(l=40, r=30, t=20, b=50),
+        title=dict(text=f"{factory_name} — Cost Bridge ({ccy}/year)", font=dict(size=10, family="Inter, sans-serif", color=DARK_TEXT)),
+        height=340, margin=dict(l=40, r=30, t=35, b=50),
         paper_bgcolor="white", plot_bgcolor="white",
         font=dict(family="Inter, sans-serif", size=9, color=DARK_TEXT),
         yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title=f"{ccy} (annual)", title_font=dict(size=9, family="Inter, sans-serif")),
@@ -1002,7 +1064,7 @@ def _portfolio_om_all_tweaked(all_results, all_fnames, param, multiplier, factor
 
 
 # ── PORTFOLIO SENSITIVITY SWEEP ──────────────────────────────
-def build_portfolio_sensitivity_chart(all_results, all_fnames, param_name, param_label, steps, ccy, is_pct=False):
+def build_portfolio_sensitivity_chart(all_results, all_fnames, param_name, param_label, steps, ccy, is_pct=False, target_om=None):
     """Build a line chart showing how portfolio OM changes as param varies across all factories."""
     from dataclasses import replace
     factory_attrs = {"va_ratio", "ps_index", "mcl_pct", "sa_pct", "tpl", "tariff_pct", "duties_pct", "transport_pct"}
@@ -1059,6 +1121,14 @@ def build_portfolio_sensitivity_chart(all_results, all_fnames, param_name, param
         yaxis=dict(title="Operating Margin (%)", showgrid=True, gridcolor="#eee", ticksuffix="%"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
+    # Target OM reference line
+    if target_om is not None:
+        fig.add_hline(
+            y=target_om * 100, line=dict(color=MUTED, width=1.5, dash="dash"),
+            annotation_text=f"Target OM ({target_om*100:.0f}%)",
+            annotation_font=dict(size=9, family="Inter, sans-serif", color=MUTED),
+            annotation_position="top right",
+        )
     return fig
 
 
@@ -2280,7 +2350,16 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
             text=[fa(totals[fn_]) for fn_ in all_fnames],
             textposition="outside",
             textfont=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT),
+            hovertemplate="%{x}<br>Annual OP: %{y:,.0f} " + ccy + "<extra></extra>",
         ))
+        # Base-case OP reference line
+        base_op_val = totals.get(base_fn, 0)
+        fig.add_hline(
+            y=base_op_val, line=dict(color=MUTED, width=1.5, dash="dash"),
+            annotation_text=f"Base ({base_fn}): {fa(base_op_val)}",
+            annotation_font=dict(size=9, family="Inter, sans-serif", color=MUTED),
+            annotation_position="top right",
+        )
         fig.update_layout(
             title=dict(text=f"Total Annual OP by Location ({ccy})", font=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT)),
             height=400, margin=dict(l=40,r=40,t=50,b=60),
@@ -2306,7 +2385,7 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
             for wi, fn_ in enumerate(all_fnames[:n_wf]):
                 with wf_cols[wi]:
                     st.markdown(f'<div style="font-size:0.7rem;font-family:Inter,sans-serif;font-weight:600;color:{DARK_TEXT};margin-bottom:0.2rem;">Cost Bridge: {fn_} ({ccy}/year)</div>', unsafe_allow_html=True)
-                    plotly_chart(build_portfolio_waterfall(all_results, fn_, ccy), config=plotly_cfg)
+                    plotly_chart(build_portfolio_waterfall(all_results, fn_, ccy, target_om=target_om), config=plotly_cfg)
             if len(all_fnames) > 3:
                 st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-top:0.3rem;">Showing top 3 of {len(all_fnames)} locations.</div>', unsafe_allow_html=True)
 
@@ -2338,7 +2417,7 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
             else:
                 steps = [round(v, 2) for v in np.arange(0.5, 1.55, 0.1)]
 
-            fig_sa = build_portfolio_sensitivity_chart(all_results, all_fnames, param_key, sa_choice, steps, ccy, is_pct=is_pct)
+            fig_sa = build_portfolio_sensitivity_chart(all_results, all_fnames, param_key, sa_choice, steps, ccy, is_pct=is_pct, target_om=target_om)
             plotly_chart(fig_sa, config=plotly_cfg)
 
     # ── INVESTMENT SUMMARY (Portfolio) ────────────────────────
@@ -3212,7 +3291,12 @@ def main():
         factory_countries = st.session_state.get("_factory_countries", {})
 
         st.markdown('<div class="sec">Financial Configuration</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="callout">Company-wide financial parameters for investment analysis and performance benchmarking.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout">Company-wide financial parameters for investment analysis and performance benchmarking.<br>'
+                    f'<span style="font-size:0.75rem;color:{MUTED};">'
+                    f'<strong>WACC</strong> — Weighted-average cost of capital; typically 7–12 % for industrial companies. '
+                    f'Used as the discount rate for NPV calculations.&emsp;'
+                    f'<strong>Target Payback</strong> — Maximum acceptable years to recover the investment from annual savings.&emsp;'
+                    f'<strong>Target OM</strong> — Minimum operating margin threshold; options below this level are flagged in charts and tables.</span></div>', unsafe_allow_html=True)
 
         fin_col1, fin_col2, fin_col3 = st.columns([1, 1, 1])
         with fin_col1:
@@ -3677,6 +3761,18 @@ This provides the local risk percentage.</li>
 
                 sc_tbl += '</tbody></table>'
                 st.markdown(sc_tbl, unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="callout" style="margin-top:0.5rem;">'
+                    f'<strong>How to read the scenarios:</strong> '
+                    f'The <em>Base Case</em> uses your input assumptions as-is. '
+                    f'<em>Downside</em> stress-tests the investment by reducing annual savings by 20 % and increasing capex by 20 %. '
+                    f'<em>Upside</em> applies a 20 % savings uplift with a 10 % capex reduction.<br>'
+                    f'<span style="font-size:0.75rem;color:{MUTED};">'
+                    f'If the downside NPV turns negative, the investment is highly sensitive to savings assumptions — '
+                    f'consider phased execution, risk-sharing arrangements, or additional due diligence before committing. '
+                    f'IRR values below the company WACC ({st.session_state.get("company_wacc", 0.08)*100:.0f} %) indicate the project '
+                    f'does not clear the cost-of-capital hurdle in that scenario.</span></div>',
+                    unsafe_allow_html=True)
 
         # Footer for investment page
         st.markdown("---")
@@ -3911,6 +4007,31 @@ Compares full cost-to-serve across factory locations, including material, labour
                 disabled=["Milestone"])
             st.session_state.ps_timeline = dict(zip(edited_tl["Milestone"], edited_tl["Target Date"].fillna("")))
 
+        # ── PRE-STUDY COMPLETENESS ─────────────────────────────
+        ps_fields = {
+            "Strategic Rationale": bool(st.session_state.ps_strategic_rationale.strip()),
+            "Purpose & Objective": bool(st.session_state.ps_purpose.strip()),
+            "Background": bool(st.session_state.ps_background.strip()),
+            "Reason to Change": bool(st.session_state.ps_reason.strip()),
+            "Risk of Inaction": bool(st.session_state.ps_risk_of_inaction.strip()),
+            "Key Risks": bool(st.session_state.ps_key_risks.strip()),
+            "Factory Scoping": bool(st.session_state.ps_scoping_rationale.strip()),
+            "Initiative Sponsor": bool(st.session_state.ps_sponsor.strip()),
+            "Initiative Lead": bool(st.session_state.ps_lead.strip()),
+        }
+        ps_done = sum(ps_fields.values())
+        ps_total = len(ps_fields)
+        ps_pct = ps_done / ps_total * 100
+        ps_color = GREEN if ps_pct == 100 else ("#e6a817" if ps_pct >= 60 else RED)
+        ps_missing = [k for k, v in ps_fields.items() if not v]
+        ps_bar_width = max(ps_pct, 2)
+        st.markdown(f'''<div style="margin:1rem 0 0.5rem 0;font-family:Inter,sans-serif;">
+            <div style="font-size:0.67rem;font-weight:700;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.3rem;">Pre-study Completeness</div>
+            <div style="background:#eee;border-radius:2px;height:6px;margin-bottom:0.3rem;"><div style="background:{ps_color};height:6px;border-radius:2px;width:{ps_bar_width}%;"></div></div>
+            <div style="font-size:0.72rem;color:{ps_color};font-weight:600;">{ps_done} of {ps_total} sections complete ({ps_pct:.0f}%)</div>
+            {f'<div style="font-size:0.68rem;color:{GREY_TEXT};margin-top:0.15rem;">Missing: {", ".join(ps_missing)}</div>' if ps_missing else '<div style="font-size:0.68rem;color:{GREEN};margin-top:0.15rem;">Ready for review</div>'}
+        </div>''', unsafe_allow_html=True)
+
         st.markdown("---")
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Pre-study</span>", unsafe_allow_html=True)
         return
@@ -4102,6 +4223,35 @@ Compares full cost-to-serve across factory locations, including material, labour
             <div><span style="display:inline-block;width:8px;height:8px;background:#FFF3CD;border:1px solid #856404;border-radius:2px;margin-right:0.2rem;"></span>Pending: <strong>{pending}</strong></div>
             <div><span style="display:inline-block;width:8px;height:8px;background:#F8D7DA;border:1px solid #721C24;border-radius:2px;margin-right:0.2rem;"></span>Rejected: <strong>{rejected}</strong></div>
         </div>""", unsafe_allow_html=True)
+
+        # ── TRANSFER FEASIBILITY COMPLETENESS ──────────────────
+        td_fields = {
+            "Transfer From": bool(st.session_state.td_transfer_from.strip()),
+            "Transfer To": bool(st.session_state.td_transfer_to.strip()),
+            "Product Line": bool(st.session_state.td_product_line.strip()),
+        }
+        # Count requirements with answers
+        td_reqs = st.session_state.get("td_requirements", {})
+        td_answered = 0
+        td_total_reqs = 0
+        for section, reqs in td_reqs.items():
+            for req in reqs:
+                td_total_reqs += 1
+                if req.get("Value", "").strip() or req.get("Status", "") in ("Approved", "Rejected"):
+                    td_answered += 1
+        td_fields["Requirements Answered"] = td_total_reqs > 0 and td_answered >= td_total_reqs * 0.5
+        td_done = sum(td_fields.values())
+        td_total = len(td_fields)
+        td_pct = td_done / td_total * 100
+        td_color = GREEN if td_pct == 100 else ("#e6a817" if td_pct >= 50 else RED)
+        td_missing = [k for k, v in td_fields.items() if not v]
+        td_bar_width = max(td_pct, 2)
+        st.markdown(f'''<div style="margin:1rem 0 0.5rem 0;font-family:Inter,sans-serif;">
+            <div style="font-size:0.67rem;font-weight:700;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.3rem;">Transfer Feasibility Completeness</div>
+            <div style="background:#eee;border-radius:2px;height:6px;margin-bottom:0.3rem;"><div style="background:{td_color};height:6px;border-radius:2px;width:{td_bar_width}%;"></div></div>
+            <div style="font-size:0.72rem;color:{td_color};font-weight:600;">{td_done} of {td_total} sections complete ({td_pct:.0f}%){f" | {td_answered}/{td_total_reqs} requirements answered" if td_total_reqs > 0 else ""}</div>
+            {f'<div style="font-size:0.68rem;color:{GREY_TEXT};margin-top:0.15rem;">Missing: {", ".join(td_missing)}</div>' if td_missing else f'<div style="font-size:0.68rem;color:{GREEN};margin-top:0.15rem;">Ready for review</div>'}
+        </div>''', unsafe_allow_html=True)
 
         st.markdown("---")
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Transfer Feasibility</span>", unsafe_allow_html=True)
@@ -4346,6 +4496,31 @@ Compares full cost-to-serve across factory locations, including material, labour
             st.markdown(team_html, unsafe_allow_html=True)
         else:
             st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-style:italic;">Complete the Team section on the Pre-study page to populate this table.</div>', unsafe_allow_html=True)
+
+        # ── PROPOSAL COMPLETENESS ──────────────────────────────
+        prop_fields = {
+            "Recommendation": bool(st.session_state.prop_recommendation),
+            "Direction": bool(st.session_state.prop_direction.strip()),
+            "Benefits": bool(st.session_state.prop_benefits.strip()),
+            "Total Investment": bool(st.session_state.prop_total_investment and st.session_state.prop_total_investment > 0),
+            "Time Plan": bool(st.session_state.prop_timeplan.strip()),
+            "Risk Exposure": any(r.get("Risk", "").strip() for r in st.session_state.prop_risk_exposure),
+            "Milestones": any(m.get("Milestone", "").strip() for m in st.session_state.prop_milestones),
+            "Approval Log": any(a.get("Approver", "").strip() for a in st.session_state.prop_approvals),
+            "Team": bool(st.session_state.ps_sponsor.strip()),
+        }
+        prop_done = sum(prop_fields.values())
+        prop_total = len(prop_fields)
+        prop_pct = prop_done / prop_total * 100
+        prop_color = GREEN if prop_pct == 100 else ("#e6a817" if prop_pct >= 60 else RED)
+        prop_missing = [k for k, v in prop_fields.items() if not v]
+        prop_bar_width = max(prop_pct, 2)
+        st.markdown(f'''<div style="margin:1rem 0 0.5rem 0;font-family:Inter,sans-serif;">
+            <div style="font-size:0.67rem;font-weight:700;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.3rem;">Proposal Completeness</div>
+            <div style="background:#eee;border-radius:2px;height:6px;margin-bottom:0.3rem;"><div style="background:{prop_color};height:6px;border-radius:2px;width:{prop_bar_width}%;"></div></div>
+            <div style="font-size:0.72rem;color:{prop_color};font-weight:600;">{prop_done} of {prop_total} sections complete ({prop_pct:.0f}%)</div>
+            {f'<div style="font-size:0.68rem;color:{GREY_TEXT};margin-top:0.15rem;">Missing: {", ".join(prop_missing)}</div>' if prop_missing else f'<div style="font-size:0.68rem;color:{GREEN};margin-top:0.15rem;">Ready for Factory Council review</div>'}
+        </div>''', unsafe_allow_html=True)
 
         st.markdown("---")
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Proposal</span>", unsafe_allow_html=True)
@@ -4819,13 +4994,13 @@ Compares full cost-to-serve across factory locations, including material, labour
                         cols[i+1].markdown(f'<div style="background:#fafafa;border:1px solid {BORDER};{bdr}border-radius:1px;padding:0.7rem 0.9rem;text-align:center;"><div style="font-size:0.62rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin-bottom:0.15rem;">{labels[i]}</div><div style="font-size:1.1rem;font-weight:700;color:{DARK_TEXT};font-variant-numeric:tabular-nums;">{fp(r["om"],1,dz=False)}</div><div style="font-size:0.78rem;font-weight:600;color:{DARK_TEXT};margin-top:0.1rem;">{r["name"]}</div><div style="font-size:0.68rem;{d_cls}margin-top:0.1rem;">{d_sign}{delta_pp:.1f}pp vs base</div></div>', unsafe_allow_html=True)
 
                     st.markdown(f'<div class="sec-sm">Per Unit Cost Comparison ({currency})</div>', unsafe_allow_html=True)
-                    st.markdown(build_cost_table(results, currency, target_market), unsafe_allow_html=True)
+                    st.markdown(build_cost_table(results, currency, target_market, target_om=target_om), unsafe_allow_html=True)
 
                     st.markdown(f'<div class="sec-sm">Full Year Impact ({currency})</div>', unsafe_allow_html=True)
-                    st.markdown(build_annual_table(results, currency), unsafe_allow_html=True)
+                    st.markdown(build_annual_table(results, currency, target_om=target_om), unsafe_allow_html=True)
 
                     if len(results) >= 2:
-                        plotly_chart(build_charts(results, currency))
+                        plotly_chart(build_charts(results, currency, target_om=target_om))
 
                     # ── SUB-TABS: Cost Bridge | Sensitivity ──
                     sub_tab_labels = ["Cost Bridge", "Sensitivity Analysis"]
@@ -4839,7 +5014,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                         for wi, wf_r in enumerate(results[:n_wf]):
                             with wf_cols[wi]:
                                 st.markdown(f'<div style="font-size:0.7rem;font-family:Inter,sans-serif;font-weight:600;color:{DARK_TEXT};margin-bottom:0.2rem;">Cost Bridge: {wf_r["name"]} ({currency}/unit)</div>', unsafe_allow_html=True)
-                                plotly_chart(build_waterfall_chart(wf_r, currency))
+                                plotly_chart(build_waterfall_chart(wf_r, currency, target_om=target_om))
                         if len(results) > 3:
                             st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-top:0.3rem;">Showing top 3 of {len(results)} locations. All locations included in tables above.</div>', unsafe_allow_html=True)
 
@@ -4881,7 +5056,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                             steps = [round(base_val * m, 2) for m in np.arange(0.5, 1.55, 0.1)]
 
                         fig_sa = build_sensitivity_chart(
-                            inputs, factories, base, param_key, sa_choice, steps, currency, is_pct=is_pct
+                            inputs, factories, base, param_key, sa_choice, steps, currency, is_pct=is_pct, target_om=target_om
                         )
                         plotly_chart(fig_sa)
 
