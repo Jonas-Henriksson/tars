@@ -1,5 +1,5 @@
 """
-Manufacturing Location Analyzer - v6.0
+Manufacturing Location Analyzer - v10.0
 Multi-Item Project-Based Production Cost & Profitability Analysis
 Author: Jonas Henriksson — Head of Strategic Planning & Intelligent Hub
 """
@@ -21,7 +21,7 @@ from fpdf import FPDF
 # Import from extracted library modules
 from landed_cost.models import FactoryAssumptions, ItemInputs
 from landed_cost.compute import compute_location, compute_sensitivity
-from landed_cost.investment import compute_investment_case
+from landed_cost.investment import compute_investment_case, compute_npv, compute_irr
 from landed_cost.lead_times import get_lead_time, estimate_lead_time, LEAD_TIME_MATRIX
 from landed_cost.formatters import fn, fp, fi, fa, dc
 from landed_cost.constants import (
@@ -54,6 +54,9 @@ INPUT_EDITOR_KEYS = [
     "ps_dep_editor", "ps_timeline_editor",
     "prop_risks_editor", "prop_fin_editor",
     "td_base_editor", "td_commercial_editor", "td_supply_editor", "td_financial_editor",
+    # Analysis Conclusion & Proposal enhancements
+    "prop_rexp_editor", "prop_milestones_editor", "prop_approvals_editor",
+    "prop_impl_editor", "prop_comm_editor",
 ]
 _blue_border = f"border-left: 3px solid {INPUT_BLUE} !important; padding-left: 2px;"
 _fixed_rules = "\n".join(f"    .st-key-{k} {{ {_blue_border} }}" for k in INPUT_EDITOR_KEYS)
@@ -65,7 +68,10 @@ _dynamic_rules = """    [class*="st-key-"][class*="_txt"] { %(bb)s }
     [class*="st-key-"][class*="_inv_hz"] { %(bb)s }
     [class*="st-key-ps_"] { %(bb)s }
     [class*="st-key-prop_"] { %(bb)s }
-    [class*="st-key-td_"] { %(bb)s }""" % {"bb": _blue_border}
+    [class*="st-key-td_"] { %(bb)s }
+    [class*="st-key-fx_"] { %(bb)s }
+    [class*="st-key-sc_"] { %(bb)s }
+    [class*="st-key-avp_"] { %(bb)s }""" % {"bb": _blue_border}
 
 st.markdown(
     '<link rel="preconnect" href="https://fonts.googleapis.com">'
@@ -379,7 +385,7 @@ st.markdown(f"""
 
 
 # ── TABLE BUILDERS ────────────────────────────────────────
-def build_cost_table(results, ccy, target_market=None):
+def build_cost_table(results, ccy, target_market=None, target_om=None):
     if not results: return ""
     hdr = "".join(f'<th>{r["name"]}</th>' for r in results)
     def row(lbl, key, fmt, cls="", indent=False):
@@ -401,6 +407,20 @@ def build_cost_table(results, ccy, target_market=None):
                 cell_cls = dc(color_diff) if color_diff != 0 else ""
                 cells += f'<td class="{cell_cls}">{fmt(v)}</td>'
         return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
+    def threshold_row(lbl, key, fmt, cls="", threshold=None):
+        """Row with color-coding against an absolute threshold (green if >= threshold)."""
+        c = f'class="{cls}"'
+        cells = ""
+        for i, r in enumerate(results):
+            v = r.get(key, 0)
+            if threshold is not None:
+                cls_cell = "delta-pos" if v >= threshold else "delta-neg"
+                if i == 0:
+                    cls_cell = f"base-case {cls_cell}"
+                cells += f'<td class="{cls_cell}">{fmt(v)}</td>'
+            else:
+                cells += f'<td class="{"base-case" if i==0 else ""}">{fmt(v)}</td>'
+        return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
     def sep():
         return f'<tr class="row-separator">{"<td></td>" * (len(results)+1)}</tr>'
     f2 = lambda v: fn(v, 2, dz=False)
@@ -414,7 +434,8 @@ def build_cost_table(results, ccy, target_market=None):
     html += row("Duties","duties",lambda v: fn(v,2,acct=True,dz=True),"",True)
     html += row("Transportation","transport",lambda v: fn(v,2,acct=True,dz=True),"",True) + sep()
     html += delta_row("Operating Profit","op",lambda v: fn(v,2,acct=True,dz=True),"row-double-top")
-    html += delta_row("Operating Margin","om",lambda v: fp(v,1,dz=False),"row-bold")
+    _om_label = f'Operating Margin{f" (target {target_om*100:.0f}%)" if target_om is not None else ""}'
+    html += threshold_row(_om_label,"om",lambda v: fp(v,1,dz=False),"row-bold", threshold=target_om)
     bom = results[0]["om"]
     dash = "\u2013"
     dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["om"]-bom)}">{dash if i==0 else fp(r["om"]-bom,1,acct=True)}</td>' for i, r in enumerate(results))
@@ -435,7 +456,8 @@ def build_cost_table(results, ccy, target_market=None):
             html += delta_row("Total Delta NWC","delta_nwc",lambda v: fn(v,0,acct=True),"row-subtotal",invert=True)
         html += delta_row("NWC Carrying Cost / Unit","nwc_carrying_cost_per_unit",lambda v: fn(v,2,acct=True),"indent",invert=True)
         html += delta_row("Adj. Operating Profit","adj_op",lambda v: fn(v,2,acct=True,dz=True),"row-bold")
-        html += delta_row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
+        _adj_om_label = f'Adj. Operating Margin{f" (target {target_om*100:.0f}%)" if target_om is not None else ""}'
+        html += threshold_row(_adj_om_label,"adj_om",lambda v: fp(v,1,dz=False),"row-bold", threshold=target_om)
         adj_bom = results[0]["adj_om"]
         adj_dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["adj_om"]-adj_bom)}">{dash if i==0 else fp(r["adj_om"]-adj_bom,1,acct=True)}</td>' for i, r in enumerate(results))
         html += f'<tr class="row-bold"><td><em>Adj. Delta Margin vs. Base</em></td>{adj_dc_cells}</tr>'
@@ -462,7 +484,7 @@ def build_cost_table(results, ccy, target_market=None):
     html += '</tbody></table>'
     return html
 
-def build_annual_table(results, ccy):
+def build_annual_table(results, ccy, target_om=None):
     if not results: return ""
     hdr = "".join(f'<th>{r["name"]}</th>' for r in results)
     bop = results[0]["annual_op"]
@@ -484,11 +506,25 @@ def build_annual_table(results, ccy):
                 cell_cls = dc(color_diff) if color_diff != 0 else ""
                 cells += f'<td class="{cell_cls}">{fmt(v)}</td>'
         return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
+    def threshold_row(lbl, key, fmt, cls="", threshold=None):
+        c = f'class="{cls}"'
+        cells = ""
+        for i, r in enumerate(results):
+            v = r.get(key, 0)
+            if threshold is not None:
+                cls_cell = "delta-pos" if v >= threshold else "delta-neg"
+                if i == 0:
+                    cls_cell = f"base-case {cls_cell}"
+                cells += f'<td class="{cls_cell}">{fmt(v)}</td>'
+            else:
+                cells += f'<td class="{"base-case" if i==0 else ""}">{fmt(v)}</td>'
+        return f'<tr {c}><td>{lbl}</td>{cells}</tr>'
     html = f'<table class="ib-table"><thead><tr><th>Full Year ({ccy})</th>{hdr}</tr></thead><tbody>'
     html += row("Annual Revenue","annual_rev",lambda v: fi(v,dz=False))
     html += row("Annual Total Cost","annual_cost",lambda v: fi(v,dz=False))
     html += delta_row("Annual Operating Profit","annual_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
-    html += row("Operating Margin","om",lambda v: fp(v,1,dz=False),"row-bold")
+    _om_label = f'Operating Margin{f" (target {target_om*100:.0f}%)" if target_om is not None else ""}'
+    html += threshold_row(_om_label,"om",lambda v: fp(v,1,dz=False),"row-bold", threshold=target_om)
     dash = "\u2013"
     dc_cells = ''.join(f'<td class="{"base-case" if i==0 else dc(r["annual_op"]-bop)}">{dash if i==0 else fi(r["annual_op"]-bop,acct=True)}</td>' for i, r in enumerate(results))
     html += f'<tr class="row-double-top"><td><em>Delta vs. Base Case (Annual)</em></td>{dc_cells}</tr>'
@@ -514,7 +550,8 @@ def build_annual_table(results, ccy):
         html += f'<tr class="indent"><td>Delta NWC vs. Base</td>{delta_nwc_cells}</tr>'
         html += delta_row("NWC Carrying Cost (Annual)","annual_nwc_cost",lambda v: fi(v,acct=True),"",invert=True)
         html += delta_row("Adj. Annual OP","annual_adj_op",lambda v: fi(v,acct=True,dz=True),"row-bold")
-        html += delta_row("Adj. Operating Margin","adj_om",lambda v: fp(v,1,dz=False),"row-bold")
+        _adj_om_label2 = f'Adj. Operating Margin{f" (target {target_om*100:.0f}%)" if target_om is not None else ""}'
+        html += threshold_row(_adj_om_label2,"adj_om",lambda v: fp(v,1,dz=False),"row-bold", threshold=target_om)
         base_adj_op = results[0].get("annual_adj_op", 0)
         adj_dc_cells = ''.join(
             f'<td class="{"base-case" if i==0 else dc(r.get("annual_adj_op",0)-base_adj_op)}">{dash if i==0 else fi(r.get("annual_adj_op",0)-base_adj_op,acct=True)}</td>'
@@ -523,7 +560,7 @@ def build_annual_table(results, ccy):
     html += '</tbody></table>'
     return html
 
-def build_charts(results, ccy):
+def build_charts(results, ccy, target_om=None):
     names = [r["name"] for r in results]
     oms = [r["om"]*100 for r in results]
     ops = [r["annual_op"] for r in results]
@@ -545,11 +582,20 @@ def build_charts(results, ccy):
     fig.update_xaxes(tickangle=0, tickfont=dict(size=10, family="Inter, sans-serif", color=DARK_TEXT))
     fig.update_yaxes(title_text="Margin (%)", row=1, col=1, ticksuffix="%", title_font=dict(size=10, family="Inter, sans-serif"))
     fig.update_yaxes(title_text=ccy, row=1, col=2, title_font=dict(size=10, family="Inter, sans-serif"))
+    # Target OM reference line on the margin subplot
+    if target_om is not None:
+        fig.add_hline(
+            y=target_om * 100, line=dict(color=MUTED, width=1.5, dash="dash"),
+            annotation_text=f"Target ({target_om*100:.0f}%)",
+            annotation_font=dict(size=9, family="Inter, sans-serif", color=MUTED),
+            annotation_position="top right",
+            row=1, col=1,
+        )
     return fig
 
 
 # ── WATERFALL (COST BRIDGE) CHART ─────────────────────────────
-def build_waterfall_chart(result, ccy):
+def build_waterfall_chart(result, ccy, target_om=None):
     """Build an IB-style waterfall from Net Sales down to Operating Profit."""
     ns = result["ns_per_unit"]
     ps = result["ps"]
@@ -568,12 +614,6 @@ def build_waterfall_chart(result, ccy):
     filtered = [(l, v, m) for l, v, m in zip(labels, values, measures) if abs(v) > 0.005 or m in ("absolute", "total")]
     labels, values, measures = zip(*filtered) if filtered else (labels, values, measures)
 
-    colors = {
-        "increasing": "#e8f5e9",
-        "decreasing": "#ffebee",
-        "totals": NAVY if op >= 0 else RED,
-    }
-
     fig = go.Figure(go.Waterfall(
         x=list(labels), y=list(values), measure=list(measures),
         connector=dict(line=dict(color="#ccc", width=1)),
@@ -583,10 +623,20 @@ def build_waterfall_chart(result, ccy):
         textposition="outside",
         text=[fa(abs(v)) for v in values],
         textfont=dict(size=9, family="Inter, sans-serif", color=DARK_TEXT),
+        hovertemplate="%{x}<br>%{y:,.2f} " + ccy + "<extra></extra>",
     ))
+    # Target OM reference line (shows the OP level needed to hit target margin)
+    if target_om is not None and ns > 0:
+        target_op = ns * target_om
+        fig.add_hline(
+            y=target_op, line=dict(color=MUTED, width=1.5, dash="dash"),
+            annotation_text=f"Target OP ({target_om*100:.0f}% OM = {fa(target_op)})",
+            annotation_font=dict(size=8, family="Inter, sans-serif", color=MUTED),
+            annotation_position="top right",
+        )
     fig.update_layout(
-        title=dict(text=""),
-        height=340, margin=dict(l=40, r=30, t=20, b=50),
+        title=dict(text=f"{result['name']} — Cost Bridge ({ccy}/unit)", font=dict(size=10, family="Inter, sans-serif", color=DARK_TEXT)),
+        height=340, margin=dict(l=40, r=30, t=35, b=50),
         paper_bgcolor="white", plot_bgcolor="white",
         font=dict(family="Inter, sans-serif", size=9, color=DARK_TEXT),
         yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title=f"{ccy} per unit", title_font=dict(size=9, family="Inter, sans-serif")),
@@ -782,7 +832,7 @@ Analysis covers {len(results)} manufacturing location{"s" if len(results)>1 else
 
 
 # ── SENSITIVITY CHART ────────────────────────────────────────
-def build_sensitivity_chart(inputs, factories, base_factory, param_name, param_label, steps, ccy, is_pct=False):
+def build_sensitivity_chart(inputs, factories, base_factory, param_name, param_label, steps, ccy, is_pct=False, target_om=None):
     """Build a line chart showing how OM changes as *param_name* varies across factories."""
     fig = go.Figure()
     colors_cycle = [NAVY, ACCENT_BLUE, GREEN, RED, "#e67e22", "#8e44ad"]
@@ -811,11 +861,19 @@ def build_sensitivity_chart(inputs, factories, base_factory, param_name, param_l
         yaxis=dict(title="Operating Margin (%)", showgrid=True, gridcolor="#eee", ticksuffix="%"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
+    # Target OM reference line
+    if target_om is not None:
+        fig.add_hline(
+            y=target_om * 100, line=dict(color=MUTED, width=1.5, dash="dash"),
+            annotation_text=f"Target OM ({target_om*100:.0f}%)",
+            annotation_font=dict(size=9, family="Inter, sans-serif", color=MUTED),
+            annotation_position="top right",
+        )
     return fig
 
 
 # ── PORTFOLIO WATERFALL (COST BRIDGE) ─────────────────────────
-def build_portfolio_waterfall(all_results, factory_name, ccy):
+def build_portfolio_waterfall(all_results, factory_name, ccy, target_om=None):
     """Build a waterfall chart aggregating annual cost components across all items for one factory."""
     total_rev = 0.0
     total_ps = 0.0
@@ -855,10 +913,20 @@ def build_portfolio_waterfall(all_results, factory_name, ccy):
         textposition="outside",
         text=[fa(abs(v)) for v in values],
         textfont=dict(size=9, family="Inter, sans-serif", color=DARK_TEXT),
+        hovertemplate="%{x}<br>%{y:,.0f} " + ccy + "<extra></extra>",
     ))
+    # Target OM reference line
+    if target_om is not None and total_rev > 0:
+        target_op = total_rev * target_om
+        fig.add_hline(
+            y=target_op, line=dict(color=MUTED, width=1.5, dash="dash"),
+            annotation_text=f"Target OP ({target_om*100:.0f}% OM = {fa(target_op)})",
+            annotation_font=dict(size=8, family="Inter, sans-serif", color=MUTED),
+            annotation_position="top right",
+        )
     fig.update_layout(
-        title=dict(text=""),
-        height=340, margin=dict(l=40, r=30, t=20, b=50),
+        title=dict(text=f"{factory_name} — Cost Bridge ({ccy}/year)", font=dict(size=10, family="Inter, sans-serif", color=DARK_TEXT)),
+        height=340, margin=dict(l=40, r=30, t=35, b=50),
         paper_bgcolor="white", plot_bgcolor="white",
         font=dict(family="Inter, sans-serif", size=9, color=DARK_TEXT),
         yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title=f"{ccy} (annual)", title_font=dict(size=9, family="Inter, sans-serif")),
@@ -1000,7 +1068,7 @@ def _portfolio_om_all_tweaked(all_results, all_fnames, param, multiplier, factor
 
 
 # ── PORTFOLIO SENSITIVITY SWEEP ──────────────────────────────
-def build_portfolio_sensitivity_chart(all_results, all_fnames, param_name, param_label, steps, ccy, is_pct=False):
+def build_portfolio_sensitivity_chart(all_results, all_fnames, param_name, param_label, steps, ccy, is_pct=False, target_om=None):
     """Build a line chart showing how portfolio OM changes as param varies across all factories."""
     from dataclasses import replace
     factory_attrs = {"va_ratio", "ps_index", "mcl_pct", "sa_pct", "tpl", "tariff_pct", "duties_pct", "transport_pct"}
@@ -1057,6 +1125,14 @@ def build_portfolio_sensitivity_chart(all_results, all_fnames, param_name, param
         yaxis=dict(title="Operating Margin (%)", showgrid=True, gridcolor="#eee", ticksuffix="%"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
+    # Target OM reference line
+    if target_om is not None:
+        fig.add_hline(
+            y=target_om * 100, line=dict(color=MUTED, width=1.5, dash="dash"),
+            annotation_text=f"Target OM ({target_om*100:.0f}%)",
+            annotation_font=dict(size=9, family="Inter, sans-serif", color=MUTED),
+            annotation_position="top right",
+        )
     return fig
 
 
@@ -1294,30 +1370,12 @@ def export_excel_project(project_data):
         for ms, dt in st.session_state.get("ps_timeline", {}).items():
             ws.write(r, 0, ms, lf); ws.write(r, 1, str(dt), lf); r += 1
 
-        # Proposal sheet
-        ws = wb.add_worksheet("Proposal")
-        w.sheets["Proposal"] = ws
-        ws.set_column(0, 0, 28)
-        ws.set_column(1, 1, 50)
-        ws.merge_range(0, 0, 0, 1, f"Proposal | {st.session_state.get('project_name', '')}", tf)
-        r = 2
-        for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits"),
-                           ("Time Plan", "prop_timeplan")]:
-            ws.write(r, 0, label, hl)
-            ws.write(r, 1, st.session_state.get(key, ""), lf)
-            r += 1
-        r += 1
-        ws.write(r, 0, "Team", hl); ws.write(r, 1, "", hl); r += 1
-        for label, key in [("Initiative Sponsor", "ps_sponsor"), ("Initiative Lead", "ps_lead"),
-                           ("Main Entity(s)", "ps_main_entity"), ("Pre-study Team", "ps_team")]:
-            ws.write(r, 0, label, lf); ws.write(r, 1, st.session_state.get(key, ""), lf); r += 1
-
-        # Transfer Details sheet
-        ws = wb.add_worksheet("Transfer Details")
-        w.sheets["Transfer Details"] = ws
+        # Transfer Feasibility sheet
+        ws = wb.add_worksheet("Transfer Feasibility")
+        w.sheets["Transfer Feasibility"] = ws
         ws.set_column(0, 0, 34)
         ws.set_column(1, 6, 18)
-        ws.merge_range(0, 0, 0, 6, f"Transfer Details | {st.session_state.get('project_name', '')}", tf)
+        ws.merge_range(0, 0, 0, 6, f"Transfer Feasibility | {st.session_state.get('project_name', '')}", tf)
         r = 2
         for label, key in [("Transfer From", "td_transfer_from"), ("Transfer To", "td_transfer_to"),
                            ("Product Line", "td_product_line"), ("Material Family", "td_material_family"),
@@ -1337,6 +1395,90 @@ def export_excel_project(project_data):
                     ws.write(r, ci, str(row.get(col, "")), lf)
                 r += 1
             r += 1
+
+        # Proposal sheet
+        ws = wb.add_worksheet("Proposal")
+        w.sheets["Proposal"] = ws
+        ws.set_column(0, 0, 28)
+        ws.set_column(1, 1, 50)
+        ws.set_column(2, 5, 20)
+        ws.merge_range(0, 0, 0, 1, f"Proposal | {st.session_state.get('project_name', '')}", tf)
+        r = 2
+        prop_rec = st.session_state.get("prop_recommendation", "")
+        if prop_rec:
+            ws.write(r, 0, "Recommendation", hl); ws.write(r, 1, prop_rec, lb); r += 1
+        for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits"),
+                           ("Time Plan", "prop_timeplan")]:
+            ws.write(r, 0, label, hl)
+            ws.write(r, 1, st.session_state.get(key, ""), lf)
+            r += 1
+        prop_inv_val = st.session_state.get("prop_total_investment")
+        if prop_inv_val:
+            ws.write(r, 0, "Total Investment", hl); ws.write(r, 1, f"{prop_inv_val:.1f} M", lf); r += 1
+        r += 1
+        # Risk Exposure
+        rexp = st.session_state.get("prop_risk_exposure", [])
+        if any(re.get("Risk", "").strip() for re in rexp):
+            ws.write(r, 0, "Risk Exposure", hl); ws.merge_range(r, 1, r, 3, "", hl); r += 1
+            for h_ci, h_lbl in enumerate(["Risk", "Probability", "Impact (M)", "Mitigation"]):
+                ws.write(r, h_ci, h_lbl, hf)
+            r += 1
+            for re_row in rexp:
+                if re_row.get("Risk", "").strip():
+                    ws.write(r, 0, re_row.get("Risk", ""), lf)
+                    ws.write(r, 1, re_row.get("Probability", ""), lf)
+                    ws.write(r, 2, float(re_row.get("Impact (M)", 0) or 0), nf)
+                    ws.write(r, 3, re_row.get("Mitigation", ""), lf)
+                    r += 1
+            r += 1
+        # Milestones
+        ms_list = st.session_state.get("prop_milestones", [])
+        if any(m.get("Milestone", "").strip() for m in ms_list):
+            ws.write(r, 0, "Milestones", hl); ws.merge_range(r, 1, r, 3, "", hl); r += 1
+            for h_ci, h_lbl in enumerate(["Milestone", "Owner", "Target Date", "Status"]):
+                ws.write(r, h_ci, h_lbl, hf)
+            r += 1
+            for ms_row in ms_list:
+                if ms_row.get("Milestone", "").strip():
+                    ws.write(r, 0, ms_row.get("Milestone", ""), lf)
+                    ws.write(r, 1, ms_row.get("Owner", ""), lf)
+                    ws.write(r, 2, ms_row.get("Target Date", ""), lf)
+                    ws.write(r, 3, ms_row.get("Status", ""), lf)
+                    r += 1
+            r += 1
+        # Approvals
+        appr = st.session_state.get("prop_approvals", [])
+        if any(a.get("Approver", "").strip() for a in appr):
+            ws.write(r, 0, "Approval Log", hl); ws.merge_range(r, 1, r, 4, "", hl); r += 1
+            for h_ci, h_lbl in enumerate(["Approver", "Role", "Decision", "Date", "Comments"]):
+                ws.write(r, h_ci, h_lbl, hf)
+            r += 1
+            for a_row in appr:
+                if a_row.get("Approver", "").strip():
+                    ws.write(r, 0, a_row.get("Approver", ""), lf)
+                    ws.write(r, 1, a_row.get("Role", ""), lf)
+                    ws.write(r, 2, a_row.get("Decision", ""), lf)
+                    ws.write(r, 3, a_row.get("Date", ""), lf)
+                    ws.write(r, 4, a_row.get("Comments", ""), lf)
+                    r += 1
+            r += 1
+        # Workforce
+        wf_from = st.session_state.get("ps_workforce_headcount_from", 0)
+        wf_to = st.session_state.get("ps_workforce_headcount_to", 0)
+        sev = st.session_state.get("prop_severance_cost", 0)
+        retr = st.session_state.get("prop_retraining_cost", 0)
+        if wf_from > 0 or wf_to > 0:
+            ws.write(r, 0, "Workforce Impact", hl); ws.merge_range(r, 1, r, 3, "", hl); r += 1
+            ws.write(r, 0, "FTE Sending", lf); ws.write(r, 1, wf_from, nf); r += 1
+            ws.write(r, 0, "FTE Receiving", lf); ws.write(r, 1, wf_to, nf); r += 1
+            ws.write(r, 0, "Net FTE", lb); ws.write(r, 1, wf_to - wf_from, nb); r += 1
+            ws.write(r, 0, "Severance (M)", lf); ws.write(r, 1, sev, nf); r += 1
+            ws.write(r, 0, "Retraining (M)", lf); ws.write(r, 1, retr, nf); r += 1
+            r += 1
+        ws.write(r, 0, "Team", hl); ws.write(r, 1, "", hl); r += 1
+        for label, key in [("Initiative Sponsor", "ps_sponsor"), ("Initiative Lead", "ps_lead"),
+                           ("Main Entity(s)", "ps_main_entity"), ("Pre-study Team", "ps_team")]:
+            ws.write(r, 0, label, lf); ws.write(r, 1, st.session_state.get(key, ""), lf); r += 1
 
     buf.seek(0)
     return buf
@@ -1705,31 +1847,13 @@ def export_pdf_project(all_results, ccy, project_name):
                 pdf.set_font("Helvetica", "", 6.5)
                 pdf.cell(0, 4.5, _safe(val), ln=True)
 
-    # Proposal page
-    prop_dir = st.session_state.get("prop_direction", "")
-    prop_ben = st.session_state.get("prop_benefits", "")
-    if any(s.strip() for s in (prop_dir, prop_ben)):
-        pdf.add_page()
-        add_page_header(pdf, f"Proposal | {project_name}", f"{ccy}")
-        for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits")]:
-            txt = st.session_state.get(key, "")
-            if txt.strip():
-                pdf.set_font("Helvetica", "B", 8)
-                pdf.set_fill_color(navy_r, navy_g, navy_b)
-                pdf.set_text_color(white_r, white_g, white_b)
-                pdf.cell(0, 5.5, label, ln=True, fill=True)
-                pdf.set_text_color(dark_r, dark_g, dark_b)
-                pdf.set_font("Helvetica", "", 7)
-                pdf.multi_cell(0, 4, _safe(txt))
-                pdf.ln(2)
-
-    # Transfer Details page
+    # Transfer Feasibility page
     td_reqs = st.session_state.get("td_requirements", {})
     has_td = any(r.get("Value", "").strip() or r.get("Status", "") != "Pending"
                  for rows in td_reqs.values() for r in rows)
     if has_td:
         pdf.add_page("L")  # Landscape for the wide table
-        add_page_header(pdf, f"Transfer Details | {project_name}", f"{ccy}")
+        add_page_header(pdf, f"Transfer Feasibility | {project_name}", f"{ccy}")
         # Header fields
         pdf.set_font("Helvetica", "B", 7)
         for label, key in [("Transfer From", "td_transfer_from"), ("Transfer To", "td_transfer_to"),
@@ -1773,6 +1897,132 @@ def export_pdf_project(all_results, ccy, project_name):
                     pdf.ln()
             pdf.ln(2)
 
+    # Proposal page
+    prop_dir = st.session_state.get("prop_direction", "")
+    prop_ben = st.session_state.get("prop_benefits", "")
+    prop_rec = st.session_state.get("prop_recommendation", "")
+    if any(s.strip() for s in (prop_dir, prop_ben, prop_rec)):
+        pdf.add_page()
+        add_page_header(pdf, f"Proposal | {project_name}", f"{ccy}")
+        # Recommendation
+        if prop_rec:
+            pdf.set_font("Helvetica", "B", 10)
+            rec_colors_pdf = {"Go": (green_r, green_g, green_b), "Conditional Go": (200, 150, 0), "No-Go": (red_r, red_g, red_b)}
+            rc = rec_colors_pdf.get(prop_rec, (dark_r, dark_g, dark_b))
+            pdf.set_text_color(*rc)
+            pdf.cell(0, 7, f"Recommendation: {prop_rec}", ln=True)
+            pdf.set_text_color(dark_r, dark_g, dark_b)
+            pdf.ln(2)
+        for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits")]:
+            txt = st.session_state.get(key, "")
+            if txt.strip():
+                pdf.set_font("Helvetica", "B", 8)
+                pdf.set_fill_color(navy_r, navy_g, navy_b)
+                pdf.set_text_color(white_r, white_g, white_b)
+                pdf.cell(0, 5.5, label, ln=True, fill=True)
+                pdf.set_text_color(dark_r, dark_g, dark_b)
+                pdf.set_font("Helvetica", "", 7)
+                pdf.multi_cell(0, 4, _safe(txt))
+                pdf.ln(2)
+        # Financials
+        prop_inv = st.session_state.get("prop_total_investment")
+        prop_tp = st.session_state.get("prop_timeplan", "")
+        if prop_inv or prop_tp:
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.set_fill_color(navy_r, navy_g, navy_b)
+            pdf.set_text_color(white_r, white_g, white_b)
+            pdf.cell(0, 5.5, "Financials & Time Plan", ln=True, fill=True)
+            pdf.set_text_color(dark_r, dark_g, dark_b)
+            pdf.set_font("Helvetica", "", 7)
+            if prop_inv:
+                pdf.cell(40, 4.5, f"Total Investment: {prop_inv:.1f} M{ccy}", ln=True)
+            if prop_tp:
+                pdf.cell(40, 4.5, f"Time Plan: {_safe(prop_tp)}", ln=True)
+            pdf.ln(2)
+        # Risk Exposure
+        rexp = st.session_state.get("prop_risk_exposure", [])
+        if any(r.get("Risk", "").strip() for r in rexp):
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.set_fill_color(navy_r, navy_g, navy_b)
+            pdf.set_text_color(white_r, white_g, white_b)
+            pdf.cell(0, 5.5, "Risk Exposure", ln=True, fill=True)
+            pdf.set_text_color(dark_r, dark_g, dark_b)
+            re_hdrs = ["Risk", "Probability", f"Impact (M{ccy})", "Mitigation"]
+            re_widths = [80, 25, 25, 147]
+            pdf.set_font("Helvetica", "B", 6)
+            for ci, h in enumerate(re_hdrs):
+                pdf.cell(re_widths[ci], 4.5, h, border=1)
+            pdf.ln()
+            pdf.set_font("Helvetica", "", 6)
+            for r in rexp:
+                if r.get("Risk", "").strip():
+                    pdf.cell(re_widths[0], 4.5, _safe(r.get("Risk", "")), border=1)
+                    pdf.cell(re_widths[1], 4.5, r.get("Probability", ""), border=1)
+                    pdf.cell(re_widths[2], 4.5, str(r.get("Impact (M)", "")), border=1)
+                    pdf.cell(re_widths[3], 4.5, _safe(r.get("Mitigation", "")), border=1)
+                    pdf.ln()
+            pdf.ln(2)
+        # Milestones
+        ms_list = st.session_state.get("prop_milestones", [])
+        if any(m.get("Milestone", "").strip() for m in ms_list):
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.set_fill_color(navy_r, navy_g, navy_b)
+            pdf.set_text_color(white_r, white_g, white_b)
+            pdf.cell(0, 5.5, "Milestones", ln=True, fill=True)
+            pdf.set_text_color(dark_r, dark_g, dark_b)
+            ms_hdrs = ["Milestone", "Owner", "Target Date", "Status"]
+            ms_widths = [110, 60, 50, 57]
+            pdf.set_font("Helvetica", "B", 6)
+            for ci, h in enumerate(ms_hdrs):
+                pdf.cell(ms_widths[ci], 4.5, h, border=1)
+            pdf.ln()
+            pdf.set_font("Helvetica", "", 6)
+            for m in ms_list:
+                if m.get("Milestone", "").strip():
+                    pdf.cell(ms_widths[0], 4.5, _safe(m.get("Milestone", "")), border=1)
+                    pdf.cell(ms_widths[1], 4.5, _safe(m.get("Owner", "")), border=1)
+                    pdf.cell(ms_widths[2], 4.5, m.get("Target Date", ""), border=1)
+                    pdf.cell(ms_widths[3], 4.5, m.get("Status", ""), border=1)
+                    pdf.ln()
+            pdf.ln(2)
+        # Approval Log
+        appr = st.session_state.get("prop_approvals", [])
+        if any(a.get("Approver", "").strip() for a in appr):
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.set_fill_color(navy_r, navy_g, navy_b)
+            pdf.set_text_color(white_r, white_g, white_b)
+            pdf.cell(0, 5.5, "Approval Log", ln=True, fill=True)
+            pdf.set_text_color(dark_r, dark_g, dark_b)
+            ap_hdrs = ["Approver", "Role", "Decision", "Date", "Comments"]
+            ap_widths = [55, 50, 50, 35, 87]
+            pdf.set_font("Helvetica", "B", 6)
+            for ci, h in enumerate(ap_hdrs):
+                pdf.cell(ap_widths[ci], 4.5, h, border=1)
+            pdf.ln()
+            pdf.set_font("Helvetica", "", 6)
+            for a in appr:
+                if a.get("Approver", "").strip():
+                    pdf.cell(ap_widths[0], 4.5, _safe(a.get("Approver", "")), border=1)
+                    pdf.cell(ap_widths[1], 4.5, _safe(a.get("Role", "")), border=1)
+                    pdf.cell(ap_widths[2], 4.5, a.get("Decision", ""), border=1)
+                    pdf.cell(ap_widths[3], 4.5, a.get("Date", ""), border=1)
+                    pdf.cell(ap_widths[4], 4.5, _safe(a.get("Comments", "")), border=1)
+                    pdf.ln()
+            pdf.ln(2)
+        # Workforce Impact
+        wf_from = st.session_state.get("ps_workforce_headcount_from", 0)
+        wf_to = st.session_state.get("ps_workforce_headcount_to", 0)
+        sev_cost = st.session_state.get("prop_severance_cost", 0)
+        retr_cost = st.session_state.get("prop_retraining_cost", 0)
+        if wf_from > 0 or wf_to > 0 or sev_cost > 0:
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.set_fill_color(navy_r, navy_g, navy_b)
+            pdf.set_text_color(white_r, white_g, white_b)
+            pdf.cell(0, 5.5, "Workforce Impact", ln=True, fill=True)
+            pdf.set_text_color(dark_r, dark_g, dark_b)
+            pdf.set_font("Helvetica", "", 7)
+            pdf.cell(0, 4.5, f"FTE Sending: {wf_from}  |  FTE Receiving: {wf_to}  |  Net: {wf_to - wf_from:+d}  |  Severance: {sev_cost:.1f} M{ccy}  |  Retraining: {retr_cost:.1f} M{ccy}", ln=True)
+
     buf = io.BytesIO()
     buf.write(pdf.output())
     buf.seek(0)
@@ -1812,7 +2062,7 @@ EXAMPLE_ITEMS = [
 
 
 # ── GOVERNANCE TEMPLATE HELPERS ─────────────────────────────────
-# Transfer Details requirements:
+# Transfer Feasibility requirements:
 # Each tuple: (main_question, input_type, follow_up_question, follow_up_condition)
 # input_type: "text" = free text, "yes_no" = Yes/No dropdown
 # follow_up_condition: "if_no" means only show follow-up when answer is No;
@@ -1842,7 +2092,7 @@ _TD_FINANCIAL_REQS = [
 
 
 def _default_td_requirements():
-    """Build the default transfer details requirements structure."""
+    """Build the default transfer feasibility requirements structure."""
     sections = {
         "Base Requirements": _TD_BASE_REQS,
         "Commercial Requirements": _TD_COMMERCIAL_REQS,
@@ -1880,6 +2130,37 @@ def init_state():
     if "active_page" not in st.session_state:
         st.session_state.active_page = "model"
     # ── GOVERNANCE TEMPLATE DEFAULTS ─────────────────────────
+    # ── ANALYSIS CONCLUSION GATE ────────────────────────────
+    if "conclusion_selected_option" not in st.session_state:
+        st.session_state.conclusion_selected_option = ""
+    if "conclusion_rationale" not in st.session_state:
+        st.session_state.conclusion_rationale = ""
+    if "conclusion_decision" not in st.session_state:
+        st.session_state.conclusion_decision = ""  # "Go" / "Conditional Go" / "No-Go" / ""
+    if "conclusion_conditions" not in st.session_state:
+        st.session_state.conclusion_conditions = ""
+    if "conclusion_decided_by" not in st.session_state:
+        st.session_state.conclusion_decided_by = ""
+    if "conclusion_decided_date" not in st.session_state:
+        st.session_state.conclusion_decided_date = ""
+    # ── PROPOSAL ENHANCEMENTS ────────────────────────────────
+    if "prop_recommendation" not in st.session_state:
+        st.session_state.prop_recommendation = ""  # "Go" / "Conditional Go" / "No-Go" / ""
+    if "prop_conditions" not in st.session_state:
+        st.session_state.prop_conditions = ""
+    if "prop_risk_exposure" not in st.session_state:
+        st.session_state.prop_risk_exposure = [{"Risk": "", "Probability": "Medium", "Impact (M)": 0.0, "Mitigation": ""}]
+    if "prop_milestones" not in st.session_state:
+        st.session_state.prop_milestones = [{"Milestone": "", "Owner": "", "Target Date": "", "Status": "Pending"}]
+    if "prop_approvals" not in st.session_state:
+        st.session_state.prop_approvals = [{"Approver": "", "Role": "", "Decision": "", "Date": "", "Comments": ""}]
+    # ── PRE-STUDY FACTORY SCOPING ────────────────────────────
+    if "ps_factories_included" not in st.session_state:
+        st.session_state.ps_factories_included = ""
+    if "ps_factories_excluded" not in st.session_state:
+        st.session_state.ps_factories_excluded = ""
+    if "ps_scoping_rationale" not in st.session_state:
+        st.session_state.ps_scoping_rationale = ""
     if "ps_strategic_rationale" not in st.session_state:
         st.session_state.ps_strategic_rationale = ""
     if "ps_purpose" not in st.session_state:
@@ -1911,6 +2192,39 @@ def init_state():
             "Pre-study Finalized": "", "Pre-study to FC": "",
             "IRE Submission": "", "IRE to IC": "", "Project Execution Start": "",
         }
+    # ── PRE-STUDY WORKFORCE IMPACT ────────────────────────────
+    if "ps_workforce_headcount_from" not in st.session_state:
+        st.session_state.ps_workforce_headcount_from = 0
+    if "ps_workforce_headcount_to" not in st.session_state:
+        st.session_state.ps_workforce_headcount_to = 0
+    if "ps_workforce_consultation_required" not in st.session_state:
+        st.session_state.ps_workforce_consultation_required = ""
+    if "ps_workforce_social_plan" not in st.session_state:
+        st.session_state.ps_workforce_social_plan = ""
+    if "ps_workforce_notes" not in st.session_state:
+        st.session_state.ps_workforce_notes = ""
+    # ── PROPOSAL IMPLEMENTATION STRATEGY ──────────────────────
+    if "prop_impl_phases" not in st.session_state:
+        st.session_state.prop_impl_phases = [
+            {"Phase": "Pilot / Qualification", "Description": "", "Go/No-Go Criteria": "", "Duration": "", "Status": "Pending"},
+            {"Phase": "Ramp-up", "Description": "", "Go/No-Go Criteria": "", "Duration": "", "Status": "Pending"},
+            {"Phase": "Full Transfer", "Description": "", "Go/No-Go Criteria": "", "Duration": "", "Status": "Pending"},
+            {"Phase": "Decommission (Sending)", "Description": "", "Go/No-Go Criteria": "", "Duration": "", "Status": "Pending"},
+        ]
+    # ── PROPOSAL WORKFORCE IMPACT ─────────────────────────────
+    if "prop_severance_cost" not in st.session_state:
+        st.session_state.prop_severance_cost = 0.0
+    if "prop_retraining_cost" not in st.session_state:
+        st.session_state.prop_retraining_cost = 0.0
+    if "prop_workforce_timeline" not in st.session_state:
+        st.session_state.prop_workforce_timeline = ""
+    if "prop_workforce_notes" not in st.session_state:
+        st.session_state.prop_workforce_notes = ""
+    # ── PROPOSAL COMMUNICATION PLAN ───────────────────────────
+    if "prop_comm_plan" not in st.session_state:
+        st.session_state.prop_comm_plan = [
+            {"Stakeholder": "", "What": "", "When": "", "Channel": "", "Owner": ""},
+        ]
     if "prop_direction" not in st.session_state:
         st.session_state.prop_direction = ""
     if "prop_benefits" not in st.session_state:
@@ -1938,6 +2252,61 @@ def init_state():
         st.session_state.td_indicative_timing = ""
     if "td_requirements" not in st.session_state:
         st.session_state.td_requirements = _default_td_requirements()
+    # ── CUSTOMER RE-QUALIFICATION TRACKER ─────────────────────
+    if "td_customer_requalification" not in st.session_state:
+        st.session_state.td_customer_requalification = [
+            {"Customer": "", "Product / SKU": "", "Requirement": "", "Lead Time (months)": 0, "Status": "Not Started", "Owner": "", "Target Date": ""}
+        ]
+    # ── TAX & TRANSFER PRICING ────────────────────────────────
+    if "td_tax_transfer_pricing" not in st.session_state:
+        st.session_state.td_tax_transfer_pricing = {
+            "intercompany_margin": "",
+            "withholding_tax": "",
+            "pe_risk": "",
+            "tax_incentives": "",
+            "ftz_benefits": "",
+            "rd_credits": "",
+            "notes": "",
+        }
+    # ── ESG / CARBON IMPACT ───────────────────────────────────
+    if "td_esg" not in st.session_state:
+        st.session_state.td_esg = {
+            "scope3_current": "",
+            "scope3_proposed": "",
+            "cbam_exposure": "",
+            "sustainability_notes": "",
+            "carbon_offset_plan": "",
+        }
+    # ── STEADY-STATE OPERATING MODEL ─────────────────────────
+    if "td_steady_state" not in st.session_state:
+        st.session_state.td_steady_state = [
+            {"Milestone": "Month 3", "Yield %": "", "Volume %": "", "Quality KPI": "", "Dual-Source Cost": "", "Notes": ""},
+            {"Milestone": "Month 6", "Yield %": "", "Volume %": "", "Quality KPI": "", "Dual-Source Cost": "", "Notes": ""},
+            {"Milestone": "Month 12", "Yield %": "", "Volume %": "", "Quality KPI": "", "Dual-Source Cost": "", "Notes": ""},
+            {"Milestone": "Month 24", "Yield %": "", "Volume %": "", "Quality KPI": "", "Dual-Source Cost": "", "Notes": ""},
+        ]
+    # ── FX EXPOSURE ──────────────────────────────────────────
+    if "fx_exposures" not in st.session_state:
+        st.session_state.fx_exposures = {}  # factory_name -> {"cost_currency": "", "hedge_assumption": "", "notes": ""}
+    # ── SCENARIO COMPARISON ──────────────────────────────────
+    if "scenario_comparison" not in st.session_state:
+        st.session_state.scenario_comparison = []  # list of {factory, pros, cons, trade_offs}
+    # ── ACTUALS VS PLAN ──────────────────────────────────────
+    if "actuals_vs_plan" not in st.session_state:
+        st.session_state.actuals_vs_plan = {
+            "tracking_started": False,
+            "entries": [
+                {"Metric": "CAPEX", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
+                {"Metric": "OPEX", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
+                {"Metric": "Ramp Timeline (months)", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
+                {"Metric": "Yield at Month 6", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
+                {"Metric": "Annual Savings (Year 1)", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
+                {"Metric": "NWC Impact", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
+            ],
+        }
+    # ── VERSION HISTORY / AUDIT TRAIL ────────────────────────
+    if "version_history" not in st.session_state:
+        st.session_state.version_history = []  # list of {"version": n, "timestamp": ..., "author": ..., "summary": ...}
 
 
 # ── ITEM ANALYSIS RENDERER ───────────────────────────────────────
@@ -2260,7 +2629,16 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
             text=[fa(totals[fn_]) for fn_ in all_fnames],
             textposition="outside",
             textfont=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT),
+            hovertemplate="%{x}<br>Annual OP: %{y:,.0f} " + ccy + "<extra></extra>",
         ))
+        # Base-case OP reference line
+        base_op_val = totals.get(base_fn, 0)
+        fig.add_hline(
+            y=base_op_val, line=dict(color=MUTED, width=1.5, dash="dash"),
+            annotation_text=f"Base ({base_fn}): {fa(base_op_val)}",
+            annotation_font=dict(size=9, family="Inter, sans-serif", color=MUTED),
+            annotation_position="top right",
+        )
         fig.update_layout(
             title=dict(text=f"Total Annual OP by Location ({ccy})", font=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT)),
             height=400, margin=dict(l=40,r=40,t=50,b=60),
@@ -2286,7 +2664,7 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
             for wi, fn_ in enumerate(all_fnames[:n_wf]):
                 with wf_cols[wi]:
                     st.markdown(f'<div style="font-size:0.7rem;font-family:Inter,sans-serif;font-weight:600;color:{DARK_TEXT};margin-bottom:0.2rem;">Cost Bridge: {fn_} ({ccy}/year)</div>', unsafe_allow_html=True)
-                    plotly_chart(build_portfolio_waterfall(all_results, fn_, ccy), config=plotly_cfg)
+                    plotly_chart(build_portfolio_waterfall(all_results, fn_, ccy, target_om=target_om), config=plotly_cfg)
             if len(all_fnames) > 3:
                 st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-top:0.3rem;">Showing top 3 of {len(all_fnames)} locations.</div>', unsafe_allow_html=True)
 
@@ -2318,7 +2696,7 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
             else:
                 steps = [round(v, 2) for v in np.arange(0.5, 1.55, 0.1)]
 
-            fig_sa = build_portfolio_sensitivity_chart(all_results, all_fnames, param_key, sa_choice, steps, ccy, is_pct=is_pct)
+            fig_sa = build_portfolio_sensitivity_chart(all_results, all_fnames, param_key, sa_choice, steps, ccy, is_pct=is_pct, target_om=target_om)
             plotly_chart(fig_sa, config=plotly_cfg)
 
     # ── INVESTMENT SUMMARY (Portfolio) ────────────────────────
@@ -3099,6 +3477,210 @@ def render_executive_summary_page():
             i_tbl += '</tbody></table>'
             st.markdown(i_tbl, unsafe_allow_html=True)
 
+    # ── TOTAL COST OF TRANSFER (TCT) ────────────────────────
+    st.markdown(f'<div class="sec-sm">Total Cost of Transfer</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Consolidated single number: CAPEX + OPEX + Restructuring + Severance + Retraining + Dual-sourcing + Customer re-qualification. This is the CFO question \u2014 "What is the total bill?"</div>', unsafe_allow_html=True)
+
+    # Aggregate investment costs from all items
+    tct_capex = 0.0
+    tct_opex = 0.0
+    tct_restructuring = 0.0
+    for item in all_results:
+        for ic in item.get("investment", []):
+            tct_capex += ic.get("capex", 0)
+            tct_opex += ic.get("opex", 0)
+            tct_restructuring += ic.get("restructuring", 0)
+    tct_severance = st.session_state.get("prop_severance_cost", 0.0) * 1e6
+    tct_retraining = st.session_state.get("prop_retraining_cost", 0.0) * 1e6
+    # Dual-sourcing estimate from steady-state model
+    tct_dual_source = 0.0
+    for ss in st.session_state.get("td_steady_state", []):
+        try:
+            tct_dual_source += float(str(ss.get("Dual-Source Cost", "0") or "0").replace(",", "").replace(" ", ""))
+        except (ValueError, TypeError):
+            pass
+    tct_total = tct_capex + tct_opex + tct_restructuring + tct_severance + tct_retraining + tct_dual_source
+
+    tct_rows = [
+        ("CAPEX (Tooling / Equipment)", tct_capex),
+        ("OPEX (Project / Qualification)", tct_opex),
+        ("Restructuring (Sending Site)", tct_restructuring),
+        ("Severance / Social Plan", tct_severance),
+        ("Retraining / Recruitment", tct_retraining),
+        ("Dual-Sourcing Period Costs", tct_dual_source),
+    ]
+    tct_hdr = f'<table class="ib-table"><thead><tr><th>Cost Component</th><th>Amount ({currency})</th></tr></thead><tbody>'
+    for lbl, val in tct_rows:
+        tct_hdr += f'<tr><td>{lbl}</td><td>{fi(val, dz=False) if val else dash}</td></tr>'
+    tct_hdr += f'<tr class="row-double-top"><td><strong>Total Cost of Transfer</strong></td><td><strong>{fi(tct_total, dz=False)}</strong></td></tr>'
+    tct_hdr += '</tbody></table>'
+    st.markdown(tct_hdr, unsafe_allow_html=True)
+
+    if tct_total > 0 and base_rev_tot > 0:
+        tct_pct_rev = tct_total / base_rev_tot * 100
+        st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};margin:0.3rem 0 0.8rem 0;">TCT as % of annual revenue: <strong>{tct_pct_rev:.1f}%</strong></div>', unsafe_allow_html=True)
+
+    # ── FX EXPOSURE ──────────────────────────────────────────
+    st.markdown(f'<div class="sec-sm">FX Exposure</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Currency of each factory\'s cost base relative to the analysis currency ({currency}). Manufacturing transfers across geographies create structural FX exposure that can erode or amplify the cost advantage.</div>', unsafe_allow_html=True)
+
+    fx_data = st.session_state.fx_exposures
+    # Auto-populate factory entries if not set
+    for fn_ in all_fnames:
+        if fn_ not in fx_data:
+            fx_data[fn_] = {"cost_currency": "", "hedge_assumption": "", "notes": ""}
+
+    fx_rows_data = []
+    for fn_ in all_fnames:
+        fx_rows_data.append({
+            "Factory": fn_,
+            "Cost Currency": fx_data[fn_].get("cost_currency", ""),
+            "Hedge Assumption": fx_data[fn_].get("hedge_assumption", ""),
+            "Notes": fx_data[fn_].get("notes", ""),
+        })
+    fx_df = pd.DataFrame(fx_rows_data)
+    edited_fx = st.data_editor(
+        fx_df, use_container_width=True, num_rows="fixed", key="fx_editor",
+        hide_index=True,
+        column_config={
+            "Factory": st.column_config.TextColumn("Factory", disabled=True, width=180),
+            "Cost Currency": st.column_config.SelectboxColumn("Cost Currency", options=CURRENCIES, width=100),
+            "Hedge Assumption": st.column_config.SelectboxColumn("Hedge", options=["", "Natural hedge", "Forward contract", "No hedge", "Partial hedge"], width=120),
+            "Notes": st.column_config.TextColumn("FX Notes", width=220),
+        },
+        disabled=["Factory"])
+    for i, fn_ in enumerate(all_fnames):
+        rec = edited_fx.iloc[i]
+        fx_data[fn_] = {"cost_currency": rec.get("Cost Currency", ""), "hedge_assumption": rec.get("Hedge Assumption", ""), "notes": rec.get("Notes", "")}
+    st.session_state.fx_exposures = fx_data
+
+    # ── SCENARIO COMPARISON TABLE ────────────────────────────
+    st.markdown(f'<div class="sec-sm">Scenario Comparison — Side-by-Side</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Factory Council decisions often compare 2\u20133 credible options. Use this table to capture trade-off commentary beyond the financial metrics.</div>', unsafe_allow_html=True)
+
+    sc_data = st.session_state.scenario_comparison
+    if not sc_data:
+        # Auto-populate from top alternatives
+        for fn_ in all_fnames:
+            sc_data.append({"Factory": fn_, "Pros": "", "Cons": "", "Trade-offs": ""})
+        st.session_state.scenario_comparison = sc_data
+
+    sc_df = pd.DataFrame(sc_data)
+    edited_sc = st.data_editor(
+        sc_df, use_container_width=True, num_rows="fixed", key="sc_editor",
+        hide_index=True,
+        column_config={
+            "Factory": st.column_config.TextColumn("Option", disabled=True, width=160),
+            "Pros": st.column_config.TextColumn("Pros / Strengths", width=220),
+            "Cons": st.column_config.TextColumn("Cons / Weaknesses", width=220),
+            "Trade-offs": st.column_config.TextColumn("Key Trade-offs", width=200),
+        },
+        disabled=["Factory"])
+    st.session_state.scenario_comparison = edited_sc.to_dict("records")
+
+    # ── ANALYSIS CONCLUSION GATE ─────────────────────────────
+    st.markdown(f'<div class="sec">Analysis Conclusion — Option Selection</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Record the recommended option and decision rationale. This creates an auditable link between the cost analysis and the governance workflow. Complete this section before proceeding to Transfer Feasibility.</div>', unsafe_allow_html=True)
+
+    # Auto-populate recommended option from model results if not set
+    if not st.session_state.conclusion_selected_option.strip() and all_results:
+        if ranked_for_verdict:
+            v_best = ranked_for_verdict[0]
+            v_delta = adj_totals[v_best] - base_adj_op
+            if v_delta > 0:
+                st.session_state.conclusion_selected_option = v_best
+
+    conc_c1, conc_c2 = st.columns([1, 1])
+    with conc_c1:
+        # Option selector — all factories
+        option_choices = [""] + all_fnames
+        current_idx = 0
+        if st.session_state.conclusion_selected_option in option_choices:
+            current_idx = option_choices.index(st.session_state.conclusion_selected_option)
+        selected = st.selectbox(
+            "Recommended Manufacturing Location",
+            options=option_choices,
+            index=current_idx,
+            key="conclusion_option_select",
+            format_func=lambda x: x if x else "— Select recommended option —",
+        )
+        st.session_state.conclusion_selected_option = selected
+
+        # Show key metrics for selected option
+        if selected and selected in all_fnames:
+            sel_op = adj_totals.get(selected, 0)
+            sel_rev = total_rev.get(selected, 0)
+            sel_om = sel_op / sel_rev * 100 if sel_rev else 0
+            delta_vs_base = sel_op - adj_totals.get(base_fn, 0)
+            is_base_selected = (selected == base_fn)
+            metric_color = NAVY if is_base_selected else (GREEN if delta_vs_base > 0 else RED)
+            st.markdown(f'''<div style="background:#f8f9fb;border:1px solid {BORDER};border-left:3px solid {metric_color};padding:0.6rem 0.9rem;margin:0.3rem 0;font-family:Inter,sans-serif;font-size:0.76rem;">
+                <strong>{selected}</strong> — Annual OP: <strong>{fi(sel_op, dz=False)} {currency}</strong> | OM: <strong>{sel_om:.1f}%</strong>
+                {f' | Delta vs Base: <span style="color:{GREEN if delta_vs_base > 0 else RED};font-weight:600;">{fi(delta_vs_base, acct=True)} {currency}</span>' if not is_base_selected else ' (Base Case)'}
+            </div>''', unsafe_allow_html=True)
+
+        st.markdown(f'<div class="sec-sm">Decision</div>', unsafe_allow_html=True)
+        decision_options = ["", "Go", "Conditional Go", "No-Go"]
+        current_dec_idx = 0
+        if st.session_state.conclusion_decision in decision_options:
+            current_dec_idx = decision_options.index(st.session_state.conclusion_decision)
+        decision = st.selectbox(
+            "Decision",
+            options=decision_options,
+            index=current_dec_idx,
+            key="conclusion_decision_select",
+            format_func=lambda x: x if x else "— Select decision —",
+        )
+        st.session_state.conclusion_decision = decision
+
+        if decision == "Conditional Go":
+            st.session_state.conclusion_conditions = st.text_area(
+                "Conditions for Proceeding",
+                value=st.session_state.conclusion_conditions,
+                key="conclusion_conditions_input", height=80,
+                placeholder="List conditions that must be met before proceeding (e.g. customer approval, quality audit pass)...")
+
+        # Decision record
+        dr_c1, dr_c2 = st.columns(2)
+        with dr_c1:
+            st.session_state.conclusion_decided_by = st.text_input(
+                "Decided By", value=st.session_state.conclusion_decided_by,
+                key="conclusion_decided_by_input",
+                placeholder="Name / role of decision maker")
+        with dr_c2:
+            st.session_state.conclusion_decided_date = st.text_input(
+                "Decision Date", value=st.session_state.conclusion_decided_date,
+                key="conclusion_decided_date_input",
+                placeholder="e.g. 2025-03-15")
+
+    with conc_c2:
+        st.markdown(f'<div class="sec-sm">Rationale</div>', unsafe_allow_html=True)
+        st.session_state.conclusion_rationale = st.text_area(
+            "Rationale", value=st.session_state.conclusion_rationale,
+            key="conclusion_rationale_input", height=200, label_visibility="collapsed",
+            placeholder="Explain why this option was selected over alternatives:\n\n- Financial advantage (OP uplift, margin improvement)\n- Strategic fit (capacity, market proximity, risk diversification)\n- NWC impact assessment\n- Key trade-offs and risks accepted\n- Factors that ruled out other options...")
+
+        # Completeness check
+        conc_complete = bool(
+            st.session_state.conclusion_selected_option
+            and st.session_state.conclusion_decision
+            and st.session_state.conclusion_rationale.strip()
+            and st.session_state.conclusion_decided_by.strip()
+        )
+        if conc_complete:
+            st.markdown(f'''<div style="background:#f0faf3;border:1px solid {GREEN};border-left:3px solid {GREEN};padding:0.5rem 0.8rem;margin:0.4rem 0;font-family:Inter,sans-serif;font-size:0.73rem;color:{GREEN};">
+                Analysis Conclusion complete — ready to proceed to Transfer Feasibility.
+            </div>''', unsafe_allow_html=True)
+        else:
+            missing = []
+            if not st.session_state.conclusion_selected_option: missing.append("Recommended Option")
+            if not st.session_state.conclusion_decision: missing.append("Decision")
+            if not st.session_state.conclusion_rationale.strip(): missing.append("Rationale")
+            if not st.session_state.conclusion_decided_by.strip(): missing.append("Decided By")
+            st.markdown(f'''<div style="background:#fff8e6;border:1px solid #e6a817;border-left:3px solid #e6a817;padding:0.5rem 0.8rem;margin:0.4rem 0;font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};">
+                Incomplete — missing: {", ".join(missing)}
+            </div>''', unsafe_allow_html=True)
+
     # Footer
     st.markdown(f'<div style="margin-top:1.5rem;padding-top:0.5rem;border-top:1px solid {BORDER};font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};text-align:center;">{data_classification} | {project_name} | Generated by Manufacturing Location Analyzer</div>', unsafe_allow_html=True)
 
@@ -3106,12 +3688,33 @@ def render_executive_summary_page():
 # ── SAVE / LOAD ───────────────────────────────────────────────
 def save_project_json():
     """Collect all session state into a JSON-serializable dict."""
+    # ── VERSION HISTORY ──────────────────────────────────────
+    history = list(st.session_state.get("version_history", []))
+    next_ver = len(history) + 1
+    history.append({
+        "version": next_ver,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "author": st.session_state.get("conclusion_decided_by", ""),
+        "summary": f"Save #{next_ver}",
+    })
+    st.session_state.version_history = history
+
     return json.dumps({
-        "version": "4.5",
+        "version": "5.0",
         "project_name": st.session_state.get("project_name", ""),
         "project_items": st.session_state.get("project_items", []),
         "next_id": st.session_state.get("next_id", 1),
+        # Analysis Conclusion
+        "conclusion_selected_option": st.session_state.get("conclusion_selected_option", ""),
+        "conclusion_rationale": st.session_state.get("conclusion_rationale", ""),
+        "conclusion_decision": st.session_state.get("conclusion_decision", ""),
+        "conclusion_conditions": st.session_state.get("conclusion_conditions", ""),
+        "conclusion_decided_by": st.session_state.get("conclusion_decided_by", ""),
+        "conclusion_decided_date": st.session_state.get("conclusion_decided_date", ""),
         # Governance — Pre-study
+        "ps_factories_included": st.session_state.get("ps_factories_included", ""),
+        "ps_factories_excluded": st.session_state.get("ps_factories_excluded", ""),
+        "ps_scoping_rationale": st.session_state.get("ps_scoping_rationale", ""),
         "ps_strategic_rationale": st.session_state.get("ps_strategic_rationale", ""),
         "ps_purpose": st.session_state.get("ps_purpose", ""),
         "ps_risk_of_inaction": st.session_state.get("ps_risk_of_inaction", ""),
@@ -3133,7 +3736,24 @@ def save_project_json():
         "prop_cash_out": st.session_state.get("prop_cash_out"),
         "prop_timeplan": st.session_state.get("prop_timeplan", ""),
         "prop_risks": st.session_state.get("prop_risks", []),
-        # Governance — Transfer Details
+        "prop_recommendation": st.session_state.get("prop_recommendation", ""),
+        "prop_conditions": st.session_state.get("prop_conditions", ""),
+        "prop_risk_exposure": st.session_state.get("prop_risk_exposure", []),
+        "prop_milestones": st.session_state.get("prop_milestones", []),
+        "prop_approvals": st.session_state.get("prop_approvals", []),
+        "prop_impl_phases": st.session_state.get("prop_impl_phases", []),
+        "prop_severance_cost": st.session_state.get("prop_severance_cost", 0.0),
+        "prop_retraining_cost": st.session_state.get("prop_retraining_cost", 0.0),
+        "prop_workforce_timeline": st.session_state.get("prop_workforce_timeline", ""),
+        "prop_workforce_notes": st.session_state.get("prop_workforce_notes", ""),
+        "prop_comm_plan": st.session_state.get("prop_comm_plan", []),
+        # Governance — Pre-study Workforce
+        "ps_workforce_headcount_from": st.session_state.get("ps_workforce_headcount_from", 0),
+        "ps_workforce_headcount_to": st.session_state.get("ps_workforce_headcount_to", 0),
+        "ps_workforce_consultation_required": st.session_state.get("ps_workforce_consultation_required", ""),
+        "ps_workforce_social_plan": st.session_state.get("ps_workforce_social_plan", ""),
+        "ps_workforce_notes": st.session_state.get("ps_workforce_notes", ""),
+        # Governance — Transfer Feasibility
         "td_transfer_to": st.session_state.get("td_transfer_to", ""),
         "td_transfer_from": st.session_state.get("td_transfer_from", ""),
         "td_product_line": st.session_state.get("td_product_line", ""),
@@ -3141,6 +3761,22 @@ def save_project_json():
         "td_transfer_volume": st.session_state.get("td_transfer_volume", ""),
         "td_indicative_timing": st.session_state.get("td_indicative_timing", ""),
         "td_requirements": st.session_state.get("td_requirements", {}),
+        # Customer Re-qualification Tracker
+        "td_customer_requalification": st.session_state.get("td_customer_requalification", []),
+        # Tax & Transfer Pricing
+        "td_tax_transfer_pricing": st.session_state.get("td_tax_transfer_pricing", {}),
+        # ESG / Carbon Impact
+        "td_esg": st.session_state.get("td_esg", {}),
+        # Steady-State Operating Model
+        "td_steady_state": st.session_state.get("td_steady_state", []),
+        # FX Exposure
+        "fx_exposures": st.session_state.get("fx_exposures", {}),
+        # Scenario Comparison
+        "scenario_comparison": st.session_state.get("scenario_comparison", []),
+        # Actuals vs Plan
+        "actuals_vs_plan": st.session_state.get("actuals_vs_plan", {}),
+        # Version History
+        "version_history": history,
     }, indent=2)
 
 
@@ -3400,7 +4036,7 @@ def main():
     st.markdown(f"""<div class="ib-header">
         <div class="ib-header-left">
             <h1>Manufacturing Location Analyzer</h1>
-            <div class="sub">Multi-Item Production Cost &amp; Profitability Analysis &middot; v9.0</div>
+            <div class="sub">Multi-Item Production Cost &amp; Profitability Analysis &middot; v10.0</div>
         </div>
         <div>{skf_logo_svg}</div>
     </div>
@@ -3416,7 +4052,7 @@ def main():
         ("Landed Cost Analysis", "model"),
         ("Required Investments", "investment"),
         ("Financial Configuration", "financial"),
-        ("Executive Summary", "executive"),
+        ("Analysis Summary", "executive"),
     ]
     info_pages = [
         ("About & Methodology", "about"),
@@ -3448,8 +4084,9 @@ def main():
     # ── GOVERNANCE NAV ──────────────────────────────────────────
     gov_pages = [
         ("Pre-study", "prestudy"),
+        ("Transfer Feasibility", "transfer"),
         ("Proposal", "proposal"),
-        ("Transfer Details", "transfer"),
+        ("Actuals vs. Plan", "actuals"),
     ]
     st.sidebar.markdown(f'<div class="nav-sep">Governance</div>', unsafe_allow_html=True)
     for label, key in gov_pages:
@@ -3486,7 +4123,12 @@ def main():
         factory_countries = st.session_state.get("_factory_countries", {})
 
         st.markdown('<div class="sec">Financial Configuration</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="callout">Company-wide financial parameters for investment analysis and performance benchmarking.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout">Company-wide financial parameters for investment analysis and performance benchmarking.<br>'
+                    f'<span style="font-size:0.75rem;color:{MUTED};">'
+                    f'<strong>WACC</strong> — Weighted-average cost of capital; typically 7–12 % for industrial companies. '
+                    f'Used as the discount rate for NPV calculations.&emsp;'
+                    f'<strong>Target Payback</strong> — Maximum acceptable years to recover the investment from annual savings.&emsp;'
+                    f'<strong>Target OM</strong> — Minimum operating margin threshold; options below this level are flagged in charts and tables.</span></div>', unsafe_allow_html=True)
 
         fin_col1, fin_col2, fin_col3 = st.columns([1, 1, 1])
         with fin_col1:
@@ -3664,7 +4306,7 @@ This provides the local risk percentage.</li>
                 </div>""", unsafe_allow_html=True)
 
         st.markdown("---")
-        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Financial Configuration</span>", unsafe_allow_html=True)
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v10.0 &middot; {st.session_state.project_name} &middot; Financial Configuration</span>", unsafe_allow_html=True)
         return  # Don't render the model page
 
     # ── REQUIRED INVESTMENTS PAGE ─────────────────────────────
@@ -3900,16 +4542,80 @@ This provides the local risk percentage.</li>
                 )
                 plotly_chart(fig_cf)
 
+                # ── STRESS-TESTED NPV ──────────────────────────────
+                st.markdown(f'<div class="sec-sm">Stress-Tested NPV — Scenario Analysis</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};margin-bottom:0.5rem;font-family:Inter,sans-serif;">Base case uses model inputs. Downside applies -20% to annual savings and +20% to investment. Upside applies +20% to savings and -10% to investment.</div>', unsafe_allow_html=True)
+
+                scenarios = [
+                    ("Downside (-20% savings, +20% cost)", -0.20, 0.20),
+                    ("Base Case", 0.0, 0.0),
+                    ("Upside (+20% savings, -10% cost)", 0.20, -0.10),
+                ]
+                sc_hdr = "".join(f'<th>{ic["factory_name"]}</th>' for ic in inv_results if ic["total_investment"] > 0 or ic["annual_savings"] != 0)
+                sc_tbl = f'<table class="ib-table"><thead><tr><th>Scenario</th>{sc_hdr}</tr></thead><tbody>'
+
+                for sc_label, savings_adj, cost_adj in scenarios:
+                    sc_cells = ""
+                    for ic in inv_results:
+                        if ic["total_investment"] == 0 and ic["annual_savings"] == 0:
+                            continue
+                        adj_savings = [s * (1 + savings_adj) for s in ic["annual_savings_by_year"]]
+                        adj_investment = ic["total_investment"] * (1 + cost_adj)
+                        adj_cf = [-adj_investment] + adj_savings
+                        sc_npv = compute_npv(adj_cf, company_wacc)
+                        cls = "delta-pos" if sc_npv > 0 else ("delta-neg" if sc_npv < 0 else "")
+                        is_base = savings_adj == 0.0 and cost_adj == 0.0
+                        weight = "font-weight:700;" if is_base else ""
+                        sc_cells += f'<td class="{cls}" style="{weight}">{fi(sc_npv, acct=True, dz=False)}</td>'
+                    row_cls = "row-bold" if savings_adj == 0.0 else ""
+                    sc_tbl += f'<tr class="{row_cls}"><td>{sc_label}</td>{sc_cells}</tr>'
+
+                # Add IRR row per scenario
+                sc_tbl += f'<tr class="row-separator">{"<td></td>" * (1 + sum(1 for ic in inv_results if ic["total_investment"] > 0 or ic["annual_savings"] != 0))}</tr>'
+                for sc_label, savings_adj, cost_adj in scenarios:
+                    sc_cells = ""
+                    for ic in inv_results:
+                        if ic["total_investment"] == 0 and ic["annual_savings"] == 0:
+                            continue
+                        _compute_irr = compute_irr
+                        adj_savings = [s * (1 + savings_adj) for s in ic["annual_savings_by_year"]]
+                        adj_investment = ic["total_investment"] * (1 + cost_adj)
+                        adj_cf = [-adj_investment] + adj_savings
+                        sc_irr = _compute_irr(adj_cf)
+                        if sc_irr is not None:
+                            cls = "delta-pos" if sc_irr > company_wacc else "delta-neg"
+                            sc_cells += f'<td class="{cls}">{sc_irr*100:.1f}%</td>'
+                        else:
+                            sc_cells += f'<td>{dash}</td>'
+                    row_cls = "row-bold" if savings_adj == 0.0 else ""
+                    irr_label = sc_label.replace("NPV", "IRR") if "NPV" in sc_label else sc_label
+                    sc_tbl += f'<tr class="{row_cls}"><td>IRR: {sc_label.split("(")[0].strip()}</td>{sc_cells}</tr>'
+
+                sc_tbl += '</tbody></table>'
+                st.markdown(sc_tbl, unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="callout" style="margin-top:0.5rem;">'
+                    f'<strong>How to read the scenarios:</strong> '
+                    f'The <em>Base Case</em> uses your input assumptions as-is. '
+                    f'<em>Downside</em> stress-tests the investment by reducing annual savings by 20 % and increasing capex by 20 %. '
+                    f'<em>Upside</em> applies a 20 % savings uplift with a 10 % capex reduction.<br>'
+                    f'<span style="font-size:0.75rem;color:{MUTED};">'
+                    f'If the downside NPV turns negative, the investment is highly sensitive to savings assumptions — '
+                    f'consider phased execution, risk-sharing arrangements, or additional due diligence before committing. '
+                    f'IRR values below the company WACC ({st.session_state.get("company_wacc", 0.08)*100:.0f} %) indicate the project '
+                    f'does not clear the cost-of-capital hurdle in that scenario.</span></div>',
+                    unsafe_allow_html=True)
+
         # Footer for investment page
         st.markdown("---")
-        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Required Investments Analysis</span>", unsafe_allow_html=True)
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v10.0 &middot; {st.session_state.project_name} &middot; Required Investments Analysis</span>", unsafe_allow_html=True)
         return
 
     # ── EXECUTIVE SUMMARY PAGE ────────────────────────────────
     if st.session_state.active_page == "executive":
         render_executive_summary_page()
         st.markdown("---")
-        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Executive Summary</span>", unsafe_allow_html=True)
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v10.0 &middot; {st.session_state.project_name} &middot; Analysis Summary</span>", unsafe_allow_html=True)
         return
 
     # ── Reference pages: render in main window ──
@@ -3997,6 +4703,7 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.markdown(f"""
 <div style="font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};line-height:1.6;max-width:800px;">
 <strong style="font-size:0.82rem;">Changelog</strong><br>
+<span style="color:{GREY_TEXT};">v10.0</span> &mdash; TCT consolidated view, FX exposure, scenario comparison, customer re-qualification tracker, tax &amp; transfer pricing, ESG/carbon impact, steady-state operating model, actuals vs. plan tracking, version history audit trail, enhanced PDF/Excel exports<br>
 <span style="color:{GREY_TEXT};">v9.0</span> &mdash; Qualitative context, Data Classification, sidebar nav<br>
 <span style="color:{GREY_TEXT};">v8.0</span> &mdash; Required Investments Analysis (NPV, IRR, payback)<br>
 <span style="color:{GREY_TEXT};">v7.0</span> &mdash; NWC impact, GIT, adjusted OP/margin<br>
@@ -4021,6 +4728,22 @@ Compares full cost-to-serve across factory locations, including material, labour
             <div style="background:{NAVY};color:#fff;font-size:0.62rem;font-weight:600;padding:0.2rem 0.7rem;border-radius:2px;text-transform:uppercase;letter-spacing:0.06em;">Footprint Optimization</div>
         </div>""", unsafe_allow_html=True)
         st.markdown(f'<div class="callout" style="font-size:0.72rem;">Structured evaluation framework for the pre-study phase. Captures strategic rationale, current set-up, key questions, dependencies, and team. Complete this document before submitting a formal proposal to the Factory Council.</div>', unsafe_allow_html=True)
+
+        # ── CLASSIFICATION-AWARE CALLOUT ──────────────────────
+        _has_restructuring = False
+        _all_res_ps = st.session_state.get("_all_results", [])
+        for _item_res in _all_res_ps:
+            for _ic in _item_res.get("investment_cases", []):
+                if _ic.get("restructuring", 0) > 0:
+                    _has_restructuring = True
+                    break
+        _is_c4 = "C4" in data_classification
+        _wf_headcount = st.session_state.get("ps_workforce_headcount_from", 0)
+        if _has_restructuring or _is_c4 or _wf_headcount > 0:
+            _c4_border = RED if _is_c4 else "#e6a817"
+            _c4_label = "C4 — Strictly Confidential" if _is_c4 else "Classification Review Recommended"
+            _c4_hint = "" if _is_c4 else " Consider upgrading from the project header."
+            st.markdown(f'<div style="background:#fef9f0;border-left:4px solid {_c4_border};padding:0.5rem 1rem;margin:0.2rem 0 0.6rem 0;font-family:Inter,sans-serif;font-size:0.72rem;"><strong style="color:{_c4_border};">{_c4_label}</strong> — Restructuring or workforce impact detected. Typically warrants C4 to protect employee privacy.{_c4_hint}</div>', unsafe_allow_html=True)
 
         ps_left, ps_right = st.columns([3, 2])
         with ps_left:
@@ -4067,7 +4790,67 @@ Compares full cost-to-serve across factory locations, including material, labour
                 key="ps_questions_input", height=100, label_visibility="collapsed",
                 placeholder="List the key questions that need to be answered during the pre-study phase...")
 
+            # ── FACTORY SCOPING RATIONALE ──────────────────────
+            st.markdown(f'<div class="sec-sm">Factory Scoping — Included & Excluded</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-bottom:0.3rem;font-family:Inter,sans-serif;">Document which factories were included in the analysis and, critically, which were excluded and why. This ensures the evaluation scope is transparent and auditable.</div>', unsafe_allow_html=True)
+
+            # Auto-populate from model if available
+            all_factory_names_ps = st.session_state.get("_all_factory_names", [])
+            if all_factory_names_ps and not st.session_state.ps_factories_included.strip():
+                st.session_state.ps_factories_included = ", ".join(all_factory_names_ps)
+
+            scope_c1, scope_c2 = st.columns(2)
+            with scope_c1:
+                st.session_state.ps_factories_included = st.text_area(
+                    "Factories Included", value=st.session_state.ps_factories_included,
+                    key="ps_incl_input", height=70, label_visibility="visible",
+                    placeholder="e.g. Gothenburg (base), Shanghai, Pune")
+            with scope_c2:
+                st.session_state.ps_factories_excluded = st.text_area(
+                    "Factories Excluded", value=st.session_state.ps_factories_excluded,
+                    key="ps_excl_input", height=70, label_visibility="visible",
+                    placeholder="e.g. Schweinfurt, Dalian, Guadalajara")
+
+            st.session_state.ps_scoping_rationale = st.text_area(
+                "Scoping Rationale", value=st.session_state.ps_scoping_rationale,
+                key="ps_scope_rationale_input", height=100, label_visibility="visible",
+                placeholder="Explain the rationale for factory inclusion/exclusion:\n\n- Why were certain factories included? (e.g. existing capability, capacity headroom, strategic corridor)\n- Why were others excluded? (e.g. no relevant capability, at capacity, geopolitical risk, no established supply chain, technology mismatch)\n- Any constraints that narrowed the scope (e.g. customer proximity requirements, regulatory barriers)")
+
         with ps_right:
+            # ── WORKFORCE & ORGANIZATIONAL IMPACT ─────────────
+            st.markdown(f'<div class="sec-sm">Workforce & Organizational Impact</div>', unsafe_allow_html=True)
+            wf_c1, wf_c2 = st.columns(2)
+            with wf_c1:
+                st.session_state.ps_workforce_headcount_from = st.number_input(
+                    "FTE Sending Site", value=st.session_state.ps_workforce_headcount_from,
+                    min_value=0, step=1, key="ps_wf_from_input",
+                    help="Estimated FTEs affected at sending factory")
+            with wf_c2:
+                st.session_state.ps_workforce_headcount_to = st.number_input(
+                    "FTE Receiving Site", value=st.session_state.ps_workforce_headcount_to,
+                    min_value=0, step=1, key="ps_wf_to_input",
+                    help="New FTEs required at receiving factory")
+            wf_consult_opts = ["", "Yes — Works council / union", "Yes — Labor authority", "Not required", "To be determined"]
+            wf_consult_idx = 0
+            if st.session_state.ps_workforce_consultation_required in wf_consult_opts:
+                wf_consult_idx = wf_consult_opts.index(st.session_state.ps_workforce_consultation_required)
+            st.session_state.ps_workforce_consultation_required = st.selectbox(
+                "Consultation Required", options=wf_consult_opts, index=wf_consult_idx,
+                key="ps_wf_consult_input",
+                format_func=lambda x: x if x else "— Select —")
+            sp_opts = ["", "Yes — social plan required", "No — attrition / redeployment", "To be assessed"]
+            sp_idx = 0
+            if st.session_state.ps_workforce_social_plan in sp_opts:
+                sp_idx = sp_opts.index(st.session_state.ps_workforce_social_plan)
+            st.session_state.ps_workforce_social_plan = st.selectbox(
+                "Social Plan / Severance", options=sp_opts, index=sp_idx,
+                key="ps_wf_social_input",
+                format_func=lambda x: x if x else "— Select —")
+            st.session_state.ps_workforce_notes = st.text_area(
+                "Workforce Notes", value=st.session_state.ps_workforce_notes,
+                key="ps_wf_notes_input", height=50, label_visibility="visible",
+                placeholder="Retention risk, key-person dependencies, knowledge transfer plan...")
+
             # Cross-functional dependencies
             st.markdown(f'<div class="sec-sm">Cross-functional Dependencies & How to Manage</div>', unsafe_allow_html=True)
             dep_df = pd.DataFrame(st.session_state.ps_dependencies)
@@ -4107,131 +4890,37 @@ Compares full cost-to-serve across factory locations, including material, labour
                 disabled=["Milestone"])
             st.session_state.ps_timeline = dict(zip(edited_tl["Milestone"], edited_tl["Target Date"].fillna("")))
 
+        # ── PRE-STUDY COMPLETENESS ─────────────────────────────
+        ps_fields = {
+            "Strategic Rationale": bool(st.session_state.ps_strategic_rationale.strip()),
+            "Purpose & Objective": bool(st.session_state.ps_purpose.strip()),
+            "Background": bool(st.session_state.ps_background.strip()),
+            "Reason to Change": bool(st.session_state.ps_reason.strip()),
+            "Risk of Inaction": bool(st.session_state.ps_risk_of_inaction.strip()),
+            "Key Risks": bool(st.session_state.ps_key_risks.strip()),
+            "Factory Scoping": bool(st.session_state.ps_scoping_rationale.strip()),
+            "Workforce Impact": bool(st.session_state.ps_workforce_headcount_from > 0 or st.session_state.ps_workforce_headcount_to > 0 or st.session_state.ps_workforce_consultation_required),
+            "Initiative Sponsor": bool(st.session_state.ps_sponsor.strip()),
+            "Initiative Lead": bool(st.session_state.ps_lead.strip()),
+        }
+        ps_done = sum(ps_fields.values())
+        ps_total = len(ps_fields)
+        ps_pct = ps_done / ps_total * 100
+        ps_color = GREEN if ps_pct == 100 else ("#e6a817" if ps_pct >= 60 else RED)
+        ps_missing = [k for k, v in ps_fields.items() if not v]
+        ps_bar_width = max(ps_pct, 2)
+        st.markdown(f'''<div style="margin:1rem 0 0.5rem 0;font-family:Inter,sans-serif;">
+            <div style="font-size:0.67rem;font-weight:700;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.3rem;">Pre-study Completeness</div>
+            <div style="background:#eee;border-radius:2px;height:6px;margin-bottom:0.3rem;"><div style="background:{ps_color};height:6px;border-radius:2px;width:{ps_bar_width}%;"></div></div>
+            <div style="font-size:0.72rem;color:{ps_color};font-weight:600;">{ps_done} of {ps_total} sections complete ({ps_pct:.0f}%)</div>
+            {f'<div style="font-size:0.68rem;color:{GREY_TEXT};margin-top:0.15rem;">Missing: {", ".join(ps_missing)}</div>' if ps_missing else '<div style="font-size:0.68rem;color:{GREEN};margin-top:0.15rem;">Ready for review</div>'}
+        </div>''', unsafe_allow_html=True)
+
         st.markdown("---")
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Pre-study</span>", unsafe_allow_html=True)
         return
 
-    # ── PROPOSAL PAGE ──────────────────────────────────────────
-    if st.session_state.active_page == "proposal":
-        project_name = st.session_state.project_name
-        data_classification = st.session_state.get("data_classification", "C3 - Confidential")
-        currency = st.session_state.get("currency", "SEK")
-        all_results = st.session_state.get("_all_results", [])
-
-        st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
-            Proposal <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
-        </div>""", unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">One-page decision summary for the Factory Council. Financial figures are auto-populated from the Required Investments analysis where available.</div>', unsafe_allow_html=True)
-
-        # Auto-generate direction from model results if not already set
-        if not st.session_state.prop_direction.strip() and all_results:
-            try:
-                best_name, best_delta = "", 0.0
-                base_om = 0.0
-                for item_data in all_results:
-                    results = item_data.get("results", [])
-                    if len(results) >= 2:
-                        base_om = results[0].get("operating_margin_pct", 0)
-                        for r in results[1:]:
-                            delta = r.get("operating_margin_pct", 0) - base_om
-                            if delta > best_delta:
-                                best_delta = delta
-                                best_name = r.get("name", "")
-                if best_name:
-                    base_name = all_results[0]["results"][0].get("name", "Base") if all_results[0].get("results") else "Base"
-                    st.session_state.prop_direction = (
-                        f"Transfer production from {base_name} to {best_name}, "
-                        f"achieving {best_delta:+.1f}pp operating margin improvement."
-                    )
-            except (KeyError, IndexError):
-                pass
-
-        prop_left, prop_right = st.columns([2, 3])
-        with prop_left:
-            st.markdown(f'<div class="sec-sm">Direction</div>', unsafe_allow_html=True)
-            st.session_state.prop_direction = st.text_area(
-                "Direction", value=st.session_state.prop_direction,
-                key="prop_direction_input", height=160, label_visibility="collapsed",
-                placeholder="Describe the recommended direction and key rationale...")
-
-        with prop_right:
-            # Benefits & Key Details (bundled)
-            st.markdown(f'<div class="sec-sm">Benefits & Key Details</div>', unsafe_allow_html=True)
-            st.session_state.prop_benefits = st.text_area(
-                "Benefits", value=st.session_state.prop_benefits,
-                key="prop_benefits_input", height=140, label_visibility="collapsed",
-                placeholder="List key benefits and relevant details (use bullet points):\n- Margin improvement of X.Xpp\n  - Lower VA cost at receiving site\n- Risk diversification\n- Relevant technical / market details...")
-
-            # Financials & Time Plan — proper numeric inputs
-            st.markdown(f'<div class="sec-sm">Financials & Time Plan</div>', unsafe_allow_html=True)
-            # Auto-populate investment total from model
-            auto_inv = 0.0
-            if all_results:
-                for item_data in all_results:
-                    for ic in item_data.get("investment_cases", []):
-                        auto_inv += ic.get("total_investment", 0)
-            auto_inv_m = auto_inv / 1e6 if auto_inv else 0.0
-
-            fc1, fc2, fc3 = st.columns(3)
-            with fc1:
-                inv_val = st.session_state.prop_total_investment if st.session_state.prop_total_investment is not None else (auto_inv_m if auto_inv_m else None)
-                new_inv = st.number_input(
-                    f"Total Investment (M{currency})", value=inv_val,
-                    min_value=0.0, step=0.5, format="%.1f", key="prop_inv_input")
-                st.session_state.prop_total_investment = new_inv
-                if auto_inv_m > 0:
-                    st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};margin-top:-0.5rem;font-style:italic;">Auto-calculated: {auto_inv_m:.1f} M{currency}</div>', unsafe_allow_html=True)
-            with fc2:
-                new_cash = st.number_input(
-                    f"Cash Out (M{currency})", value=st.session_state.prop_cash_out or 0.0,
-                    min_value=0.0, step=0.5, format="%.1f", key="prop_cash_input")
-                st.session_state.prop_cash_out = new_cash
-            with fc3:
-                st.session_state.prop_timeplan = st.text_input(
-                    "Time Plan", value=st.session_state.prop_timeplan,
-                    key="prop_timeplan_input",
-                    placeholder="e.g. May '25 — Dec '26")
-
-        # Dependencies, Risks & Mitigations (full width)
-        st.markdown(f'<div class="sec-sm">Dependencies, Risks & Mitigations</div>', unsafe_allow_html=True)
-        risk_df = pd.DataFrame(st.session_state.prop_risks)
-        if "Risk" not in risk_df.columns:
-            risk_df = pd.DataFrame([{"Risk": "", "Mitigation": ""}])
-        edited_risks = st.data_editor(
-            risk_df, use_container_width=True, num_rows="dynamic", key="prop_risks_editor",
-            hide_index=True,
-            column_config={
-                "Risk": st.column_config.TextColumn("Risk / Dependency", width=280),
-                "Mitigation": st.column_config.TextColumn("Mitigation", width=320),
-            })
-        st.session_state.prop_risks = edited_risks.to_dict("records")
-
-        # Team — read-only reference from Pre-study
-        st.markdown(f'<div class="sec-sm">Team</div>', unsafe_allow_html=True)
-        team_data = {
-            "Role": ["Initiative Sponsor", "Initiative Lead", "Main Entity(s)", "Pre-study Team"],
-            "Name": [
-                st.session_state.ps_sponsor or "—",
-                st.session_state.ps_lead or "—",
-                st.session_state.ps_main_entity or "—",
-                st.session_state.ps_team.replace("\n", ", ") if st.session_state.ps_team else "—",
-            ],
-        }
-        has_team = any(v != "—" for v in team_data["Name"])
-        if has_team:
-            team_html = '<table class="ib-table"><thead><tr><th>Role</th><th>Name</th></tr></thead><tbody>'
-            for role, name in zip(team_data["Role"], team_data["Name"]):
-                team_html += f'<tr><td>{role}</td><td>{name}</td></tr>'
-            team_html += '</tbody></table>'
-            st.markdown(team_html, unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-style:italic;">Complete the Team section on the Pre-study page to populate this table.</div>', unsafe_allow_html=True)
-
-        st.markdown("---")
-        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Proposal</span>", unsafe_allow_html=True)
-        return
-
-    # ── TRANSFER DETAILS PAGE ──────────────────────────────────
+    # ── TRANSFER FEASIBILITY PAGE ──────────────────────────────────
     if st.session_state.active_page == "transfer":
         project_name = st.session_state.project_name
         data_classification = st.session_state.get("data_classification", "C3 - Confidential")
@@ -4239,7 +4928,7 @@ Compares full cost-to-serve across factory locations, including material, labour
         factory_countries = st.session_state.get("_factory_countries", {})
 
         st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
-            Transfer Details <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
+            Transfer Feasibility <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
         </div>""", unsafe_allow_html=True)
 
         # Auto-populate transfer from/to from factory config if empty
@@ -4321,111 +5010,6 @@ Compares full cost-to-serve across factory locations, including material, labour
             "Financial Requirements": f"background:#A9C0E8;color:{DARK_TEXT};",
         }
 
-        # Compact table CSS — page-level overrides for dense table feel
-        # These apply globally but only render on the Transfer Details page
-        st.markdown(f"""<style>
-        /* ── Transfer Details compact overrides ── */
-        /* Nuclear option: kill ALL spacing in the main block */
-        .stMainBlockContainer [data-testid="stVerticalBlockBorderWrapper"] {{
-            gap: 0 !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer [data-testid="stVerticalBlock"] {{
-            gap: 0 !important;
-        }}
-        .stMainBlockContainer [data-testid="column"] {{
-            padding: 0 !important;
-        }}
-        .stMainBlockContainer [data-testid="column"] > div {{
-            gap: 0 !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer [data-testid="stHorizontalBlock"] {{
-            gap: 0.25rem !important; align-items: center !important;
-            margin-top: 0.1rem !important; margin-bottom: 0.1rem !important;
-        }}
-        /* Kill every wrapper margin/padding */
-        .stMainBlockContainer .element-container {{
-            margin: 0 !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer .stMarkdown {{
-            margin: 0 !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer .stMarkdown p {{
-            margin: 0 !important;
-        }}
-        .stMainBlockContainer .stTextInput,
-        .stMainBlockContainer .stSelectbox,
-        .stMainBlockContainer .stDateInput {{
-            margin: 0 !important; padding: 0 !important;
-        }}
-        /* Text inputs — 1.4rem height */
-        .stMainBlockContainer .stTextInput > div {{
-            padding: 0 !important;
-        }}
-        .stMainBlockContainer .stTextInput > div > div {{
-            padding: 0 !important; min-height: 0 !important;
-        }}
-        .stMainBlockContainer .stTextInput > div > div > input {{
-            font-size: 0.68rem !important; padding: 0.1rem 0.3rem !important;
-            height: 1.4rem !important; min-height: 0 !important;
-            font-family: 'Inter', sans-serif !important; border-radius: 2px !important;
-        }}
-        /* Selectboxes — compact with centered text */
-        .stMainBlockContainer .stSelectbox > div {{
-            padding: 0 !important;
-        }}
-        .stMainBlockContainer .stSelectbox > div > div {{
-            min-height: 0 !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer .stSelectbox [data-baseweb="select"] {{
-            height: 1.4rem !important; min-height: 0 !important;
-        }}
-        .stMainBlockContainer .stSelectbox [data-baseweb="select"] > div {{
-            padding: 0 0.25rem !important; min-height: 0 !important;
-            height: 1.4rem !important; line-height: 1.4rem !important;
-        }}
-        .stMainBlockContainer .stSelectbox [data-baseweb="select"] > div > div {{
-            padding: 0 !important; font-size: 0.68rem !important;
-            font-family: 'Inter', sans-serif !important;
-            line-height: 1.4rem !important;
-        }}
-        .stMainBlockContainer .stSelectbox svg {{
-            width: 0.5rem !important; height: 0.5rem !important;
-            right: 0.2rem !important;
-        }}
-        /* Date inputs — compact with small placeholder */
-        .stMainBlockContainer .stDateInput > div {{
-            padding: 0 !important;
-        }}
-        .stMainBlockContainer .stDateInput > div > div {{
-            min-height: 0 !important; height: 1.4rem !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer .stDateInput [data-baseweb="input"] {{
-            height: 1.4rem !important; min-height: 0 !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer .stDateInput [data-baseweb="input"] > div {{
-            padding: 0 0.25rem !important;
-        }}
-        .stMainBlockContainer .stDateInput input {{
-            font-size: 0.68rem !important; padding: 0 !important;
-            height: 1.4rem !important; min-height: 0 !important;
-            font-family: 'Inter', sans-serif !important;
-        }}
-        .stMainBlockContainer .stDateInput input::placeholder {{
-            font-size: 0.58rem !important; color: #bbb !important;
-            letter-spacing: 0.02em !important;
-        }}
-        .stMainBlockContainer .stDateInput button {{
-            height: 1.4rem !important; width: 1.2rem !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer .stDateInput button svg {{
-            width: 0.5rem !important; height: 0.5rem !important;
-        }}
-        /* Expander compact */
-        .stMainBlockContainer details summary {{
-            font-size: 0.72rem !important; padding: 0.3rem 0.5rem !important;
-        }}
-        </style>""", unsafe_allow_html=True)
-
         # Migrate old data format if needed
         for _sec_name, _sec_rows in td_reqs.items():
             for _row in _sec_rows:
@@ -4436,83 +5020,76 @@ Compares full cost-to-serve across factory locations, including material, labour
                 _row.pop("Required Documents", None)
                 if "Input Type" not in _row:
                     _row["Input Type"] = "yes_no" if "(yes/no)" in _row.get("Requirement", "") else "text"
-                # Migrate (Q) → (Quantity)
                 for _fld in ("Requirement", "Follow-up"):
                     if _fld in _row:
                         _row[_fld] = _row[_fld].replace("(Q)", "(Quantity)")
 
-        # Column header row
-        _hdr_style = f"font-family:Inter,sans-serif;font-size:0.58rem;font-weight:700;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;padding-bottom:0.2rem;"
-        hc1, hc2, hc3, hc4, hc5 = st.columns([3.5, 2, 1.5, 1.2, 1])
-        hc1.markdown(f"<div style='{_hdr_style}'>Requirement</div>", unsafe_allow_html=True)
-        hc2.markdown(f"<div style='{_hdr_style}'>Value / Answer</div>", unsafe_allow_html=True)
-        hc3.markdown(f"<div style='{_hdr_style}'>Approver</div>", unsafe_allow_html=True)
-        hc4.markdown(f"<div style='{_hdr_style}'>Date</div>", unsafe_allow_html=True)
-        hc5.markdown(f"<div style='{_hdr_style}'>Status</div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='border-bottom:2px solid {NAVY};margin:0 0 0.2rem 0;'></div>", unsafe_allow_html=True)
-
-        _yn_opts = ["—", "Yes", "No"]
-
+        # Build a flat table per section for data_editor, then handle follow-ups separately
         for section_name, rows in td_reqs.items():
             style = _section_styles.get(section_name, f"background:{NAVY};color:#fff;")
-            st.markdown(f"""<div style="{style}padding:0.25rem 0.6rem;border-radius:2px 2px 0 0;margin-top:0.5rem;margin-bottom:0.15rem;font-family:Inter,sans-serif;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+            st.markdown(f"""<div style="{style}padding:0.25rem 0.6rem;border-radius:2px 2px 0 0;margin-top:0.5rem;font-family:Inter,sans-serif;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
                 {section_name}
             </div>""", unsafe_allow_html=True)
 
-            for ri, row in enumerate(rows):
-                sec_key = section_name.lower().replace(" ", "_").replace("&", "and")
-                req_label = row["Requirement"]
+            # Build display rows: main requirement + stacked follow-up label
+            display_rows = []
+            for row in rows:
+                req = row["Requirement"]
                 follow_up = row.get("Follow-up", "")
                 condition = row.get("Condition", "")
-                input_type = row.get("Input Type", "text")
+                # Append follow-up label to requirement text
+                if follow_up and condition != "if_no":
+                    req_display = f"{req}\n↳ {follow_up}"
+                else:
+                    req_display = req
+                display_rows.append({
+                    "Requirement": req_display,
+                    "Value": row.get("Value", ""),
+                    "Approver": row.get("Approver", ""),
+                    "Date": row.get("Date", ""),
+                    "Status": row.get("Status", "Pending"),
+                })
 
-                # Main question row
-                c_req, c_val, c_approver, c_date, c_status = st.columns([3.5, 2, 1.5, 1.2, 1])
-                with c_req:
-                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.68rem;color:{DARK_TEXT};padding:0.1rem 0;line-height:1.25;'>{req_label}</div>", unsafe_allow_html=True)
-                with c_val:
-                    if input_type == "yes_no":
-                        _cur_val = row.get("Value", "")
-                        _yi = _yn_opts.index(_cur_val) if _cur_val in _yn_opts else 0
-                        row["Value"] = st.selectbox("val", _yn_opts, index=_yi, key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed")
-                    else:
-                        row["Value"] = st.text_input("val", value=row.get("Value", ""), key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed")
-                with c_approver:
-                    row["Approver"] = st.text_input("apr", value=row.get("Approver", ""), key=f"td_{sec_key}_{ri}_apr", label_visibility="collapsed")
-                with c_date:
-                    _cur_date = row.get("Date", "")
-                    _date_val = None
-                    if _cur_date:
-                        try:
-                            from datetime import datetime as _dt
-                            _date_val = _dt.strptime(_cur_date, "%Y-%m-%d").date()
-                        except (ValueError, TypeError):
-                            _date_val = None
-                    _picked = st.date_input("dt", value=_date_val, key=f"td_{sec_key}_{ri}_dt", label_visibility="collapsed")
-                    row["Date"] = _picked.strftime("%Y-%m-%d") if _picked else ""
-                with c_status:
-                    _status_opts = ["Pending", "Approved", "Rejected"]
-                    _cur_status = row.get("Status", "Pending")
-                    _si = _status_opts.index(_cur_status) if _cur_status in _status_opts else 0
-                    row["Status"] = st.selectbox("st", _status_opts, index=_si, key=f"td_{sec_key}_{ri}_st", label_visibility="collapsed")
+            sec_key = section_name.lower().replace(" ", "_").replace("&", "and")
+            section_df = pd.DataFrame(display_rows)
 
-                # Follow-up question (stacked below, with conditional logic for "if_no")
-                if follow_up:
-                    show_follow_up = True
-                    if condition == "if_no":
-                        main_val = (row.get("Value", "") or "").strip().lower()
-                        show_follow_up = main_val in ("no", "n")
+            # Determine which rows are yes/no type for the Value column
+            yn_rows = [i for i, r in enumerate(rows) if r.get("Input Type") == "yes_no"]
 
-                    if show_follow_up:
-                        c_fq, c_fa, _, _, _ = st.columns([3.5, 2, 1.5, 1.2, 1])
-                        with c_fq:
-                            _prefix = "If no: " if condition == "if_no" else ""
-                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.62rem;color:{GREY_TEXT};padding:0 0 0.05rem 0.8rem;font-style:italic;line-height:1.2;'>↳ {_prefix}{follow_up}</div>", unsafe_allow_html=True)
-                        with c_fa:
-                            row["Follow-up Answer"] = st.text_input("fua", value=row.get("Follow-up Answer", ""), key=f"td_{sec_key}_{ri}_fua", label_visibility="collapsed")
+            edited = st.data_editor(
+                section_df, use_container_width=True, num_rows="fixed",
+                key=f"td_{sec_key}_editor", hide_index=True,
+                column_config={
+                    "Requirement": st.column_config.TextColumn("Requirement", disabled=True, width=280),
+                    "Value": st.column_config.TextColumn("Value / Answer", width=140),
+                    "Approver": st.column_config.TextColumn("Approver", width=120),
+                    "Date": st.column_config.TextColumn("Date", width=90),
+                    "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "Approved", "Rejected"], width=90),
+                },
+                disabled=["Requirement"])
 
-                # Thin separator
-                st.markdown(f"<div style='border-bottom:1px solid #eee;margin:0;'></div>", unsafe_allow_html=True)
+            # Write back edited values
+            edited_records = edited.to_dict("records")
+            for i, rec in enumerate(edited_records):
+                rows[i]["Value"] = rec.get("Value", "")
+                rows[i]["Approver"] = rec.get("Approver", "")
+                rows[i]["Date"] = rec.get("Date", "")
+                rows[i]["Status"] = rec.get("Status", "Pending")
+
+            # Render conditional follow-up inputs (only for "if_no" rows where answer is No)
+            for ri, row in enumerate(rows):
+                condition = row.get("Condition", "")
+                follow_up = row.get("Follow-up", "")
+                if condition == "if_no" and follow_up:
+                    main_val = (row.get("Value", "") or "").strip().lower()
+                    if main_val in ("no", "n"):
+                        c1, c2 = st.columns([3.5, 6.5])
+                        with c1:
+                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};padding:0.15rem 0 0.15rem 1rem;font-style:italic;'>↳ If no: {follow_up}</div>", unsafe_allow_html=True)
+                        with c2:
+                            row["Follow-up Answer"] = st.text_input(
+                                "fua", value=row.get("Follow-up Answer", ""),
+                                key=f"td_{sec_key}_{ri}_fua", label_visibility="collapsed")
 
         st.session_state.td_requirements = td_reqs
 
@@ -4531,8 +5108,573 @@ Compares full cost-to-serve across factory locations, including material, labour
             <div><span style="display:inline-block;width:8px;height:8px;background:#F8D7DA;border:1px solid #721C24;border-radius:2px;margin-right:0.2rem;"></span>Rejected: <strong>{rejected}</strong></div>
         </div>""", unsafe_allow_html=True)
 
+        # ── CUSTOMER RE-QUALIFICATION TRACKER ────────────────────
+        st.markdown(f'<div class="sec">Customer Re-qualification Tracker</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Track customer-specific re-qualification requirements. For automotive and aerospace customers this can be a 12\u201324 month gate that must be planned alongside the transfer timeline.</div>', unsafe_allow_html=True)
+
+        cq_df = pd.DataFrame(st.session_state.td_customer_requalification)
+        if "Customer" not in cq_df.columns:
+            cq_df = pd.DataFrame([{"Customer": "", "Product / SKU": "", "Requirement": "", "Lead Time (months)": 0, "Status": "Not Started", "Owner": "", "Target Date": ""}])
+        edited_cq = st.data_editor(
+            cq_df, use_container_width=True, num_rows="dynamic", key="td_cq_editor",
+            hide_index=True,
+            column_config={
+                "Customer": st.column_config.TextColumn("Customer", width=150),
+                "Product / SKU": st.column_config.TextColumn("Product / SKU", width=130),
+                "Requirement": st.column_config.TextColumn("Qualification Requirement", width=180),
+                "Lead Time (months)": st.column_config.NumberColumn("Lead Time (mo)", min_value=0, step=1, format="%d", width=90),
+                "Status": st.column_config.SelectboxColumn("Status", options=["Not Started", "In Progress", "Submitted", "Approved", "Rejected", "Waived"], width=100),
+                "Owner": st.column_config.TextColumn("Owner", width=110),
+                "Target Date": st.column_config.TextColumn("Target Date", width=100),
+            })
+        st.session_state.td_customer_requalification = edited_cq.to_dict("records")
+
+        # Customer re-qual summary
+        cq_statuses = {}
+        for cq in st.session_state.td_customer_requalification:
+            s = cq.get("Status", "Not Started")
+            cq_statuses[s] = cq_statuses.get(s, 0) + 1
+        if any(cq.get("Customer", "").strip() for cq in st.session_state.td_customer_requalification):
+            cq_colors = {"Approved": GREEN, "In Progress": ACCENT_BLUE, "Submitted": "#e6a817", "Not Started": GREY_TEXT, "Rejected": RED, "Waived": MUTED}
+            cq_parts = " ".join(f'<span style="color:{cq_colors.get(k, GREY_TEXT)};font-weight:600;">{v} {k}</span>' for k, v in cq_statuses.items() if v > 0)
+            max_lt = max((int(cq.get("Lead Time (months)", 0) or 0) for cq in st.session_state.td_customer_requalification), default=0)
+            cq_parts += f' &emsp;|&emsp; Longest lead time: <strong>{max_lt} months</strong>' if max_lt > 0 else ""
+            st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};margin:0.3rem 0 0.6rem 0;padding:0.4rem 0.8rem;background:#fafbfc;border:1px solid {BORDER};border-radius:2px;">{cq_parts}</div>', unsafe_allow_html=True)
+
+        # ── TAX & TRANSFER PRICING ────────────────────────────────
+        st.markdown(f'<div class="sec">Tax & Transfer Pricing</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Intercompany pricing, withholding taxes, permanent establishment risk, and tax incentives. These can materially affect the net landed cost but are often overlooked in initial comparisons.</div>', unsafe_allow_html=True)
+
+        ttp = st.session_state.td_tax_transfer_pricing
+        tc1, tc2 = st.columns(2)
+        with tc1:
+            ttp["intercompany_margin"] = st.text_input("Intercompany Margin Approach", value=ttp.get("intercompany_margin", ""), key="td_ttp_ic_margin", placeholder="e.g. Cost-plus 5%, arm's length")
+            ttp["withholding_tax"] = st.text_input("Withholding Tax (%)", value=ttp.get("withholding_tax", ""), key="td_ttp_wht", placeholder="e.g. 10% on royalties, 0% under treaty")
+            ttp["pe_risk"] = st.text_input("Permanent Establishment Risk", value=ttp.get("pe_risk", ""), key="td_ttp_pe", placeholder="e.g. No PE risk — independent entity")
+        with tc2:
+            ttp["tax_incentives"] = st.text_input("Tax Incentives / Grants", value=ttp.get("tax_incentives", ""), key="td_ttp_incentives", placeholder="e.g. 5-year tax holiday, investment grant")
+            ttp["ftz_benefits"] = st.text_input("Free Trade Zone / SEZ Benefits", value=ttp.get("ftz_benefits", ""), key="td_ttp_ftz", placeholder="e.g. Duty-free imports for re-export")
+            ttp["rd_credits"] = st.text_input("R&D Credits / Patent Box", value=ttp.get("rd_credits", ""), key="td_ttp_rd", placeholder="e.g. 25% R&D tax credit applicable")
+        ttp["notes"] = st.text_area("Tax & Transfer Pricing Notes", value=ttp.get("notes", ""), key="td_ttp_notes", height=60, placeholder="Key assumptions, open questions, advisors consulted...")
+        st.session_state.td_tax_transfer_pricing = ttp
+
+        # ── ESG / CARBON IMPACT ───────────────────────────────────
+        st.markdown(f'<div class="sec">ESG & Carbon Impact</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Environmental impact of the proposed transfer. Longer supply chains increase Scope 3 emissions. EU CBAM (Carbon Border Adjustment Mechanism) may create material cost exposure for carbon-intensive imports.</div>', unsafe_allow_html=True)
+
+        esg = st.session_state.td_esg
+        ec1, ec2 = st.columns(2)
+        with ec1:
+            esg["scope3_current"] = st.text_input("Scope 3 — Current Setup (tCO\u2082/yr)", value=esg.get("scope3_current", ""), key="td_esg_s3_curr", placeholder="e.g. 1,200 tCO\u2082/yr")
+            esg["scope3_proposed"] = st.text_input("Scope 3 — Proposed Setup (tCO\u2082/yr)", value=esg.get("scope3_proposed", ""), key="td_esg_s3_prop", placeholder="e.g. 2,400 tCO\u2082/yr (longer transport)")
+        with ec2:
+            esg["cbam_exposure"] = st.text_input("EU CBAM Exposure", value=esg.get("cbam_exposure", ""), key="td_esg_cbam", placeholder="e.g. Not applicable / \u20ac50k/yr estimated")
+            esg["carbon_offset_plan"] = st.text_input("Carbon Offset / Mitigation Plan", value=esg.get("carbon_offset_plan", ""), key="td_esg_offset", placeholder="e.g. Rail transport, renewable energy at receiving site")
+        esg["sustainability_notes"] = st.text_area("Sustainability Notes", value=esg.get("sustainability_notes", ""), key="td_esg_notes", height=60, placeholder="Impact on sustainability reporting, customer ESG requirements, board-level considerations...")
+        st.session_state.td_esg = esg
+
+        # ── STEADY-STATE OPERATING MODEL ─────────────────────────
+        st.markdown(f'<div class="sec">Steady-State Operating Model</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Define the expected ramp trajectory. What does Month 3, 6, 12, and 24 look like? Include yield targets, volume ramp, quality KPIs, and dual-sourcing costs during transition.</div>', unsafe_allow_html=True)
+
+        ss_df = pd.DataFrame(st.session_state.td_steady_state)
+        if "Milestone" not in ss_df.columns:
+            ss_df = pd.DataFrame([{"Milestone": "Month 3", "Yield %": "", "Volume %": "", "Quality KPI": "", "Dual-Source Cost": "", "Notes": ""}])
+        edited_ss = st.data_editor(
+            ss_df, use_container_width=True, num_rows="dynamic", key="td_ss_editor",
+            hide_index=True,
+            column_config={
+                "Milestone": st.column_config.TextColumn("Milestone", width=100),
+                "Yield %": st.column_config.TextColumn("Yield Target", width=100),
+                "Volume %": st.column_config.TextColumn("Volume Ramp %", width=100),
+                "Quality KPI": st.column_config.TextColumn("Quality KPI", width=140),
+                "Dual-Source Cost": st.column_config.TextColumn("Dual-Source Cost", width=120),
+                "Notes": st.column_config.TextColumn("Notes", width=180),
+            })
+        st.session_state.td_steady_state = edited_ss.to_dict("records")
+
+        # ── TRANSFER FEASIBILITY COMPLETENESS ──────────────────
+        td_fields = {
+            "Transfer From": bool(st.session_state.td_transfer_from.strip()),
+            "Transfer To": bool(st.session_state.td_transfer_to.strip()),
+            "Product Line": bool(st.session_state.td_product_line.strip()),
+        }
+        # Count requirements with answers
+        td_reqs = st.session_state.get("td_requirements", {})
+        td_answered = 0
+        td_total_reqs = 0
+        for section, reqs in td_reqs.items():
+            for req in reqs:
+                td_total_reqs += 1
+                if req.get("Value", "").strip() or req.get("Status", "") in ("Approved", "Rejected"):
+                    td_answered += 1
+        td_fields["Requirements Answered"] = td_total_reqs > 0 and td_answered >= td_total_reqs * 0.5
+        td_done = sum(td_fields.values())
+        td_total = len(td_fields)
+        td_pct = td_done / td_total * 100
+        td_color = GREEN if td_pct == 100 else ("#e6a817" if td_pct >= 50 else RED)
+        td_missing = [k for k, v in td_fields.items() if not v]
+        td_bar_width = max(td_pct, 2)
+        st.markdown(f'''<div style="margin:1rem 0 0.5rem 0;font-family:Inter,sans-serif;">
+            <div style="font-size:0.67rem;font-weight:700;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.3rem;">Transfer Feasibility Completeness</div>
+            <div style="background:#eee;border-radius:2px;height:6px;margin-bottom:0.3rem;"><div style="background:{td_color};height:6px;border-radius:2px;width:{td_bar_width}%;"></div></div>
+            <div style="font-size:0.72rem;color:{td_color};font-weight:600;">{td_done} of {td_total} sections complete ({td_pct:.0f}%){f" | {td_answered}/{td_total_reqs} requirements answered" if td_total_reqs > 0 else ""}</div>
+            {f'<div style="font-size:0.68rem;color:{GREY_TEXT};margin-top:0.15rem;">Missing: {", ".join(td_missing)}</div>' if td_missing else f'<div style="font-size:0.68rem;color:{GREEN};margin-top:0.15rem;">Ready for review</div>'}
+        </div>''', unsafe_allow_html=True)
+
         st.markdown("---")
-        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Transfer Details</span>", unsafe_allow_html=True)
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Transfer Feasibility</span>", unsafe_allow_html=True)
+        return
+
+    # ── PROPOSAL PAGE ──────────────────────────────────────────
+    if st.session_state.active_page == "proposal":
+        project_name = st.session_state.project_name
+        data_classification = st.session_state.get("data_classification", "C3 - Confidential")
+        currency = st.session_state.get("currency", "SEK")
+        all_results = st.session_state.get("_all_results", [])
+
+        st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
+            Proposal <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
+        </div>""", unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Decision summary for the Factory Council. Includes structured recommendation, quantified risk exposure, milestone tracking, and formal approval log. Financial figures are auto-populated from the Required Investments analysis where available.</div>', unsafe_allow_html=True)
+
+        # ── CLASSIFICATION-AWARE CALLOUT (PROPOSAL) ───────────
+        _has_restr_prop = False
+        for _item_res in all_results:
+            for _ic in _item_res.get("investment_cases", []):
+                if _ic.get("restructuring", 0) > 0:
+                    _has_restr_prop = True
+                    break
+        _is_c4_prop = "C4" in data_classification
+        _wf_hc_prop = st.session_state.get("ps_workforce_headcount_from", 0)
+        if _has_restr_prop or _is_c4_prop or _wf_hc_prop > 0:
+            _c4b = RED if _is_c4_prop else "#e6a817"
+            _c4l = "C4 — Strictly Confidential" if _is_c4_prop else "Classification Review Recommended"
+            _c4h = "" if _is_c4_prop else " Consider upgrading from the project header."
+            st.markdown(f'<div style="background:#fef9f0;border-left:4px solid {_c4b};padding:0.5rem 1rem;margin:0.2rem 0 0.6rem 0;font-family:Inter,sans-serif;font-size:0.72rem;"><strong style="color:{_c4b};">{_c4l}</strong> — Restructuring or workforce impact detected. Restrict distribution to named recipients.{_c4h}</div>', unsafe_allow_html=True)
+
+        # ── RECOMMENDATION ─────────────────────────────────────
+        st.markdown(f'<div class="sec">Recommendation</div>', unsafe_allow_html=True)
+
+        # Pull conclusion from Analysis Summary if available
+        conclusion_opt = st.session_state.get("conclusion_selected_option", "")
+        conclusion_dec = st.session_state.get("conclusion_decision", "")
+        if conclusion_opt and not st.session_state.prop_direction.strip():
+            st.session_state.prop_direction = f"Recommended location: {conclusion_opt}"
+
+        rec_c1, rec_c2 = st.columns([1, 2])
+        with rec_c1:
+            rec_options = ["", "Go", "Conditional Go", "No-Go"]
+            current_rec_idx = 0
+            if st.session_state.prop_recommendation in rec_options:
+                current_rec_idx = rec_options.index(st.session_state.prop_recommendation)
+            # Auto-populate from conclusion gate if empty
+            if not st.session_state.prop_recommendation and conclusion_dec in rec_options:
+                st.session_state.prop_recommendation = conclusion_dec
+                current_rec_idx = rec_options.index(conclusion_dec) if conclusion_dec in rec_options else 0
+            recommendation = st.selectbox(
+                "Recommendation to Factory Council",
+                options=rec_options,
+                index=current_rec_idx,
+                key="prop_rec_select",
+                format_func=lambda x: x if x else "— Select recommendation —",
+            )
+            st.session_state.prop_recommendation = recommendation
+
+            # Recommendation verdict box
+            if recommendation:
+                rec_colors = {"Go": GREEN, "Conditional Go": "#e6a817", "No-Go": RED}
+                rec_icons = {"Go": "\u2714", "Conditional Go": "\u26a0", "No-Go": "\u2716"}
+                rc = rec_colors.get(recommendation, NAVY)
+                ri = rec_icons.get(recommendation, "")
+                st.markdown(f'''<div style="background:#f8f9fb;border:1px solid {BORDER};border-left:4px solid {rc};padding:0.7rem 1rem;margin:0.4rem 0;font-family:Inter,sans-serif;">
+                    <div style="font-size:1rem;font-weight:700;color:{rc};">{ri} {recommendation}</div>
+                </div>''', unsafe_allow_html=True)
+
+            if recommendation == "Conditional Go":
+                st.session_state.prop_conditions = st.text_area(
+                    "Conditions for Proceeding",
+                    value=st.session_state.prop_conditions,
+                    key="prop_conditions_input", height=80,
+                    placeholder="List conditions that must be met:\n- Customer approval obtained\n- Quality audit passed\n- FX hedge in place...")
+
+        with rec_c2:
+            st.markdown(f'<div class="sec-sm">Direction</div>', unsafe_allow_html=True)
+            st.session_state.prop_direction = st.text_area(
+                "Direction", value=st.session_state.prop_direction,
+                key="prop_direction_input", height=120, label_visibility="collapsed",
+                placeholder="Describe the recommended direction and key rationale...")
+
+            st.markdown(f'<div class="sec-sm">Benefits & Key Details</div>', unsafe_allow_html=True)
+            st.session_state.prop_benefits = st.text_area(
+                "Benefits", value=st.session_state.prop_benefits,
+                key="prop_benefits_input", height=100, label_visibility="collapsed",
+                placeholder="List key benefits (use bullet points):\n- Margin improvement of X.Xpp\n- Risk diversification\n- Capacity headroom...")
+
+        # ── FINANCIALS & TIME PLAN ─────────────────────────────
+        st.markdown(f'<div class="sec-sm">Financials & Time Plan</div>', unsafe_allow_html=True)
+        auto_inv = 0.0
+        if all_results:
+            for item_data in all_results:
+                for ic in item_data.get("investment_cases", []):
+                    auto_inv += ic.get("total_investment", 0)
+        auto_inv_m = auto_inv / 1e6 if auto_inv else 0.0
+
+        fc1, fc2, fc3 = st.columns(3)
+        with fc1:
+            inv_val = st.session_state.prop_total_investment if st.session_state.prop_total_investment is not None else (auto_inv_m if auto_inv_m else None)
+            new_inv = st.number_input(
+                f"Total Investment (M{currency})", value=inv_val,
+                min_value=0.0, step=0.5, format="%.1f", key="prop_inv_input")
+            st.session_state.prop_total_investment = new_inv
+            if auto_inv_m > 0:
+                st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};margin-top:-0.5rem;font-style:italic;">Auto-calculated: {auto_inv_m:.1f} M{currency}</div>', unsafe_allow_html=True)
+        with fc2:
+            new_cash = st.number_input(
+                f"Cash Out (M{currency})", value=st.session_state.prop_cash_out or 0.0,
+                min_value=0.0, step=0.5, format="%.1f", key="prop_cash_input")
+            st.session_state.prop_cash_out = new_cash
+        with fc3:
+            st.session_state.prop_timeplan = st.text_input(
+                "Time Plan", value=st.session_state.prop_timeplan,
+                key="prop_timeplan_input",
+                placeholder="e.g. May '25 — Dec '26")
+
+        # ── QUANTIFIED RISK EXPOSURE ───────────────────────────
+        st.markdown(f'<div class="sec">Risk Exposure</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Quantify each risk with probability and financial impact. This enables the Factory Council to weigh the total risk-adjusted exposure against the expected benefits.</div>', unsafe_allow_html=True)
+
+        rexp_df = pd.DataFrame(st.session_state.prop_risk_exposure)
+        if "Risk" not in rexp_df.columns:
+            rexp_df = pd.DataFrame([{"Risk": "", "Probability": "Medium", "Impact (M)": 0.0, "Mitigation": ""}])
+        edited_rexp = st.data_editor(
+            rexp_df, use_container_width=True, num_rows="dynamic", key="prop_rexp_editor",
+            hide_index=True,
+            column_config={
+                "Risk": st.column_config.TextColumn("Risk / Dependency", width=220),
+                "Probability": st.column_config.SelectboxColumn("Probability", options=["Low", "Medium", "High"], width=100),
+                "Impact (M)": st.column_config.NumberColumn(f"Impact (M{currency})", format="%.1f", min_value=0.0, width=120),
+                "Mitigation": st.column_config.TextColumn("Mitigation Strategy", width=260),
+            })
+        st.session_state.prop_risk_exposure = edited_rexp.to_dict("records")
+
+        # Risk exposure summary
+        prob_weights = {"Low": 0.15, "Medium": 0.40, "High": 0.75}
+        total_exposure = 0.0
+        weighted_exposure = 0.0
+        for rr in st.session_state.prop_risk_exposure:
+            impact = float(rr.get("Impact (M)", 0) or 0)
+            total_exposure += impact
+            weighted_exposure += impact * prob_weights.get(rr.get("Probability", "Medium"), 0.40)
+        if total_exposure > 0:
+            st.markdown(f'''<div style="display:flex;gap:1.5rem;margin:0.4rem 0 0.6rem 0;font-family:Inter,sans-serif;">
+                <div class="kpi" style="flex:1;"><div class="lbl">Total Gross Exposure</div><div class="val">{total_exposure:.1f} M{currency}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Probability-Weighted Exposure</div><div class="val" style="color:{RED if weighted_exposure > (st.session_state.prop_total_investment or 0) * 0.3 else NAVY};">{weighted_exposure:.1f} M{currency}</div><div class="det">Low=15%, Medium=40%, High=75%</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Exposure / Investment Ratio</div><div class="val">{weighted_exposure / st.session_state.prop_total_investment * 100:.0f}%</div><div class="det">of total investment</div></div>
+            </div>''', unsafe_allow_html=True) if st.session_state.prop_total_investment and st.session_state.prop_total_investment > 0 else st.markdown(f'''<div style="display:flex;gap:1.5rem;margin:0.4rem 0 0.6rem 0;font-family:Inter,sans-serif;">
+                <div class="kpi" style="flex:1;"><div class="lbl">Total Gross Exposure</div><div class="val">{total_exposure:.1f} M{currency}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Probability-Weighted Exposure</div><div class="val">{weighted_exposure:.1f} M{currency}</div><div class="det">Low=15%, Medium=40%, High=75%</div></div>
+            </div>''', unsafe_allow_html=True)
+
+        # ── MILESTONE TRACKER ──────────────────────────────────
+        st.markdown(f'<div class="sec">Milestone Tracker</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Track key execution milestones with clear ownership and target dates. Each milestone should have a single accountable owner.</div>', unsafe_allow_html=True)
+
+        ms_df = pd.DataFrame(st.session_state.prop_milestones)
+        if "Milestone" not in ms_df.columns:
+            ms_df = pd.DataFrame([{"Milestone": "", "Owner": "", "Target Date": "", "Status": "Pending"}])
+        edited_ms = st.data_editor(
+            ms_df, use_container_width=True, num_rows="dynamic", key="prop_milestones_editor",
+            hide_index=True,
+            column_config={
+                "Milestone": st.column_config.TextColumn("Milestone", width=250),
+                "Owner": st.column_config.TextColumn("Accountable Owner", width=160),
+                "Target Date": st.column_config.TextColumn("Target Date", width=120),
+                "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "In Progress", "Complete", "At Risk", "Blocked"], width=110),
+            })
+        st.session_state.prop_milestones = edited_ms.to_dict("records")
+
+        # Milestone summary bar
+        ms_counts = {"Pending": 0, "In Progress": 0, "Complete": 0, "At Risk": 0, "Blocked": 0}
+        for ms in st.session_state.prop_milestones:
+            s = ms.get("Status", "Pending")
+            if s in ms_counts:
+                ms_counts[s] += 1
+        total_ms = sum(ms_counts.values())
+        if total_ms > 0 and any(ms.get("Milestone", "").strip() for ms in st.session_state.prop_milestones):
+            ms_colors = {"Complete": GREEN, "In Progress": ACCENT_BLUE, "Pending": GREY_TEXT, "At Risk": "#e6a817", "Blocked": RED}
+            ms_parts = " ".join(
+                f'<span style="color:{ms_colors.get(k, GREY_TEXT)};font-weight:600;">{v} {k}</span>'
+                for k, v in ms_counts.items() if v > 0
+            )
+            st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};margin:0.3rem 0 0.6rem 0;padding:0.4rem 0.8rem;background:#fafbfc;border:1px solid {BORDER};border-radius:2px;">{ms_parts}</div>', unsafe_allow_html=True)
+
+        # ── IMPLEMENTATION STRATEGY ────────────────────────────
+        st.markdown(f'<div class="sec">Implementation Strategy</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Phase-gate execution plan. Each phase requires go/no-go approval before proceeding to the next.</div>', unsafe_allow_html=True)
+
+        impl_df = pd.DataFrame(st.session_state.prop_impl_phases)
+        if "Phase" not in impl_df.columns:
+            impl_df = pd.DataFrame([{"Phase": "", "Description": "", "Go/No-Go Criteria": "", "Duration": "", "Status": "Pending"}])
+        edited_impl = st.data_editor(
+            impl_df, use_container_width=True, num_rows="dynamic", key="prop_impl_editor",
+            hide_index=True,
+            column_config={
+                "Phase": st.column_config.TextColumn("Phase", width=160),
+                "Description": st.column_config.TextColumn("Key Activities", width=210),
+                "Go/No-Go Criteria": st.column_config.TextColumn("Go/No-Go Criteria", width=210),
+                "Duration": st.column_config.TextColumn("Duration", width=90),
+                "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "In Progress", "Complete", "At Risk", "Blocked"], width=110),
+            })
+        st.session_state.prop_impl_phases = edited_impl.to_dict("records")
+
+        # Phase summary bar
+        ph_counts = {"Pending": 0, "In Progress": 0, "Complete": 0, "At Risk": 0, "Blocked": 0}
+        for ph in st.session_state.prop_impl_phases:
+            s = ph.get("Status", "Pending")
+            if s in ph_counts:
+                ph_counts[s] += 1
+        total_ph = sum(ph_counts.values())
+        if total_ph > 0 and any(ph.get("Phase", "").strip() for ph in st.session_state.prop_impl_phases):
+            ph_colors = {"Complete": GREEN, "In Progress": ACCENT_BLUE, "Pending": GREY_TEXT, "At Risk": "#e6a817", "Blocked": RED}
+            ph_parts = " ".join(
+                f'<span style="color:{ph_colors.get(k, GREY_TEXT)};font-weight:600;">{v} {k}</span>'
+                for k, v in ph_counts.items() if v > 0
+            )
+            st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};margin:0.3rem 0 0.6rem 0;padding:0.4rem 0.8rem;background:#fafbfc;border:1px solid {BORDER};border-radius:2px;">{ph_parts}</div>', unsafe_allow_html=True)
+
+        # ── WORKFORCE IMPACT (PROPOSAL) ───────────────────────
+        st.markdown(f'<div class="sec">Workforce & Organizational Impact</div>', unsafe_allow_html=True)
+        _wf_from = st.session_state.get("ps_workforce_headcount_from", 0)
+        _wf_to = st.session_state.get("ps_workforce_headcount_to", 0)
+        _wf_consult = st.session_state.get("ps_workforce_consultation_required", "")
+        _wf_social = st.session_state.get("ps_workforce_social_plan", "")
+        if _wf_from > 0 or _wf_to > 0:
+            st.markdown(f'''<div style="display:flex;gap:1.5rem;margin:0.2rem 0 0.5rem 0;font-family:Inter,sans-serif;">
+                <div class="kpi" style="flex:1;"><div class="lbl">FTE Sending</div><div class="val" style="color:{RED};">{_wf_from}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">FTE Receiving</div><div class="val" style="color:{GREEN};">{_wf_to}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Net FTE</div><div class="val">{_wf_to - _wf_from:+d}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Consultation</div><div class="val" style="font-size:0.82rem;">{_wf_consult or "—"}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Social Plan</div><div class="val" style="font-size:0.82rem;">{_wf_social.split("—")[0].strip() if _wf_social else "—"}</div></div>
+            </div>''', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-style:italic;">Complete the Workforce section on the Pre-study page to populate this summary.</div>', unsafe_allow_html=True)
+
+        wfp_c1, wfp_c2, wfp_c3 = st.columns(3)
+        with wfp_c1:
+            st.session_state.prop_severance_cost = st.number_input(
+                f"Severance / Social Plan (M{currency})", value=st.session_state.prop_severance_cost,
+                min_value=0.0, step=0.1, format="%.1f", key="prop_sev_input")
+        with wfp_c2:
+            st.session_state.prop_retraining_cost = st.number_input(
+                f"Retraining / Recruitment (M{currency})", value=st.session_state.prop_retraining_cost,
+                min_value=0.0, step=0.1, format="%.1f", key="prop_retrain_input")
+        with wfp_c3:
+            st.session_state.prop_workforce_timeline = st.text_input(
+                "Notification Timeline", value=st.session_state.prop_workforce_timeline,
+                key="prop_wf_timeline_input",
+                placeholder="e.g. Q2 '25 — works council, Q3 '25 — notices")
+        _wf_total_cost = st.session_state.prop_severance_cost + st.session_state.prop_retraining_cost
+        if _wf_total_cost > 0:
+            st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-family:Inter,sans-serif;margin:0.1rem 0 0.2rem 0;"><strong>Total Workforce Cost:</strong> {_wf_total_cost:.1f} M{currency}</div>', unsafe_allow_html=True)
+        st.session_state.prop_workforce_notes = st.text_area(
+            "Workforce Notes", value=st.session_state.prop_workforce_notes,
+            key="prop_wf_notes_input", height=50,
+            placeholder="Knowledge transfer plan, retention incentives, redeployment options...")
+
+        # ── COMMUNICATION PLAN ────────────────────────────────
+        st.markdown(f'<div class="sec">Communication Plan</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Stakeholder communication matrix. Define who is informed, when, and through which channel. Premature disclosure can trigger talent flight and supplier disruption.</div>', unsafe_allow_html=True)
+
+        comm_df = pd.DataFrame(st.session_state.prop_comm_plan)
+        if "Stakeholder" not in comm_df.columns:
+            comm_df = pd.DataFrame([{"Stakeholder": "", "What": "", "When": "", "Channel": "", "Owner": ""}])
+        edited_comm = st.data_editor(
+            comm_df, use_container_width=True, num_rows="dynamic", key="prop_comm_editor",
+            hide_index=True,
+            column_config={
+                "Stakeholder": st.column_config.TextColumn("Stakeholder Group", width=160),
+                "What": st.column_config.TextColumn("Message / Scope", width=210),
+                "When": st.column_config.TextColumn("Timing", width=110),
+                "Channel": st.column_config.SelectboxColumn("Channel", options=["1:1 Meeting", "Town Hall", "Written Notice", "Email", "Board Memo", "Press Release", "Works Council Session"], width=140),
+                "Owner": st.column_config.TextColumn("Owner", width=130),
+            })
+        st.session_state.prop_comm_plan = edited_comm.to_dict("records")
+
+        # ── DEPENDENCIES, RISKS & MITIGATIONS (legacy) ─────────
+        st.markdown(f'<div class="sec-sm">Dependencies, Risks & Mitigations</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-bottom:0.3rem;font-family:Inter,sans-serif;">Qualitative risk register. For quantified impact assessment, use the Risk Exposure section above.</div>', unsafe_allow_html=True)
+        risk_df = pd.DataFrame(st.session_state.prop_risks)
+        if "Risk" not in risk_df.columns:
+            risk_df = pd.DataFrame([{"Risk": "", "Mitigation": ""}])
+        edited_risks = st.data_editor(
+            risk_df, use_container_width=True, num_rows="dynamic", key="prop_risks_editor",
+            hide_index=True,
+            column_config={
+                "Risk": st.column_config.TextColumn("Risk / Dependency", width=280),
+                "Mitigation": st.column_config.TextColumn("Mitigation", width=320),
+            })
+        st.session_state.prop_risks = edited_risks.to_dict("records")
+
+        # ── APPROVAL LOG ───────────────────────────────────────
+        st.markdown(f'<div class="sec">Approval & Decision Log</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Record formal approvals from each decision-maker. This creates an auditable trail for the Factory Council governance process.</div>', unsafe_allow_html=True)
+
+        appr_df = pd.DataFrame(st.session_state.prop_approvals)
+        if "Approver" not in appr_df.columns:
+            appr_df = pd.DataFrame([{"Approver": "", "Role": "", "Decision": "", "Date": "", "Comments": ""}])
+        edited_appr = st.data_editor(
+            appr_df, use_container_width=True, num_rows="dynamic", key="prop_approvals_editor",
+            hide_index=True,
+            column_config={
+                "Approver": st.column_config.TextColumn("Approver Name", width=160),
+                "Role": st.column_config.TextColumn("Role / Function", width=140),
+                "Decision": st.column_config.SelectboxColumn("Decision", options=["", "Approved", "Approved with Conditions", "Rejected", "Deferred"], width=160),
+                "Date": st.column_config.TextColumn("Date", width=100),
+                "Comments": st.column_config.TextColumn("Comments / Conditions", width=220),
+            })
+        st.session_state.prop_approvals = edited_appr.to_dict("records")
+
+        # Approval summary
+        appr_counts = {"Approved": 0, "Approved with Conditions": 0, "Rejected": 0, "Deferred": 0, "Pending": 0}
+        for ap in st.session_state.prop_approvals:
+            d = ap.get("Decision", "")
+            if d in appr_counts:
+                appr_counts[d] += 1
+            elif ap.get("Approver", "").strip() and not d:
+                appr_counts["Pending"] += 1
+        total_appr = sum(appr_counts.values())
+        if total_appr > 0 and any(ap.get("Approver", "").strip() for ap in st.session_state.prop_approvals):
+            appr_colors = {"Approved": GREEN, "Approved with Conditions": "#e6a817", "Rejected": RED, "Deferred": GREY_TEXT, "Pending": MUTED}
+            appr_parts = " ".join(
+                f'<span style="color:{appr_colors.get(k, GREY_TEXT)};font-weight:600;">{v} {k}</span>'
+                for k, v in appr_counts.items() if v > 0
+            )
+            st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};margin:0.3rem 0 0.6rem 0;padding:0.4rem 0.8rem;background:#fafbfc;border:1px solid {BORDER};border-radius:2px;">{appr_parts}</div>', unsafe_allow_html=True)
+
+        # ── TEAM ───────────────────────────────────────────────
+        st.markdown(f'<div class="sec-sm">Team</div>', unsafe_allow_html=True)
+        team_data = {
+            "Role": ["Initiative Sponsor", "Initiative Lead", "Main Entity(s)", "Pre-study Team"],
+            "Name": [
+                st.session_state.ps_sponsor or "\u2014",
+                st.session_state.ps_lead or "\u2014",
+                st.session_state.ps_main_entity or "\u2014",
+                st.session_state.ps_team.replace("\n", ", ") if st.session_state.ps_team else "\u2014",
+            ],
+        }
+        has_team = any(v != "\u2014" for v in team_data["Name"])
+        if has_team:
+            team_html = '<table class="ib-table"><thead><tr><th>Role</th><th>Name</th></tr></thead><tbody>'
+            for role, name in zip(team_data["Role"], team_data["Name"]):
+                team_html += f'<tr><td>{role}</td><td>{name}</td></tr>'
+            team_html += '</tbody></table>'
+            st.markdown(team_html, unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-style:italic;">Complete the Team section on the Pre-study page to populate this table.</div>', unsafe_allow_html=True)
+
+        # ── PROPOSAL COMPLETENESS ──────────────────────────────
+        prop_fields = {
+            "Recommendation": bool(st.session_state.prop_recommendation),
+            "Direction": bool(st.session_state.prop_direction.strip()),
+            "Benefits": bool(st.session_state.prop_benefits.strip()),
+            "Total Investment": bool(st.session_state.prop_total_investment and st.session_state.prop_total_investment > 0),
+            "Time Plan": bool(st.session_state.prop_timeplan.strip()),
+            "Risk Exposure": any(r.get("Risk", "").strip() for r in st.session_state.prop_risk_exposure),
+            "Milestones": any(m.get("Milestone", "").strip() for m in st.session_state.prop_milestones),
+            "Implementation Strategy": any(ph.get("Description", "").strip() for ph in st.session_state.prop_impl_phases),
+            "Communication Plan": any(c.get("Stakeholder", "").strip() for c in st.session_state.prop_comm_plan),
+            "Approval Log": any(a.get("Approver", "").strip() for a in st.session_state.prop_approvals),
+            "Team": bool(st.session_state.ps_sponsor.strip()),
+        }
+        prop_done = sum(prop_fields.values())
+        prop_total = len(prop_fields)
+        prop_pct = prop_done / prop_total * 100
+        prop_color = GREEN if prop_pct == 100 else ("#e6a817" if prop_pct >= 60 else RED)
+        prop_missing = [k for k, v in prop_fields.items() if not v]
+        prop_bar_width = max(prop_pct, 2)
+        st.markdown(f'''<div style="margin:1rem 0 0.5rem 0;font-family:Inter,sans-serif;">
+            <div style="font-size:0.67rem;font-weight:700;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.3rem;">Proposal Completeness</div>
+            <div style="background:#eee;border-radius:2px;height:6px;margin-bottom:0.3rem;"><div style="background:{prop_color};height:6px;border-radius:2px;width:{prop_bar_width}%;"></div></div>
+            <div style="font-size:0.72rem;color:{prop_color};font-weight:600;">{prop_done} of {prop_total} sections complete ({prop_pct:.0f}%)</div>
+            {f'<div style="font-size:0.68rem;color:{GREY_TEXT};margin-top:0.15rem;">Missing: {", ".join(prop_missing)}</div>' if prop_missing else f'<div style="font-size:0.68rem;color:{GREEN};margin-top:0.15rem;">Ready for Factory Council review</div>'}
+        </div>''', unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Proposal</span>", unsafe_allow_html=True)
+        return
+
+    # ── ACTUALS VS PLAN PAGE ──────────────────────────────────
+    if st.session_state.active_page == "actuals":
+        project_name = st.session_state.project_name
+        data_classification = st.session_state.get("data_classification", "C3 - Confidential")
+        currency = st.session_state.get("currency", "SEK")
+
+        st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
+            Actuals vs. Plan <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
+        </div>""", unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Post-decision tracking. Compare planned vs. actual outcomes to close the feedback loop and build institutional credibility for future analyses. Update this section as actuals become available during the transfer execution.</div>', unsafe_allow_html=True)
+
+        avp = st.session_state.actuals_vs_plan
+
+        st.markdown(f'<div class="sec">Actuals vs. Plan Tracker</div>', unsafe_allow_html=True)
+
+        avp_df = pd.DataFrame(avp.get("entries", []))
+        if "Metric" not in avp_df.columns:
+            avp_df = pd.DataFrame([{"Metric": "CAPEX", "Plan": "", "Actual": "", "Variance": "", "Notes": ""}])
+        edited_avp = st.data_editor(
+            avp_df, use_container_width=True, num_rows="dynamic", key="avp_editor",
+            hide_index=True,
+            column_config={
+                "Metric": st.column_config.TextColumn("Metric", width=180),
+                "Plan": st.column_config.TextColumn(f"Plan ({currency})", width=130),
+                "Actual": st.column_config.TextColumn(f"Actual ({currency})", width=130),
+                "Variance": st.column_config.TextColumn("Variance", width=130),
+                "Notes": st.column_config.TextColumn("Notes / Explanation", width=240),
+            })
+        avp["entries"] = edited_avp.to_dict("records")
+
+        # Auto-compute variance where possible
+        for entry in avp["entries"]:
+            try:
+                plan_v = float(str(entry.get("Plan", "")).replace(",", "").replace(" ", ""))
+                actual_v = float(str(entry.get("Actual", "")).replace(",", "").replace(" ", ""))
+                var = actual_v - plan_v
+                var_pct = (var / plan_v * 100) if plan_v != 0 else 0
+                entry["Variance"] = f"{var:+,.0f} ({var_pct:+.1f}%)"
+            except (ValueError, TypeError):
+                pass
+
+        st.session_state.actuals_vs_plan = avp
+
+        # Variance summary
+        has_data = any(e.get("Actual", "").strip() for e in avp["entries"])
+        if has_data:
+            on_track = sum(1 for e in avp["entries"] if e.get("Variance", "").strip() and "-" not in e.get("Variance", "").split("(")[0])
+            over = sum(1 for e in avp["entries"] if e.get("Variance", "").strip() and "+" in e.get("Variance", "").split("(")[0])
+            total_tracked = sum(1 for e in avp["entries"] if e.get("Actual", "").strip())
+            st.markdown(f'''<div style="display:flex;gap:1.5rem;margin:0.5rem 0;font-family:Inter,sans-serif;">
+                <div class="kpi" style="flex:1;"><div class="lbl">Metrics Tracked</div><div class="val">{total_tracked}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">On / Under Plan</div><div class="val" style="color:{GREEN};">{on_track}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Over Plan</div><div class="val" style="color:{RED};">{over}</div></div>
+            </div>''', unsafe_allow_html=True)
+
+        # ── VERSION HISTORY ──────────────────────────────────────
+        st.markdown(f'<div class="sec">Save History / Audit Trail</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Each time you save the project, a version entry is recorded. This provides traceability when proposals are revised after conditional approval.</div>', unsafe_allow_html=True)
+
+        vh = st.session_state.get("version_history", [])
+        if vh:
+            vh_tbl = '<table class="ib-table"><thead><tr><th>Version</th><th>Timestamp</th><th>Author</th><th>Summary</th></tr></thead><tbody>'
+            for entry in reversed(vh):
+                vh_tbl += f'<tr><td>v{entry.get("version", "?")}</td><td>{entry.get("timestamp", "")}</td><td>{entry.get("author", "")}</td><td>{entry.get("summary", "")}</td></tr>'
+            vh_tbl += '</tbody></table>'
+            st.markdown(vh_tbl, unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-style:italic;">No save history yet. Save the project from the Analysis Setup page to start recording versions.</div>', unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Actuals vs. Plan</span>", unsafe_allow_html=True)
         return
 
     # ── COST MODEL PAGE (active_page == "model") ──
@@ -4603,22 +5745,57 @@ Compares full cost-to-serve across factory locations, including material, labour
                     for gk in ("ps_strategic_rationale", "ps_purpose", "ps_risk_of_inaction",
                                "ps_key_risks", "ps_background", "ps_reason", "ps_questions", "ps_sponsor",
                                "ps_lead", "ps_main_entity", "ps_impact_entities", "ps_team",
+                               "ps_factories_included", "ps_factories_excluded", "ps_scoping_rationale",
                                "prop_direction", "prop_benefits", "prop_timeplan",
+                               "prop_recommendation", "prop_conditions",
+                               "conclusion_selected_option", "conclusion_rationale",
+                               "conclusion_decision", "conclusion_conditions",
+                               "conclusion_decided_by", "conclusion_decided_date",
                                "td_transfer_to", "td_transfer_from", "td_product_line",
-                               "td_material_family", "td_transfer_volume", "td_indicative_timing"):
+                               "td_material_family", "td_transfer_volume", "td_indicative_timing",
+                               "prop_workforce_timeline", "prop_workforce_notes",
+                               "ps_workforce_consultation_required", "ps_workforce_social_plan",
+                               "ps_workforce_notes"):
                         if gk in proj:
                             st.session_state[gk] = proj[gk]
                     for gk_obj in ("ps_dependencies", "ps_timeline", "prop_risks",
-                                   "td_requirements"):
+                                   "prop_risk_exposure", "prop_milestones", "prop_approvals",
+                                   "prop_impl_phases", "prop_comm_plan",
+                                   "td_requirements",
+                                   "td_customer_requalification", "td_tax_transfer_pricing",
+                                   "td_esg", "td_steady_state",
+                                   "fx_exposures", "scenario_comparison",
+                                   "actuals_vs_plan", "version_history"):
                         if gk_obj in proj:
                             st.session_state[gk_obj] = proj[gk_obj]
                     if "prop_total_investment" in proj:
                         st.session_state.prop_total_investment = proj["prop_total_investment"]
                     if "prop_cash_out" in proj:
                         st.session_state.prop_cash_out = proj["prop_cash_out"]
+                    for nk in ("prop_severance_cost", "prop_retraining_cost"):
+                        if nk in proj:
+                            st.session_state[nk] = float(proj[nk] or 0)
+                    for nk_int in ("ps_workforce_headcount_from", "ps_workforce_headcount_to"):
+                        if nk_int in proj:
+                            st.session_state[nk_int] = int(proj[nk_int] or 0)
                     st.rerun()
                 except Exception:
                     st.error("Invalid project file.")
+
+    # ── Product scope row ──
+    ps1, ps2, ps3 = st.columns([2, 2, 4])
+    with ps1:
+        pl_df = pd.DataFrame({"Product Line": [st.session_state.td_product_line]})
+        edited_pl = st.data_editor(pl_df, use_container_width=True, num_rows="fixed",
+            key="proj_pl", hide_index=True,
+            column_config={"Product Line": st.column_config.TextColumn("Product Line", width=200)})
+        st.session_state.td_product_line = str(edited_pl.loc[0, "Product Line"] or "")
+    with ps2:
+        mf_df = pd.DataFrame({"Material Family": [st.session_state.td_material_family]})
+        edited_mf = st.data_editor(mf_df, use_container_width=True, num_rows="fixed",
+            key="proj_mf", hide_index=True,
+            column_config={"Material Family": st.column_config.TextColumn("Material Family", width=200)})
+        st.session_state.td_material_family = str(edited_mf.loc[0, "Material Family"] or "")
 
     # ── SHARED FACTORY SETUP ──────────────────────────────────────
     st.markdown('<div class="sec" id="sec-factory-config">Shared Factory Configuration</div>', unsafe_allow_html=True)
@@ -5035,13 +6212,13 @@ Compares full cost-to-serve across factory locations, including material, labour
                         cols[i+1].markdown(f'<div style="background:#fafafa;border:1px solid {BORDER};{bdr}border-radius:1px;padding:0.7rem 0.9rem;text-align:center;"><div style="font-size:0.62rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin-bottom:0.15rem;">{labels[i]}</div><div style="font-size:1.1rem;font-weight:700;color:{DARK_TEXT};font-variant-numeric:tabular-nums;">{fp(r["om"],1,dz=False)}</div><div style="font-size:0.78rem;font-weight:600;color:{DARK_TEXT};margin-top:0.1rem;">{r["name"]}</div><div style="font-size:0.68rem;{d_cls}margin-top:0.1rem;">{d_sign}{delta_pp:.1f}pp vs base</div></div>', unsafe_allow_html=True)
 
                     st.markdown(f'<div class="sec-sm">Per Unit Cost Comparison ({currency})</div>', unsafe_allow_html=True)
-                    st.markdown(build_cost_table(results, currency, target_market), unsafe_allow_html=True)
+                    st.markdown(build_cost_table(results, currency, target_market, target_om=target_om), unsafe_allow_html=True)
 
                     st.markdown(f'<div class="sec-sm">Full Year Impact ({currency})</div>', unsafe_allow_html=True)
-                    st.markdown(build_annual_table(results, currency), unsafe_allow_html=True)
+                    st.markdown(build_annual_table(results, currency, target_om=target_om), unsafe_allow_html=True)
 
                     if len(results) >= 2:
-                        plotly_chart(build_charts(results, currency))
+                        plotly_chart(build_charts(results, currency, target_om=target_om))
 
                     # ── SUB-TABS: Cost Bridge | Sensitivity ──
                     sub_tab_labels = ["Cost Bridge", "Sensitivity Analysis"]
@@ -5055,7 +6232,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                         for wi, wf_r in enumerate(results[:n_wf]):
                             with wf_cols[wi]:
                                 st.markdown(f'<div style="font-size:0.7rem;font-family:Inter,sans-serif;font-weight:600;color:{DARK_TEXT};margin-bottom:0.2rem;">Cost Bridge: {wf_r["name"]} ({currency}/unit)</div>', unsafe_allow_html=True)
-                                plotly_chart(build_waterfall_chart(wf_r, currency))
+                                plotly_chart(build_waterfall_chart(wf_r, currency, target_om=target_om))
                         if len(results) > 3:
                             st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-top:0.3rem;">Showing top 3 of {len(results)} locations. All locations included in tables above.</div>', unsafe_allow_html=True)
 
@@ -5097,7 +6274,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                             steps = [round(base_val * m, 2) for m in np.arange(0.5, 1.55, 0.1)]
 
                         fig_sa = build_sensitivity_chart(
-                            inputs, factories, base, param_key, sa_choice, steps, currency, is_pct=is_pct
+                            inputs, factories, base, param_key, sa_choice, steps, currency, is_pct=is_pct, target_om=target_om
                         )
                         plotly_chart(fig_sa)
 
@@ -5139,7 +6316,7 @@ Compares full cost-to-serve across factory locations, including material, labour
     # ── FOOTER ────────────────────────────────────────────────
     st.markdown("---")
     c1,c2,c3 = st.columns([4,1,1])
-    c1.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} item{'s' if len(st.session_state.project_items)!=1 else ''} &middot; {currency} &middot; Market: {target_market} &middot; {data_classification}</span>", unsafe_allow_html=True)
+    c1.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v10.0 &middot; {st.session_state.project_name} &middot; {len(st.session_state.project_items)} item{'s' if len(st.session_state.project_items)!=1 else ''} &middot; {currency} &middot; Market: {target_market} &middot; {data_classification}</span>", unsafe_allow_html=True)
     if all_results:
         _ = c2.download_button("Export Excel", data=export_excel_project(all_results),
             file_name=f"Landed_Cost_{st.session_state.project_name.replace(' ','_')}.xlsx",
