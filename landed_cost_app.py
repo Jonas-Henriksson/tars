@@ -5547,7 +5547,7 @@ Compares full cost-to-serve across factory locations, including material, labour
         _ss_prop = st.session_state.get("sending_site_costs", {})
         auto_inv += sum(v for v in _ss_prop.values() if isinstance(v, (int, float)))
         auto_inv_m = auto_inv / 1e6 if auto_inv else 0.0
-        if st.session_state.prop_total_investment is None and auto_inv_m:
+        if not st.session_state.prop_total_investment and auto_inv_m:
             st.session_state.prop_total_investment = auto_inv_m
         _inv_val = st.session_state.prop_total_investment or 0.0
         _it_val = st.session_state.prop_internal_transfer or 0.0
@@ -5579,23 +5579,6 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.session_state.prop_cash_out = float(_r1_edited.iloc[0][f"Net Cash Out (M{currency})"] or 0.0)
         st.session_state.prop_timeplan = str(_r1_edited.iloc[0]["Time Plan"] or "")
         recommendation = st.session_state.prop_recommendation
-
-        # Auto-calc hint
-        if auto_inv_m > 0 or _it_val > 0:
-            _hints = []
-            if auto_inv_m > 0:
-                _hints.append(f"Investment auto-calculated: {auto_inv_m:.1f} M{currency}")
-            if _it_val > 0:
-                _hints.append(f"Net Cash Out = {st.session_state.prop_total_investment:.1f} \u2212 {_it_val:.1f}")
-            st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};font-style:italic;margin-top:-0.6rem;">{" · ".join(_hints)}</div>', unsafe_allow_html=True)
-
-        # Verdict badge
-        if recommendation:
-            rec_colors = {"Go": GREEN, "Conditional Go": "#e6a817", "No-Go": RED}
-            rec_icons = {"Go": "\u2714", "Conditional Go": "\u26a0", "No-Go": "\u2716"}
-            _rc = rec_colors.get(recommendation, NAVY)
-            _ri = rec_icons.get(recommendation, "")
-            st.markdown(f'<div style="display:inline-block;font-family:Inter,sans-serif;font-size:0.72rem;font-weight:700;color:{_rc};background:{_rc}14;border-radius:4px;padding:3px 12px;">{_ri} {recommendation}</div>', unsafe_allow_html=True)
 
         # ── Row 2: Direction, Benefits, Conditions (single-row data_editor)
         _r2_data = {
