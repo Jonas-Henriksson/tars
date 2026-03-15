@@ -5976,27 +5976,28 @@ Compares full cost-to-serve across factory locations, including material, labour
         else:
             st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-style:italic;">Complete the Workforce section on the Pre-study page to populate this summary.</div>', unsafe_allow_html=True)
 
-        wfp_c1, wfp_c2, wfp_c3 = st.columns(3)
-        with wfp_c1:
-            st.session_state.prop_severance_cost = st.number_input(
-                f"Severance / Social Plan (M{currency})", value=st.session_state.prop_severance_cost,
-                min_value=0.0, step=0.1, format="%.1f", key="prop_sev_input")
-        with wfp_c2:
-            st.session_state.prop_retraining_cost = st.number_input(
-                f"Retraining / Recruitment (M{currency})", value=st.session_state.prop_retraining_cost,
-                min_value=0.0, step=0.1, format="%.1f", key="prop_retrain_input")
-        with wfp_c3:
-            st.session_state.prop_workforce_timeline = st.text_input(
-                "Notification Timeline", value=st.session_state.prop_workforce_timeline,
-                key="prop_wf_timeline_input",
-                placeholder="e.g. Q2 '25 — works council, Q3 '25 — notices")
+        _wf_df = pd.DataFrame([{
+            f"Severance / Social Plan (M{currency})": st.session_state.prop_severance_cost,
+            f"Retraining / Recruitment (M{currency})": st.session_state.prop_retraining_cost,
+            "Notification Timeline": st.session_state.prop_workforce_timeline,
+            "Workforce Notes": st.session_state.prop_workforce_notes,
+        }])
+        _wf_edited = st.data_editor(
+            _wf_df, use_container_width=True, num_rows="fixed", hide_index=True,
+            key="prop_wf_editor",
+            column_config={
+                f"Severance / Social Plan (M{currency})": st.column_config.NumberColumn(f"Severance / Social Plan (M{currency})", format="%.1f", min_value=0.0, step=0.1, width=200),
+                f"Retraining / Recruitment (M{currency})": st.column_config.NumberColumn(f"Retraining / Recruitment (M{currency})", format="%.1f", min_value=0.0, step=0.1, width=200),
+                "Notification Timeline": st.column_config.TextColumn("Notification Timeline", width=200),
+                "Workforce Notes": st.column_config.TextColumn("Workforce Notes", width=280),
+            })
+        st.session_state.prop_severance_cost = float(_wf_edited.iloc[0][f"Severance / Social Plan (M{currency})"] or 0.0)
+        st.session_state.prop_retraining_cost = float(_wf_edited.iloc[0][f"Retraining / Recruitment (M{currency})"] or 0.0)
+        st.session_state.prop_workforce_timeline = str(_wf_edited.iloc[0]["Notification Timeline"] or "")
+        st.session_state.prop_workforce_notes = str(_wf_edited.iloc[0]["Workforce Notes"] or "")
         _wf_total_cost = st.session_state.prop_severance_cost + st.session_state.prop_retraining_cost
         if _wf_total_cost > 0:
             st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-family:Inter,sans-serif;margin:0.1rem 0 0.2rem 0;"><strong>Total Workforce Cost:</strong> {_wf_total_cost:.1f} M{currency}</div>', unsafe_allow_html=True)
-        st.session_state.prop_workforce_notes = st.text_area(
-            "Workforce Notes", value=st.session_state.prop_workforce_notes,
-            key="prop_wf_notes_input", height=50,
-            placeholder="Knowledge transfer plan, retention incentives, redeployment options...")
 
         # ── COMMUNICATION PLAN ────────────────────────────────
         st.markdown(f'<div class="sec">Communication Plan</div>', unsafe_allow_html=True)
