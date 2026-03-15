@@ -2084,7 +2084,7 @@ _TD_SUPPLY_REQS = [
 def _default_td_requirements():
     """Build the default transfer feasibility requirements structure."""
     sections = {
-        "Base Requirements": _TD_BASE_REQS,
+        "Operational Requirements": _TD_BASE_REQS,
         "Commercial Requirements": _TD_COMMERCIAL_REQS,
         "Product Line & Supply Chain Requirements": _TD_SUPPLY_REQS,
     }
@@ -5166,7 +5166,7 @@ Compares full cost-to-serve across factory locations, including material, labour
         td_reqs = st.session_state.td_requirements
 
         _section_styles = {
-            "Base Requirements": f"background:{NAVY};color:#fff;",
+            "Operational Requirements": f"background:{NAVY};color:#fff;",
             "Commercial Requirements": f"background:#4472C4;color:#fff;",
             "Product Line & Supply Chain Requirements": f"background:#7B9CD6;color:#fff;",
         }
@@ -5185,7 +5185,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                     if _fld in _row:
                         _row[_fld] = _row[_fld].replace("(Q)", "(Quantity)")
 
-        # Build a flat table per section for data_editor, then handle follow-ups separately
+        # Compact data_editor matrix per section
         for section_name, rows in td_reqs.items():
             style = _section_styles.get(section_name, f"background:{NAVY};color:#fff;")
             st.markdown(f"""<div style="{style}padding:0.25rem 0.6rem;border-radius:2px 2px 0 0;margin-top:0.5rem;font-family:Inter,sans-serif;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
@@ -5194,85 +5194,83 @@ Compares full cost-to-serve across factory locations, including material, labour
 
             sec_key = section_name.lower().replace(" ", "_").replace("&", "and")
 
-            # Column header row
-            _hdr_cols = st.columns([3.0, 1.8, 1.2, 1.0, 1.0])
-            for _ci, _lbl in enumerate(["Requirement", "Value / Answer", "Approver", "Date", "Status"]):
-                with _hdr_cols[_ci]:
-                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.6rem;font-weight:600;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.04em;padding:0.2rem 0;border-bottom:1px solid {BORDER};'>{_lbl}</div>", unsafe_allow_html=True)
-
-            # Render each requirement row with appropriate input types
+            # Build flat df rows: main requirements + follow-up sub-rows
+            df_rows = []
+            row_map = []  # (source_row_index, "main" | "followup" | "followup_no")
             for ri, row in enumerate(rows):
-                req = row["Requirement"]
                 follow_up = row.get("Follow-up", "")
                 condition = row.get("Condition", "")
-                is_yn = row.get("Input Type") == "yes_no"
-                has_inline_followup = follow_up and condition != "if_no"
+                _date_val = row.get("Date", "")
+                _parsed = None
+                if _date_val:
+                    try:
+                        from datetime import datetime as _dt
+                        _parsed = _dt.strptime(str(_date_val), "%Y-%m-%d").date()
+                    except (ValueError, TypeError):
+                        _parsed = None
+                df_rows.append({
+                    "Requirement": row["Requirement"],
+                    "Value / Answer": row.get("Value", ""),
+                    "Approver": row.get("Approver", ""),
+                    "Date": _parsed,
+                    "Status": row.get("Status", "Pending"),
+                })
+                row_map.append((ri, "main"))
 
-                rc = st.columns([3.0, 1.8, 1.2, 1.0, 1.0])
-                with rc[0]:
-                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.72rem;color:{DARK_TEXT};padding:0.55rem 0 0.2rem 0;'>{req}</div>", unsafe_allow_html=True)
-                with rc[1]:
-                    if is_yn:
-                        _yn_opts = ["", "Yes", "No"]
-                        _yn_cur = row.get("Value", "")
-                        _yn_idx = _yn_opts.index(_yn_cur) if _yn_cur in _yn_opts else 0
-                        row["Value"] = st.selectbox(
-                            f"val_{sec_key}_{ri}", options=_yn_opts, index=_yn_idx,
-                            key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed",
-                            format_func=lambda x: x if x else "— Select —")
-                    else:
-                        row["Value"] = st.text_input(
-                            f"val_{sec_key}_{ri}", value=row.get("Value", ""),
-                            key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed")
-                with rc[2]:
-                    row["Approver"] = st.text_input(
-                        f"app_{sec_key}_{ri}", value=row.get("Approver", ""),
-                        key=f"td_{sec_key}_{ri}_app", label_visibility="collapsed")
-                with rc[3]:
-                    _date_val = row.get("Date", "")
-                    _parsed_date = None
-                    if _date_val:
-                        try:
-                            from datetime import datetime as _dt
-                            _parsed_date = _dt.strptime(str(_date_val), "%Y-%m-%d").date()
-                        except (ValueError, TypeError):
-                            _parsed_date = None
-                    _date_result = st.date_input(
-                        f"dt_{sec_key}_{ri}", value=_parsed_date,
-                        key=f"td_{sec_key}_{ri}_dt", label_visibility="collapsed")
-                    row["Date"] = str(_date_result) if _date_result else ""
-                with rc[4]:
-                    _st_opts = ["Pending", "Approved", "Rejected"]
-                    _st_cur = row.get("Status", "Pending")
-                    _st_idx = _st_opts.index(_st_cur) if _st_cur in _st_opts else 0
-                    _st_color_map = {"Pending": ("#e6a817", "#fef9e7"), "Approved": (GREEN, "#e8f5e9"), "Rejected": (RED, "#fdecea")}
-                    row["Status"] = st.selectbox(
-                        f"st_{sec_key}_{ri}", options=_st_opts, index=_st_idx,
-                        key=f"td_{sec_key}_{ri}_st", label_visibility="collapsed")
-                    _sc_fg, _sc_bg = _st_color_map.get(row["Status"], ("#333", "#f5f5f5"))
-                    st.markdown(f"<div style='font-size:0.65rem;font-weight:700;color:{_sc_fg};background:{_sc_bg};border-radius:4px;padding:2px 8px;text-align:center;margin-top:-0.5rem;'>{row['Status']}</div>", unsafe_allow_html=True)
+                # Inline follow-up (always visible)
+                if follow_up and condition != "if_no":
+                    df_rows.append({
+                        "Requirement": f"  ↳ {follow_up}",
+                        "Value / Answer": row.get("Follow-up Answer", ""),
+                        "Approver": "",
+                        "Date": None,
+                        "Status": "",
+                    })
+                    row_map.append((ri, "followup"))
 
-                # Inline follow-up (non-conditional) — show on same row below
-                if has_inline_followup:
-                    fu_cols = st.columns([3.0, 1.8, 3.2])
-                    with fu_cols[0]:
-                        st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};padding:0 0 0.3rem 1rem;font-style:italic;'>{follow_up}</div>", unsafe_allow_html=True)
-                    with fu_cols[1]:
-                        row["Follow-up Answer"] = st.text_input(
-                            f"fua_{sec_key}_{ri}", value=row.get("Follow-up Answer", ""),
-                            key=f"td_{sec_key}_{ri}_fua", label_visibility="collapsed")
-
-                # Conditional follow-up (if_no) — only show when answer is No
+                # Conditional follow-up (if_no) — only when answer is No
                 if condition == "if_no" and follow_up:
                     main_val = (row.get("Value", "") or "").strip().lower()
                     if main_val in ("no", "n"):
-                        fu_cols2 = st.columns([3.0, 1.8, 3.2])
-                        with fu_cols2[0]:
-                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{RED};padding:0 0 0.3rem 1rem;font-style:italic;'>If no: {follow_up}</div>", unsafe_allow_html=True)
-                        with fu_cols2[1]:
-                            row["Follow-up Answer"] = st.text_input(
-                                "fua_no", value=row.get("Follow-up Answer", ""),
-                                key=f"td_{sec_key}_{ri}_fua_no", label_visibility="collapsed")
+                        df_rows.append({
+                            "Requirement": f"  ↳ If no: {follow_up}",
+                            "Value / Answer": row.get("Follow-up Answer", ""),
+                            "Approver": "",
+                            "Date": None,
+                            "Status": "",
+                        })
+                        row_map.append((ri, "followup_no"))
+
+            df = pd.DataFrame(df_rows)
+
+            edited = st.data_editor(
+                df,
+                use_container_width=True,
+                num_rows="fixed",
+                hide_index=True,
+                key=f"td_matrix_{sec_key}",
+                column_config={
+                    "Requirement": st.column_config.TextColumn("Requirement", width=280, disabled=True),
+                    "Value / Answer": st.column_config.TextColumn("Value / Answer", width=140),
+                    "Approver": st.column_config.TextColumn("Approver", width=120),
+                    "Date": st.column_config.DateColumn("Date", width=100),
+                    "Status": st.column_config.SelectboxColumn("Status", options=["", "Pending", "Approved", "Rejected"], width=100),
+                },
+            )
+
+            # Write edited values back to source rows
+            for di, (ri, kind) in enumerate(row_map):
+                if di >= len(edited):
+                    break
+                erow = edited.iloc[di]
+                if kind == "main":
+                    rows[ri]["Value"] = str(erow["Value / Answer"] or "")
+                    rows[ri]["Approver"] = str(erow["Approver"] or "")
+                    _d = erow["Date"]
+                    rows[ri]["Date"] = str(_d) if _d is not None and str(_d) != "NaT" else ""
+                    rows[ri]["Status"] = erow["Status"] if erow["Status"] else "Pending"
+                elif kind in ("followup", "followup_no"):
+                    rows[ri]["Follow-up Answer"] = str(erow["Value / Answer"] or "")
 
         st.session_state.td_requirements = td_reqs
 
@@ -5538,99 +5536,97 @@ Compares full cost-to-serve across factory locations, including material, labour
         if conclusion_opt and not st.session_state.prop_direction.strip():
             st.session_state.prop_direction = f"Recommended location: {conclusion_opt}"
 
-        rec_c1, rec_c2 = st.columns([1, 2])
-        with rec_c1:
-            rec_options = ["", "Go", "Conditional Go", "No-Go"]
-            current_rec_idx = 0
-            if st.session_state.prop_recommendation in rec_options:
-                current_rec_idx = rec_options.index(st.session_state.prop_recommendation)
-            # Auto-populate from conclusion gate if empty
-            if not st.session_state.prop_recommendation and conclusion_dec in rec_options:
-                st.session_state.prop_recommendation = conclusion_dec
-                current_rec_idx = rec_options.index(conclusion_dec) if conclusion_dec in rec_options else 0
-            recommendation = st.selectbox(
-                "Recommendation",
-                options=rec_options,
-                index=current_rec_idx,
-                key="prop_rec_select",
-                format_func=lambda x: x if x else "— Select recommendation —",
-            )
-            st.session_state.prop_recommendation = recommendation
+        # Build recommendation data for compact data_editor matrix
+        rec_options = ["", "Go", "Conditional Go", "No-Go"]
+        current_rec_idx = 0
+        if st.session_state.prop_recommendation in rec_options:
+            current_rec_idx = rec_options.index(st.session_state.prop_recommendation)
+        if not st.session_state.prop_recommendation and conclusion_dec in rec_options:
+            st.session_state.prop_recommendation = conclusion_dec
 
-            # Recommendation verdict box
-            if recommendation:
-                rec_colors = {"Go": GREEN, "Conditional Go": "#e6a817", "No-Go": RED}
-                rec_icons = {"Go": "\u2714", "Conditional Go": "\u26a0", "No-Go": "\u2716"}
-                rc = rec_colors.get(recommendation, NAVY)
-                ri = rec_icons.get(recommendation, "")
-                st.markdown(f'''<div style="background:#f8f9fb;border:1px solid {BORDER};border-left:4px solid {rc};padding:0.7rem 1rem;margin:0.4rem 0;font-family:Inter,sans-serif;">
-                    <div style="font-size:1rem;font-weight:700;color:{rc};">{ri} {recommendation}</div>
-                </div>''', unsafe_allow_html=True)
-
-            if recommendation == "Conditional Go":
-                st.session_state.prop_conditions = st.text_area(
-                    "Conditions for Proceeding",
-                    value=st.session_state.prop_conditions,
-                    key="prop_conditions_input", height=80,
-                    placeholder="List conditions that must be met:\n- Customer approval obtained\n- Quality audit passed\n- FX hedge in place...")
-
-        with rec_c2:
-            st.markdown(f'<div class="sec-sm">Direction</div>', unsafe_allow_html=True)
-            st.session_state.prop_direction = st.text_area(
-                "Direction", value=st.session_state.prop_direction,
-                key="prop_direction_input", height=120, label_visibility="collapsed",
-                placeholder="Describe the recommended direction and key rationale...")
-
-            st.markdown(f'<div class="sec-sm">Benefits & Key Details</div>', unsafe_allow_html=True)
-            st.session_state.prop_benefits = st.text_area(
-                "Benefits", value=st.session_state.prop_benefits,
-                key="prop_benefits_input", height=100, label_visibility="collapsed",
-                placeholder="List key benefits (use bullet points):\n- Margin improvement of X.Xpp\n- Risk diversification\n- Capacity headroom...")
-
-        # ── FINANCIALS & TIME PLAN ─────────────────────────────
-        st.markdown(f'<div class="sec-sm">Financials & Time Plan</div>', unsafe_allow_html=True)
+        # Auto-calculate financials
         auto_inv = 0.0
         if all_results:
             for item_data in all_results:
                 for ic in item_data.get("investment_cases", []):
                     auto_inv += ic.get("total_investment", 0)
-        # Include sending-site costs in total investment
         _ss_prop = st.session_state.get("sending_site_costs", {})
         auto_inv += sum(v for v in _ss_prop.values() if isinstance(v, (int, float)))
         auto_inv_m = auto_inv / 1e6 if auto_inv else 0.0
+        _inv_val = st.session_state.prop_total_investment if st.session_state.prop_total_investment is not None else (auto_inv_m if auto_inv_m else 0.0)
+        _it_val = st.session_state.prop_internal_transfer or 0.0
+        _suggested_cash = max(0.0, (_inv_val or 0.0) - (_it_val or 0.0))
+        _cash_val = st.session_state.prop_cash_out if st.session_state.prop_cash_out else _suggested_cash
 
-        fc1, fc2, fc3, fc4 = st.columns(4)
-        with fc1:
-            inv_val = st.session_state.prop_total_investment if st.session_state.prop_total_investment is not None else (auto_inv_m if auto_inv_m else None)
-            new_inv = st.number_input(
-                f"Total Investment (M{currency})", value=inv_val,
-                min_value=0.0, step=0.5, format="%.1f", key="prop_inv_input",
-                help="Sum of CAPEX, OPEX, restructuring, and sending-site costs from Required Investments. Includes both cash and non-cash items (e.g. internal equipment transfers).")
-            st.session_state.prop_total_investment = new_inv
-            if auto_inv_m > 0:
-                st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};margin-top:-0.5rem;font-style:italic;">Auto-calculated: {auto_inv_m:.1f} M{currency}</div>', unsafe_allow_html=True)
-        with fc2:
-            new_it = st.number_input(
-                f"Internal Transfer (M{currency})", value=st.session_state.prop_internal_transfer or 0.0,
-                min_value=0.0, step=0.5, format="%.1f", key="prop_it_input",
-                help="Equipment or assets transferred between group entities at book value. Counts as investment at the receiving unit but has no net cash impact at group level.")
-            st.session_state.prop_internal_transfer = new_it
-        with fc3:
-            # Auto-suggest net cash out if internal transfer is set
-            _suggested_cash = max(0.0, (new_inv or 0.0) - (new_it or 0.0))
-            _cash_val = st.session_state.prop_cash_out if st.session_state.prop_cash_out else _suggested_cash
-            new_cash = st.number_input(
-                f"Net Cash Out (M{currency})", value=_cash_val,
-                min_value=0.0, step=0.5, format="%.1f", key="prop_cash_input",
-                help="Actual cash expenditure at group level. Equals Total Investment minus Internal Equipment Transfers. This is the real funding requirement.")
-            st.session_state.prop_cash_out = new_cash
-            if new_it > 0:
-                st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};margin-top:-0.5rem;font-style:italic;">= Investment ({new_inv:.1f}) − Transfer ({new_it:.1f})</div>', unsafe_allow_html=True)
-        with fc4:
-            st.session_state.prop_timeplan = st.text_input(
-                "Time Plan", value=st.session_state.prop_timeplan,
-                key="prop_timeplan_input",
-                placeholder="e.g. May '25 — Dec '26")
+        # Unified proposal summary matrix
+        _prop_rows = [
+            {"Field": "Recommendation", "Value": st.session_state.prop_recommendation},
+            {"Field": f"Total Investment (M{currency})", "Value": f"{_inv_val:.1f}" if _inv_val else ""},
+            {"Field": f"Internal Transfer (M{currency})", "Value": f"{_it_val:.1f}" if _it_val else ""},
+            {"Field": f"Net Cash Out (M{currency})", "Value": f"{_cash_val:.1f}" if _cash_val else ""},
+            {"Field": "Time Plan", "Value": st.session_state.prop_timeplan},
+            {"Field": "Direction", "Value": st.session_state.prop_direction},
+            {"Field": "Benefits & Key Details", "Value": st.session_state.prop_benefits},
+        ]
+        if st.session_state.prop_recommendation == "Conditional Go":
+            _prop_rows.insert(1, {"Field": "Conditions for Proceeding", "Value": st.session_state.prop_conditions})
+
+        _prop_df = pd.DataFrame(_prop_rows)
+        _prop_edited = st.data_editor(
+            _prop_df,
+            use_container_width=True,
+            num_rows="fixed",
+            hide_index=True,
+            key="prop_summary_matrix",
+            column_config={
+                "Field": st.column_config.TextColumn("Field", width=220, disabled=True),
+                "Value": st.column_config.TextColumn("Value", width=500),
+            },
+        )
+
+        # Write edited values back to session state
+        _prop_map = {}
+        for _pi, _pr in enumerate(_prop_rows):
+            _prop_map[_pr["Field"]] = _pi
+        for _pi in range(len(_prop_edited)):
+            _field = _prop_edited.iloc[_pi]["Field"]
+            _val = str(_prop_edited.iloc[_pi]["Value"] or "")
+            if _field == "Recommendation":
+                st.session_state.prop_recommendation = _val if _val in rec_options else ""
+            elif _field.startswith("Total Investment"):
+                try:
+                    st.session_state.prop_total_investment = float(_val) if _val else 0.0
+                except ValueError:
+                    pass
+            elif _field.startswith("Internal Transfer"):
+                try:
+                    st.session_state.prop_internal_transfer = float(_val) if _val else 0.0
+                except ValueError:
+                    pass
+            elif _field.startswith("Net Cash Out"):
+                try:
+                    st.session_state.prop_cash_out = float(_val) if _val else 0.0
+                except ValueError:
+                    pass
+            elif _field == "Time Plan":
+                st.session_state.prop_timeplan = _val
+            elif _field == "Direction":
+                st.session_state.prop_direction = _val
+            elif _field == "Benefits & Key Details":
+                st.session_state.prop_benefits = _val
+            elif _field == "Conditions for Proceeding":
+                st.session_state.prop_conditions = _val
+
+        recommendation = st.session_state.prop_recommendation
+        # Compact verdict indicator
+        if recommendation:
+            rec_colors = {"Go": GREEN, "Conditional Go": "#e6a817", "No-Go": RED}
+            rec_icons = {"Go": "\u2714", "Conditional Go": "\u26a0", "No-Go": "\u2716"}
+            _rc = rec_colors.get(recommendation, NAVY)
+            _ri = rec_icons.get(recommendation, "")
+            st.markdown(f'<div style="display:inline-block;font-family:Inter,sans-serif;font-size:0.72rem;font-weight:700;color:{_rc};background:{_rc}14;border-radius:4px;padding:3px 12px;margin-top:-0.3rem;">{_ri} {recommendation}</div>', unsafe_allow_html=True)
+        if auto_inv_m > 0:
+            st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};font-style:italic;">Investment auto-calculated: {auto_inv_m:.1f} M{currency}</div>', unsafe_allow_html=True)
 
         # ── QUANTIFIED RISK EXPOSURE ───────────────────────────
         st.markdown(f'<div class="sec">Risk Exposure</div>', unsafe_allow_html=True)
