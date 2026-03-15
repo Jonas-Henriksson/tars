@@ -1818,16 +1818,16 @@ EXAMPLE_ITEMS = [
 # follow_up_condition: "if_no" means only show follow-up when answer is No;
 #                      None means always show the follow-up (stacked below main).
 _TD_BASE_REQS = [
-    ("Tail-end threshold (Q)", "text", "Transfer volume (Q)", None),
+    ("Tail-end threshold (Quantity)", "text", "Transfer volume (Quantity)", None),
     ("Factory strategy (Flexible/volume)", "text", "Transfer volume type (Flexible/volume)", None),
     ("Established skills and capabilities", "yes_no", "Approved plan to establish capability?", "if_no"),
     ("Macro stability", "yes_no", "Approval to move ahead?", "if_no"),
-    ("Remaining capacity (Q)", "text", "Expected demand Y+5 (Q)", None),
+    ("Remaining capacity (Quantity)", "text", "Expected demand Y+5 (Quantity)", None),
 ]
 _TD_COMMERCIAL_REQS = [
     ("Confirmed acceptance rate", "yes_no", "Comment", None),
     ("Customer approval", "yes_no", "Comment", None),
-    ("Current market demand in region (Q)", "text", "Expected 5-year CAGR", None),
+    ("Current market demand in region (Quantity)", "text", "Expected 5-year CAGR", None),
     ("Technology relevancy confirmed", "yes_no", "Comment", None),
 ]
 _TD_SUPPLY_REQS = [
@@ -4321,20 +4321,65 @@ Compares full cost-to-serve across factory locations, including material, labour
             "Financial Requirements": f"background:#A9C0E8;color:{DARK_TEXT};",
         }
 
-        # Compact table CSS — tighten padding on all inputs inside the requirements area
+        # Compact table CSS — aggressively reduce all spacing for dense table feel
         st.markdown(f"""<style>
-        div[data-testid="stVerticalBlock"] .td-req-row .stTextInput > div > div > input,
-        div[data-testid="stVerticalBlock"] .td-req-row .stSelectbox > div > div > div,
-        div[data-testid="stVerticalBlock"] .td-req-row .stDateInput > div > div > input {{
-            font-size: 0.72rem !important; padding: 0.2rem 0.4rem !important;
-            height: 1.8rem !important; min-height: 0 !important;
+        /* ── Transfer Details compact table overrides ── */
+        .td-compact .stTextInput,
+        .td-compact .stSelectbox,
+        .td-compact .stDateInput {{
+            margin-bottom: -0.6rem !important;
+        }}
+        .td-compact .stTextInput > div > div > input {{
+            font-size: 0.7rem !important; padding: 0.15rem 0.35rem !important;
+            height: 1.6rem !important; min-height: 0 !important;
             font-family: 'Inter', sans-serif !important;
+            border-radius: 2px !important;
         }}
-        div[data-testid="stVerticalBlock"] .td-req-row .stSelectbox > div > div {{
+        .td-compact .stSelectbox > div > div {{
+            min-height: 0 !important;
+            font-size: 0.7rem !important;
+        }}
+        .td-compact .stSelectbox > div > div > div {{
+            font-size: 0.7rem !important; padding: 0.15rem 0.35rem !important;
+            min-height: 1.6rem !important; height: 1.6rem !important;
+            line-height: 1.6rem !important;
+            font-family: 'Inter', sans-serif !important;
+            border-radius: 2px !important;
+            display: flex !important; align-items: center !important;
+        }}
+        .td-compact .stSelectbox svg {{
+            width: 0.7rem !important; height: 0.7rem !important;
+        }}
+        .td-compact .stDateInput > div > div {{
             min-height: 0 !important;
         }}
-        div[data-testid="stVerticalBlock"] .td-req-row .stDateInput > div > div {{
-            min-height: 0 !important;
+        .td-compact .stDateInput > div > div > input {{
+            font-size: 0.7rem !important; padding: 0.15rem 0.35rem !important;
+            height: 1.6rem !important; min-height: 0 !important;
+            font-family: 'Inter', sans-serif !important;
+            border-radius: 2px !important;
+        }}
+        .td-compact .stDateInput button {{
+            height: 1.6rem !important; width: 1.6rem !important;
+            padding: 0 !important;
+        }}
+        .td-compact .stDateInput button svg {{
+            width: 0.7rem !important; height: 0.7rem !important;
+        }}
+        /* Reduce vertical gap between Streamlit elements inside columns */
+        .td-compact [data-testid="stVerticalBlockBorderWrapper"],
+        .td-compact [data-testid="stVerticalBlock"] {{
+            gap: 0 !important;
+        }}
+        .td-compact [data-testid="column"] {{
+            padding-top: 0 !important; padding-bottom: 0 !important;
+        }}
+        /* Reduce markdown container padding */
+        .td-compact [data-testid="stMarkdownContainer"] {{
+            margin: 0 !important; padding: 0 !important;
+        }}
+        .td-compact [data-testid="stMarkdownContainer"] p {{
+            margin: 0 !important;
         }}
         </style>""", unsafe_allow_html=True)
 
@@ -4348,22 +4393,29 @@ Compares full cost-to-serve across factory locations, including material, labour
                 _row.pop("Required Documents", None)
                 if "Input Type" not in _row:
                     _row["Input Type"] = "yes_no" if "(yes/no)" in _row.get("Requirement", "") else "text"
+                # Migrate (Q) → (Quantity)
+                for _fld in ("Requirement", "Follow-up"):
+                    if _fld in _row:
+                        _row[_fld] = _row[_fld].replace("(Q)", "(Quantity)")
+
+        # Open compact wrapper
+        st.markdown('<div class="td-compact">', unsafe_allow_html=True)
 
         # Column header row
-        _hdr_style = f"font-family:Inter,sans-serif;font-size:0.6rem;font-weight:700;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;"
+        _hdr_style = f"font-family:Inter,sans-serif;font-size:0.58rem;font-weight:700;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;padding-bottom:0.2rem;"
         hc1, hc2, hc3, hc4, hc5 = st.columns([3.5, 2, 1.5, 1.2, 1])
         hc1.markdown(f"<div style='{_hdr_style}'>Requirement</div>", unsafe_allow_html=True)
         hc2.markdown(f"<div style='{_hdr_style}'>Value / Answer</div>", unsafe_allow_html=True)
         hc3.markdown(f"<div style='{_hdr_style}'>Approver</div>", unsafe_allow_html=True)
         hc4.markdown(f"<div style='{_hdr_style}'>Date</div>", unsafe_allow_html=True)
         hc5.markdown(f"<div style='{_hdr_style}'>Status</div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='border-bottom:2px solid {NAVY};margin-bottom:0;'></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='border-bottom:2px solid {NAVY};margin:0 0 0.2rem 0;'></div>", unsafe_allow_html=True)
 
         _yn_opts = ["—", "Yes", "No"]
 
         for section_name, rows in td_reqs.items():
             style = _section_styles.get(section_name, f"background:{NAVY};color:#fff;")
-            st.markdown(f"""<div style="{style}padding:0.35rem 0.7rem;border-radius:2px 2px 0 0;margin-top:0.6rem;font-family:Inter,sans-serif;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+            st.markdown(f"""<div style="{style}padding:0.25rem 0.6rem;border-radius:2px 2px 0 0;margin-top:0.4rem;font-family:Inter,sans-serif;font-size:0.64rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
                 {section_name}
             </div>""", unsafe_allow_html=True)
 
@@ -4374,13 +4426,10 @@ Compares full cost-to-serve across factory locations, including material, labour
                 condition = row.get("Condition", "")
                 input_type = row.get("Input Type", "text")
 
-                # Wrap each requirement in a container div for compact styling
-                st.markdown('<div class="td-req-row">', unsafe_allow_html=True)
-
                 # Main question row
                 c_req, c_val, c_approver, c_date, c_status = st.columns([3.5, 2, 1.5, 1.2, 1])
                 with c_req:
-                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.74rem;color:{DARK_TEXT};padding:0.25rem 0;line-height:1.3;'>{req_label}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.7rem;color:{DARK_TEXT};padding:0.15rem 0;line-height:1.3;'>{req_label}</div>", unsafe_allow_html=True)
                 with c_val:
                     if input_type == "yes_no":
                         _cur_val = row.get("Value", "")
@@ -4418,29 +4467,31 @@ Compares full cost-to-serve across factory locations, including material, labour
                         c_fq, c_fa, _, _, _ = st.columns([3.5, 2, 1.5, 1.2, 1])
                         with c_fq:
                             _prefix = "If no: " if condition == "if_no" else ""
-                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.68rem;color:{GREY_TEXT};padding:0 0 0.15rem 1.2rem;font-style:italic;line-height:1.3;'>↳ {_prefix}{follow_up}</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};padding:0 0 0.1rem 1rem;font-style:italic;line-height:1.2;'>↳ {_prefix}{follow_up}</div>", unsafe_allow_html=True)
                         with c_fa:
                             row["Follow-up Answer"] = st.text_input("fua", value=row.get("Follow-up Answer", ""), key=f"td_{sec_key}_{ri}_fua", label_visibility="collapsed")
 
-                st.markdown('</div>', unsafe_allow_html=True)
                 # Thin separator
-                st.markdown(f"<div style='border-bottom:1px solid #e8e8e8;margin:0;'></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='border-bottom:1px solid #eee;margin:0.1rem 0;'></div>", unsafe_allow_html=True)
+
+        # Close compact wrapper
+        st.markdown('</div>', unsafe_allow_html=True)
 
         st.session_state.td_requirements = td_reqs
 
         # Auto-fetch quantity annotation
         if _td_total_qty:
-            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.68rem;color:{GREY_TEXT};margin-top:0.5rem;'>Fetched from analysis — Transfer quantity: <strong>{_td_total_qty}</strong> units</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};margin-top:0.3rem;'>Fetched from analysis — Transfer quantity: <strong>{_td_total_qty}</strong> units</div>", unsafe_allow_html=True)
 
         # Approval summary bar
         total_reqs = sum(len(rows) for rows in td_reqs.values())
         approved = sum(1 for rows in td_reqs.values() for r in rows if r.get("Status") == "Approved")
         pending = sum(1 for rows in td_reqs.values() for r in rows if r.get("Status") == "Pending")
         rejected = sum(1 for rows in td_reqs.values() for r in rows if r.get("Status") == "Rejected")
-        st.markdown(f"""<div style="display:flex;gap:1.5rem;margin-top:0.8rem;padding:0.5rem 0.7rem;background:#f8f9fa;border-radius:3px;font-family:Inter,sans-serif;font-size:0.72rem;border:1px solid #eee;">
-            <div><span style="display:inline-block;width:8px;height:8px;background:#D4EDDA;border:1px solid #155724;border-radius:2px;margin-right:0.25rem;"></span>Approved: <strong>{approved}</strong>/{total_reqs}</div>
-            <div><span style="display:inline-block;width:8px;height:8px;background:#FFF3CD;border:1px solid #856404;border-radius:2px;margin-right:0.25rem;"></span>Pending: <strong>{pending}</strong></div>
-            <div><span style="display:inline-block;width:8px;height:8px;background:#F8D7DA;border:1px solid #721C24;border-radius:2px;margin-right:0.25rem;"></span>Rejected: <strong>{rejected}</strong></div>
+        st.markdown(f"""<div style="display:flex;gap:1.5rem;margin-top:0.6rem;padding:0.35rem 0.6rem;background:#f8f9fa;border-radius:2px;font-family:Inter,sans-serif;font-size:0.68rem;border:1px solid #eee;">
+            <div><span style="display:inline-block;width:8px;height:8px;background:#D4EDDA;border:1px solid #155724;border-radius:2px;margin-right:0.2rem;"></span>Approved: <strong>{approved}</strong>/{total_reqs}</div>
+            <div><span style="display:inline-block;width:8px;height:8px;background:#FFF3CD;border:1px solid #856404;border-radius:2px;margin-right:0.2rem;"></span>Pending: <strong>{pending}</strong></div>
+            <div><span style="display:inline-block;width:8px;height:8px;background:#F8D7DA;border:1px solid #721C24;border-radius:2px;margin-right:0.2rem;"></span>Rejected: <strong>{rejected}</strong></div>
         </div>""", unsafe_allow_html=True)
 
         st.markdown("---")
