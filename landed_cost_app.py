@@ -1325,9 +1325,9 @@ def export_excel_project(project_data):
             ws.write(r, 0, label, lb); ws.write(r, 1, st.session_state.get(key, ""), lf); r += 1
         r += 1
         td_reqs = st.session_state.get("td_requirements", {})
-        td_cols = ["Requirement", "Value", "Follow-up", "Follow-up Answer", "Approver", "Date", "Status", "Required Documents"]
+        td_cols = ["Requirement", "Value", "Follow-up", "Follow-up Answer", "Approver", "Date", "Status"]
         for section, rows in td_reqs.items():
-            ws.merge_range(r, 0, r, 6, section, sf) if 6 > 0 else ws.write(r, 0, section, sf)
+            ws.merge_range(r, 0, r, len(td_cols) - 1, section, sf)
             r += 1
             for ci, col in enumerate(td_cols):
                 ws.write(r, ci, col, hf)
@@ -1740,9 +1740,9 @@ def export_pdf_project(all_results, ccy, project_name):
             pdf.set_font("Helvetica", "B", 7)
         pdf.ln(6)
         # Requirements tables
-        td_col_w = [65, 35, 30, 22, 22, 30]
-        td_hdrs = ["Requirement", "Value / Answer", "Approver", "Date", "Status", "Req. Documents"]
-        td_keys = ["Requirement", "Value", "Approver", "Date", "Status", "Required Documents"]
+        td_col_w = [75, 45, 35, 25, 24]
+        td_hdrs = ["Requirement", "Value / Answer", "Approver", "Date", "Status"]
+        td_keys = ["Requirement", "Value", "Approver", "Date", "Status"]
         for section, rows in td_reqs.items():
             pdf.set_font("Helvetica", "B", 7)
             pdf.set_fill_color(navy_r, navy_g, navy_b)
@@ -1762,7 +1762,7 @@ def export_pdf_project(all_results, ccy, project_name):
                 follow_up = row.get("Follow-up", "")
                 follow_up_ans = row.get("Follow-up Answer", "")
                 cond = row.get("Condition", "")
-                if follow_up and (cond != "if_no" or (row.get("Value", "").strip().lower() in ("no", "n", "false", "0"))):
+                if follow_up and (cond != "if_no" or (row.get("Value", "").strip().lower() in ("no", "n"))):
                     prefix = "If no: " if cond == "if_no" else ""
                     pdf.set_font("Helvetica", "I", 6)
                     pdf.cell(td_col_w[0], 4.5, _safe(f"  > {prefix}{follow_up}"), border=1)
@@ -1813,30 +1813,31 @@ EXAMPLE_ITEMS = [
 
 # ── GOVERNANCE TEMPLATE HELPERS ─────────────────────────────────
 # Transfer Details requirements:
-# Each tuple: (main_question, follow_up_question_or_None, follow_up_condition, required_docs)
-# follow_up_condition: "if_no" means only show follow-up when main answer is No/no;
+# Each tuple: (main_question, input_type, follow_up_question, follow_up_condition)
+# input_type: "text" = free text, "yes_no" = Yes/No dropdown
+# follow_up_condition: "if_no" means only show follow-up when answer is No;
 #                      None means always show the follow-up (stacked below main).
 _TD_BASE_REQS = [
-    ("Tail-end threshold (Q)", "Transfer volume (Q)", None, ""),
-    ("Factory strategy (Flexible/volume)", "Transfer volume type (Flexible/volume)", None, ""),
-    ("Established skills and capabilities (yes/no)", "Approved plan to establish capability?", "if_no", "High-level plan"),
-    ("Macro stability (yes/no)", "Approval to move ahead?", "if_no", "Risk assessment"),
-    ("Remaining capacity (Q)", "Expected demand Y+5 (Q)", None, ""),
+    ("Tail-end threshold (Q)", "text", "Transfer volume (Q)", None),
+    ("Factory strategy (Flexible/volume)", "text", "Transfer volume type (Flexible/volume)", None),
+    ("Established skills and capabilities", "yes_no", "Approved plan to establish capability?", "if_no"),
+    ("Macro stability", "yes_no", "Approval to move ahead?", "if_no"),
+    ("Remaining capacity (Q)", "text", "Expected demand Y+5 (Q)", None),
 ]
 _TD_COMMERCIAL_REQS = [
-    ("Confirmed acceptance rate (yes/no)", "Comment", None, ""),
-    ("Customer approval (yes/no)", "Comment", None, ""),
-    ("Current market demand in region (Q)", "Expected 5-year CAGR", None, ""),
-    ("Technology relevancy confirmed (yes/no)", "Comment", None, ""),
+    ("Confirmed acceptance rate", "yes_no", "Comment", None),
+    ("Customer approval", "yes_no", "Comment", None),
+    ("Current market demand in region (Q)", "text", "Expected 5-year CAGR", None),
+    ("Technology relevancy confirmed", "yes_no", "Comment", None),
 ]
 _TD_SUPPLY_REQS = [
-    ("Aligned with Global product line manager", "Comment", None, ""),
-    ("Established supply chain (yes/no)", "Approved plan to establish supply?", "if_no", "High-level plan"),
+    ("Aligned with Global product line manager", "yes_no", "Comment", None),
+    ("Established supply chain", "yes_no", "Approved plan to establish supply?", "if_no"),
 ]
 _TD_FINANCIAL_REQS = [
-    ("Business case for both units in place", "Expected investment (Both units, MSEK)", None, "Business case"),
-    ("Payback period (Both units, Years)", "Expected total IRR (Both units, %)", None, ""),
-    ("NWC impact assessed (yes/no)", "Expected delta NWC vs. base (MSEK)", None, ""),
+    ("Business case for both units in place", "yes_no", "Expected investment (Both units, MSEK)", None),
+    ("Payback period (Both units, Years)", "text", "Expected total IRR (Both units, %)", None),
+    ("NWC impact assessed", "yes_no", "Expected delta NWC vs. base (MSEK)", None),
 ]
 
 
@@ -1851,17 +1852,17 @@ def _default_td_requirements():
     result = {}
     for section, rows in sections.items():
         result[section] = []
-        for main_q, follow_up_q, condition, support_doc in rows:
+        for main_q, input_type, follow_up_q, condition in rows:
             result[section].append({
                 "Requirement": main_q,
                 "Value": "",
+                "Input Type": input_type,
                 "Follow-up": follow_up_q or "",
                 "Follow-up Answer": "",
                 "Condition": condition or "",
                 "Approver": "",
                 "Date": "",
                 "Status": "Pending",
-                "Required Documents": support_doc,
             })
     return result
 
@@ -3885,7 +3886,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                 st.session_state.td_transfer_volume = st.text_input("Transfer Volume", value=st.session_state.td_transfer_volume, key="td_vol_input")
                 st.session_state.td_indicative_timing = st.text_input("Indicative Timing", value=st.session_state.td_indicative_timing, key="td_timing_input")
 
-        # Requirements sections — custom-rendered rows with stacked questions & conditional follow-ups
+        # Requirements sections — compact IB table with stacked questions & conditional follow-ups
         td_reqs = st.session_state.td_requirements
 
         _section_styles = {
@@ -3895,33 +3896,49 @@ Compares full cost-to-serve across factory locations, including material, labour
             "Financial Requirements": f"background:#A9C0E8;color:{DARK_TEXT};",
         }
 
-        _STATUS_BADGE = {
-            "Pending": "background:#FFF3CD;color:#856404;",
-            "Approved": "background:#D4EDDA;color:#155724;",
-            "Rejected": "background:#F8D7DA;color:#721C24;",
-        }
+        # Compact table CSS — tighten padding on all inputs inside the requirements area
+        st.markdown(f"""<style>
+        div[data-testid="stVerticalBlock"] .td-req-row .stTextInput > div > div > input,
+        div[data-testid="stVerticalBlock"] .td-req-row .stSelectbox > div > div > div,
+        div[data-testid="stVerticalBlock"] .td-req-row .stDateInput > div > div > input {{
+            font-size: 0.72rem !important; padding: 0.2rem 0.4rem !important;
+            height: 1.8rem !important; min-height: 0 !important;
+            font-family: 'Inter', sans-serif !important;
+        }}
+        div[data-testid="stVerticalBlock"] .td-req-row .stSelectbox > div > div {{
+            min-height: 0 !important;
+        }}
+        div[data-testid="stVerticalBlock"] .td-req-row .stDateInput > div > div {{
+            min-height: 0 !important;
+        }}
+        </style>""", unsafe_allow_html=True)
 
-        # Migrate old data format if needed (Related Question -> Follow-up)
+        # Migrate old data format if needed
         for _sec_name, _sec_rows in td_reqs.items():
             for _row in _sec_rows:
                 if "Related Question" in _row and "Follow-up" not in _row:
                     _row["Follow-up"] = _row.pop("Related Question", "")
                     _row["Follow-up Answer"] = _row.pop("Answer", "")
                     _row.setdefault("Condition", "")
+                _row.pop("Required Documents", None)
+                if "Input Type" not in _row:
+                    _row["Input Type"] = "yes_no" if "(yes/no)" in _row.get("Requirement", "") else "text"
 
-        # Column header
-        st.markdown(f"""<div style="display:flex;gap:0;font-family:Inter,sans-serif;font-size:0.62rem;font-weight:600;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;padding:0.3rem 0;border-bottom:1px solid #ddd;margin-top:0.5rem;">
-            <div style="flex:3;padding-left:0.5rem;">Requirement</div>
-            <div style="flex:2;">Value / Answer</div>
-            <div style="flex:1.5;">Approver</div>
-            <div style="flex:1;">Date</div>
-            <div style="flex:1;">Status</div>
-            <div style="flex:1.5;">Required Documents</div>
-        </div>""", unsafe_allow_html=True)
+        # Column header row
+        _hdr_style = f"font-family:Inter,sans-serif;font-size:0.6rem;font-weight:700;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;"
+        hc1, hc2, hc3, hc4, hc5 = st.columns([3.5, 2, 1.5, 1.2, 1])
+        hc1.markdown(f"<div style='{_hdr_style}'>Requirement</div>", unsafe_allow_html=True)
+        hc2.markdown(f"<div style='{_hdr_style}'>Value / Answer</div>", unsafe_allow_html=True)
+        hc3.markdown(f"<div style='{_hdr_style}'>Approver</div>", unsafe_allow_html=True)
+        hc4.markdown(f"<div style='{_hdr_style}'>Date</div>", unsafe_allow_html=True)
+        hc5.markdown(f"<div style='{_hdr_style}'>Status</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='border-bottom:2px solid {NAVY};margin-bottom:0;'></div>", unsafe_allow_html=True)
+
+        _yn_opts = ["—", "Yes", "No"]
 
         for section_name, rows in td_reqs.items():
             style = _section_styles.get(section_name, f"background:{NAVY};color:#fff;")
-            st.markdown(f"""<div style="{style}padding:0.45rem 0.8rem;border-radius:3px 3px 0 0;margin-top:1rem;font-family:Inter,sans-serif;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+            st.markdown(f"""<div style="{style}padding:0.35rem 0.7rem;border-radius:2px 2px 0 0;margin-top:0.6rem;font-family:Inter,sans-serif;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
                 {section_name}
             </div>""", unsafe_allow_html=True)
 
@@ -3930,58 +3947,75 @@ Compares full cost-to-serve across factory locations, including material, labour
                 req_label = row["Requirement"]
                 follow_up = row.get("Follow-up", "")
                 condition = row.get("Condition", "")
+                input_type = row.get("Input Type", "text")
+
+                # Wrap each requirement in a container div for compact styling
+                st.markdown('<div class="td-req-row">', unsafe_allow_html=True)
 
                 # Main question row
-                c_req, c_val, c_approver, c_date, c_status, c_docs = st.columns([3, 2, 1.5, 1, 1, 1.5])
+                c_req, c_val, c_approver, c_date, c_status = st.columns([3.5, 2, 1.5, 1.2, 1])
                 with c_req:
-                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};padding:0.35rem 0;'>{req_label}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.74rem;color:{DARK_TEXT};padding:0.25rem 0;line-height:1.3;'>{req_label}</div>", unsafe_allow_html=True)
                 with c_val:
-                    row["Value"] = st.text_input("val", value=row.get("Value", ""), key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed")
+                    if input_type == "yes_no":
+                        _cur_val = row.get("Value", "")
+                        _yi = _yn_opts.index(_cur_val) if _cur_val in _yn_opts else 0
+                        row["Value"] = st.selectbox("val", _yn_opts, index=_yi, key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed")
+                    else:
+                        row["Value"] = st.text_input("val", value=row.get("Value", ""), key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed")
                 with c_approver:
                     row["Approver"] = st.text_input("apr", value=row.get("Approver", ""), key=f"td_{sec_key}_{ri}_apr", label_visibility="collapsed")
                 with c_date:
-                    row["Date"] = st.text_input("dt", value=row.get("Date", ""), key=f"td_{sec_key}_{ri}_dt", label_visibility="collapsed")
+                    _cur_date = row.get("Date", "")
+                    _date_val = None
+                    if _cur_date:
+                        try:
+                            from datetime import datetime as _dt
+                            _date_val = _dt.strptime(_cur_date, "%Y-%m-%d").date()
+                        except (ValueError, TypeError):
+                            _date_val = None
+                    _picked = st.date_input("dt", value=_date_val, key=f"td_{sec_key}_{ri}_dt", label_visibility="collapsed")
+                    row["Date"] = _picked.strftime("%Y-%m-%d") if _picked else ""
                 with c_status:
                     _status_opts = ["Pending", "Approved", "Rejected"]
                     _cur_status = row.get("Status", "Pending")
                     _si = _status_opts.index(_cur_status) if _cur_status in _status_opts else 0
                     row["Status"] = st.selectbox("st", _status_opts, index=_si, key=f"td_{sec_key}_{ri}_st", label_visibility="collapsed")
-                with c_docs:
-                    row["Required Documents"] = st.text_input("doc", value=row.get("Required Documents", ""), key=f"td_{sec_key}_{ri}_doc", label_visibility="collapsed")
 
                 # Follow-up question (stacked below, with conditional logic for "if_no")
                 if follow_up:
                     show_follow_up = True
                     if condition == "if_no":
                         main_val = (row.get("Value", "") or "").strip().lower()
-                        show_follow_up = main_val in ("no", "n", "false", "0")
+                        show_follow_up = main_val in ("no", "n")
 
                     if show_follow_up:
-                        c_fq, c_fa, _, _, _, _ = st.columns([3, 2, 1.5, 1, 1, 1.5])
+                        c_fq, c_fa, _, _, _ = st.columns([3.5, 2, 1.5, 1.2, 1])
                         with c_fq:
                             _prefix = "If no: " if condition == "if_no" else ""
-                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.72rem;color:{GREY_TEXT};padding:0 0 0.35rem 1rem;font-style:italic;'>↳ {_prefix}{follow_up}</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.68rem;color:{GREY_TEXT};padding:0 0 0.15rem 1.2rem;font-style:italic;line-height:1.3;'>↳ {_prefix}{follow_up}</div>", unsafe_allow_html=True)
                         with c_fa:
                             row["Follow-up Answer"] = st.text_input("fua", value=row.get("Follow-up Answer", ""), key=f"td_{sec_key}_{ri}_fua", label_visibility="collapsed")
 
-                # Separator line between rows
-                st.markdown(f"<div style='border-bottom:1px solid #eee;margin:0;'></div>", unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+                # Thin separator
+                st.markdown(f"<div style='border-bottom:1px solid #e8e8e8;margin:0;'></div>", unsafe_allow_html=True)
 
         st.session_state.td_requirements = td_reqs
 
-        # Auto-fetch quantity annotation for "Transfer volume (Q)" field
+        # Auto-fetch quantity annotation
         if _td_total_qty:
-            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.68rem;color:{GREY_TEXT};margin-top:0.3rem;'>Auto-fetched from analysis — Transfer quantity: <strong>{_td_total_qty}</strong> units</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.68rem;color:{GREY_TEXT};margin-top:0.5rem;'>Fetched from analysis — Transfer quantity: <strong>{_td_total_qty}</strong> units</div>", unsafe_allow_html=True)
 
-        # Approval summary
+        # Approval summary bar
         total_reqs = sum(len(rows) for rows in td_reqs.values())
         approved = sum(1 for rows in td_reqs.values() for r in rows if r.get("Status") == "Approved")
         pending = sum(1 for rows in td_reqs.values() for r in rows if r.get("Status") == "Pending")
         rejected = sum(1 for rows in td_reqs.values() for r in rows if r.get("Status") == "Rejected")
-        st.markdown(f"""<div style="display:flex;gap:1.5rem;margin-top:1rem;font-family:Inter,sans-serif;font-size:0.72rem;">
-            <div><span style="display:inline-block;width:10px;height:10px;background:#D4EDDA;border:1px solid #155724;border-radius:2px;margin-right:0.3rem;"></span>Approved: <strong>{approved}</strong>/{total_reqs}</div>
-            <div><span style="display:inline-block;width:10px;height:10px;background:#FFF3CD;border:1px solid #856404;border-radius:2px;margin-right:0.3rem;"></span>Pending: <strong>{pending}</strong></div>
-            <div><span style="display:inline-block;width:10px;height:10px;background:#F8D7DA;border:1px solid #721C24;border-radius:2px;margin-right:0.3rem;"></span>Rejected: <strong>{rejected}</strong></div>
+        st.markdown(f"""<div style="display:flex;gap:1.5rem;margin-top:0.8rem;padding:0.5rem 0.7rem;background:#f8f9fa;border-radius:3px;font-family:Inter,sans-serif;font-size:0.72rem;border:1px solid #eee;">
+            <div><span style="display:inline-block;width:8px;height:8px;background:#D4EDDA;border:1px solid #155724;border-radius:2px;margin-right:0.25rem;"></span>Approved: <strong>{approved}</strong>/{total_reqs}</div>
+            <div><span style="display:inline-block;width:8px;height:8px;background:#FFF3CD;border:1px solid #856404;border-radius:2px;margin-right:0.25rem;"></span>Pending: <strong>{pending}</strong></div>
+            <div><span style="display:inline-block;width:8px;height:8px;background:#F8D7DA;border:1px solid #721C24;border-radius:2px;margin-right:0.25rem;"></span>Rejected: <strong>{rejected}</strong></div>
         </div>""", unsafe_allow_html=True)
 
         st.markdown("---")
