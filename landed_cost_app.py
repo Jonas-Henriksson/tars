@@ -4,6 +4,7 @@ Multi-Item Project-Based Production Cost & Profitability Analysis
 Author: Jonas Henriksson — Head of Strategic Planning & Intelligent Hub
 """
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -66,16 +67,18 @@ st.markdown(
     unsafe_allow_html=True,
 )
 # Inject Inter font into Plotly iframes (Streamlit renders charts in iframes
-# that don't inherit the parent document's stylesheets)
-st.markdown("""
+# that don't inherit the parent document's stylesheets).
+# st.markdown strips <script> tags, so we use components.html which executes JS.
+components.html("""
 <script>
 (function() {
-    const FONT_URL = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap';
+    var FONT_URL = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap';
+    var parentDoc = window.parent.document;
     function injectFont(iframe) {
         try {
-            const doc = iframe.contentDocument || iframe.contentWindow.document;
-            if (doc && !doc.querySelector('link[data-inter-injected]')) {
-                const link = doc.createElement('link');
+            var doc = iframe.contentDocument || iframe.contentWindow.document;
+            if (doc && doc.head && !doc.querySelector('link[data-inter-injected]')) {
+                var link = doc.createElement('link');
                 link.rel = 'stylesheet';
                 link.href = FONT_URL;
                 link.setAttribute('data-inter-injected', '1');
@@ -83,14 +86,13 @@ st.markdown("""
             }
         } catch(e) {}
     }
-    const obs = new MutationObserver(function() {
-        document.querySelectorAll('iframe').forEach(injectFont);
-    });
-    obs.observe(document.body, {childList: true, subtree: true});
-    document.querySelectorAll('iframe').forEach(injectFont);
+    function scan() { parentDoc.querySelectorAll('iframe').forEach(injectFont); }
+    var obs = new MutationObserver(scan);
+    obs.observe(parentDoc.body, {childList: true, subtree: true});
+    scan();
 })();
 </script>
-""", unsafe_allow_html=True)
+""", height=0)
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
