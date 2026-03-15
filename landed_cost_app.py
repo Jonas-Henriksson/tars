@@ -3899,73 +3899,81 @@ Compares full cost-to-serve across factory locations, including material, labour
         # Compact table CSS — page-level overrides for dense table feel
         # These apply globally but only render on the Transfer Details page
         st.markdown(f"""<style>
-        /* ── Transfer Details compact table overrides ── */
-        /* Shrink all text inputs */
+        /* ── Transfer Details compact overrides ── */
+        /* Text inputs */
         .stMainBlockContainer .stTextInput > div > div > input {{
-            font-size: 0.7rem !important; padding: 0.15rem 0.35rem !important;
-            height: 1.5rem !important; min-height: 0 !important;
-            font-family: 'Inter', sans-serif !important;
-            border-radius: 2px !important;
+            font-size: 0.68rem !important; padding: 0.1rem 0.3rem !important;
+            height: 1.4rem !important; min-height: 0 !important;
+            font-family: 'Inter', sans-serif !important; border-radius: 2px !important;
         }}
-        /* Shrink all selectboxes */
+        /* Selectboxes — container, value, and dropdown arrow */
         .stMainBlockContainer .stSelectbox > div > div {{
             min-height: 0 !important;
         }}
         .stMainBlockContainer .stSelectbox > div > div > div {{
-            font-size: 0.7rem !important; padding: 0rem 0.3rem !important;
-            min-height: 1.5rem !important; height: 1.5rem !important;
-            font-family: 'Inter', sans-serif !important;
-            border-radius: 2px !important;
+            font-size: 0.68rem !important; padding: 0 0.25rem !important;
+            min-height: 1.4rem !important; height: 1.4rem !important;
+            font-family: 'Inter', sans-serif !important; border-radius: 2px !important;
             display: flex !important; align-items: center !important;
         }}
+        .stMainBlockContainer .stSelectbox [data-baseweb="select"] {{
+            height: 1.4rem !important;
+        }}
         .stMainBlockContainer .stSelectbox [data-baseweb="select"] > div {{
-            padding-top: 0 !important; padding-bottom: 0 !important;
+            padding: 0 0.25rem !important; line-height: 1.4rem !important;
+        }}
+        .stMainBlockContainer .stSelectbox [data-baseweb="select"] > div > div {{
+            padding: 0 !important;
         }}
         .stMainBlockContainer .stSelectbox svg {{
-            width: 0.65rem !important; height: 0.65rem !important;
+            width: 0.55rem !important; height: 0.55rem !important;
         }}
-        /* Shrink date inputs */
+        /* Date inputs — input field, placeholder, wrapper, button */
         .stMainBlockContainer .stDateInput > div > div {{
-            min-height: 0 !important;
+            min-height: 0 !important; height: 1.4rem !important;
         }}
-        .stMainBlockContainer .stDateInput > div > div > input {{
-            font-size: 0.7rem !important; padding: 0.15rem 0.35rem !important;
-            height: 1.5rem !important; min-height: 0 !important;
-            font-family: 'Inter', sans-serif !important;
-            border-radius: 2px !important;
+        .stMainBlockContainer .stDateInput > div > div > input,
+        .stMainBlockContainer .stDateInput [data-baseweb="input"] input {{
+            font-size: 0.68rem !important; padding: 0.1rem 0.3rem !important;
+            height: 1.4rem !important; min-height: 0 !important;
+            font-family: 'Inter', sans-serif !important; border-radius: 2px !important;
         }}
         .stMainBlockContainer .stDateInput [data-baseweb="input"] {{
+            padding: 0 !important; height: 1.4rem !important; min-height: 0 !important;
+        }}
+        .stMainBlockContainer .stDateInput [data-baseweb="input"] > div {{
             padding: 0 !important;
+        }}
+        /* YYYY/MM/DD placeholder text */
+        .stMainBlockContainer .stDateInput input::placeholder {{
+            font-size: 0.62rem !important; color: #bbb !important;
         }}
         .stMainBlockContainer .stDateInput button {{
-            height: 1.5rem !important; width: 1.5rem !important;
-            padding: 0 !important;
+            height: 1.4rem !important; width: 1.2rem !important; padding: 0 !important;
         }}
         .stMainBlockContainer .stDateInput button svg {{
-            width: 0.65rem !important; height: 0.65rem !important;
+            width: 0.55rem !important; height: 0.55rem !important;
         }}
-        /* Collapse vertical gaps between elements */
-        .stMainBlockContainer [data-testid="stVerticalBlockBorderWrapper"] {{
-            gap: 0rem !important;
-        }}
-        .stMainBlockContainer [data-testid="stVerticalBlock"] {{
-            gap: 0rem !important;
-        }}
+        /* Collapse ALL vertical gaps */
+        .stMainBlockContainer [data-testid="stVerticalBlockBorderWrapper"],
+        .stMainBlockContainer [data-testid="stVerticalBlock"],
         .stMainBlockContainer [data-testid="column"] > div {{
-            gap: 0rem !important;
+            gap: 0 !important;
         }}
-        /* Tighten horizontal rule margins */
         .stMainBlockContainer [data-testid="stHorizontalBlock"] {{
-            gap: 0.4rem !important;
+            gap: 0.3rem !important; align-items: center !important;
         }}
-        /* Kill default element bottom margin */
+        /* Kill all element margins */
         .stMainBlockContainer .stTextInput,
         .stMainBlockContainer .stSelectbox,
-        .stMainBlockContainer .stDateInput {{
-            margin-bottom: 0 !important;
+        .stMainBlockContainer .stDateInput,
+        .stMainBlockContainer .element-container,
+        .stMainBlockContainer .stMarkdown {{
+            margin-top: 0 !important; margin-bottom: 0 !important;
         }}
-        .stMainBlockContainer .element-container {{
-            margin-bottom: 0 !important;
+        /* Expander compact */
+        .stMainBlockContainer .streamlit-expanderHeader {{
+            font-size: 0.72rem !important; padding: 0.3rem 0.5rem !important;
         }}
         </style>""", unsafe_allow_html=True)
 
@@ -3998,7 +4006,7 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         for section_name, rows in td_reqs.items():
             style = _section_styles.get(section_name, f"background:{NAVY};color:#fff;")
-            st.markdown(f"""<div style="{style}padding:0.25rem 0.6rem;border-radius:2px 2px 0 0;margin-top:0.4rem;font-family:Inter,sans-serif;font-size:0.64rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+            st.markdown(f"""<div style="{style}padding:0.25rem 0.6rem;border-radius:2px 2px 0 0;margin-top:0.5rem;margin-bottom:0.15rem;font-family:Inter,sans-serif;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
                 {section_name}
             </div>""", unsafe_allow_html=True)
 
@@ -4012,7 +4020,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                 # Main question row
                 c_req, c_val, c_approver, c_date, c_status = st.columns([3.5, 2, 1.5, 1.2, 1])
                 with c_req:
-                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.7rem;color:{DARK_TEXT};padding:0.15rem 0;line-height:1.3;'>{req_label}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.68rem;color:{DARK_TEXT};padding:0.1rem 0;line-height:1.25;'>{req_label}</div>", unsafe_allow_html=True)
                 with c_val:
                     if input_type == "yes_no":
                         _cur_val = row.get("Value", "")
@@ -4050,12 +4058,12 @@ Compares full cost-to-serve across factory locations, including material, labour
                         c_fq, c_fa, _, _, _ = st.columns([3.5, 2, 1.5, 1.2, 1])
                         with c_fq:
                             _prefix = "If no: " if condition == "if_no" else ""
-                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};padding:0 0 0.1rem 1rem;font-style:italic;line-height:1.2;'>↳ {_prefix}{follow_up}</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.62rem;color:{GREY_TEXT};padding:0 0 0.05rem 0.8rem;font-style:italic;line-height:1.2;'>↳ {_prefix}{follow_up}</div>", unsafe_allow_html=True)
                         with c_fa:
                             row["Follow-up Answer"] = st.text_input("fua", value=row.get("Follow-up Answer", ""), key=f"td_{sec_key}_{ri}_fua", label_visibility="collapsed")
 
                 # Thin separator
-                st.markdown(f"<div style='border-bottom:1px solid #eee;margin:0.1rem 0;'></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='border-bottom:1px solid #eee;margin:0;'></div>", unsafe_allow_html=True)
 
         st.session_state.td_requirements = td_reqs
 
