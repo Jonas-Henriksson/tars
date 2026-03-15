@@ -5148,11 +5148,8 @@ Compares full cost-to-serve across factory locations, including material, labour
         with st.expander("Edit Transfer Header", expanded=False):
             hc1, hc2, hc3 = st.columns(3)
             with hc1:
-                _from_opts = [""] + all_factory_names
-                _from_idx = _from_opts.index(st.session_state.td_transfer_from) if st.session_state.td_transfer_from in _from_opts else 0
-                st.session_state.td_transfer_from = st.selectbox(
-                    "Transfer From", options=_from_opts, index=_from_idx, key="td_from_input",
-                    format_func=lambda x: x if x else "— Select —")
+                # Transfer From is always the base case — display as read-only
+                st.text_input("Transfer From (base case)", value=st.session_state.td_transfer_from or "—", key="td_from_display", disabled=True)
                 _to_opts = [""] + [f for f in all_factory_names if f != st.session_state.td_transfer_from]
                 _to_idx = _to_opts.index(st.session_state.td_transfer_to) if st.session_state.td_transfer_to in _to_opts else 0
                 st.session_state.td_transfer_to = st.selectbox(
