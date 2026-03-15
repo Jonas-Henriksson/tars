@@ -7,6 +7,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import plotly.io as pio
 from plotly.subplots import make_subplots
 import io
 import json
@@ -29,6 +30,13 @@ from landed_cost.constants import (
 
 # Constants, models, compute engine, formatters, and lead times
 # are imported from the landed_cost package (see landed_cost/ directory).
+
+# ── PLOTLY GLOBAL FONT ────────────────────────────────────
+# Set default font for all Plotly charts to match the app typography.
+_plotly_template = go.layout.Template()
+_plotly_template.layout.font = dict(family="Inter, Arial, Helvetica, sans-serif")
+pio.templates["ib"] = _plotly_template
+pio.templates.default = "plotly+ib"
 
 
 # ── PAGE CONFIG ───────────────────────────────────────────
