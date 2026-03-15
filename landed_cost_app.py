@@ -3768,7 +3768,7 @@ def main():
 
         if cc_mode == "Company-wide rate":
             cc_data = {
-                "Component": CC_ROWS + ["**Total**"],
+                "Component": CC_ROWS + ["Total"],
                 "Rate (%)": cc_defaults + [sum(cc_defaults)],
                 "Guide": CC_GUIDES + ["Edit to override component sum — components will be ignored"],
             }
@@ -3784,11 +3784,11 @@ def main():
             # Check if Total was manually overridden
             component_sum = 0.0
             for i, row in edited_cc.iterrows():
-                if row["Component"] != "**Total**":
+                if row["Component"] != "Total":
                     v = row["Rate (%)"]
                     if v is not None and not pd.isna(v):
                         component_sum += float(v)
-            total_row_val = float(edited_cc.loc[edited_cc["Component"] == "**Total**", "Rate (%)"].values[0] or 0)
+            total_row_val = float(edited_cc.loc[edited_cc["Component"] == "Total", "Rate (%)"].values[0] or 0)
             if abs(total_row_val - component_sum) > 0.01:
                 global_cc_pct = total_row_val
                 st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};margin-top:0.2rem;">Override active — using <strong>{total_row_val:.1f}%</strong> instead of component sum ({component_sum:.1f}%)</div>', unsafe_allow_html=True)
@@ -3810,7 +3810,7 @@ def main():
                     vals = list(cc_defaults)
                 cc_cols[fn_] = vals + [sum(vals)]
             cc_cols["Guide"] = CC_GUIDES + ["Edit to override component sum — components will be ignored"]
-            cc_rows_with_total = CC_ROWS + ["**Total**"]
+            cc_rows_with_total = CC_ROWS + ["Total"]
             cc_df = pd.DataFrame(cc_cols, index=cc_rows_with_total)
 
             edited_cc = st.data_editor(
@@ -3829,7 +3829,7 @@ def main():
                     v = edited_cc.loc[row_name, fn_]
                     if v is not None and not pd.isna(v):
                         component_sum += float(v)
-                total_val = float(edited_cc.loc["**Total**", fn_] or 0)
+                total_val = float(edited_cc.loc["Total", fn_] or 0)
                 if abs(total_val - component_sum) > 0.01:
                     carrying_cost_rates[fn_] = total_val / 100.0
                     overrides.append(f"{fn_}: {total_val:.1f}% (components: {component_sum:.1f}%)")
