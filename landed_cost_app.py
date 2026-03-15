@@ -65,15 +65,36 @@ st.markdown(
     '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">',
     unsafe_allow_html=True,
 )
+# Inject Inter font into Plotly iframes (Streamlit renders charts in iframes
+# that don't inherit the parent document's stylesheets)
+st.markdown("""
+<script>
+(function() {
+    const FONT_URL = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap';
+    function injectFont(iframe) {
+        try {
+            const doc = iframe.contentDocument || iframe.contentWindow.document;
+            if (doc && !doc.querySelector('link[data-inter-injected]')) {
+                const link = doc.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = FONT_URL;
+                link.setAttribute('data-inter-injected', '1');
+                doc.head.appendChild(link);
+            }
+        } catch(e) {}
+    }
+    const obs = new MutationObserver(function() {
+        document.querySelectorAll('iframe').forEach(injectFont);
+    });
+    obs.observe(document.body, {childList: true, subtree: true});
+    document.querySelectorAll('iframe').forEach(injectFont);
+})();
+</script>
+""", unsafe_allow_html=True)
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     .stApp {{ font-family: 'Inter', -apple-system, sans-serif; background-color: #ffffff; }}
-    /* Ensure Plotly SVG text picks up Inter */
-    .js-plotly-plot text, .plotly text, .js-plotly-plot .gtitle, .js-plotly-plot .xtitle,
-    .js-plotly-plot .ytitle, .js-plotly-plot .legend text {{
-        font-family: 'Inter', Arial, Helvetica, sans-serif !important;
-    }}
     .block-container {{ padding: 1.5rem 2.5rem; max-width: 1400px; }}
     #MainMenu, footer {{visibility: hidden;}}
     [data-testid="stFileUploader"] small,
