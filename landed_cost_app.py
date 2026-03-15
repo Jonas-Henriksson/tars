@@ -59,10 +59,21 @@ _dynamic_rules = """    [class*="st-key-"][class*="_txt"] { %(bb)s }
     [class*="st-key-"][class*="_inv_matrix"] { %(bb)s }
     [class*="st-key-"][class*="_inv_hz"] { %(bb)s }""" % {"bb": _blue_border}
 
+st.markdown(
+    '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+    '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">',
+    unsafe_allow_html=True,
+)
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     .stApp {{ font-family: 'Inter', -apple-system, sans-serif; background-color: #ffffff; }}
+    /* Ensure Plotly SVG text picks up Inter */
+    .js-plotly-plot text, .plotly text, .js-plotly-plot .gtitle, .js-plotly-plot .xtitle,
+    .js-plotly-plot .ytitle, .js-plotly-plot .legend text {{
+        font-family: 'Inter', Arial, Helvetica, sans-serif !important;
+    }}
     .block-container {{ padding: 1.5rem 2.5rem; max-width: 1400px; }}
     #MainMenu, footer {{visibility: hidden;}}
     [data-testid="stFileUploader"] small,
