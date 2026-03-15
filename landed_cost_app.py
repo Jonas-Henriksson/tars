@@ -5719,14 +5719,14 @@ Compares full cost-to-serve across factory locations, including material, labour
             })
         st.session_state.prop_impl_phases = edited_impl.to_dict("records")
 
-        # Phase summary bar
+        # Phase summary bar — only show when at least one phase has progressed
         ph_counts = {"Pending": 0, "In Progress": 0, "Complete": 0, "At Risk": 0, "Blocked": 0}
         for ph in st.session_state.prop_impl_phases:
             s = ph.get("Status", "Pending")
             if s in ph_counts:
                 ph_counts[s] += 1
-        total_ph = sum(ph_counts.values())
-        if total_ph > 0 and any(ph.get("Phase", "").strip() for ph in st.session_state.prop_impl_phases):
+        _has_progress = any(ph_counts.get(s, 0) > 0 for s in ("In Progress", "Complete", "At Risk", "Blocked"))
+        if _has_progress:
             ph_colors = {"Complete": GREEN, "In Progress": ACCENT_BLUE, "Pending": GREY_TEXT, "At Risk": "#e6a817", "Blocked": RED}
             ph_parts = " ".join(
                 f'<span style="color:{ph_colors.get(k, GREY_TEXT)};font-weight:600;">{v} {k}</span>'
