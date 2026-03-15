@@ -5480,7 +5480,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                 help="Duration where both sending and receiving sites produce in parallel to ensure supply continuity")
         _ss["dual_sourcing_cost"] = st.number_input(
             f"Estimated dual-sourcing cost ({_fin_currency_ss})", value=float(_ss.get("dual_sourcing_cost", 0.0)),
-            min_value=0.0, step=100000.0, format="%,.0f", key="td_ss_dual_cost",
+            min_value=0.0, step=100000.0, format="%.0f", key="td_ss_dual_cost",
             help="Additional cost of running both sites in parallel — typically includes duplicate overhead, logistics, quality monitoring, and yield loss at the new site. This feeds into the Total Cost of Transfer.")
         ss_q1, ss_q2 = st.columns(2)
         with ss_q1:
