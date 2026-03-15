@@ -184,15 +184,11 @@ st.markdown(f"""
     }}
     header {{background: transparent !important; height: 0 !important; min-height: 0 !important; padding: 0 !important;}}
     header [data-testid="stDecoration"] {{display: none;}}
-    /* Sidebar toggle — navy button with white arrow, fixed top-left */
+    /* Sidebar always visible — hide collapse/expand controls */
     [data-testid="collapsedControl"],
-    [data-testid="stSidebarCollapseButton"] {{position: fixed; top: 0.5rem; left: 0.5rem; z-index: 999; background: {NAVY}; border-radius: 4px; padding: 0.25rem;}}
-    [data-testid="collapsedControl"] svg,
-    [data-testid="stSidebarCollapseButton"] svg {{fill: white !important; color: white !important; stroke: white !important;}}
-    [data-testid="stSidebarCollapseButton"] button {{background: transparent !important; border: none !important; color: white !important;}}
-    /* Close button inside expanded sidebar */
-    section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {{position: static; background: {NAVY}; border-radius: 4px; padding: 0.25rem;}}
-    section[data-testid="stSidebar"] button[kind="header"] {{color: white !important; background: {NAVY} !important; border: none !important;}}
+    [data-testid="stSidebarCollapseButton"] {{display: none !important;}}
+    section[data-testid="stSidebar"] button[kind="header"] {{display: none !important;}}
+    section[data-testid="stSidebar"] {{transform: none !important; position: relative !important;}}
     section[data-testid="stSidebar"] {{
         min-width: 21rem !important; max-width: 21rem !important;
         background: #f0f2f6 !important;
@@ -5152,11 +5148,8 @@ Compares full cost-to-serve across factory locations, including material, labour
         with st.expander("Edit Transfer Header", expanded=False):
             hc1, hc2, hc3 = st.columns(3)
             with hc1:
-                _from_opts = [""] + all_factory_names
-                _from_idx = _from_opts.index(st.session_state.td_transfer_from) if st.session_state.td_transfer_from in _from_opts else 0
-                st.session_state.td_transfer_from = st.selectbox(
-                    "Transfer From", options=_from_opts, index=_from_idx, key="td_from_input",
-                    format_func=lambda x: x if x else "— Select —")
+                # Transfer From is always the base case — display as read-only
+                st.text_input("Transfer From (base case)", value=st.session_state.td_transfer_from or "—", key="td_from_display", disabled=True)
                 _to_opts = [""] + [f for f in all_factory_names if f != st.session_state.td_transfer_from]
                 _to_idx = _to_opts.index(st.session_state.td_transfer_to) if st.session_state.td_transfer_to in _to_opts else 0
                 st.session_state.td_transfer_to = st.selectbox(
@@ -5243,13 +5236,13 @@ Compares full cost-to-serve across factory locations, including material, labour
                     _st_opts = ["Pending", "Approved", "Rejected"]
                     _st_cur = row.get("Status", "Pending")
                     _st_idx = _st_opts.index(_st_cur) if _st_cur in _st_opts else 0
-                    _st_colors = {"Pending": f"color:#e6a817;", "Approved": f"color:{GREEN};", "Rejected": f"color:{RED};"}
+                    _st_color_map = {"Pending": "#e6a817", "Approved": GREEN, "Rejected": RED}
                     row["Status"] = st.selectbox(
                         f"st_{sec_key}_{ri}", options=_st_opts, index=_st_idx,
                         key=f"td_{sec_key}_{ri}_st", label_visibility="collapsed")
-                    # Color badge below selectbox
-                    _sc = _st_colors.get(row["Status"], "")
-                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.6rem;font-weight:700;{_sc}margin-top:-0.7rem;'>{row['Status']}</div>", unsafe_allow_html=True)
+                    # Tint the selectbox text colour via scoped CSS
+                    _sc_hex = _st_color_map.get(row["Status"], "#333")
+                    st.markdown(f"<style>[data-testid='stSelectbox']:has(#td_{sec_key}_{ri}_st) div[data-baseweb='select'] span {{color:{_sc_hex} !important;font-weight:600;}}</style>", unsafe_allow_html=True)
 
                 # Inline follow-up (non-conditional) — show on same row below
                 if has_inline_followup:
