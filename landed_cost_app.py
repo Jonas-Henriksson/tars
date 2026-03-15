@@ -3900,79 +3900,103 @@ Compares full cost-to-serve across factory locations, including material, labour
         # These apply globally but only render on the Transfer Details page
         st.markdown(f"""<style>
         /* ── Transfer Details compact overrides ── */
-        /* Text inputs */
+        /* Nuclear option: kill ALL spacing in the main block */
+        .stMainBlockContainer [data-testid="stVerticalBlockBorderWrapper"] {{
+            gap: 0 !important; padding: 0 !important;
+        }}
+        .stMainBlockContainer [data-testid="stVerticalBlock"] {{
+            gap: 0 !important;
+        }}
+        .stMainBlockContainer [data-testid="column"] {{
+            padding: 0 !important;
+        }}
+        .stMainBlockContainer [data-testid="column"] > div {{
+            gap: 0 !important; padding: 0 !important;
+        }}
+        .stMainBlockContainer [data-testid="stHorizontalBlock"] {{
+            gap: 0.25rem !important; align-items: center !important;
+            margin-top: 0.1rem !important; margin-bottom: 0.1rem !important;
+        }}
+        /* Kill every wrapper margin/padding */
+        .stMainBlockContainer .element-container {{
+            margin: 0 !important; padding: 0 !important;
+        }}
+        .stMainBlockContainer .stMarkdown {{
+            margin: 0 !important; padding: 0 !important;
+        }}
+        .stMainBlockContainer .stMarkdown p {{
+            margin: 0 !important;
+        }}
+        .stMainBlockContainer .stTextInput,
+        .stMainBlockContainer .stSelectbox,
+        .stMainBlockContainer .stDateInput {{
+            margin: 0 !important; padding: 0 !important;
+        }}
+        /* Text inputs — 1.4rem height */
+        .stMainBlockContainer .stTextInput > div {{
+            padding: 0 !important;
+        }}
+        .stMainBlockContainer .stTextInput > div > div {{
+            padding: 0 !important; min-height: 0 !important;
+        }}
         .stMainBlockContainer .stTextInput > div > div > input {{
             font-size: 0.68rem !important; padding: 0.1rem 0.3rem !important;
             height: 1.4rem !important; min-height: 0 !important;
             font-family: 'Inter', sans-serif !important; border-radius: 2px !important;
         }}
-        /* Selectboxes — container, value, and dropdown arrow */
-        .stMainBlockContainer .stSelectbox > div > div {{
-            min-height: 0 !important;
+        /* Selectboxes — compact with centered text */
+        .stMainBlockContainer .stSelectbox > div {{
+            padding: 0 !important;
         }}
-        .stMainBlockContainer .stSelectbox > div > div > div {{
-            font-size: 0.68rem !important; padding: 0 0.25rem !important;
-            min-height: 1.4rem !important; height: 1.4rem !important;
-            font-family: 'Inter', sans-serif !important; border-radius: 2px !important;
-            display: flex !important; align-items: center !important;
+        .stMainBlockContainer .stSelectbox > div > div {{
+            min-height: 0 !important; padding: 0 !important;
         }}
         .stMainBlockContainer .stSelectbox [data-baseweb="select"] {{
-            height: 1.4rem !important;
+            height: 1.4rem !important; min-height: 0 !important;
         }}
         .stMainBlockContainer .stSelectbox [data-baseweb="select"] > div {{
-            padding: 0 0.25rem !important; line-height: 1.4rem !important;
+            padding: 0 0.25rem !important; min-height: 0 !important;
+            height: 1.4rem !important; line-height: 1.4rem !important;
         }}
         .stMainBlockContainer .stSelectbox [data-baseweb="select"] > div > div {{
-            padding: 0 !important;
+            padding: 0 !important; font-size: 0.68rem !important;
+            font-family: 'Inter', sans-serif !important;
+            line-height: 1.4rem !important;
         }}
         .stMainBlockContainer .stSelectbox svg {{
-            width: 0.55rem !important; height: 0.55rem !important;
+            width: 0.5rem !important; height: 0.5rem !important;
+            right: 0.2rem !important;
         }}
-        /* Date inputs — input field, placeholder, wrapper, button */
-        .stMainBlockContainer .stDateInput > div > div {{
-            min-height: 0 !important; height: 1.4rem !important;
-        }}
-        .stMainBlockContainer .stDateInput > div > div > input,
-        .stMainBlockContainer .stDateInput [data-baseweb="input"] input {{
-            font-size: 0.68rem !important; padding: 0.1rem 0.3rem !important;
-            height: 1.4rem !important; min-height: 0 !important;
-            font-family: 'Inter', sans-serif !important; border-radius: 2px !important;
-        }}
-        .stMainBlockContainer .stDateInput [data-baseweb="input"] {{
-            padding: 0 !important; height: 1.4rem !important; min-height: 0 !important;
-        }}
-        .stMainBlockContainer .stDateInput [data-baseweb="input"] > div {{
+        /* Date inputs — compact with small placeholder */
+        .stMainBlockContainer .stDateInput > div {{
             padding: 0 !important;
         }}
-        /* YYYY/MM/DD placeholder text */
+        .stMainBlockContainer .stDateInput > div > div {{
+            min-height: 0 !important; height: 1.4rem !important; padding: 0 !important;
+        }}
+        .stMainBlockContainer .stDateInput [data-baseweb="input"] {{
+            height: 1.4rem !important; min-height: 0 !important; padding: 0 !important;
+        }}
+        .stMainBlockContainer .stDateInput [data-baseweb="input"] > div {{
+            padding: 0 0.25rem !important;
+        }}
+        .stMainBlockContainer .stDateInput input {{
+            font-size: 0.68rem !important; padding: 0 !important;
+            height: 1.4rem !important; min-height: 0 !important;
+            font-family: 'Inter', sans-serif !important;
+        }}
         .stMainBlockContainer .stDateInput input::placeholder {{
-            font-size: 0.62rem !important; color: #bbb !important;
+            font-size: 0.58rem !important; color: #bbb !important;
+            letter-spacing: 0.02em !important;
         }}
         .stMainBlockContainer .stDateInput button {{
             height: 1.4rem !important; width: 1.2rem !important; padding: 0 !important;
         }}
         .stMainBlockContainer .stDateInput button svg {{
-            width: 0.55rem !important; height: 0.55rem !important;
-        }}
-        /* Collapse ALL vertical gaps */
-        .stMainBlockContainer [data-testid="stVerticalBlockBorderWrapper"],
-        .stMainBlockContainer [data-testid="stVerticalBlock"],
-        .stMainBlockContainer [data-testid="column"] > div {{
-            gap: 0 !important;
-        }}
-        .stMainBlockContainer [data-testid="stHorizontalBlock"] {{
-            gap: 0.3rem !important; align-items: center !important;
-        }}
-        /* Kill all element margins */
-        .stMainBlockContainer .stTextInput,
-        .stMainBlockContainer .stSelectbox,
-        .stMainBlockContainer .stDateInput,
-        .stMainBlockContainer .element-container,
-        .stMainBlockContainer .stMarkdown {{
-            margin-top: 0 !important; margin-bottom: 0 !important;
+            width: 0.5rem !important; height: 0.5rem !important;
         }}
         /* Expander compact */
-        .stMainBlockContainer .streamlit-expanderHeader {{
+        .stMainBlockContainer details summary {{
             font-size: 0.72rem !important; padding: 0.3rem 0.5rem !important;
         }}
         </style>""", unsafe_allow_html=True)
