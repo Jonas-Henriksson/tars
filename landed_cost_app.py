@@ -2105,6 +2105,509 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
             st.markdown(build_qualitative_summary(qual), unsafe_allow_html=True)
 
 
+# ── COUNTRY COORDINATES (for executive summary map) ──────────
+_COUNTRY_COORDS: dict[str, tuple[float, float]] = {
+    "Sweden": (62.0, 15.0), "Germany": (51.2, 10.4), "France": (46.6, 2.2),
+    "Italy": (42.5, 12.5), "Austria": (47.5, 14.6), "Poland": (51.9, 19.1),
+    "Czech Republic": (49.8, 15.5), "Spain": (40.5, -3.7), "Netherlands": (52.1, 5.3),
+    "UK": (55.4, -3.4), "Turkey": (39.9, 32.9),
+    "USA": (39.8, -98.6), "Mexico": (23.6, -102.6), "Brazil": (-14.2, -51.9),
+    "Canada": (56.1, -106.3), "Argentina": (-38.4, -63.6),
+    "China": (35.9, 104.2), "India": (20.6, 79.0), "Japan": (36.2, 138.3),
+    "South Korea": (35.9, 127.8), "Thailand": (15.9, 100.9),
+    "Vietnam": (14.1, 108.3), "Malaysia": (4.2, 101.9), "Indonesia": (-0.8, 113.9),
+    "South Africa": (-30.6, 22.9), "Australia": (-25.3, 133.8),
+}
+
+
+# ── EXECUTIVE SUMMARY PAGE ────────────────────────────────────
+def render_executive_summary_page():
+    """Render the Executive Summary page — a CEO-level overview of the full case."""
+    all_results = st.session_state.get("_all_results", [])
+    company_wacc = st.session_state.get("_company_wacc", 0.08)
+    target_payback = st.session_state.get("target_payback", 3)
+    target_om = st.session_state.get("target_om", 0.20)
+    factory_countries = st.session_state.get("_factory_countries", {})
+    currency = st.session_state.get("currency", "SEK")
+    project_name = st.session_state.get("project_name", "New Analysis")
+    target_market = st.session_state.get("target_market", "")
+    data_classification = st.session_state.get("data_classification", "C3 - Confidential")
+    carrying_cost_rates = st.session_state.get("_carrying_cost_rates", {})
+
+    if not all_results:
+        st.markdown('<div class="callout" style="font-size:0.76rem;">No analysis results available yet. Open <strong>Landed Cost Analysis</strong> first to configure the project and compute results.</div>', unsafe_allow_html=True)
+        return
+
+    st.markdown(f'<div class="sec">Executive Summary — {project_name}</div>', unsafe_allow_html=True)
+
+    # IB-style project metadata strip
+    n_items = len(all_results)
+    analysis_date = date.today().strftime("%d %B %Y")
+    st.markdown(f'''<div style="display:flex;gap:2rem;flex-wrap:wrap;font-family:Inter,sans-serif;font-size:0.7rem;color:{GREY_TEXT};margin:0.2rem 0 0.6rem 0;padding:0.5rem 0.9rem;background:#fafbfc;border:1px solid {BORDER};border-radius:2px;">
+        <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Project</span><br>{project_name}</div>
+        <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Date</span><br>{analysis_date}</div>
+        <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Currency</span><br>{currency}</div>
+        <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Target Market</span><br>{target_market or "N/A"}</div>
+        <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Items Analysed</span><br>{n_items}</div>
+        <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Classification</span><br>{data_classification}</div>
+    </div>''', unsafe_allow_html=True)
+
+    # ── SOURCING MAP ─────────────────────────────────────────
+    st.markdown(f'<div class="sec-sm">Global Sourcing & Manufacturing Footprint</div>', unsafe_allow_html=True)
+
+    # Gather location data
+    all_fnames = []
+    for item in all_results:
+        for r in item["results"]:
+            if r["name"] not in all_fnames:
+                all_fnames.append(r["name"])
+
+    base_fn = all_fnames[0] if all_fnames else None
+    alt_fnames = [fn_ for fn_ in all_fnames if fn_ != base_fn]
+
+    # Build coordinate lists
+    map_lats, map_lons, map_labels, map_colors, map_sizes, map_symbols = [], [], [], [], [], []
+
+    # Target market marker
+    if target_market and target_market in _COUNTRY_COORDS:
+        lat, lon = _COUNTRY_COORDS[target_market]
+        map_lats.append(lat)
+        map_lons.append(lon)
+        map_labels.append(f"Target Market: {target_market}")
+        map_colors.append("#e67e22")
+        map_sizes.append(18)
+        map_symbols.append("star")
+
+    # Base factory
+    base_country = factory_countries.get(base_fn, "")
+    if base_country and base_country in _COUNTRY_COORDS:
+        lat, lon = _COUNTRY_COORDS[base_country]
+        map_lats.append(lat)
+        map_lons.append(lon)
+        map_labels.append(f"Current: {base_fn} ({base_country})")
+        map_colors.append(NAVY)
+        map_sizes.append(16)
+        map_symbols.append("circle")
+
+    # Alt factories
+    for fn_ in alt_fnames:
+        ctry = factory_countries.get(fn_, "")
+        if ctry and ctry in _COUNTRY_COORDS:
+            lat, lon = _COUNTRY_COORDS[ctry]
+            map_lats.append(lat)
+            map_lons.append(lon)
+            map_labels.append(f"Alternative: {fn_} ({ctry})")
+            map_colors.append(ACCENT_BLUE)
+            map_sizes.append(14)
+            map_symbols.append("diamond")
+
+    fig_map = go.Figure()
+
+    # Draw flow arrows — current sourcing (base → target market)
+    if base_country and base_country in _COUNTRY_COORDS and target_market and target_market in _COUNTRY_COORDS:
+        b_lat, b_lon = _COUNTRY_COORDS[base_country]
+        t_lat, t_lon = _COUNTRY_COORDS[target_market]
+        fig_map.add_trace(go.Scattergeo(
+            lat=[b_lat, t_lat], lon=[b_lon, t_lon],
+            mode="lines", name="Current sourcing",
+            line=dict(width=3, color=NAVY, dash="solid"),
+            showlegend=True,
+            hoverinfo="skip",
+        ))
+
+    # Draw flow arrows — potential alternative sourcing (alt → target market)
+    # Find the best alternative by OM
+    best_alt_fn = None
+    if alt_fnames:
+        totals = {fn_: 0.0 for fn_ in all_fnames}
+        for item in all_results:
+            for r in item["results"]:
+                totals[r["name"]] += r.get("annual_adj_op", r["annual_op"])
+        ranked_alts = sorted(alt_fnames, key=lambda fn_: totals.get(fn_, 0), reverse=True)
+        best_alt_fn = ranked_alts[0] if ranked_alts else None
+
+    for fn_ in alt_fnames:
+        ctry = factory_countries.get(fn_, "")
+        if ctry and ctry in _COUNTRY_COORDS and target_market and target_market in _COUNTRY_COORDS:
+            a_lat, a_lon = _COUNTRY_COORDS[ctry]
+            t_lat, t_lon = _COUNTRY_COORDS[target_market]
+            is_best = (fn_ == best_alt_fn)
+            fig_map.add_trace(go.Scattergeo(
+                lat=[a_lat, t_lat], lon=[a_lon, t_lon],
+                mode="lines",
+                name=f"Potential: {fn_}" if is_best else f"Alternative: {fn_}",
+                line=dict(width=2.5 if is_best else 1.5,
+                          color=GREEN if is_best else ACCENT_BLUE,
+                          dash="solid" if is_best else "dot"),
+                showlegend=True,
+                hoverinfo="skip",
+            ))
+
+    # Location markers
+    fig_map.add_trace(go.Scattergeo(
+        lat=map_lats, lon=map_lons,
+        mode="markers+text",
+        text=map_labels,
+        textposition="top center",
+        textfont=dict(size=9, family="Inter, sans-serif", color=DARK_TEXT),
+        marker=dict(size=map_sizes, color=map_colors, symbol=map_symbols,
+                    line=dict(width=1, color="white")),
+        showlegend=False,
+        hovertemplate="%{text}<extra></extra>",
+    ))
+
+    fig_map.update_geos(
+        showcountries=True, countrycolor="#d4d8e0",
+        showcoastlines=True, coastlinecolor="#b0b8c4",
+        showland=True, landcolor="#f7f8fa",
+        showocean=True, oceancolor="#eaf2fb",
+        showlakes=False,
+        projection_type="natural earth",
+        lataxis_range=[-55, 75],
+        lonaxis_range=[-140, 170],
+    )
+    fig_map.update_layout(
+        height=420,
+        margin=dict(l=0, r=0, t=30, b=0),
+        paper_bgcolor="white",
+        font=dict(family="Inter, sans-serif", size=10, color=DARK_TEXT),
+        legend=dict(orientation="h", yanchor="top", y=-0.02, xanchor="center", x=0.5,
+                    font=dict(size=10)),
+        title=dict(
+            text=f"Manufacturing Footprint — Sourcing to {target_market}" if target_market else "Manufacturing Footprint",
+            font=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT),
+            x=0.5,
+        ),
+    )
+    plotly_chart(fig_map)
+
+    # Map legend explanation
+    legend_parts = [
+        f'<span style="color:{NAVY};font-weight:700;">\u25cf</span> Current factory (base case)',
+        f'<span style="color:{ACCENT_BLUE};font-weight:700;">\u25c6</span> Alternative factory',
+        f'<span style="color:#e67e22;font-weight:700;">\u2605</span> Target market',
+        f'<span style="color:{NAVY};">\u2500\u2500</span> Current sourcing flow',
+        f'<span style="color:{GREEN};">\u2500\u2500</span> Recommended alternative',
+        f'<span style="color:{ACCENT_BLUE};">\u00b7\u00b7\u00b7\u00b7</span> Other alternatives',
+    ]
+    st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.7rem;color:{GREY_TEXT};text-align:center;margin:-0.5rem 0 1rem 0;">{"&emsp;|&emsp;".join(legend_parts)}</div>', unsafe_allow_html=True)
+
+    # ── KEY FINANCIAL METRICS ────────────────────────────────
+    st.markdown(f'<div class="sec-sm">Key Financial Metrics</div>', unsafe_allow_html=True)
+
+    totals = {fn_: 0.0 for fn_ in all_fnames}
+    total_rev = {fn_: 0.0 for fn_ in all_fnames}
+    adj_totals = {fn_: 0.0 for fn_ in all_fnames}
+    for item in all_results:
+        for r in item["results"]:
+            totals[r["name"]] += r["annual_op"]
+            total_rev[r["name"]] += r["annual_rev"]
+            adj_totals[r["name"]] += r.get("annual_adj_op", r["annual_op"])
+
+    # IB-style recommendation verdict box
+    base_adj_op = adj_totals.get(base_fn, 0)
+    base_rev_tot = total_rev.get(base_fn, 0)
+    ranked_for_verdict = sorted(alt_fnames, key=lambda fn_: adj_totals.get(fn_, 0), reverse=True)
+    if ranked_for_verdict:
+        v_best = ranked_for_verdict[0]
+        v_delta = adj_totals[v_best] - base_adj_op
+        v_best_om = adj_totals[v_best] / total_rev[v_best] * 100 if total_rev[v_best] else 0
+        v_base_om = base_adj_op / base_rev_tot * 100 if base_rev_tot else 0
+        v_delta_pp = v_best_om - v_base_om
+        if v_delta > 0:
+            verdict_color = GREEN
+            verdict_icon = "\u2714"
+            verdict_text = f"Transfer to <strong>{v_best}</strong> is financially attractive, delivering <strong>+{fi(v_delta, dz=False)} {currency}</strong> annual OP uplift ({v_delta_pp:+.1f}pp margin improvement vs. {base_fn})."
+        elif abs(v_delta_pp) < 0.5:
+            verdict_color = "#e6a817"
+            verdict_icon = "\u25cf"
+            verdict_text = f"All locations deliver comparable profitability. No material cost advantage exists between {base_fn} and {v_best} ({v_delta_pp:+.1f}pp). Decision should be driven by strategic factors."
+        else:
+            verdict_color = RED
+            verdict_icon = "\u2716"
+            verdict_text = f"Current sourcing from <strong>{base_fn}</strong> remains optimal. Best alternative ({v_best}) trails by <strong>{fi(abs(v_delta), dz=False)} {currency}</strong> ({v_delta_pp:+.1f}pp)."
+
+        st.markdown(f'''<div style="background:#f8f9fb;border:1px solid {BORDER};border-left:4px solid {verdict_color};padding:0.8rem 1.1rem;margin:0.5rem 0 0.8rem 0;font-family:Inter,sans-serif;">
+            <div style="font-size:0.67rem;font-weight:700;color:{NAVY};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.3rem;">{verdict_icon} Recommendation</div>
+            <div style="font-size:0.78rem;color:{DARK_TEXT};line-height:1.55;">{verdict_text}</div>
+        </div>''', unsafe_allow_html=True)
+
+    base_op = totals.get(base_fn, 0)
+    base_rev = total_rev.get(base_fn, 0)
+    base_om = base_op / base_rev * 100 if base_rev else 0
+
+    ranked = sorted(alt_fnames, key=lambda fn_: adj_totals.get(fn_, 0), reverse=True)
+    best_fn = ranked[0] if ranked else None
+    best_op = adj_totals.get(best_fn, 0)
+    best_rev = total_rev.get(best_fn, 0)
+    best_om = best_op / best_rev * 100 if best_rev else 0
+    delta_op = best_op - adj_totals.get(base_fn, 0)
+
+    # KPI cards
+    ncards = min(len(ranked), 3) + 1
+    cols = st.columns(ncards)
+    cols[0].markdown(f'''<div style="background:{BASE_CASE_BG};border:1px solid {BORDER};border-radius:2px;padding:0.8rem 1rem;text-align:center;">
+        <div style="font-size:0.65rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.2rem;">Base Case (Current)</div>
+        <div style="font-size:1.15rem;font-weight:700;color:{DARK_TEXT};">{fi(base_op, dz=False)} {currency}</div>
+        <div style="font-size:0.82rem;font-weight:600;color:{DARK_TEXT};margin-top:0.15rem;">{base_fn}</div>
+        <div style="font-size:0.7rem;color:{MUTED};margin-top:0.1rem;">OM {base_om:.1f}%</div>
+    </div>''', unsafe_allow_html=True)
+
+    labels = ["Best Alternative", "2nd Best", "3rd Best"]
+    for i, fn_ in enumerate(ranked[:3]):
+        delta = adj_totals[fn_] - adj_totals.get(base_fn, 0)
+        is_better = delta > 0
+        bdr = f"border-left:3px solid {GREEN};" if is_better else f"border-left:3px solid {RED};"
+        d_sign = "+" if delta > 0 else ""
+        d_cls = f"color:{GREEN};font-weight:600;" if is_better else f"color:{RED};font-weight:600;"
+        fn_om = adj_totals[fn_] / total_rev[fn_] * 100 if total_rev[fn_] else 0
+        cols[i+1].markdown(f'''<div style="background:#fafafa;border:1px solid {BORDER};{bdr}border-radius:2px;padding:0.8rem 1rem;text-align:center;">
+            <div style="font-size:0.65rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.2rem;">{labels[i]}</div>
+            <div style="font-size:1.15rem;font-weight:700;color:{DARK_TEXT};">{fi(adj_totals[fn_], dz=False)} {currency}</div>
+            <div style="font-size:0.82rem;font-weight:600;color:{DARK_TEXT};margin-top:0.15rem;">{fn_}</div>
+            <div style="font-size:0.7rem;{d_cls}margin-top:0.1rem;">{d_sign}{fi(delta, acct=True)} vs base | OM {fn_om:.1f}%</div>
+        </div>''', unsafe_allow_html=True)
+
+    # ── EXECUTIVE NARRATIVE ──────────────────────────────────
+    # Auto-generated narrative for each item
+    for item in all_results:
+        results = item["results"]
+        inp_data = item["inputs"]
+        if len(results) >= 2:
+            from landed_cost.models import ItemInputs
+            inp_obj = ItemInputs(
+                item_number=inp_data.get("item_number", ""),
+                designation=inp_data.get("designation", ""),
+                net_sales_value=0, net_sales_qty=0,
+                material=0, variable_va=0, fixed_va=0,
+            )
+            summary_html = build_exec_summary(results, inp_obj, currency)
+            if summary_html:
+                st.markdown(summary_html, unsafe_allow_html=True)
+
+    # ── LANDED COST COMPARISON TABLE ─────────────────────────
+    st.markdown(f'<div class="sec-sm">Landed Cost Comparison — All Items</div>', unsafe_allow_html=True)
+
+    hdr = "".join(f'<th>{fn_}</th>' for fn_ in all_fnames)
+    tbl = f'<table class="ib-table"><thead><tr><th>Metric</th>{hdr}</tr></thead><tbody>'
+
+    # Revenue
+    rev_cells = "".join(f'<td class="{"base-case" if fn_==base_fn else ""}">{fi(total_rev[fn_], dz=False)}</td>' for fn_ in all_fnames)
+    tbl += f'<tr><td>Total Annual Revenue</td>{rev_cells}</tr>'
+
+    # Operating profit
+    op_cells = "".join(f'<td class="{"base-case" if fn_==base_fn else ""}">{fi(totals[fn_], dz=False)}</td>' for fn_ in all_fnames)
+    tbl += f'<tr class="row-bold"><td><strong>Total Annual OP</strong></td>{op_cells}</tr>'
+
+    # OM
+    om_cells = "".join(
+        f'<td class="{"base-case" if fn_==base_fn else ""}">{totals[fn_]/total_rev[fn_]*100:.1f}%</td>' if total_rev[fn_] else '<td>\u2013</td>'
+        for fn_ in all_fnames
+    )
+    tbl += f'<tr class="row-bold"><td><strong>Operating Margin</strong></td>{om_cells}</tr>'
+
+    # NWC-adjusted OP
+    has_nwc = any(r.get("lead_time_days") is not None for item in all_results for r in item["results"])
+    if has_nwc:
+        base_adj = adj_totals.get(base_fn, 0)
+        adj_op_cells = "".join(f'<td class="{"base-case" if fn_==base_fn else ""}">{fi(adj_totals[fn_], dz=False)}</td>' for fn_ in all_fnames)
+        tbl += f'<tr class="row-bold"><td><strong>NWC-Adjusted OP</strong></td>{adj_op_cells}</tr>'
+
+        adj_om_cells = "".join(
+            f'<td class="{"base-case" if fn_==base_fn else ""}">{adj_totals[fn_]/total_rev[fn_]*100:.1f}%</td>' if total_rev[fn_] else '<td>\u2013</td>'
+            for fn_ in all_fnames
+        )
+        tbl += f'<tr class="row-bold"><td><strong>Adj. Operating Margin</strong></td>{adj_om_cells}</tr>'
+
+    # Delta vs base
+    dash = "\u2013"
+    delta_cells = "".join(
+        f'<td class="{"base-case" if fn_==base_fn else dc(adj_totals[fn_]-adj_totals.get(base_fn,0))}">{dash if fn_==base_fn else fi(adj_totals[fn_]-adj_totals.get(base_fn,0), acct=True)}</td>'
+        for fn_ in all_fnames
+    )
+    tbl += f'<tr class="row-bold"><td><em>Delta vs. Base</em></td>{delta_cells}</tr>'
+    tbl += '</tbody></table>'
+    st.markdown(tbl, unsafe_allow_html=True)
+
+    # ── INVESTMENT SUMMARY ───────────────────────────────────
+    has_inv = any(
+        ic.get("total_investment", 0) > 0
+        for item in all_results
+        for ic in item.get("investment", [])
+    )
+    if has_inv:
+        st.markdown(f'<div class="sec-sm">Investment Requirements</div>', unsafe_allow_html=True)
+
+        agg_inv = {fn_: 0.0 for fn_ in alt_fnames}
+        agg_savings = {fn_: 0.0 for fn_ in alt_fnames}
+        agg_count = {fn_: 0 for fn_ in alt_fnames}
+        for item in all_results:
+            for ic in item.get("investment", []):
+                fn_ = ic.get("factory_name", "")
+                if fn_ in alt_fnames:
+                    agg_inv[fn_] += ic.get("total_investment", 0)
+                    agg_savings[fn_] += ic.get("annual_savings", 0)
+                    agg_count[fn_] += 1
+
+        # Recompute NPV/IRR/payback at portfolio level
+        agg_capex = {fn_: 0.0 for fn_ in alt_fnames}
+        agg_opex = {fn_: 0.0 for fn_ in alt_fnames}
+        agg_restr = {fn_: 0.0 for fn_ in alt_fnames}
+        agg_savings_by_year = {fn_: [] for fn_ in alt_fnames}
+        for item in all_results:
+            for ic in item.get("investment", []):
+                fn_ = ic.get("factory_name", "")
+                if fn_ in alt_fnames:
+                    agg_capex[fn_] += ic.get("capex", 0)
+                    agg_opex[fn_] += ic.get("opex", 0)
+                    agg_restr[fn_] += ic.get("restructuring", 0)
+                    yr_savings = ic.get("annual_savings_by_year", [ic.get("annual_savings", 0)])
+                    for yi, sv in enumerate(yr_savings):
+                        if yi < len(agg_savings_by_year[fn_]):
+                            agg_savings_by_year[fn_][yi] += sv
+                        else:
+                            agg_savings_by_year[fn_].append(sv)
+
+        agg_avg_savings = {fn_: (sum(v) / len(v) if v else 0.0) for fn_, v in agg_savings_by_year.items()}
+        agg_cases = {}
+        for fn_ in alt_fnames:
+            savings_input = agg_savings_by_year[fn_] if agg_savings_by_year[fn_] else agg_avg_savings[fn_]
+            agg_cases[fn_] = compute_investment_case(
+                annual_savings=savings_input,
+                capex=agg_capex[fn_], opex=agg_opex[fn_], restructuring=agg_restr[fn_],
+                discount_rate=company_wacc, horizon_years=10,
+            )
+
+        inv_hdr = "".join(f'<th>{fn_}</th>' for fn_ in alt_fnames)
+        inv_tbl = f'<table class="ib-table"><thead><tr><th>Investment Metric</th>{inv_hdr}</tr></thead><tbody>'
+
+        inv_tbl += f'<tr><td>Total Investment</td>{"".join(f"<td>{fi(agg_inv[fn_], dz=False)}</td>" for fn_ in alt_fnames)}</tr>'
+        inv_tbl += f'<tr><td>Avg. Annual Savings</td>{"".join(f"<td>{fi(agg_avg_savings[fn_], acct=True, dz=False)}</td>" for fn_ in alt_fnames)}</tr>'
+
+        npv_cells = ""
+        for fn_ in alt_fnames:
+            v = agg_cases[fn_]["npv"]
+            cls = "delta-pos" if v > 0 else ("delta-neg" if v < 0 else "")
+            npv_cells += f'<td class="{cls}"><strong>{fi(v, acct=True, dz=False)}</strong></td>'
+        inv_tbl += f'<tr class="row-bold"><td><strong>NPV (10yr)</strong></td>{npv_cells}</tr>'
+
+        irr_cells = ""
+        for fn_ in alt_fnames:
+            irr = agg_cases[fn_]["irr"]
+            if irr is not None:
+                cls = "delta-pos" if irr > company_wacc else "delta-neg"
+                irr_cells += f'<td class="{cls}"><strong>{irr*100:.1f}%</strong></td>'
+            else:
+                irr_cells += f'<td>{dash}</td>'
+        inv_tbl += f'<tr class="row-bold"><td><strong>IRR</strong></td>{irr_cells}</tr>'
+
+        pb_cells = ""
+        for fn_ in alt_fnames:
+            pb = agg_cases[fn_]["simple_payback"]
+            if pb is not None:
+                cls = "delta-pos" if pb <= target_payback else "delta-neg"
+                pb_cells += f'<td class="{cls}">{pb:.1f} years</td>'
+            else:
+                pb_cells += f'<td>{dash}</td>'
+        inv_tbl += f'<tr class="row-bold"><td>Simple Payback (target \u2264 {target_payback}yr)</td>{pb_cells}</tr>'
+
+        inv_tbl += '</tbody></table>'
+        st.markdown(inv_tbl, unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.76rem;color:{GREY_TEXT};margin:0.6rem 0;">No investment data entered. Configure investments on the <strong>Required Investments</strong> page.</div>', unsafe_allow_html=True)
+
+    # ── STRATEGIC CONTEXT ────────────────────────────────────
+    has_qual = any(
+        any(v.strip() for v in item.get("qualitative", {}).values())
+        for item in all_results
+    )
+    if has_qual:
+        st.markdown(f'<div class="sec-sm">Strategic Context</div>', unsafe_allow_html=True)
+        for item in all_results:
+            qual = item.get("qualitative", {})
+            if not any(v.strip() for v in qual.values()):
+                continue
+            inp = item["inputs"]
+            lbl = f"{inp['item_number']} - {inp['designation']}" if inp.get("item_number") else inp.get("designation", "Item")
+            st.markdown(f'<div style="font-weight:600;font-size:0.8rem;color:{NAVY};margin:0.6rem 0 0.2rem 0;">{lbl}</div>', unsafe_allow_html=True)
+            st.markdown(build_qualitative_summary(qual), unsafe_allow_html=True)
+
+    # ── FINANCIAL CONFIGURATION APPLIED ──────────────────────
+    st.markdown(f'<div class="sec-sm">Financial Configuration Applied</div>', unsafe_allow_html=True)
+
+    dash = "\u2013"
+    tm_display = target_market or dash
+    fin_tbl = f'''<table class="ib-table"><thead><tr><th>Parameter</th><th>Value</th></tr></thead><tbody>
+        <tr><td>Company WACC</td><td>{company_wacc*100:.1f}%</td></tr>
+        <tr><td>Target Payback Period</td><td>{target_payback} years</td></tr>
+        <tr><td>Target Operating Margin</td><td>{target_om*100:.1f}%</td></tr>
+        <tr><td>Currency</td><td>{currency}</td></tr>
+        <tr><td>Target Market</td><td>{tm_display}</td></tr>
+        <tr><td>Data Classification</td><td>{data_classification}</td></tr>
+    </tbody></table>'''
+    st.markdown(fin_tbl, unsafe_allow_html=True)
+
+    # Carrying cost rates per factory
+    if carrying_cost_rates:
+        cc_hdr = "".join(f'<th>{fn_}</th>' for fn_ in all_fnames if fn_ in carrying_cost_rates)
+        cc_cells = "".join(f'<td>{carrying_cost_rates[fn_]*100:.1f}%</td>' for fn_ in all_fnames if fn_ in carrying_cost_rates)
+        cc_tbl = f'<table class="ib-table" style="margin-top:0.5rem;"><thead><tr><th>Carrying Cost Rate</th>{cc_hdr}</tr></thead><tbody><tr><td>Annual Rate</td>{cc_cells}</tr></tbody></table>'
+        st.markdown(cc_tbl, unsafe_allow_html=True)
+
+    # ── APPENDIX / ITEM DETAILS ──────────────────────────────
+    st.markdown(f'<div class="sec-sm">Appendix — Item-Level Detail</div>', unsafe_allow_html=True)
+
+    for item_idx, item in enumerate(all_results):
+        inp = item["inputs"]
+        results = item["results"]
+        item_label = f"{inp.get('item_number', '')} {inp.get('designation', '')}".strip() or f"Item {item_idx + 1}"
+        st.markdown(f'<div style="font-weight:600;font-size:0.8rem;color:{NAVY};margin:0.8rem 0 0.3rem 0;">{item_label}</div>', unsafe_allow_html=True)
+
+        if len(results) >= 2:
+            i_hdr = "".join(f'<th>{r["name"]}</th>' for r in results)
+            i_tbl = f'<table class="ib-table"><thead><tr><th>Per-Unit Metric ({currency})</th>{i_hdr}</tr></thead><tbody>'
+
+            rows = [
+                ("Net Sales / Unit", "ns"),
+                ("Material", "material"),
+                ("Variable VA", "variable_va"),
+                ("Fixed VA", "fixed_va"),
+                ("Total COGS / Unit", "cogs"),
+                ("Gross Profit / Unit", "gp"),
+                ("S&A / Unit", "sa"),
+                ("Tariffs & Duties / Unit", "tariff_duty"),
+                ("Transport / Unit", "transport"),
+                ("Operating Profit / Unit", "op"),
+            ]
+            for label, key in rows:
+                cls = "row-bold" if key in ("cogs", "gp", "op") else ""
+                cells = "".join(
+                    f'<td class="{"base-case" if ri==0 else ""}">{fn(r.get(key, 0), 2)}</td>'
+                    for ri, r in enumerate(results)
+                )
+                i_tbl += f'<tr class="{cls}"><td>{"<strong>"+label+"</strong>" if cls else label}</td>{cells}</tr>'
+
+            # OM row
+            om_cells = "".join(
+                f'<td class="{"base-case" if ri==0 else ""}">{r["om"]*100:.1f}%</td>'
+                for ri, r in enumerate(results)
+            )
+            i_tbl += f'<tr class="row-bold"><td><strong>Operating Margin</strong></td>{om_cells}</tr>'
+
+            # Annual OP row
+            aop_cells = "".join(
+                f'<td class="{"base-case" if ri==0 else ""}">{fi(r["annual_op"], dz=False)}</td>'
+                for ri, r in enumerate(results)
+            )
+            i_tbl += f'<tr class="row-bold"><td><strong>Annual OP</strong></td>{aop_cells}</tr>'
+
+            i_tbl += '</tbody></table>'
+            st.markdown(i_tbl, unsafe_allow_html=True)
+
+    # Footer
+    st.markdown(f'<div style="margin-top:1.5rem;padding-top:0.5rem;border-top:1px solid {BORDER};font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};text-align:center;">{data_classification} | {project_name} | Generated by Manufacturing Location Analyzer</div>', unsafe_allow_html=True)
+
+
 # ── SAVE / LOAD ───────────────────────────────────────────────
 def save_project_json():
     """Collect all session state into a JSON-serializable dict."""
@@ -2142,6 +2645,7 @@ def main():
         ("Required Investments", "investment"),
         ("Strategic Context", "strategic"),
         ("Financial Configuration", "financial"),
+        ("Executive Summary", "executive"),
     ]
     info_pages = [
         ("About & Methodology", "about"),
@@ -2657,6 +3161,13 @@ This provides the local risk percentage.</li>
         # Footer for investment page
         st.markdown("---")
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Required Investments Analysis</span>", unsafe_allow_html=True)
+        return
+
+    # ── EXECUTIVE SUMMARY PAGE ────────────────────────────────
+    if st.session_state.active_page == "executive":
+        render_executive_summary_page()
+        st.markdown("---")
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Executive Summary</span>", unsafe_allow_html=True)
         return
 
     # ── Reference pages: render in main window ──
