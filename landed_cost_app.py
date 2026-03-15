@@ -2458,9 +2458,27 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
 
     # Cost overrides
     st.markdown('<div class="sec-sm">Cost Overrides (Optional)</div>', unsafe_allow_html=True)
+    st.markdown(f'''<div class="callout" style="font-size:0.72rem;">
+        Use overrides when you have <strong>actual quoted costs</strong> from a receiving factory that differ from the VA Ratio estimate.
+        Leave blank to let the model calculate costs using the VA Ratio from the assumptions matrix.<br>
+        <span style="color:{GREY_TEXT};font-size:0.68rem;line-height:1.6;">
+        <strong>When to override:</strong>&ensp;
+        You have a firm supplier quote for material at the receiving site&ensp;|&ensp;
+        Local labour rates are known and differ significantly from VA Ratio scaling&ensp;|&ensp;
+        The item uses a unique process not captured by the generic VA Ratio<br>
+        <strong>When to leave blank:</strong>&ensp;
+        Early-stage analysis with no site-specific quotes&ensp;|&ensp;
+        VA Ratio accurately reflects relative cost levels&ensp;|&ensp;
+        You want to test sensitivity to VA Ratio changes first
+        </span>
+    </div>''', unsafe_allow_html=True)
     OV_ROWS = ["Material", "Variable VA", "Fixed VA"]
     ov_cols = {cn: [None, None, None] for cn in factory_col_names_shared}
-    ov_cols["Guide"] = ["Override material (blank = base)", "Override variable VA (blank = VA Ratio)", "Override fixed VA (blank = VA Ratio)"]
+    ov_cols["Guide"] = [
+        f"Override material cost per unit (blank = use base case {material:.2f})",
+        f"Override variable VA per unit (blank = base {variable_va:.2f} \u00d7 VA Ratio)",
+        f"Override fixed VA per unit (blank = base {fixed_va:.2f} \u00d7 VA Ratio)",
+    ]
     ov_df = pd.DataFrame(ov_cols, index=OV_ROWS)
 
     edited_ov = st.data_editor(
