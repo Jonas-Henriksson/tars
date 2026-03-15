@@ -2144,7 +2144,15 @@ def init_state():
     if "prop_risk_exposure" not in st.session_state:
         st.session_state.prop_risk_exposure = [{"Risk": "", "Probability": "Medium", "Impact (M)": 0.0, "Mitigation": ""}]
     if "prop_milestones" not in st.session_state:
-        st.session_state.prop_milestones = [{"Milestone": "", "Owner": "", "Target Date": "", "Status": "Pending"}]
+        st.session_state.prop_milestones = [
+            {"Milestone": "Pre-study approved", "Owner": "", "Target Date": "", "Status": "Pending"},
+            {"Milestone": "Supplier qualification complete", "Owner": "", "Target Date": "", "Status": "Pending"},
+            {"Milestone": "Equipment installed & validated", "Owner": "", "Target Date": "", "Status": "Pending"},
+            {"Milestone": "Pilot production run", "Owner": "", "Target Date": "", "Status": "Pending"},
+            {"Milestone": "Customer approval obtained", "Owner": "", "Target Date": "", "Status": "Pending"},
+            {"Milestone": "Full volume ramp-up", "Owner": "", "Target Date": "", "Status": "Pending"},
+            {"Milestone": "Sending site decommissioned", "Owner": "", "Target Date": "", "Status": "Pending"},
+        ]
     if "prop_approvals" not in st.session_state:
         st.session_state.prop_approvals = [{"Approver": "", "Role": "", "Decision": "", "Date": "", "Comments": ""}]
     # ── PRE-STUDY FACTORY SCOPING ────────────────────────────
