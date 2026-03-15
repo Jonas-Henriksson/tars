@@ -50,6 +50,10 @@ INPUT_EDITOR_KEYS = [
     "proj_name", "proj_ccy", "proj_tm", "proj_dt",
     "fc_editor", "country_editor", "assumption_matrix", "nwc_matrix",
     "wacc_editor", "target_pb_editor", "target_om_editor", "coc_editor",
+    # Governance template inputs
+    "ps_dep_editor", "ps_timeline_editor",
+    "prop_risks_editor", "prop_fin_editor",
+    "td_base_editor", "td_commercial_editor", "td_supply_editor", "td_financial_editor",
 ]
 _blue_border = f"border-left: 3px solid {INPUT_BLUE} !important; padding-left: 2px;"
 _fixed_rules = "\n".join(f"    .st-key-{k} {{ {_blue_border} }}" for k in INPUT_EDITOR_KEYS)
@@ -58,7 +62,10 @@ _dynamic_rules = """    [class*="st-key-"][class*="_txt"] { %(bb)s }
     [class*="st-key-"][class*="_ns"] { %(bb)s }
     [class*="st-key-"][class*="_ov"] { %(bb)s }
     [class*="st-key-"][class*="_inv_matrix"] { %(bb)s }
-    [class*="st-key-"][class*="_inv_hz"] { %(bb)s }""" % {"bb": _blue_border}
+    [class*="st-key-"][class*="_inv_hz"] { %(bb)s }
+    [class*="st-key-ps_"] { %(bb)s }
+    [class*="st-key-prop_"] { %(bb)s }
+    [class*="st-key-td_"] { %(bb)s }""" % {"bb": _blue_border}
 
 st.markdown(
     '<link rel="preconnect" href="https://fonts.googleapis.com">'
@@ -1252,6 +1259,77 @@ def export_excel_project(project_data):
                 total = sum(res["annual_op"] for item in project_data for res in item["results"] if res["name"]==fn_)
                 ws.write(r,c+1,total,inb)
 
+        # ── GOVERNANCE SHEETS ────────────────────────────────
+        # Pre-study sheet
+        ws = wb.add_worksheet("Pre-study")
+        w.sheets["Pre-study"] = ws
+        ws.set_column(0, 0, 28)
+        ws.set_column(1, 1, 50)
+        ws.merge_range(0, 0, 0, 1, f"Pre-study | {st.session_state.get('project_name', '')}", tf)
+        r = 2
+        for label, key in [("Background & Current Set-up", "ps_background"),
+                           ("Reason to Change", "ps_reason"),
+                           ("Key Questions", "ps_questions")]:
+            ws.write(r, 0, label, hl)
+            ws.write(r, 1, st.session_state.get(key, ""), lf)
+            r += 1
+        r += 1
+        ws.write(r, 0, "Team", hl); ws.write(r, 1, "", hl); r += 1
+        for label, key in [("Initiative Sponsor", "ps_sponsor"), ("Initiative Lead", "ps_lead"),
+                           ("Main Entity(s)", "ps_main_entity"), ("Impact on Other Entities", "ps_impact_entities"),
+                           ("Pre-study Team", "ps_team")]:
+            ws.write(r, 0, label, lf)
+            ws.write(r, 1, st.session_state.get(key, ""), lf)
+            r += 1
+        r += 1
+        ws.write(r, 0, "Time Plan", hl); ws.write(r, 1, "", hl); r += 1
+        for ms, dt in st.session_state.get("ps_timeline", {}).items():
+            ws.write(r, 0, ms, lf); ws.write(r, 1, str(dt), lf); r += 1
+
+        # Proposal sheet
+        ws = wb.add_worksheet("Proposal")
+        w.sheets["Proposal"] = ws
+        ws.set_column(0, 0, 28)
+        ws.set_column(1, 1, 50)
+        ws.merge_range(0, 0, 0, 1, f"Proposal | {st.session_state.get('project_name', '')}", tf)
+        r = 2
+        for label, key in [("Direction", "prop_direction"), ("Benefits", "prop_benefits"),
+                           ("Relevant Details", "prop_details"), ("Time Plan", "prop_timeplan")]:
+            ws.write(r, 0, label, hl)
+            ws.write(r, 1, st.session_state.get(key, ""), lf)
+            r += 1
+        r += 1
+        ws.write(r, 0, "Team", hl); ws.write(r, 1, "", hl); r += 1
+        for label, key in [("Initiative Sponsor", "prop_sponsor"), ("Initiative Lead", "prop_lead"),
+                           ("Pre-study Team", "prop_team")]:
+            ws.write(r, 0, label, lf); ws.write(r, 1, st.session_state.get(key, ""), lf); r += 1
+
+        # Transfer Details sheet
+        ws = wb.add_worksheet("Transfer Details")
+        w.sheets["Transfer Details"] = ws
+        ws.set_column(0, 0, 34)
+        ws.set_column(1, 6, 18)
+        ws.merge_range(0, 0, 0, 6, f"Transfer Details | {st.session_state.get('project_name', '')}", tf)
+        r = 2
+        for label, key in [("Transfer To", "td_transfer_to"), ("Transfer From", "td_transfer_from"),
+                           ("Product Line", "td_product_line"), ("Material Family", "td_material_family"),
+                           ("Transfer Volume", "td_transfer_volume"), ("Indicative Timing", "td_indicative_timing")]:
+            ws.write(r, 0, label, lb); ws.write(r, 1, st.session_state.get(key, ""), lf); r += 1
+        r += 1
+        td_reqs = st.session_state.get("td_requirements", {})
+        td_cols = ["Requirement", "Value", "Related Question", "Answer", "Approver", "Date", "Status"]
+        for section, rows in td_reqs.items():
+            ws.merge_range(r, 0, r, 6, section, sf) if 6 > 0 else ws.write(r, 0, section, sf)
+            r += 1
+            for ci, col in enumerate(td_cols):
+                ws.write(r, ci, col, hf)
+            r += 1
+            for row in rows:
+                for ci, col in enumerate(td_cols):
+                    ws.write(r, ci, str(row.get(col, "")), lf)
+                r += 1
+            r += 1
+
     buf.seek(0)
     return buf
 
@@ -1571,6 +1649,100 @@ def export_pdf_project(all_results, ccy, project_name):
 
         add_table(pdf, headers, rows, col_widths, bold_rows=base_bold+nwc_portfolio_bold)
 
+    # ── GOVERNANCE PAGES ────────────────────────────────────
+    def _safe(txt):
+        return (txt or "").encode("latin-1", "replace").decode("latin-1")
+
+    # Pre-study page
+    ps_bg = st.session_state.get("ps_background", "")
+    ps_reason = st.session_state.get("ps_reason", "")
+    ps_questions = st.session_state.get("ps_questions", "")
+    if any(s.strip() for s in (ps_bg, ps_reason, ps_questions)):
+        pdf.add_page()
+        add_page_header(pdf, f"Pre-study | {project_name}", f"{ccy}")
+        for label, txt in [("Background & Current Set-up", ps_bg),
+                           ("Reason to Change Current Set-up", ps_reason),
+                           ("Key Questions to Review", ps_questions)]:
+            if txt.strip():
+                pdf.set_font("Helvetica", "B", 8)
+                pdf.set_fill_color(navy_r, navy_g, navy_b)
+                pdf.set_text_color(white_r, white_g, white_b)
+                pdf.cell(0, 5.5, label, ln=True, fill=True)
+                pdf.set_text_color(dark_r, dark_g, dark_b)
+                pdf.set_font("Helvetica", "", 7)
+                pdf.multi_cell(0, 4, _safe(txt))
+                pdf.ln(2)
+        # Team
+        pdf.set_font("Helvetica", "B", 8)
+        pdf.set_fill_color(navy_r, navy_g, navy_b)
+        pdf.set_text_color(white_r, white_g, white_b)
+        pdf.cell(0, 5.5, "Team", ln=True, fill=True)
+        pdf.set_text_color(dark_r, dark_g, dark_b)
+        pdf.set_font("Helvetica", "", 7)
+        for label, key in [("Initiative Sponsor", "ps_sponsor"), ("Initiative Lead", "ps_lead"),
+                           ("Main Entity(s)", "ps_main_entity"), ("Pre-study Team", "ps_team")]:
+            val = st.session_state.get(key, "")
+            if val.strip():
+                pdf.set_font("Helvetica", "B", 6.5)
+                pdf.cell(45, 4.5, label, border=0)
+                pdf.set_font("Helvetica", "", 6.5)
+                pdf.cell(0, 4.5, _safe(val), ln=True)
+
+    # Proposal page
+    prop_dir = st.session_state.get("prop_direction", "")
+    prop_ben = st.session_state.get("prop_benefits", "")
+    if any(s.strip() for s in (prop_dir, prop_ben)):
+        pdf.add_page()
+        add_page_header(pdf, f"Proposal | {project_name}", f"{ccy}")
+        for label, key in [("Direction", "prop_direction"), ("Benefits", "prop_benefits"),
+                           ("Relevant Details", "prop_details")]:
+            txt = st.session_state.get(key, "")
+            if txt.strip():
+                pdf.set_font("Helvetica", "B", 8)
+                pdf.set_fill_color(navy_r, navy_g, navy_b)
+                pdf.set_text_color(white_r, white_g, white_b)
+                pdf.cell(0, 5.5, label, ln=True, fill=True)
+                pdf.set_text_color(dark_r, dark_g, dark_b)
+                pdf.set_font("Helvetica", "", 7)
+                pdf.multi_cell(0, 4, _safe(txt))
+                pdf.ln(2)
+
+    # Transfer Details page
+    td_reqs = st.session_state.get("td_requirements", {})
+    has_td = any(r.get("Value", "").strip() or r.get("Status", "") != "Pending"
+                 for rows in td_reqs.values() for r in rows)
+    if has_td:
+        pdf.add_page("L")  # Landscape for the wide table
+        add_page_header(pdf, f"Transfer Details | {project_name}", f"{ccy}")
+        # Header fields
+        pdf.set_font("Helvetica", "B", 7)
+        for label, key in [("Transfer To", "td_transfer_to"), ("Transfer From", "td_transfer_from"),
+                           ("Product Line", "td_product_line"), ("Transfer Volume", "td_transfer_volume")]:
+            pdf.cell(30, 4.5, label + ":", border=0)
+            pdf.set_font("Helvetica", "", 7)
+            pdf.cell(40, 4.5, _safe(st.session_state.get(key, "")), border=0)
+            pdf.set_font("Helvetica", "B", 7)
+        pdf.ln(6)
+        # Requirements tables
+        td_col_w = [60, 22, 60, 22, 28, 22, 22]
+        td_hdrs = ["Requirement", "Value", "Related Question", "Answer", "Approver", "Date", "Status"]
+        for section, rows in td_reqs.items():
+            pdf.set_font("Helvetica", "B", 7)
+            pdf.set_fill_color(navy_r, navy_g, navy_b)
+            pdf.set_text_color(white_r, white_g, white_b)
+            pdf.cell(sum(td_col_w), 5, section, ln=True, fill=True)
+            pdf.set_text_color(dark_r, dark_g, dark_b)
+            pdf.set_font("Helvetica", "B", 6)
+            for ci, h in enumerate(td_hdrs):
+                pdf.cell(td_col_w[ci], 4.5, h, border=1)
+            pdf.ln()
+            pdf.set_font("Helvetica", "", 6)
+            for row in rows:
+                for ci, col in enumerate(td_hdrs):
+                    pdf.cell(td_col_w[ci], 4.5, _safe(str(row.get(col, ""))), border=1)
+                pdf.ln()
+            pdf.ln(2)
+
     buf = io.BytesIO()
     buf.write(pdf.output())
     buf.seek(0)
@@ -1609,6 +1781,54 @@ EXAMPLE_ITEMS = [
 ]
 
 
+# ── GOVERNANCE TEMPLATE HELPERS ─────────────────────────────────
+_TD_BASE_REQS = [
+    ("Tail-end threshold (Q)", "Transfer volume (Q)"),
+    ("Factory strategy (Flexible/volume)", "Transfer volume type (Flexible/volume)"),
+    ("Established skills and capabilities (yes/no)", "If no, approved plan to establish capability?"),
+    ("Macro stability (yes/no)", "If no, approval to move ahead?"),
+    ("Remaining capacity (Q)", "Expected demand Y+5 (Q)"),
+]
+_TD_COMMERCIAL_REQS = [
+    ("Confirmed acceptance rate (yes/no)", ""),
+    ("Customer approval (yes/no)", ""),
+    ("Current market demand in region (Q)", "Expected 5-year CAGR"),
+    ("Technology relevancy confirmed (yes/no)", ""),
+]
+_TD_SUPPLY_REQS = [
+    ("Aligned with Global product line manager", ""),
+    ("Established supply chain (yes/no)", "If no, approved plan to establish supply?"),
+]
+_TD_FINANCIAL_REQS = [
+    ("Business case for both units in place", "Expected investment (Both units, MSEK)"),
+    ("Payback period (Both units, Years)", "Expected total IRR (Both units, %)"),
+]
+
+
+def _default_td_requirements():
+    """Build the default transfer details requirements structure."""
+    sections = {
+        "Base Requirements": _TD_BASE_REQS,
+        "Commercial Requirements": _TD_COMMERCIAL_REQS,
+        "Product Line & Supply Chain Requirements": _TD_SUPPLY_REQS,
+        "Financial Requirements": _TD_FINANCIAL_REQS,
+    }
+    result = {}
+    for section, rows in sections.items():
+        result[section] = []
+        for req, related in rows:
+            result[section].append({
+                "Requirement": req,
+                "Value": "",
+                "Related Question": related,
+                "Answer": "",
+                "Approver": "",
+                "Date": "",
+                "Status": "Pending",
+            })
+    return result
+
+
 # ── SESSION STATE INIT ──────────────────────────────────────────
 def init_state():
     if "project_name" not in st.session_state:
@@ -1621,6 +1841,64 @@ def init_state():
         st.session_state.ex = False
     if "active_page" not in st.session_state:
         st.session_state.active_page = "model"
+    # ── GOVERNANCE TEMPLATE DEFAULTS ─────────────────────────
+    if "ps_background" not in st.session_state:
+        st.session_state.ps_background = ""
+    if "ps_reason" not in st.session_state:
+        st.session_state.ps_reason = ""
+    if "ps_questions" not in st.session_state:
+        st.session_state.ps_questions = ""
+    if "ps_dependencies" not in st.session_state:
+        st.session_state.ps_dependencies = [{"Dependency": "", "How to Manage": ""}]
+    if "ps_sponsor" not in st.session_state:
+        st.session_state.ps_sponsor = ""
+    if "ps_lead" not in st.session_state:
+        st.session_state.ps_lead = ""
+    if "ps_main_entity" not in st.session_state:
+        st.session_state.ps_main_entity = ""
+    if "ps_impact_entities" not in st.session_state:
+        st.session_state.ps_impact_entities = ""
+    if "ps_team" not in st.session_state:
+        st.session_state.ps_team = ""
+    if "ps_timeline" not in st.session_state:
+        st.session_state.ps_timeline = {
+            "Pre-study Finalized": "", "Pre-study to FC": "",
+            "IRE Submission": "", "IRE to IC": "", "Project Execution Start": "",
+        }
+    if "prop_direction" not in st.session_state:
+        st.session_state.prop_direction = ""
+    if "prop_benefits" not in st.session_state:
+        st.session_state.prop_benefits = ""
+    if "prop_details" not in st.session_state:
+        st.session_state.prop_details = ""
+    if "prop_total_investment" not in st.session_state:
+        st.session_state.prop_total_investment = None
+    if "prop_cash_out" not in st.session_state:
+        st.session_state.prop_cash_out = None
+    if "prop_timeplan" not in st.session_state:
+        st.session_state.prop_timeplan = ""
+    if "prop_risks" not in st.session_state:
+        st.session_state.prop_risks = [{"Risk": "", "Mitigation": ""}]
+    if "prop_sponsor" not in st.session_state:
+        st.session_state.prop_sponsor = ""
+    if "prop_lead" not in st.session_state:
+        st.session_state.prop_lead = ""
+    if "prop_team" not in st.session_state:
+        st.session_state.prop_team = ""
+    if "td_transfer_to" not in st.session_state:
+        st.session_state.td_transfer_to = ""
+    if "td_transfer_from" not in st.session_state:
+        st.session_state.td_transfer_from = ""
+    if "td_product_line" not in st.session_state:
+        st.session_state.td_product_line = ""
+    if "td_material_family" not in st.session_state:
+        st.session_state.td_material_family = ""
+    if "td_transfer_volume" not in st.session_state:
+        st.session_state.td_transfer_volume = ""
+    if "td_indicative_timing" not in st.session_state:
+        st.session_state.td_indicative_timing = ""
+    if "td_requirements" not in st.session_state:
+        st.session_state.td_requirements = _default_td_requirements()
 
 
 # ── ITEM ANALYSIS RENDERER ───────────────────────────────────────
@@ -2616,6 +2894,36 @@ def save_project_json():
         "project_name": st.session_state.get("project_name", ""),
         "project_items": st.session_state.get("project_items", []),
         "next_id": st.session_state.get("next_id", 1),
+        # Governance — Pre-study
+        "ps_background": st.session_state.get("ps_background", ""),
+        "ps_reason": st.session_state.get("ps_reason", ""),
+        "ps_questions": st.session_state.get("ps_questions", ""),
+        "ps_dependencies": st.session_state.get("ps_dependencies", []),
+        "ps_sponsor": st.session_state.get("ps_sponsor", ""),
+        "ps_lead": st.session_state.get("ps_lead", ""),
+        "ps_main_entity": st.session_state.get("ps_main_entity", ""),
+        "ps_impact_entities": st.session_state.get("ps_impact_entities", ""),
+        "ps_team": st.session_state.get("ps_team", ""),
+        "ps_timeline": st.session_state.get("ps_timeline", {}),
+        # Governance — Proposal
+        "prop_direction": st.session_state.get("prop_direction", ""),
+        "prop_benefits": st.session_state.get("prop_benefits", ""),
+        "prop_details": st.session_state.get("prop_details", ""),
+        "prop_total_investment": st.session_state.get("prop_total_investment"),
+        "prop_cash_out": st.session_state.get("prop_cash_out"),
+        "prop_timeplan": st.session_state.get("prop_timeplan", ""),
+        "prop_risks": st.session_state.get("prop_risks", []),
+        "prop_sponsor": st.session_state.get("prop_sponsor", ""),
+        "prop_lead": st.session_state.get("prop_lead", ""),
+        "prop_team": st.session_state.get("prop_team", ""),
+        # Governance — Transfer Details
+        "td_transfer_to": st.session_state.get("td_transfer_to", ""),
+        "td_transfer_from": st.session_state.get("td_transfer_from", ""),
+        "td_product_line": st.session_state.get("td_product_line", ""),
+        "td_material_family": st.session_state.get("td_material_family", ""),
+        "td_transfer_volume": st.session_state.get("td_transfer_volume", ""),
+        "td_indicative_timing": st.session_state.get("td_indicative_timing", ""),
+        "td_requirements": st.session_state.get("td_requirements", {}),
     }, indent=2)
 
 
@@ -2673,6 +2981,19 @@ def main():
                 f'<a class="nav-sub" href="#{anchor}">{lbl}</a>' for lbl, anchor in sub_sections
             )
             st.sidebar.markdown(links_html, unsafe_allow_html=True)
+
+    # ── GOVERNANCE NAV ──────────────────────────────────────────
+    gov_pages = [
+        ("Pre-study", "prestudy"),
+        ("Proposal", "proposal"),
+        ("Transfer Details", "transfer"),
+    ]
+    st.sidebar.markdown(f'<div class="nav-sep">Governance</div>', unsafe_allow_html=True)
+    for label, key in gov_pages:
+        if st.sidebar.button(label, key=f"nav_{key}", use_container_width=True,
+                             type="primary" if st.session_state.active_page == key else "secondary"):
+            st.session_state.active_page = key
+            st.rerun()
 
     st.sidebar.markdown(f'<div class="nav-sep">Reference</div>', unsafe_allow_html=True)
     for label, key in info_pages:
@@ -3270,6 +3591,315 @@ Compares full cost-to-serve across factory locations, including material, labour
 """, unsafe_allow_html=True)
         return
 
+    # ── PRE-STUDY PAGE ─────────────────────────────────────────
+    if st.session_state.active_page == "prestudy":
+        project_name = st.session_state.project_name
+        data_classification = st.session_state.get("data_classification", "C3 - Confidential")
+        st.markdown(f"""<div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.8rem;">
+            <div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};">Pre-study <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}</div>
+            <div style="background:{NAVY};color:#fff;font-size:0.62rem;font-weight:600;padding:0.2rem 0.7rem;border-radius:2px;text-transform:uppercase;letter-spacing:0.06em;">Footprint Optimization</div>
+        </div>""", unsafe_allow_html=True)
+
+        ps_left, ps_right = st.columns([3, 2])
+        with ps_left:
+            st.markdown(f'<div class="sec-sm">Background & Current Set-up</div>', unsafe_allow_html=True)
+            st.session_state.ps_background = st.text_area(
+                "Background", value=st.session_state.ps_background,
+                key="ps_bg_input", height=120, label_visibility="collapsed",
+                placeholder="Describe the current manufacturing set-up, volumes, and relevant context...")
+
+            st.markdown(f'<div class="sec-sm">Reason to Change Current Set-up</div>', unsafe_allow_html=True)
+            st.session_state.ps_reason = st.text_area(
+                "Reason", value=st.session_state.ps_reason,
+                key="ps_reason_input", height=120, label_visibility="collapsed",
+                placeholder="Why is a change being considered? What triggers this evaluation?...")
+
+            st.markdown(f'<div class="sec-sm">Key Questions to Review as Part of Pre-study</div>', unsafe_allow_html=True)
+            st.session_state.ps_questions = st.text_area(
+                "Questions", value=st.session_state.ps_questions,
+                key="ps_questions_input", height=120, label_visibility="collapsed",
+                placeholder="List the key questions that need to be answered during the pre-study phase...")
+
+        with ps_right:
+            # Cross-functional dependencies
+            st.markdown(f'<div class="sec-sm">Cross-functional Dependencies & How to Manage</div>', unsafe_allow_html=True)
+            dep_df = pd.DataFrame(st.session_state.ps_dependencies)
+            if "Dependency" not in dep_df.columns:
+                dep_df = pd.DataFrame([{"Dependency": "", "How to Manage": ""}])
+            edited_deps = st.data_editor(
+                dep_df, use_container_width=True, num_rows="dynamic", key="ps_dep_editor",
+                hide_index=True,
+                column_config={
+                    "Dependency": st.column_config.TextColumn("Dependency", width=180),
+                    "How to Manage": st.column_config.TextColumn("How to Manage", width=260),
+                })
+            st.session_state.ps_dependencies = edited_deps.to_dict("records")
+
+            # Team
+            st.markdown(f'<div class="sec-sm">Team</div>', unsafe_allow_html=True)
+            st.session_state.ps_sponsor = st.text_input("Initiative Sponsor", value=st.session_state.ps_sponsor, key="ps_sponsor_input")
+            st.session_state.ps_lead = st.text_input("Initiative Lead", value=st.session_state.ps_lead, key="ps_lead_input")
+            st.session_state.ps_main_entity = st.text_input("Main Entity(s)", value=st.session_state.ps_main_entity, key="ps_entity_input")
+            st.session_state.ps_impact_entities = st.text_input("Impact Assessment on Other Entity(s)", value=st.session_state.ps_impact_entities, key="ps_impact_input")
+            st.session_state.ps_team = st.text_area(
+                "Pre-study Team", value=st.session_state.ps_team,
+                key="ps_team_input", height=80, label_visibility="visible",
+                placeholder="Team members and their roles / regions...")
+
+            # Time Plan
+            st.markdown(f'<div class="sec-sm">Time Plan</div>', unsafe_allow_html=True)
+            tl = st.session_state.ps_timeline
+            tl_df = pd.DataFrame({"Milestone": list(tl.keys()), "Target Date": list(tl.values())})
+            edited_tl = st.data_editor(
+                tl_df, use_container_width=True, num_rows="fixed", key="ps_timeline_editor",
+                hide_index=True,
+                column_config={
+                    "Milestone": st.column_config.TextColumn("Milestone", disabled=True, width=200),
+                    "Target Date": st.column_config.TextColumn("Target Date", width=160),
+                },
+                disabled=["Milestone"])
+            st.session_state.ps_timeline = dict(zip(edited_tl["Milestone"], edited_tl["Target Date"].fillna("")))
+
+        st.markdown("---")
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Pre-study</span>", unsafe_allow_html=True)
+        return
+
+    # ── PROPOSAL PAGE ──────────────────────────────────────────
+    if st.session_state.active_page == "proposal":
+        project_name = st.session_state.project_name
+        data_classification = st.session_state.get("data_classification", "C3 - Confidential")
+        currency = st.session_state.get("currency", "SEK")
+        all_results = st.session_state.get("_all_results", [])
+
+        st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
+            Proposal <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
+        </div>""", unsafe_allow_html=True)
+
+        # Auto-generate direction from model results if not already set
+        if not st.session_state.prop_direction.strip() and all_results:
+            try:
+                best_name, best_delta = "", 0.0
+                base_om = 0.0
+                for item_data in all_results:
+                    results = item_data.get("results", [])
+                    if len(results) >= 2:
+                        base_om = results[0].get("operating_margin_pct", 0)
+                        for r in results[1:]:
+                            delta = r.get("operating_margin_pct", 0) - base_om
+                            if delta > best_delta:
+                                best_delta = delta
+                                best_name = r.get("name", "")
+                if best_name:
+                    base_name = all_results[0]["results"][0].get("name", "Base") if all_results[0].get("results") else "Base"
+                    st.session_state.prop_direction = (
+                        f"Transfer production from {base_name} to {best_name}, "
+                        f"achieving {best_delta:+.1f}pp operating margin improvement."
+                    )
+            except (KeyError, IndexError):
+                pass
+
+        prop_left, prop_right = st.columns([2, 3])
+        with prop_left:
+            st.markdown(f'<div class="sec-sm">Direction</div>', unsafe_allow_html=True)
+            st.session_state.prop_direction = st.text_area(
+                "Direction", value=st.session_state.prop_direction,
+                key="prop_direction_input", height=160, label_visibility="collapsed",
+                placeholder="Describe the recommended direction and key rationale...")
+
+        with prop_right:
+            # Benefits
+            st.markdown(f'<div class="sec-sm">Benefits</div>', unsafe_allow_html=True)
+            st.session_state.prop_benefits = st.text_area(
+                "Benefits", value=st.session_state.prop_benefits,
+                key="prop_benefits_input", height=100, label_visibility="collapsed",
+                placeholder="List key benefits (use bullet points: - Benefit 1\n- Benefit 2)...")
+
+            # Relevant Details
+            st.markdown(f'<div class="sec-sm">Relevant Details</div>', unsafe_allow_html=True)
+            st.session_state.prop_details = st.text_area(
+                "Details", value=st.session_state.prop_details,
+                key="prop_details_input", height=100, label_visibility="collapsed",
+                placeholder="Additional context, technical details, or market considerations...")
+
+            # Financials & Time Plan
+            st.markdown(f'<div class="sec-sm">Financials & Time Plan</div>', unsafe_allow_html=True)
+            # Try auto-populating investment total from session state
+            auto_inv = 0.0
+            if all_results:
+                for item_data in all_results:
+                    for ic in item_data.get("investment_cases", []):
+                        auto_inv += ic.get("total_investment", 0)
+            fin_data = {
+                "Item": ["Total Investment", "Cash Out", "Time Plan"],
+                "Value": [
+                    f"{(st.session_state.prop_total_investment or auto_inv) / 1e6:.1f} M{currency}" if (st.session_state.prop_total_investment or auto_inv) else "",
+                    f"{st.session_state.prop_cash_out / 1e6:.1f} M{currency}" if st.session_state.prop_cash_out else "",
+                    st.session_state.prop_timeplan,
+                ],
+            }
+            fin_df = pd.DataFrame(fin_data)
+            edited_fin = st.data_editor(
+                fin_df, use_container_width=True, num_rows="fixed", key="prop_fin_editor",
+                hide_index=True,
+                column_config={
+                    "Item": st.column_config.TextColumn("Item", disabled=True, width=160),
+                    "Value": st.column_config.TextColumn("Value", width=240),
+                },
+                disabled=["Item"])
+            # Persist edited values back
+            for _, row in edited_fin.iterrows():
+                if row["Item"] == "Time Plan":
+                    st.session_state.prop_timeplan = str(row["Value"] or "")
+
+            # Dependencies, Risks & Mitigations
+            st.markdown(f'<div class="sec-sm">Dependencies, Risks & Mitigations</div>', unsafe_allow_html=True)
+            risk_df = pd.DataFrame(st.session_state.prop_risks)
+            if "Risk" not in risk_df.columns:
+                risk_df = pd.DataFrame([{"Risk": "", "Mitigation": ""}])
+            edited_risks = st.data_editor(
+                risk_df, use_container_width=True, num_rows="dynamic", key="prop_risks_editor",
+                hide_index=True,
+                column_config={
+                    "Risk": st.column_config.TextColumn("Risk / Dependency", width=220),
+                    "Mitigation": st.column_config.TextColumn("Mitigation", width=260),
+                })
+            st.session_state.prop_risks = edited_risks.to_dict("records")
+
+        # Team (full width)
+        st.markdown(f'<div class="sec-sm">Team</div>', unsafe_allow_html=True)
+        tc1, tc2, tc3 = st.columns(3)
+        with tc1:
+            st.session_state.prop_sponsor = st.text_input(
+                "Initiative Sponsor", value=st.session_state.prop_sponsor or st.session_state.ps_sponsor,
+                key="prop_sponsor_input")
+        with tc2:
+            st.session_state.prop_lead = st.text_input(
+                "Initiative Lead", value=st.session_state.prop_lead or st.session_state.ps_lead,
+                key="prop_lead_input")
+        with tc3:
+            st.session_state.prop_team = st.text_input(
+                "Pre-study Team", value=st.session_state.prop_team or st.session_state.ps_team.split("\n")[0] if st.session_state.ps_team else "",
+                key="prop_team_input")
+
+        st.markdown("---")
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Proposal</span>", unsafe_allow_html=True)
+        return
+
+    # ── TRANSFER DETAILS PAGE ──────────────────────────────────
+    if st.session_state.active_page == "transfer":
+        project_name = st.session_state.project_name
+        data_classification = st.session_state.get("data_classification", "C3 - Confidential")
+        all_factory_names = st.session_state.get("_all_factory_names", ["Base Case"])
+        factory_countries = st.session_state.get("_factory_countries", {})
+
+        st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
+            Transfer Details <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
+        </div>""", unsafe_allow_html=True)
+
+        # Auto-populate transfer to/from from factory config if empty
+        if not st.session_state.td_transfer_from and len(all_factory_names) >= 1:
+            st.session_state.td_transfer_from = all_factory_names[0]
+        if not st.session_state.td_transfer_to and len(all_factory_names) >= 2:
+            st.session_state.td_transfer_to = all_factory_names[1]
+
+        # Header bar — six key-value pairs in styled boxes
+        st.markdown(f"""<div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:1rem;">
+            <div style="flex:1;min-width:200px;background:{NAVY};color:#fff;padding:0.5rem 0.8rem;border-radius:3px;">
+                <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.06em;opacity:0.8;">Transfer to</div>
+                <div style="font-size:0.8rem;font-weight:600;">{st.session_state.td_transfer_to or '—'}</div>
+            </div>
+            <div style="flex:1;min-width:200px;background:{NAVY};color:#fff;padding:0.5rem 0.8rem;border-radius:3px;">
+                <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.06em;opacity:0.8;">Transfer from</div>
+                <div style="font-size:0.8rem;font-weight:600;">{st.session_state.td_transfer_from or '—'}</div>
+            </div>
+            <div style="flex:1;min-width:150px;background:#e8edf5;padding:0.5rem 0.8rem;border-radius:3px;">
+                <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.06em;color:{GREY_TEXT};">Product Line</div>
+                <div style="font-size:0.8rem;font-weight:600;color:{DARK_TEXT};">{st.session_state.td_product_line or '—'}</div>
+            </div>
+            <div style="flex:1;min-width:150px;background:#e8edf5;padding:0.5rem 0.8rem;border-radius:3px;">
+                <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.06em;color:{GREY_TEXT};">Material Family</div>
+                <div style="font-size:0.8rem;font-weight:600;color:{DARK_TEXT};">{st.session_state.td_material_family or '—'}</div>
+            </div>
+            <div style="flex:1;min-width:150px;background:{NAVY};color:#fff;padding:0.5rem 0.8rem;border-radius:3px;">
+                <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.06em;opacity:0.8;">Transfer Volume</div>
+                <div style="font-size:0.8rem;font-weight:600;">{st.session_state.td_transfer_volume or '—'}</div>
+            </div>
+            <div style="flex:1;min-width:150px;background:#e8edf5;padding:0.5rem 0.8rem;border-radius:3px;">
+                <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.06em;color:{GREY_TEXT};">Indicative Timing</div>
+                <div style="font-size:0.8rem;font-weight:600;color:{DARK_TEXT};">{st.session_state.td_indicative_timing or '—'}</div>
+            </div>
+        </div>""", unsafe_allow_html=True)
+
+        # Editable header fields
+        with st.expander("Edit Transfer Header", expanded=False):
+            hc1, hc2, hc3 = st.columns(3)
+            with hc1:
+                st.session_state.td_transfer_to = st.text_input("Transfer To", value=st.session_state.td_transfer_to, key="td_to_input")
+                st.session_state.td_transfer_from = st.text_input("Transfer From", value=st.session_state.td_transfer_from, key="td_from_input")
+            with hc2:
+                st.session_state.td_product_line = st.text_input("Product Line", value=st.session_state.td_product_line, key="td_pl_input")
+                st.session_state.td_material_family = st.text_input("Material Family", value=st.session_state.td_material_family, key="td_mf_input")
+            with hc3:
+                st.session_state.td_transfer_volume = st.text_input("Transfer Volume", value=st.session_state.td_transfer_volume, key="td_vol_input")
+                st.session_state.td_indicative_timing = st.text_input("Indicative Timing", value=st.session_state.td_indicative_timing, key="td_timing_input")
+
+        # Approval status badge colors
+        _STATUS_COLORS = {
+            "Pending": f"background:#FFF3CD;color:#856404;",
+            "Approved": f"background:#D4EDDA;color:#155724;",
+            "Rejected": f"background:#F8D7DA;color:#721C24;",
+        }
+
+        # Requirements sections
+        td_reqs = st.session_state.td_requirements
+
+        _section_styles = {
+            "Base Requirements": f"background:{NAVY};color:#fff;",
+            "Commercial Requirements": f"background:#4472C4;color:#fff;",
+            "Product Line & Supply Chain Requirements": f"background:#7B9CD6;color:#fff;",
+            "Financial Requirements": f"background:#A9C0E8;color:{DARK_TEXT};",
+        }
+
+        for section_name, rows in td_reqs.items():
+            style = _section_styles.get(section_name, f"background:{NAVY};color:#fff;")
+            st.markdown(f"""<div style="{style}padding:0.45rem 0.8rem;border-radius:3px 3px 0 0;margin-top:1rem;font-family:Inter,sans-serif;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+                {section_name}
+            </div>""", unsafe_allow_html=True)
+
+            section_df = pd.DataFrame(rows)
+            editor_key = f"td_{section_name.lower().replace(' ', '_').replace('&', 'and')}_editor"
+            edited_section = st.data_editor(
+                section_df, use_container_width=True, num_rows="fixed",
+                key=editor_key, hide_index=True,
+                column_config={
+                    "Requirement": st.column_config.TextColumn("Requirement", disabled=True, width=230),
+                    "Value": st.column_config.TextColumn("Value", width=100),
+                    "Related Question": st.column_config.TextColumn("Related Question", disabled=True, width=230),
+                    "Answer": st.column_config.TextColumn("Answer", width=100),
+                    "Approver": st.column_config.TextColumn("Approver", width=110),
+                    "Date": st.column_config.TextColumn("Date", width=90),
+                    "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "Approved", "Rejected"], width=100),
+                },
+                disabled=["Requirement", "Related Question"])
+            td_reqs[section_name] = edited_section.to_dict("records")
+
+        st.session_state.td_requirements = td_reqs
+
+        # Approval summary
+        total_reqs = sum(len(rows) for rows in td_reqs.values())
+        approved = sum(1 for rows in td_reqs.values() for r in rows if r.get("Status") == "Approved")
+        pending = sum(1 for rows in td_reqs.values() for r in rows if r.get("Status") == "Pending")
+        rejected = sum(1 for rows in td_reqs.values() for r in rows if r.get("Status") == "Rejected")
+        st.markdown(f"""<div style="display:flex;gap:1.5rem;margin-top:1rem;font-family:Inter,sans-serif;font-size:0.72rem;">
+            <div><span style="display:inline-block;width:10px;height:10px;background:#D4EDDA;border:1px solid #155724;border-radius:2px;margin-right:0.3rem;"></span>Approved: <strong>{approved}</strong>/{total_reqs}</div>
+            <div><span style="display:inline-block;width:10px;height:10px;background:#FFF3CD;border:1px solid #856404;border-radius:2px;margin-right:0.3rem;"></span>Pending: <strong>{pending}</strong></div>
+            <div><span style="display:inline-block;width:10px;height:10px;background:#F8D7DA;border:1px solid #721C24;border-radius:2px;margin-right:0.3rem;"></span>Rejected: <strong>{rejected}</strong></div>
+        </div>""", unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Transfer Details</span>", unsafe_allow_html=True)
+        return
+
     # ── COST MODEL PAGE (active_page == "model") ──
 
     ex = st.session_state.ex
@@ -3334,6 +3964,23 @@ Compares full cost-to-serve across factory locations, including material, labour
                     st.session_state.project_name = proj.get("project_name", "Loaded Analysis")
                     st.session_state.project_items = proj.get("project_items", [{"id": 0}])
                     st.session_state.next_id = proj.get("next_id", 1)
+                    # Restore governance data
+                    for gk in ("ps_background", "ps_reason", "ps_questions", "ps_sponsor",
+                               "ps_lead", "ps_main_entity", "ps_impact_entities", "ps_team",
+                               "prop_direction", "prop_benefits", "prop_details", "prop_timeplan",
+                               "prop_sponsor", "prop_lead", "prop_team",
+                               "td_transfer_to", "td_transfer_from", "td_product_line",
+                               "td_material_family", "td_transfer_volume", "td_indicative_timing"):
+                        if gk in proj:
+                            st.session_state[gk] = proj[gk]
+                    for gk_obj in ("ps_dependencies", "ps_timeline", "prop_risks",
+                                   "td_requirements"):
+                        if gk_obj in proj:
+                            st.session_state[gk_obj] = proj[gk_obj]
+                    if "prop_total_investment" in proj:
+                        st.session_state.prop_total_investment = proj["prop_total_investment"]
+                    if "prop_cash_out" in proj:
+                        st.session_state.prop_cash_out = proj["prop_cash_out"]
                     st.rerun()
                 except Exception:
                     st.error("Invalid project file.")
