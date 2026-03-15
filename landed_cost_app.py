@@ -5014,11 +5014,15 @@ Compares full cost-to-serve across factory locations, including material, labour
             Transfer Feasibility <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
         </div>""", unsafe_allow_html=True)
 
-        # Auto-populate transfer from/to from factory config if empty
+        # Auto-populate transfer from/to from factory config & conclusion if empty
         if not st.session_state.td_transfer_from and len(all_factory_names) >= 1:
             st.session_state.td_transfer_from = all_factory_names[0]
-        if not st.session_state.td_transfer_to and len(all_factory_names) >= 2:
-            st.session_state.td_transfer_to = all_factory_names[1]
+        _conclusion_pick = st.session_state.get("conclusion_selected_option", "")
+        if not st.session_state.td_transfer_to:
+            if _conclusion_pick and _conclusion_pick in all_factory_names:
+                st.session_state.td_transfer_to = _conclusion_pick
+            elif len(all_factory_names) >= 2:
+                st.session_state.td_transfer_to = all_factory_names[1]
 
         # Auto-fetch transfer volume from analysis results (From factory)
         _all_res = st.session_state.get("_all_results", [])
@@ -5074,8 +5078,16 @@ Compares full cost-to-serve across factory locations, including material, labour
         with st.expander("Edit Transfer Header", expanded=False):
             hc1, hc2, hc3 = st.columns(3)
             with hc1:
-                st.session_state.td_transfer_from = st.text_input("Transfer From", value=st.session_state.td_transfer_from, key="td_from_input")
-                st.session_state.td_transfer_to = st.text_input("Transfer To", value=st.session_state.td_transfer_to, key="td_to_input")
+                _from_opts = [""] + all_factory_names
+                _from_idx = _from_opts.index(st.session_state.td_transfer_from) if st.session_state.td_transfer_from in _from_opts else 0
+                st.session_state.td_transfer_from = st.selectbox(
+                    "Transfer From", options=_from_opts, index=_from_idx, key="td_from_input",
+                    format_func=lambda x: x if x else "— Select —")
+                _to_opts = [""] + [f for f in all_factory_names if f != st.session_state.td_transfer_from]
+                _to_idx = _to_opts.index(st.session_state.td_transfer_to) if st.session_state.td_transfer_to in _to_opts else 0
+                st.session_state.td_transfer_to = st.selectbox(
+                    "Transfer To", options=_to_opts, index=_to_idx, key="td_to_input",
+                    format_func=lambda x: x if x else "— Select —")
             with hc2:
                 st.session_state.td_product_line = st.text_input("Product Line", value=st.session_state.td_product_line, key="td_pl_input")
                 st.session_state.td_material_family = st.text_input("Material Family", value=st.session_state.td_material_family, key="td_mf_input")
