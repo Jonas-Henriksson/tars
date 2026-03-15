@@ -1312,12 +1312,12 @@ def export_excel_project(project_data):
                            ("Main Entity(s)", "ps_main_entity"), ("Pre-study Team", "ps_team")]:
             ws.write(r, 0, label, lf); ws.write(r, 1, st.session_state.get(key, ""), lf); r += 1
 
-        # Transfer Details sheet
-        ws = wb.add_worksheet("Transfer Details")
-        w.sheets["Transfer Details"] = ws
+        # Transfer Feasibility sheet
+        ws = wb.add_worksheet("Transfer Feasibility")
+        w.sheets["Transfer Feasibility"] = ws
         ws.set_column(0, 0, 34)
         ws.set_column(1, 6, 18)
-        ws.merge_range(0, 0, 0, 6, f"Transfer Details | {st.session_state.get('project_name', '')}", tf)
+        ws.merge_range(0, 0, 0, 6, f"Transfer Feasibility | {st.session_state.get('project_name', '')}", tf)
         r = 2
         for label, key in [("Transfer From", "td_transfer_from"), ("Transfer To", "td_transfer_to"),
                            ("Product Line", "td_product_line"), ("Material Family", "td_material_family"),
@@ -1723,13 +1723,13 @@ def export_pdf_project(all_results, ccy, project_name):
                 pdf.multi_cell(0, 4, _safe(txt))
                 pdf.ln(2)
 
-    # Transfer Details page
+    # Transfer Feasibility page
     td_reqs = st.session_state.get("td_requirements", {})
     has_td = any(r.get("Value", "").strip() or r.get("Status", "") != "Pending"
                  for rows in td_reqs.values() for r in rows)
     if has_td:
         pdf.add_page("L")  # Landscape for the wide table
-        add_page_header(pdf, f"Transfer Details | {project_name}", f"{ccy}")
+        add_page_header(pdf, f"Transfer Feasibility | {project_name}", f"{ccy}")
         # Header fields
         pdf.set_font("Helvetica", "B", 7)
         for label, key in [("Transfer From", "td_transfer_from"), ("Transfer To", "td_transfer_to"),
@@ -1812,7 +1812,7 @@ EXAMPLE_ITEMS = [
 
 
 # ── GOVERNANCE TEMPLATE HELPERS ─────────────────────────────────
-# Transfer Details requirements:
+# Transfer Feasibility requirements:
 # Each tuple: (main_question, input_type, follow_up_question, follow_up_condition)
 # input_type: "text" = free text, "yes_no" = Yes/No dropdown
 # follow_up_condition: "if_no" means only show follow-up when answer is No;
@@ -1842,7 +1842,7 @@ _TD_FINANCIAL_REQS = [
 
 
 def _default_td_requirements():
-    """Build the default transfer details requirements structure."""
+    """Build the default transfer feasibility requirements structure."""
     sections = {
         "Base Requirements": _TD_BASE_REQS,
         "Commercial Requirements": _TD_COMMERCIAL_REQS,
@@ -2955,7 +2955,7 @@ def save_project_json():
         "prop_cash_out": st.session_state.get("prop_cash_out"),
         "prop_timeplan": st.session_state.get("prop_timeplan", ""),
         "prop_risks": st.session_state.get("prop_risks", []),
-        # Governance — Transfer Details
+        # Governance — Transfer Feasibility
         "td_transfer_to": st.session_state.get("td_transfer_to", ""),
         "td_transfer_from": st.session_state.get("td_transfer_from", ""),
         "td_product_line": st.session_state.get("td_product_line", ""),
@@ -3024,7 +3024,7 @@ def main():
     gov_pages = [
         ("Pre-study", "prestudy"),
         ("Proposal", "proposal"),
-        ("Transfer Details", "transfer"),
+        ("Transfer Feasibility", "transfer"),
     ]
     st.sidebar.markdown(f'<div class="nav-sep">Governance</div>', unsafe_allow_html=True)
     for label, key in gov_pages:
@@ -3806,7 +3806,7 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Proposal</span>", unsafe_allow_html=True)
         return
 
-    # ── TRANSFER DETAILS PAGE ──────────────────────────────────
+    # ── TRANSFER FEASIBILITY PAGE ──────────────────────────────────
     if st.session_state.active_page == "transfer":
         project_name = st.session_state.project_name
         data_classification = st.session_state.get("data_classification", "C3 - Confidential")
@@ -3814,7 +3814,7 @@ Compares full cost-to-serve across factory locations, including material, labour
         factory_countries = st.session_state.get("_factory_countries", {})
 
         st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
-            Transfer Details <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
+            Transfer Feasibility <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
         </div>""", unsafe_allow_html=True)
 
         # Auto-populate transfer from/to from factory config if empty
@@ -3995,7 +3995,7 @@ Compares full cost-to-serve across factory locations, including material, labour
         </div>""", unsafe_allow_html=True)
 
         st.markdown("---")
-        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Transfer Details</span>", unsafe_allow_html=True)
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>{data_classification} &middot; {project_name} &middot; Transfer Feasibility</span>", unsafe_allow_html=True)
         return
 
     # ── COST MODEL PAGE (active_page == "model") ──
