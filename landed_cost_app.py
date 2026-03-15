@@ -5536,15 +5536,60 @@ Compares full cost-to-serve across factory locations, including material, labour
         if conclusion_opt and not st.session_state.prop_direction.strip():
             st.session_state.prop_direction = f"Recommended location: {conclusion_opt}"
 
-        # Build recommendation data for compact data_editor matrix
+        # Recommendation selectbox + verdict badge (compact single row)
         rec_options = ["", "Go", "Conditional Go", "No-Go"]
         current_rec_idx = 0
         if st.session_state.prop_recommendation in rec_options:
             current_rec_idx = rec_options.index(st.session_state.prop_recommendation)
         if not st.session_state.prop_recommendation and conclusion_dec in rec_options:
             st.session_state.prop_recommendation = conclusion_dec
+            current_rec_idx = rec_options.index(conclusion_dec) if conclusion_dec in rec_options else 0
 
-        # Auto-calculate financials
+        _rec_c1, _rec_c2 = st.columns([1, 3])
+        with _rec_c1:
+            recommendation = st.selectbox(
+                "Recommendation", options=rec_options, index=current_rec_idx,
+                key="prop_rec_select",
+                format_func=lambda x: x if x else "\u2014 Select \u2014")
+            st.session_state.prop_recommendation = recommendation
+        with _rec_c2:
+            if recommendation:
+                rec_colors = {"Go": GREEN, "Conditional Go": "#e6a817", "No-Go": RED}
+                rec_icons = {"Go": "\u2714", "Conditional Go": "\u26a0", "No-Go": "\u2716"}
+                _rc = rec_colors.get(recommendation, NAVY)
+                _ri = rec_icons.get(recommendation, "")
+                st.markdown(f'<div style="display:inline-block;font-family:Inter,sans-serif;font-size:0.78rem;font-weight:700;color:{_rc};background:{_rc}14;border-radius:4px;padding:6px 16px;margin-top:1.45rem;">{_ri} {recommendation}</div>', unsafe_allow_html=True)
+
+        # Recommendation details matrix
+        _rec_detail_rows = [
+            {"Field": "Direction", "Value": st.session_state.prop_direction},
+            {"Field": "Benefits & Key Details", "Value": st.session_state.prop_benefits},
+        ]
+        if recommendation == "Conditional Go":
+            _rec_detail_rows.append({"Field": "Conditions for Proceeding", "Value": st.session_state.prop_conditions})
+
+        _rec_detail_edited = st.data_editor(
+            pd.DataFrame(_rec_detail_rows),
+            use_container_width=True, num_rows="fixed", hide_index=True,
+            key="prop_rec_details",
+            column_config={
+                "Field": st.column_config.TextColumn("Field", width=200, disabled=True),
+                "Value": st.column_config.TextColumn("Value", width=500),
+            },
+        )
+        for _di in range(len(_rec_detail_edited)):
+            _fld = _rec_detail_edited.iloc[_di]["Field"]
+            _val = str(_rec_detail_edited.iloc[_di]["Value"] or "")
+            if _fld == "Direction":
+                st.session_state.prop_direction = _val
+            elif _fld == "Benefits & Key Details":
+                st.session_state.prop_benefits = _val
+            elif _fld == "Conditions for Proceeding":
+                st.session_state.prop_conditions = _val
+
+        # ── FINANCIALS & TIME PLAN ─────────────────────────────
+        st.markdown(f'<div class="sec-sm">Financials & Time Plan</div>', unsafe_allow_html=True)
+
         auto_inv = 0.0
         if all_results:
             for item_data in all_results:
@@ -5558,75 +5603,32 @@ Compares full cost-to-serve across factory locations, including material, labour
         _suggested_cash = max(0.0, (_inv_val or 0.0) - (_it_val or 0.0))
         _cash_val = st.session_state.prop_cash_out if st.session_state.prop_cash_out else _suggested_cash
 
-        # Unified proposal summary matrix
-        _prop_rows = [
-            {"Field": "Recommendation", "Value": st.session_state.prop_recommendation},
-            {"Field": f"Total Investment (M{currency})", "Value": f"{_inv_val:.1f}" if _inv_val else ""},
-            {"Field": f"Internal Transfer (M{currency})", "Value": f"{_it_val:.1f}" if _it_val else ""},
-            {"Field": f"Net Cash Out (M{currency})", "Value": f"{_cash_val:.1f}" if _cash_val else ""},
-            {"Field": "Time Plan", "Value": st.session_state.prop_timeplan},
-            {"Field": "Direction", "Value": st.session_state.prop_direction},
-            {"Field": "Benefits & Key Details", "Value": st.session_state.prop_benefits},
+        _fin_note_inv = f"Auto: {auto_inv_m:.1f}" if auto_inv_m > 0 else ""
+        _fin_note_cash = f"= {_inv_val:.1f} \u2212 {_it_val:.1f}" if _it_val > 0 else ""
+        _fin_rows = [
+            {"Field": "Total Investment", "Value (MSEK)": _inv_val, "Note": _fin_note_inv},
+            {"Field": "Internal Transfer", "Value (MSEK)": _it_val, "Note": ""},
+            {"Field": "Net Cash Out", "Value (MSEK)": _cash_val, "Note": _fin_note_cash},
         ]
-        if st.session_state.prop_recommendation == "Conditional Go":
-            _prop_rows.insert(1, {"Field": "Conditions for Proceeding", "Value": st.session_state.prop_conditions})
-
-        _prop_df = pd.DataFrame(_prop_rows)
-        _prop_edited = st.data_editor(
-            _prop_df,
-            use_container_width=True,
-            num_rows="fixed",
-            hide_index=True,
-            key="prop_summary_matrix",
+        _fin_edited = st.data_editor(
+            pd.DataFrame(_fin_rows),
+            use_container_width=True, num_rows="fixed", hide_index=True,
+            key="prop_fin_matrix",
             column_config={
-                "Field": st.column_config.TextColumn("Field", width=220, disabled=True),
-                "Value": st.column_config.TextColumn("Value", width=500),
+                "Field": st.column_config.TextColumn("Field", width=200, disabled=True),
+                "Value (MSEK)": st.column_config.NumberColumn(f"Value (M{currency})", format="%.1f", min_value=0.0, step=0.5, width=140),
+                "Note": st.column_config.TextColumn("Note", width=180, disabled=True),
             },
         )
+        st.session_state.prop_total_investment = float(_fin_edited.iloc[0]["Value (MSEK)"] or 0.0)
+        st.session_state.prop_internal_transfer = float(_fin_edited.iloc[1]["Value (MSEK)"] or 0.0)
+        st.session_state.prop_cash_out = float(_fin_edited.iloc[2]["Value (MSEK)"] or 0.0)
 
-        # Write edited values back to session state
-        _prop_map = {}
-        for _pi, _pr in enumerate(_prop_rows):
-            _prop_map[_pr["Field"]] = _pi
-        for _pi in range(len(_prop_edited)):
-            _field = _prop_edited.iloc[_pi]["Field"]
-            _val = str(_prop_edited.iloc[_pi]["Value"] or "")
-            if _field == "Recommendation":
-                st.session_state.prop_recommendation = _val if _val in rec_options else ""
-            elif _field.startswith("Total Investment"):
-                try:
-                    st.session_state.prop_total_investment = float(_val) if _val else 0.0
-                except ValueError:
-                    pass
-            elif _field.startswith("Internal Transfer"):
-                try:
-                    st.session_state.prop_internal_transfer = float(_val) if _val else 0.0
-                except ValueError:
-                    pass
-            elif _field.startswith("Net Cash Out"):
-                try:
-                    st.session_state.prop_cash_out = float(_val) if _val else 0.0
-                except ValueError:
-                    pass
-            elif _field == "Time Plan":
-                st.session_state.prop_timeplan = _val
-            elif _field == "Direction":
-                st.session_state.prop_direction = _val
-            elif _field == "Benefits & Key Details":
-                st.session_state.prop_benefits = _val
-            elif _field == "Conditions for Proceeding":
-                st.session_state.prop_conditions = _val
-
-        recommendation = st.session_state.prop_recommendation
-        # Compact verdict indicator
-        if recommendation:
-            rec_colors = {"Go": GREEN, "Conditional Go": "#e6a817", "No-Go": RED}
-            rec_icons = {"Go": "\u2714", "Conditional Go": "\u26a0", "No-Go": "\u2716"}
-            _rc = rec_colors.get(recommendation, NAVY)
-            _ri = rec_icons.get(recommendation, "")
-            st.markdown(f'<div style="display:inline-block;font-family:Inter,sans-serif;font-size:0.72rem;font-weight:700;color:{_rc};background:{_rc}14;border-radius:4px;padding:3px 12px;margin-top:-0.3rem;">{_ri} {recommendation}</div>', unsafe_allow_html=True)
-        if auto_inv_m > 0:
-            st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};font-style:italic;">Investment auto-calculated: {auto_inv_m:.1f} M{currency}</div>', unsafe_allow_html=True)
+        _tp_c1, _tp_c2 = st.columns([1, 3])
+        with _tp_c1:
+            st.session_state.prop_timeplan = st.text_input(
+                "Time Plan", value=st.session_state.prop_timeplan,
+                key="prop_timeplan_input", placeholder="e.g. May '25 \u2014 Dec '26")
 
         # ── QUANTIFIED RISK EXPOSURE ───────────────────────────
         st.markdown(f'<div class="sec">Risk Exposure</div>', unsafe_allow_html=True)
