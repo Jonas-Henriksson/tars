@@ -16,7 +16,7 @@ NWC (Net Working Capital) impact:
  11. Goods-in-Transit (GIT) = (PS x Qty / 365) x Transit Days
  12. Safety Stock = (PS x Qty / 365) x Safety Stock Days
  13. Cycle Stock = (PS x Qty / 365) x Cycle Stock Days
- 14. Payables (DPO) = (PS x Qty / 365) x Payment Terms Days  [reduces NWC]
+ 14. Payables (DPO) = (Material x Qty / 365) x Payment Terms Days  [reduces NWC]
  15. Total NWC = GIT + Safety Stock + Cycle Stock - Payables
  16. Delta NWC = NWC(location) - NWC(base)
  17. NWC Carrying Cost (annual) = Delta NWC x Total Carrying Cost %
@@ -97,28 +97,29 @@ def compute_location(
     qty = inputs.net_sales_qty
 
     # ── NWC (Net Working Capital) Impact ────────────────────
-    # All inventory components valued at PS (transfer price).
-    # Daily cost flow = PS x Qty / 365
+    # Inventory components (GIT, SS, CS) valued at PS (transfer price).
+    # Payables (DPO) valued at material cost (what is owed to suppliers).
     lt = lead_time_days
     base_lt = base_lead_time_days
-    daily_flow = (ps * qty / 365.0) if qty > 0 else 0.0
+    daily_flow_ps = (ps * qty / 365.0) if qty > 0 else 0.0
+    daily_flow_mat = (mat * qty / 365.0) if qty > 0 else 0.0
 
-    # 1. Goods-in-Transit
-    git_value = daily_flow * lt if lt is not None else 0.0
+    # 1. Goods-in-Transit (valued at PS)
+    git_value = daily_flow_ps * lt if lt is not None else 0.0
     delta_lt = (lt - base_lt) if (lt is not None and base_lt is not None) else 0
-    delta_git = daily_flow * delta_lt
+    delta_git = daily_flow_ps * delta_lt
 
-    # 2. Safety Stock (optional)
-    ss_value = daily_flow * safety_stock_days
-    delta_ss = daily_flow * (safety_stock_days - base_safety_stock_days)
+    # 2. Safety Stock (valued at PS)
+    ss_value = daily_flow_ps * safety_stock_days
+    delta_ss = daily_flow_ps * (safety_stock_days - base_safety_stock_days)
 
-    # 3. Cycle Stock (optional)
-    cs_value = daily_flow * cycle_stock_days
-    delta_cs = daily_flow * (cycle_stock_days - base_cycle_stock_days)
+    # 3. Cycle Stock (valued at PS)
+    cs_value = daily_flow_ps * cycle_stock_days
+    delta_cs = daily_flow_ps * (cycle_stock_days - base_cycle_stock_days)
 
-    # 4. Payment Terms / DPO (optional) — reduces NWC (longer DPO = benefit)
-    pt_value = daily_flow * payment_terms_days
-    delta_pt = daily_flow * (payment_terms_days - base_payment_terms_days)
+    # 4. Payment Terms / DPO (valued at material cost) — reduces NWC
+    pt_value = daily_flow_mat * payment_terms_days
+    delta_pt = daily_flow_mat * (payment_terms_days - base_payment_terms_days)
 
     # Total NWC = GIT + Safety Stock + Cycle Stock - Payables
     total_nwc = git_value + ss_value + cs_value - pt_value
