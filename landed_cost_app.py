@@ -5963,6 +5963,18 @@ Compares full cost-to-serve across factory locations, including material, labour
             })
         avp["entries"] = edited_avp.to_dict("records")
 
+        # Highlight overridden auto-fill values
+        if _all_res_avp:
+            _overrides = []
+            for _entry in avp["entries"]:
+                _m = _entry.get("Metric", "")
+                _user_val = _entry.get("Plan", "").strip()
+                _model_val = _auto_plan.get(_m, "").strip()
+                if _model_val and _user_val and _user_val != _model_val:
+                    _overrides.append(f"<strong>{_m}</strong>: model = {_model_val}, entered = {_user_val}")
+            if _overrides:
+                st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.65rem;color:#e6a817;margin:0.2rem 0 0.4rem 0;padding:0.3rem 0.6rem;background:#fef9f0;border-left:3px solid #e6a817;border-radius:2px;">Plan overrides detected (differs from model): {" &middot; ".join(_overrides)}</div>', unsafe_allow_html=True)
+
         # Auto-compute variance where possible
         for entry in avp["entries"]:
             try:
