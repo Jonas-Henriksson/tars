@@ -68,31 +68,24 @@ st.markdown(
 )
 # Inject Inter font into Plotly iframes (Streamlit renders charts in iframes
 # that don't inherit the parent document's stylesheets).
-# st.markdown strips <script> tags, so we use components.html which executes JS.
-components.html("""
-<script>
-(function() {
-    var FONT_URL = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap';
-    var parentDoc = window.parent.document;
-    function injectFont(iframe) {
-        try {
-            var doc = iframe.contentDocument || iframe.contentWindow.document;
-            if (doc && doc.head && !doc.querySelector('link[data-inter-injected]')) {
-                var link = doc.createElement('link');
-                link.rel = 'stylesheet';
-                link.href = FONT_URL;
-                link.setAttribute('data-inter-injected', '1');
-                doc.head.appendChild(link);
-            }
-        } catch(e) {}
-    }
-    function scan() { parentDoc.querySelectorAll('iframe').forEach(injectFont); }
-    var obs = new MutationObserver(scan);
-    obs.observe(parentDoc.body, {childList: true, subtree: true});
-    scan();
-})();
-</script>
-""", height=0)
+# We render charts via components.html() with Inter loaded directly in the HTML.
+def plotly_chart(fig, *, config=None, height=None):
+    """Render a Plotly figure with Inter font via components.html()."""
+    if config is None:
+        config = {"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False}
+    html = fig.to_html(
+        include_plotlyjs="cdn",
+        full_html=False,
+        config=config,
+    )
+    # Determine chart height from layout or default
+    h = height or fig.layout.height or 420
+    full = f"""
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>* {{ font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif !important; }}</style>
+    {html}
+    """
+    components.html(full, height=h + 20, scrolling=False)
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -1595,10 +1588,24 @@ EX_FACTORIES = [
 EXAMPLE_ITEMS = [
     {"item_number":"1001","designation":"Bearing Assembly XR-200","destination":"Northern Europe",
      "comment":"Annual sourcing review","net_sales_value":121280000.0,"net_sales_qty":2570000,
-     "material":18.96,"variable_va":2.26,"fixed_va":2.57},
+     "material":18.96,"variable_va":2.26,"fixed_va":2.57,
+     "sales_projection":[
+         {"year":1,"value":121280000.0,"qty":2570000},
+         {"year":2,"value":125720000.0,"qty":2660000},
+         {"year":3,"value":130400000.0,"qty":2760000},
+         {"year":4,"value":135200000.0,"qty":2850000},
+         {"year":5,"value":140400000.0,"qty":2950000},
+     ]},
     {"item_number":"2045","designation":"Seal Kit HT-500","destination":"Northern Europe",
      "comment":"New product launch evaluation","net_sales_value":45600000.0,"net_sales_qty":1200000,
-     "material":12.50,"variable_va":1.80,"fixed_va":1.95},
+     "material":12.50,"variable_va":1.80,"fixed_va":1.95,
+     "sales_projection":[
+         {"year":1,"value":45600000.0,"qty":1200000},
+         {"year":2,"value":49400000.0,"qty":1300000},
+         {"year":3,"value":53200000.0,"qty":1400000},
+         {"year":4,"value":57000000.0,"qty":1500000},
+         {"year":5,"value":60800000.0,"qty":1600000},
+     ]},
 ]
 
 
@@ -1655,30 +1662,73 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
     destination = str(edited_txt.loc["Destination", "Value"] or "")
     comment = str(edited_txt.loc["Comment", "Value"] or "")
 
-    # Net sales + base costs
-    st.markdown('<div class="sec-sm">Net Sales & Base Costs (Per Unit)</div>', unsafe_allow_html=True)
+    # Sales projection (3-5 year)
+    st.markdown('<div class="sec-sm">Sales Projection</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};margin:-0.3rem 0 0.4rem 0;font-style:italic;">Year 1 (base year) is used for item cost comparisons. Full projection feeds the investment case.</div>', unsafe_allow_html=True)
 
-    ns_data = {
-        "Field": ["Net Sales (Total Value)", "Net Sales (Quantity)", "Material", "Variable VA", "Fixed VA"],
+    n_proj_years = st.session_state.get(f"{pfx}n_proj_years", 5)
+    n_proj_years = st.selectbox("Projection years", [3, 4, 5], index=[3, 4, 5].index(n_proj_years), key=f"{pfx}n_proj_years_sel")
+    st.session_state[f"{pfx}n_proj_years"] = n_proj_years
+
+    # Build projection table
+    ex_proj = ex_item.get("sales_projection", []) if ex_item else []
+    proj_data = {"Year": [f"Y{y}" for y in range(1, n_proj_years + 1)]}
+    proj_vals = []
+    proj_qtys = []
+    for y in range(1, n_proj_years + 1):
+        ex_row = next((p for p in ex_proj if p["year"] == y), None) if ex_proj else None
+        if ex_row:
+            proj_vals.append(float(ex_row["value"]))
+            proj_qtys.append(float(ex_row["qty"]))
+        elif y == 1 and ex_item:
+            proj_vals.append(float(ex_item["net_sales_value"]))
+            proj_qtys.append(float(ex_item["net_sales_qty"]))
+        else:
+            proj_vals.append(0.0)
+            proj_qtys.append(0.0)
+    proj_data["Net Sales (Value)"] = proj_vals
+    proj_data["Net Sales (Qty)"] = proj_qtys
+    proj_df = pd.DataFrame(proj_data).set_index("Year")
+
+    edited_proj = st.data_editor(
+        proj_df, use_container_width=True, num_rows="fixed", key=f"{pfx}proj",
+        column_config={
+            "Net Sales (Value)": st.column_config.NumberColumn("Net Sales (Value)", format="%,.0f", width=200),
+            "Net Sales (Qty)": st.column_config.NumberColumn("Net Sales (Qty)", format="%,.0f", width=200),
+        },
+    )
+
+    # Extract projection and base year values
+    sales_projection = []
+    for y in range(1, n_proj_years + 1):
+        row_label = f"Y{y}"
+        v = float(edited_proj.loc[row_label, "Net Sales (Value)"] or 0)
+        q = int(edited_proj.loc[row_label, "Net Sales (Qty)"] or 0)
+        sales_projection.append({"year": y, "value": v, "qty": q})
+
+    net_sales_value = sales_projection[0]["value"] if sales_projection else 0.0
+    net_sales_qty = sales_projection[0]["qty"] if sales_projection else 0
+
+    # Base costs (per unit)
+    st.markdown('<div class="sec-sm">Base Costs (Per Unit)</div>', unsafe_allow_html=True)
+
+    bc_data = {
+        "Field": ["Material", "Variable VA", "Fixed VA"],
         "Value": [
-            ex_item["net_sales_value"] if ex_item else 0.0,
-            ex_item["net_sales_qty"] if ex_item else 0.0,
             ex_item["material"] if ex_item else 0.0,
             ex_item["variable_va"] if ex_item else 0.0,
             ex_item["fixed_va"] if ex_item else 0.0,
         ],
         "Guide": [
-            "Total annual revenue for this item",
-            "Total annual units produced/sold",
             "Direct material cost per unit at base case",
             "Variable VA cost per unit at base case",
             "Fixed VA cost per unit at base case",
         ]
     }
-    ns_df = pd.DataFrame(ns_data).set_index("Field")
+    bc_df = pd.DataFrame(bc_data).set_index("Field")
 
-    edited_ns = st.data_editor(
-        ns_df, use_container_width=True, num_rows="fixed", key=f"{pfx}ns",
+    edited_bc = st.data_editor(
+        bc_df, use_container_width=True, num_rows="fixed", key=f"{pfx}bc",
         column_config={
             "Value": st.column_config.NumberColumn("Value", format="%,.2f", width=200),
             "Guide": st.column_config.TextColumn("Guide", width=300, disabled=True),
@@ -1686,18 +1736,16 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
         disabled=["Guide"],
     )
 
-    net_sales_value = float(edited_ns.loc["Net Sales (Total Value)", "Value"] or 0)
-    net_sales_qty = int(edited_ns.loc["Net Sales (Quantity)", "Value"] or 0)
-    material = float(edited_ns.loc["Material", "Value"] or 0)
-    variable_va = float(edited_ns.loc["Variable VA", "Value"] or 0)
-    fixed_va = float(edited_ns.loc["Fixed VA", "Value"] or 0)
+    material = float(edited_bc.loc["Material", "Value"] or 0)
+    variable_va = float(edited_bc.loc["Variable VA", "Value"] or 0)
+    fixed_va = float(edited_bc.loc["Fixed VA", "Value"] or 0)
 
     inputs = ItemInputs(item_number, designation, st.session_state.get("currency","SEK"),
                         destination, "", comment, net_sales_value, net_sales_qty,
-                        material, variable_va, fixed_va)
+                        material, variable_va, fixed_va, sales_projection)
 
     if inputs.net_sales_qty == 0 or inputs.net_sales_value == 0:
-        st.markdown('<div class="callout">Enter Net Sales values to see results.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="callout">Enter Year 1 Net Sales values to see results.</div>', unsafe_allow_html=True)
         return None
 
     # Cost overrides
@@ -1870,7 +1918,7 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
         )
         fig.update_xaxes(tickangle=0, tickfont=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT))
         fig.update_yaxes(title_text=ccy, title_font=dict(size=10))
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False})
+        plotly_chart(fig)
 
     # ── PORTFOLIO COST BRIDGE & SENSITIVITY (same layout as item-level) ──
     if len(all_fnames) >= 2:
@@ -1886,7 +1934,7 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
             for wi, fn_ in enumerate(all_fnames[:n_wf]):
                 with wf_cols[wi]:
                     st.markdown(f'<div style="font-size:0.7rem;font-family:Inter,sans-serif;font-weight:600;color:{DARK_TEXT};margin-bottom:0.2rem;">Cost Bridge: {fn_} ({ccy}/year)</div>', unsafe_allow_html=True)
-                    st.plotly_chart(build_portfolio_waterfall(all_results, fn_, ccy), use_container_width=True, config=plotly_cfg)
+                    plotly_chart(build_portfolio_waterfall(all_results, fn_, ccy), config=plotly_cfg)
             if len(all_fnames) > 3:
                 st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-top:0.3rem;">Showing top 3 of {len(all_fnames)} locations.</div>', unsafe_allow_html=True)
 
@@ -1896,7 +1944,7 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
             # Tornado chart (portfolio-wide, all factories)
             tornado_fig = build_portfolio_tornado(all_results, all_fnames, ccy)
             if tornado_fig:
-                st.plotly_chart(tornado_fig, use_container_width=True, config=plotly_cfg)
+                plotly_chart(tornado_fig, config=plotly_cfg)
 
             # Parameter sweep
             sa_params = {
@@ -1919,7 +1967,7 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
                 steps = [round(v, 2) for v in np.arange(0.5, 1.55, 0.1)]
 
             fig_sa = build_portfolio_sensitivity_chart(all_results, all_fnames, param_key, sa_choice, steps, ccy, is_pct=is_pct)
-            st.plotly_chart(fig_sa, use_container_width=True, config=plotly_cfg)
+            plotly_chart(fig_sa, config=plotly_cfg)
 
     # ── INVESTMENT SUMMARY (Portfolio) ────────────────────────
     has_inv = any(
@@ -1934,9 +1982,9 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
         # Collect alt factory names (exclude base)
         alt_fnames = [fn_ for fn_ in all_fnames if fn_ != base_fn]
         if alt_fnames:
-            # Aggregate: total investment, total annual savings, combined NPV
+            # Aggregate: total investment, year-by-year savings, combined NPV
             agg_inv = {fn_: 0.0 for fn_ in alt_fnames}
-            agg_savings = {fn_: 0.0 for fn_ in alt_fnames}
+            agg_savings_by_year = {fn_: [] for fn_ in alt_fnames}
             agg_capex = {fn_: 0.0 for fn_ in alt_fnames}
             agg_opex = {fn_: 0.0 for fn_ in alt_fnames}
             agg_restr = {fn_: 0.0 for fn_ in alt_fnames}
@@ -1945,16 +1993,24 @@ def render_portfolio_summary(all_results, ccy, company_wacc=0.08, target_payback
                     fn_ = ic.get("factory_name", "")
                     if fn_ in alt_fnames:
                         agg_inv[fn_] += ic.get("total_investment", 0)
-                        agg_savings[fn_] += ic.get("annual_savings", 0)
                         agg_capex[fn_] += ic.get("capex", 0)
                         agg_opex[fn_] += ic.get("opex", 0)
                         agg_restr[fn_] += ic.get("restructuring", 0)
+                        yr_savings = ic.get("annual_savings_by_year", [ic.get("annual_savings", 0)])
+                        # Sum year-by-year savings across items
+                        for yi, sv in enumerate(yr_savings):
+                            if yi < len(agg_savings_by_year[fn_]):
+                                agg_savings_by_year[fn_][yi] += sv
+                            else:
+                                agg_savings_by_year[fn_].append(sv)
+            agg_savings = {fn_: (sum(v) / len(v) if v else 0.0) for fn_, v in agg_savings_by_year.items()}
 
             # Compute portfolio-level NPV, IRR, payback using aggregated flows
             agg_cases = {}
             for fn_ in alt_fnames:
+                savings_input = agg_savings_by_year[fn_] if agg_savings_by_year[fn_] else agg_savings[fn_]
                 agg_cases[fn_] = compute_investment_case(
-                    annual_savings=agg_savings[fn_],
+                    annual_savings=savings_input,
                     capex=agg_capex[fn_], opex=agg_opex[fn_], restructuring=agg_restr[fn_],
                     discount_rate=company_wacc,
                     horizon_years=10,
@@ -2111,105 +2167,7 @@ def main():
         <span style="font-style:italic;">Grey italic</span> = guidance notes
     </div>""", unsafe_allow_html=True)
 
-    # ── SIDEBAR CONTENT (Reference pages) ──
-    if st.session_state.active_page == "about":
-        st.sidebar.markdown("---")
-        st.sidebar.markdown(f"""
-<div style="font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};line-height:1.6;">
-
-<strong style="font-size:0.82rem;">Purpose</strong><br>
-The Manufacturing Location Analyzer enables strategic evaluation of manufacturing location alternatives.
-It compares the full cost-to-serve across multiple production sites, accounting for material costs,
-value-added processing, tariffs, duties, transportation, and selling & administrative expenses.
-The model calculates operating profit and margin impact at both per-unit and full-year levels.
-
-<br><br><strong style="font-size:0.82rem;">Methodology</strong><br>
-The 8-step cost build-up follows standard industrial cost methodology:
-<ol style="margin:0.3rem 0 0.3rem 1.2rem;padding:0;">
-<li>Base case costs (Material + Variable VA + Fixed VA) define the Standard Cost (SC)</li>
-<li>VA Ratio scales Variable and Fixed VA to each location's cost level</li>
-<li>PS Index converts SC to Price Standard (PS)</li>
-<li>MCL % determines Actual Cost from PS</li>
-<li>S&A is applied as a percentage of Net Sales</li>
-<li>Tariffs and Duties are calculated on (TPL/100) x PS</li>
-<li>Transportation is applied directly on PS</li>
-<li>Operating Profit = Net Sales - PS - S&A - Tariff - Duties - Transport</li>
-</ol>
-
-<br><strong style="font-size:0.82rem;">NWC Impact</strong><br>
-Net Working Capital impact captures the balance sheet cost of inventory tied up across the supply chain:
-<ul style="margin:0.3rem 0 0.3rem 1.2rem;padding:0;">
-<li><strong>Goods in Transit (GIT)</strong> = (PS x Qty / 365) x Transit Days</li>
-<li><strong>Safety Stock</strong> = (PS x Qty / 365) x Safety Stock Days</li>
-<li><strong>Cycle Stock</strong> = (PS x Qty / 365) x Cycle Stock Days</li>
-<li><strong>Payables (DPO)</strong> = (PS x Qty / 365) x Payment Terms Days &mdash; reduces NWC</li>
-<li><strong>Total NWC</strong> = GIT + Safety Stock + Cycle Stock - Payables</li>
-<li><strong>Delta NWC</strong> = NWC(location) - NWC(base)</li>
-<li><strong>NWC Carrying Cost</strong> = Delta NWC x Total Carrying Cost % (per factory: WACC + Risk + Storage + Service)</li>
-<li><strong>Adjusted OP</strong> = OP - NWC Carrying Cost per unit</li>
-</ul>
-
-<br><strong style="font-size:0.9rem;">Required Investments Analysis</strong><br>
-A separate module evaluates the overall investment rationale for each production transfer:
-<ul style="margin:0.3rem 0 0.3rem 1.2rem;padding:0;">
-<li><strong>Total Investment</strong> = CAPEX + OPEX + Restructuring</li>
-<li><strong>Annual Savings</strong> = NWC-Adjusted Annual OP (alternative) - NWC-Adjusted Annual OP (base)</li>
-<li><strong>NPV</strong> = -Investment + &Sigma; [Annual Savings / (1+r)<sup>t</sup>] over the analysis horizon</li>
-<li><strong>IRR</strong> = Discount rate where NPV = 0 (solved numerically)</li>
-<li><strong>Simple Payback</strong> = Total Investment / Annual Savings</li>
-<li><strong>Discounted Payback</strong> = First year where cumulative discounted cash flow &ge; 0</li>
-</ul>
-Investment inputs are per receiving factory and per item. The discount rate defaults to the Company WACC.
-
-</div>
-""", unsafe_allow_html=True)
-
-    elif st.session_state.active_page == "changelog":
-        st.sidebar.markdown("---")
-        st.sidebar.markdown(f"""
-<div style="font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};line-height:1.6;">
-<strong style="font-size:0.82rem;">Changelog</strong><br>
-<span style="color:{GREY_TEXT};">v9.0</span> &mdash; Qualitative context, Data Classification, sidebar nav<br>
-<span style="color:{GREY_TEXT};">v8.0</span> &mdash; Required Investments Analysis (NPV, IRR, payback)<br>
-<span style="color:{GREY_TEXT};">v7.0</span> &mdash; NWC impact, GIT, adjusted OP/margin<br>
-<span style="color:{GREY_TEXT};">v6.0</span> &mdash; IB visual refresh, waterfall, tornado, PDF export<br>
-<span style="color:{GREY_TEXT};">v5.0</span> &mdash; Testable modules, sensitivity, lead times<br>
-<span style="color:{GREY_TEXT};">v4.0</span> &mdash; Multi-item projects, portfolio summary<br>
-<span style="color:{GREY_TEXT};">v1&ndash;3</span> &mdash; Core engine, matrix UX, IB styling<br>
-
-<br><strong style="font-size:0.82rem;">Contact</strong><br>
-<strong>Jonas Henriksson</strong><br>Head of Strategic Planning &amp; Intelligent Hub<br>
-<a href="mailto:jonas.henriksson@skf.com" style="color:{ACCENT_BLUE};text-decoration:none;">jonas.henriksson@skf.com</a>
-</div>
-""", unsafe_allow_html=True)
-
-    elif st.session_state.active_page == "guide":
-        st.sidebar.markdown("---")
-        st.sidebar.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:0.74rem;color:{DARK_TEXT};line-height:1.55;">
-<strong style="font-size:0.82rem;">What This Model Does</strong><br>
-Compares full cost-to-serve across factory locations, including material, labour, tariffs, shipping, and inventory costs. Shows which location offers the best operating profit.
-
-<br><br><strong style="font-size:0.82rem;">Quick Start</strong><br>
-<strong>1.</strong> Tick "Load example data" to see a pre-filled analysis<br>
-<strong>2.</strong> Check KPI cards for best margin at a glance<br>
-<strong>3.</strong> Review tables for cost breakdown details<br>
-<strong>4.</strong> Open Portfolio Summary for combined view
-
-<br><br><strong style="font-size:0.82rem;">Input Legend</strong><br>
-<span style="border-left:3px solid {INPUT_BLUE};padding-left:0.3rem;font-weight:600;color:{INPUT_BLUE};">Blue border</span> = editable input<br>
-<strong>Bold text</strong> = calculated output<br>
-<span style="color:{GREY_TEXT};font-style:italic;">Grey italic</span> = guidance notes
-
-<br><br><strong style="font-size:0.82rem;">Workflow</strong><br>
-<strong>1.</strong> Set analysis name, currency, target market<br>
-<strong>2.</strong> Configure factory assumptions matrix<br>
-<strong>3.</strong> Assign factory countries for lead times<br>
-<strong>4.</strong> Set Company WACC, carrying cost rates, and NWC assumptions<br>
-<strong>5.</strong> Add items with costs and overrides<br>
-<strong>6.</strong> Review results, sensitivity, investment<br>
-<strong>7.</strong> Add strategic context per item<br>
-<strong>8.</strong> Export PDF or Excel
-</div>""", unsafe_allow_html=True)
+    # (Reference page content is rendered in the main window, see below)
     # ── STRATEGIC CONTEXT PAGE ─────────────────────────────────
     if st.session_state.active_page == "strategic":
         st.markdown(f'<div class="callout" style="font-size:0.72rem;">Provide strategic context and qualitative rationale for each item\'s transfer decision. These inputs appear in the executive summary, portfolio overview, and exported reports.</div>', unsafe_allow_html=True)
@@ -2509,9 +2467,13 @@ This provides the local risk percentage.</li>
                 },
                 disabled=["Guide"])
 
-            # Compute investment cases
+            # Compute investment cases with year-by-year savings from projection
             inv_results = []
-            base_adj_annual_op = results[0].get("annual_adj_op", results[0]["annual_op"])
+            dc_inputs = item_data.get("_inputs_dc")
+            base_factory = item_data.get("_base_factory")
+            factories_list = item_data.get("_factories", [])
+            get_ov_fn = item_data.get("_get_ov")
+
             for alt_r in results[1:]:
                 an = alt_r["name"]
                 def _inv_val(row_name, col_name, _df=edited_inv):
@@ -2522,7 +2484,35 @@ This provides the local risk percentage.</li>
                 capex = _inv_val("CAPEX (Tooling / Equipment)", an)
                 opex = _inv_val("OPEX (Project / Qualification)", an)
                 restr = _inv_val("Restructuring (Sending Site)", an)
-                annual_savings = alt_r.get("annual_adj_op", alt_r["annual_op"]) - base_adj_annual_op
+
+                # Build year-by-year savings from sales projection
+                alt_factory = next((f for f in factories_list if f.name == an), None)
+                projection = dc_inputs.sales_projection if dc_inputs else []
+                if projection and dc_inputs and alt_factory and base_factory:
+                    from dataclasses import replace
+                    savings_by_year = []
+                    for p in projection:
+                        yr_inputs = replace(dc_inputs,
+                                               net_sales_value=float(p["value"]),
+                                               net_sales_qty=int(p["qty"]))
+                        base_lt = get_lead_time(factory_countries.get(base_factory.name, ""),
+                                                factory_countries.get(base_factory.name, ""))
+                        alt_lt = get_lead_time(factory_countries.get(base_factory.name, ""),
+                                               factory_countries.get(an, ""))
+                        ov = get_ov_fn(an) if get_ov_fn else {}
+                        base_r = compute_location(yr_inputs, base_factory, is_base=True,
+                                                  lead_time_days=base_lt,
+                                                  company_wacc=company_wacc)
+                        alt_r_yr = compute_location(yr_inputs, alt_factory, overrides=ov,
+                                                    lead_time_days=alt_lt,
+                                                    company_wacc=company_wacc)
+                        base_op = base_r.get("annual_adj_op", base_r["annual_op"])
+                        alt_op = alt_r_yr.get("annual_adj_op", alt_r_yr["annual_op"])
+                        savings_by_year.append(alt_op - base_op)
+                    annual_savings = savings_by_year
+                else:
+                    base_adj_annual_op = results[0].get("annual_adj_op", results[0]["annual_op"])
+                    annual_savings = alt_r.get("annual_adj_op", alt_r["annual_op"]) - base_adj_annual_op
 
                 inv_case = compute_investment_case(
                     annual_savings=annual_savings,
@@ -2621,16 +2611,111 @@ This provides the local risk percentage.</li>
                     yaxis=dict(title=currency, showgrid=True, gridcolor="#eee", zeroline=True, zerolinecolor="#ccc"),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 )
-                st.plotly_chart(fig_cf, use_container_width=True, config={"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False})
+                plotly_chart(fig_cf)
 
         # Footer for investment page
         st.markdown("---")
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Required Investments Analysis</span>", unsafe_allow_html=True)
         return
 
-    # ── Reference-only pages: show info message ──
-    if st.session_state.active_page in ("about", "guide", "changelog"):
-        st.markdown(f'<div class="callout" style="font-size:0.76rem;">Reference content is displayed in the sidebar. Select <strong>Landed Cost Analysis</strong> or <strong>Strategic Context</strong> from the sidebar to work with the analysis.</div>', unsafe_allow_html=True)
+    # ── Reference pages: render in main window ──
+    if st.session_state.active_page == "about":
+        st.markdown(f"""
+<div style="font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};line-height:1.6;max-width:800px;">
+
+<strong style="font-size:0.82rem;">Purpose</strong><br>
+The Manufacturing Location Analyzer enables strategic evaluation of manufacturing location alternatives.
+It compares the full cost-to-serve across multiple production sites, accounting for material costs,
+value-added processing, tariffs, duties, transportation, and selling & administrative expenses.
+The model calculates operating profit and margin impact at both per-unit and full-year levels.
+
+<br><br><strong style="font-size:0.82rem;">Methodology</strong><br>
+The 8-step cost build-up follows standard industrial cost methodology:
+<ol style="margin:0.3rem 0 0.3rem 1.2rem;padding:0;">
+<li>Base case costs (Material + Variable VA + Fixed VA) define the Standard Cost (SC)</li>
+<li>VA Ratio scales Variable and Fixed VA to each location's cost level</li>
+<li>PS Index converts SC to Price Standard (PS)</li>
+<li>MCL % determines Actual Cost from PS</li>
+<li>S&A is applied as a percentage of Net Sales</li>
+<li>Tariffs and Duties are calculated on (TPL/100) x PS</li>
+<li>Transportation is applied directly on PS</li>
+<li>Operating Profit = Net Sales - PS - S&A - Tariff - Duties - Transport</li>
+</ol>
+
+<br><strong style="font-size:0.82rem;">NWC Impact</strong><br>
+Net Working Capital impact captures the balance sheet cost of inventory tied up across the supply chain:
+<ul style="margin:0.3rem 0 0.3rem 1.2rem;padding:0;">
+<li><strong>Goods in Transit (GIT)</strong> = (PS x Qty / 365) x Transit Days</li>
+<li><strong>Safety Stock</strong> = (PS x Qty / 365) x Safety Stock Days</li>
+<li><strong>Cycle Stock</strong> = (PS x Qty / 365) x Cycle Stock Days</li>
+<li><strong>Payables (DPO)</strong> = (PS x Qty / 365) x Payment Terms Days &mdash; reduces NWC</li>
+<li><strong>Total NWC</strong> = GIT + Safety Stock + Cycle Stock - Payables</li>
+<li><strong>Delta NWC</strong> = NWC(location) - NWC(base)</li>
+<li><strong>NWC Carrying Cost</strong> = Delta NWC x Total Carrying Cost % (per factory: WACC + Risk + Storage + Service)</li>
+<li><strong>Adjusted OP</strong> = OP - NWC Carrying Cost per unit</li>
+</ul>
+
+<br><strong style="font-size:0.9rem;">Required Investments Analysis</strong><br>
+A separate module evaluates the overall investment rationale for each production transfer:
+<ul style="margin:0.3rem 0 0.3rem 1.2rem;padding:0;">
+<li><strong>Total Investment</strong> = CAPEX + OPEX + Restructuring</li>
+<li><strong>Annual Savings</strong> = NWC-Adjusted Annual OP (alternative) - NWC-Adjusted Annual OP (base)</li>
+<li><strong>NPV</strong> = -Investment + &Sigma; [Annual Savings / (1+r)<sup>t</sup>] over the analysis horizon</li>
+<li><strong>IRR</strong> = Discount rate where NPV = 0 (solved numerically)</li>
+<li><strong>Simple Payback</strong> = Total Investment / Annual Savings</li>
+<li><strong>Discounted Payback</strong> = First year where cumulative discounted cash flow &ge; 0</li>
+</ul>
+Investment inputs are per receiving factory and per item. The discount rate defaults to the Company WACC.
+
+</div>
+""", unsafe_allow_html=True)
+        return
+
+    if st.session_state.active_page == "guide":
+        st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};line-height:1.6;max-width:800px;">
+<strong style="font-size:0.82rem;">What This Model Does</strong><br>
+Compares full cost-to-serve across factory locations, including material, labour, tariffs, shipping, and inventory costs. Shows which location offers the best operating profit.
+
+<br><br><strong style="font-size:0.82rem;">Quick Start</strong><br>
+<strong>1.</strong> Tick "Load example data" to see a pre-filled analysis<br>
+<strong>2.</strong> Check KPI cards for best margin at a glance<br>
+<strong>3.</strong> Review tables for cost breakdown details<br>
+<strong>4.</strong> Open Portfolio Summary for combined view
+
+<br><br><strong style="font-size:0.82rem;">Input Legend</strong><br>
+<span style="border-left:3px solid {INPUT_BLUE};padding-left:0.3rem;font-weight:600;color:{INPUT_BLUE};">Blue border</span> = editable input<br>
+<strong>Bold text</strong> = calculated output<br>
+<span style="color:{GREY_TEXT};font-style:italic;">Grey italic</span> = guidance notes
+
+<br><br><strong style="font-size:0.82rem;">Workflow</strong><br>
+<strong>1.</strong> Set analysis name, currency, target market<br>
+<strong>2.</strong> Configure factory assumptions matrix<br>
+<strong>3.</strong> Assign factory countries for lead times<br>
+<strong>4.</strong> Set Company WACC, carrying cost rates, and NWC assumptions<br>
+<strong>5.</strong> Add items with costs and overrides<br>
+<strong>6.</strong> Review results, sensitivity, investment<br>
+<strong>7.</strong> Add strategic context per item<br>
+<strong>8.</strong> Export PDF or Excel
+</div>""", unsafe_allow_html=True)
+        return
+
+    if st.session_state.active_page == "changelog":
+        st.markdown(f"""
+<div style="font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};line-height:1.6;max-width:800px;">
+<strong style="font-size:0.82rem;">Changelog</strong><br>
+<span style="color:{GREY_TEXT};">v9.0</span> &mdash; Qualitative context, Data Classification, sidebar nav<br>
+<span style="color:{GREY_TEXT};">v8.0</span> &mdash; Required Investments Analysis (NPV, IRR, payback)<br>
+<span style="color:{GREY_TEXT};">v7.0</span> &mdash; NWC impact, GIT, adjusted OP/margin<br>
+<span style="color:{GREY_TEXT};">v6.0</span> &mdash; IB visual refresh, waterfall, tornado, PDF export<br>
+<span style="color:{GREY_TEXT};">v5.0</span> &mdash; Testable modules, sensitivity, lead times<br>
+<span style="color:{GREY_TEXT};">v4.0</span> &mdash; Multi-item projects, portfolio summary<br>
+<span style="color:{GREY_TEXT};">v1&ndash;3</span> &mdash; Core engine, matrix UX, IB styling<br>
+
+<br><strong style="font-size:0.82rem;">Contact</strong><br>
+<strong>Jonas Henriksson</strong><br>Head of Strategic Planning &amp; Intelligent Hub<br>
+<a href="mailto:jonas.henriksson@skf.com" style="color:{ACCENT_BLUE};text-decoration:none;">jonas.henriksson@skf.com</a>
+</div>
+""", unsafe_allow_html=True)
         return
 
     # ── COST MODEL PAGE (active_page == "model") ──
@@ -3067,7 +3152,7 @@ This provides the local risk percentage.</li>
                     st.markdown(build_annual_table(results, currency), unsafe_allow_html=True)
 
                     if len(results) >= 2:
-                        st.plotly_chart(build_charts(results, currency), use_container_width=True, config={"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False})
+                        plotly_chart(build_charts(results, currency))
 
                     # ── SUB-TABS: Cost Bridge | Sensitivity ──
                     sub_tab_labels = ["Cost Bridge", "Sensitivity Analysis"]
@@ -3081,7 +3166,7 @@ This provides the local risk percentage.</li>
                         for wi, wf_r in enumerate(results[:n_wf]):
                             with wf_cols[wi]:
                                 st.markdown(f'<div style="font-size:0.7rem;font-family:Inter,sans-serif;font-weight:600;color:{DARK_TEXT};margin-bottom:0.2rem;">Cost Bridge: {wf_r["name"]} ({currency}/unit)</div>', unsafe_allow_html=True)
-                                st.plotly_chart(build_waterfall_chart(wf_r, currency), use_container_width=True, config={"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False})
+                                plotly_chart(build_waterfall_chart(wf_r, currency))
                         if len(results) > 3:
                             st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-top:0.3rem;">Showing top 3 of {len(results)} locations. All locations included in tables above.</div>', unsafe_allow_html=True)
 
@@ -3099,7 +3184,7 @@ This provides the local risk percentage.</li>
                             if tornado_factory:
                                 tornado_fig = build_tornado_chart(inputs, tornado_factory, is_base=False, ccy=currency, overrides=get_ov(tornado_factory.name))
                                 if tornado_fig:
-                                    st.plotly_chart(tornado_fig, use_container_width=True, config={"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False})
+                                    plotly_chart(tornado_fig)
 
                         sa_params = {
                             "VA Ratio": ("va_ratio", False),
@@ -3125,7 +3210,7 @@ This provides the local risk percentage.</li>
                         fig_sa = build_sensitivity_chart(
                             inputs, factories, base, param_key, sa_choice, steps, currency, is_pct=is_pct
                         )
-                        st.plotly_chart(fig_sa, use_container_width=True, config={"displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d", "sendDataToCloud"], "displaylogo": False})
+                        plotly_chart(fig_sa)
 
                     inv_results = []
 

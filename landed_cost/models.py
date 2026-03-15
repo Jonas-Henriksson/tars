@@ -40,17 +40,21 @@ class ItemInputs:
     """Per-item cost data supplied by the user.
 
     Attributes:
-        item_number:    Unique identifier for the item.
-        designation:    Human-readable item description.
-        currency:       Reporting currency code.
-        destination:    Target market or region.
-        date:           Analysis date (informational).
-        comment:        Free-text scope / reason.
-        net_sales_value: Total annual revenue for this item.
-        net_sales_qty:   Total annual units produced / sold.
-        material:       Direct material cost per unit (base case).
-        variable_va:    Variable value-added cost per unit (base case).
-        fixed_va:       Fixed value-added cost per unit (base case).
+        item_number:      Unique identifier for the item.
+        designation:      Human-readable item description.
+        currency:         Reporting currency code.
+        destination:      Target market or region.
+        date:             Analysis date (informational).
+        comment:          Free-text scope / reason.
+        net_sales_value:  Year 1 (base year) annual revenue — used for item comparisons.
+        net_sales_qty:    Year 1 (base year) annual units — used for item comparisons.
+        material:         Direct material cost per unit (base case).
+        variable_va:      Variable value-added cost per unit (base case).
+        fixed_va:         Fixed value-added cost per unit (base case).
+        sales_projection: Multi-year sales projection as list of
+                          ``{"year": int, "value": float, "qty": int}`` dicts.
+                          Year 1 must match net_sales_value / net_sales_qty.
+                          Used by the investment case to model volume/price growth.
     """
     item_number: str = ""
     designation: str = ""
@@ -63,11 +67,28 @@ class ItemInputs:
     material: float = 0.0
     variable_va: float = 0.0
     fixed_va: float = 0.0
+    sales_projection: list = field(default_factory=list)
 
     @property
     def net_sales_per_unit(self) -> float:
         """Net sales value divided by quantity, or 0 if quantity is zero."""
         return self.net_sales_value / self.net_sales_qty if self.net_sales_qty else 0.0
+
+    def get_projection_for_year(self, year: int) -> tuple[float, int]:
+        """Return (net_sales_value, net_sales_qty) for a given projection year.
+
+        Falls back to the last available projection year, or base-year values
+        if no projection exists.
+        """
+        if not self.sales_projection:
+            return self.net_sales_value, self.net_sales_qty
+        # Find exact year
+        for p in self.sales_projection:
+            if p["year"] == year:
+                return float(p["value"]), int(p["qty"])
+        # Beyond projection: use last year
+        last = self.sales_projection[-1]
+        return float(last["value"]), int(last["qty"])
 
     def validate(self) -> list[str]:
         """Return a list of validation error messages (empty = valid)."""
