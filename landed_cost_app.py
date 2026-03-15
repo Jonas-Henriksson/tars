@@ -53,7 +53,6 @@ INPUT_EDITOR_KEYS = [
     # Governance template inputs
     "ps_dep_editor",
     "prop_risks_editor", "prop_fin_editor",
-    "td_base_editor", "td_commercial_editor", "td_supply_editor", "td_financial_editor",
     # Analysis Conclusion & Proposal enhancements
     "prop_rexp_editor", "prop_milestones_editor", "prop_approvals_editor",
     "prop_impl_editor", "prop_comm_editor",
@@ -5126,65 +5125,79 @@ Compares full cost-to-serve across factory locations, including material, labour
                 {section_name}
             </div>""", unsafe_allow_html=True)
 
-            # Build display rows: main requirement + stacked follow-up label
-            display_rows = []
-            for row in rows:
+            sec_key = section_name.lower().replace(" ", "_").replace("&", "and")
+
+            # Column header row
+            _hdr_cols = st.columns([3.0, 1.8, 1.2, 1.0, 1.0])
+            for _ci, _lbl in enumerate(["Requirement", "Value / Answer", "Approver", "Date", "Status"]):
+                with _hdr_cols[_ci]:
+                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.6rem;font-weight:600;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.04em;padding:0.2rem 0;border-bottom:1px solid {BORDER};'>{_lbl}</div>", unsafe_allow_html=True)
+
+            # Render each requirement row with appropriate input types
+            for ri, row in enumerate(rows):
                 req = row["Requirement"]
                 follow_up = row.get("Follow-up", "")
                 condition = row.get("Condition", "")
-                # Append follow-up label to requirement text
-                if follow_up and condition != "if_no":
-                    req_display = f"{req}\n↳ {follow_up}"
-                else:
-                    req_display = req
-                display_rows.append({
-                    "Requirement": req_display,
-                    "Value": row.get("Value", ""),
-                    "Approver": row.get("Approver", ""),
-                    "Date": row.get("Date", ""),
-                    "Status": row.get("Status", "Pending"),
-                })
+                is_yn = row.get("Input Type") == "yes_no"
+                has_inline_followup = follow_up and condition != "if_no"
 
-            sec_key = section_name.lower().replace(" ", "_").replace("&", "and")
-            section_df = pd.DataFrame(display_rows)
+                rc = st.columns([3.0, 1.8, 1.2, 1.0, 1.0])
+                with rc[0]:
+                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.72rem;color:{DARK_TEXT};padding:0.55rem 0 0.2rem 0;'>{req}</div>", unsafe_allow_html=True)
+                with rc[1]:
+                    if is_yn:
+                        _yn_opts = ["", "Yes", "No"]
+                        _yn_cur = row.get("Value", "")
+                        _yn_idx = _yn_opts.index(_yn_cur) if _yn_cur in _yn_opts else 0
+                        row["Value"] = st.selectbox(
+                            f"val_{sec_key}_{ri}", options=_yn_opts, index=_yn_idx,
+                            key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed",
+                            format_func=lambda x: x if x else "— Select —")
+                    else:
+                        row["Value"] = st.text_input(
+                            f"val_{sec_key}_{ri}", value=row.get("Value", ""),
+                            key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed")
+                with rc[2]:
+                    row["Approver"] = st.text_input(
+                        f"app_{sec_key}_{ri}", value=row.get("Approver", ""),
+                        key=f"td_{sec_key}_{ri}_app", label_visibility="collapsed")
+                with rc[3]:
+                    row["Date"] = st.text_input(
+                        f"dt_{sec_key}_{ri}", value=row.get("Date", ""),
+                        key=f"td_{sec_key}_{ri}_dt", label_visibility="collapsed")
+                with rc[4]:
+                    _st_opts = ["Pending", "Approved", "Rejected"]
+                    _st_cur = row.get("Status", "Pending")
+                    _st_idx = _st_opts.index(_st_cur) if _st_cur in _st_opts else 0
+                    _st_colors = {"Pending": f"color:#e6a817;", "Approved": f"color:{GREEN};", "Rejected": f"color:{RED};"}
+                    row["Status"] = st.selectbox(
+                        f"st_{sec_key}_{ri}", options=_st_opts, index=_st_idx,
+                        key=f"td_{sec_key}_{ri}_st", label_visibility="collapsed")
+                    # Color badge below selectbox
+                    _sc = _st_colors.get(row["Status"], "")
+                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.6rem;font-weight:700;{_sc}margin-top:-0.7rem;'>{row['Status']}</div>", unsafe_allow_html=True)
 
-            # Determine which rows are yes/no type for the Value column
-            yn_rows = [i for i, r in enumerate(rows) if r.get("Input Type") == "yes_no"]
+                # Inline follow-up (non-conditional) — show on same row below
+                if has_inline_followup:
+                    fu_cols = st.columns([3.0, 1.8, 3.2])
+                    with fu_cols[0]:
+                        st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};padding:0 0 0.3rem 1rem;font-style:italic;'>{follow_up}</div>", unsafe_allow_html=True)
+                    with fu_cols[1]:
+                        row["Follow-up Answer"] = st.text_input(
+                            f"fua_{sec_key}_{ri}", value=row.get("Follow-up Answer", ""),
+                            key=f"td_{sec_key}_{ri}_fua", label_visibility="collapsed")
 
-            edited = st.data_editor(
-                section_df, use_container_width=True, num_rows="fixed",
-                key=f"td_{sec_key}_editor", hide_index=True,
-                column_config={
-                    "Requirement": st.column_config.TextColumn("Requirement", disabled=True, width=280),
-                    "Value": st.column_config.TextColumn("Value / Answer", width=140),
-                    "Approver": st.column_config.TextColumn("Approver", width=120),
-                    "Date": st.column_config.TextColumn("Date", width=90),
-                    "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "Approved", "Rejected"], width=90),
-                },
-                disabled=["Requirement"])
-
-            # Write back edited values
-            edited_records = edited.to_dict("records")
-            for i, rec in enumerate(edited_records):
-                rows[i]["Value"] = rec.get("Value", "")
-                rows[i]["Approver"] = rec.get("Approver", "")
-                rows[i]["Date"] = rec.get("Date", "")
-                rows[i]["Status"] = rec.get("Status", "Pending")
-
-            # Render conditional follow-up inputs (only for "if_no" rows where answer is No)
-            for ri, row in enumerate(rows):
-                condition = row.get("Condition", "")
-                follow_up = row.get("Follow-up", "")
+                # Conditional follow-up (if_no) — only show when answer is No
                 if condition == "if_no" and follow_up:
                     main_val = (row.get("Value", "") or "").strip().lower()
                     if main_val in ("no", "n"):
-                        c1, c2 = st.columns([3.5, 6.5])
-                        with c1:
-                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};padding:0.15rem 0 0.15rem 1rem;font-style:italic;'>↳ If no: {follow_up}</div>", unsafe_allow_html=True)
-                        with c2:
+                        fu_cols2 = st.columns([3.0, 1.8, 3.2])
+                        with fu_cols2[0]:
+                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{RED};padding:0 0 0.3rem 1rem;font-style:italic;'>If no: {follow_up}</div>", unsafe_allow_html=True)
+                        with fu_cols2[1]:
                             row["Follow-up Answer"] = st.text_input(
-                                "fua", value=row.get("Follow-up Answer", ""),
-                                key=f"td_{sec_key}_{ri}_fua", label_visibility="collapsed")
+                                "fua_no", value=row.get("Follow-up Answer", ""),
+                                key=f"td_{sec_key}_{ri}_fua_no", label_visibility="collapsed")
 
         st.session_state.td_requirements = td_reqs
 
