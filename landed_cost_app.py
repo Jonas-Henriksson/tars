@@ -51,7 +51,7 @@ INPUT_EDITOR_KEYS = [
     "fc_editor", "country_editor", "assumption_matrix", "nwc_matrix",
     "wacc_editor", "target_pb_editor", "target_om_editor", "coc_editor",
     # Governance template inputs
-    "ps_dep_editor", "ps_timeline_editor",
+    "ps_dep_editor",
     "prop_risks_editor", "prop_fin_editor",
     "td_base_editor", "td_commercial_editor", "td_supply_editor", "td_financial_editor",
     # Analysis Conclusion & Proposal enhancements
@@ -2189,9 +2189,22 @@ def init_state():
         st.session_state.ps_team = ""
     if "ps_timeline" not in st.session_state:
         st.session_state.ps_timeline = {
-            "Pre-study Finalized": "", "Pre-study to FC": "",
-            "IRE Submission": "", "IRE to IC": "", "Project Execution Start": "",
+            "Pre-study Finalized": "", "Decision": "",
+            "Preliminary Execution Start": "",
         }
+    else:
+        # Migrate legacy keys
+        _tl = st.session_state.ps_timeline
+        _migrated = False
+        if "Pre-study to FC" in _tl and "Decision" not in _tl:
+            _tl["Decision"] = _tl.pop("Pre-study to FC"); _migrated = True
+        if "Project Execution Start" in _tl and "Preliminary Execution Start" not in _tl:
+            _tl["Preliminary Execution Start"] = _tl.pop("Project Execution Start"); _migrated = True
+        for _old_key in ("IRE Submission", "IRE to IC"):
+            if _old_key in _tl:
+                _tl.pop(_old_key); _migrated = True
+        if _migrated:
+            st.session_state.ps_timeline = _tl
     # ── PRE-STUDY WORKFORCE IMPACT ────────────────────────────
     if "ps_workforce_headcount_from" not in st.session_state:
         st.session_state.ps_workforce_headcount_from = 0
@@ -4944,16 +4957,21 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.markdown(f'<div class="sec">Time Plan</div>', unsafe_allow_html=True)
 
         tl = st.session_state.ps_timeline
-        tl_df = pd.DataFrame({"Milestone": list(tl.keys()), "Target Date": list(tl.values())})
-        edited_tl = st.data_editor(
-            tl_df, use_container_width=True, num_rows="fixed", key="ps_timeline_editor",
-            hide_index=True,
-            column_config={
-                "Milestone": st.column_config.TextColumn("Milestone", disabled=True, width=300),
-                "Target Date": st.column_config.TextColumn("Target Date", width=200),
-            },
-            disabled=["Milestone"])
-        st.session_state.ps_timeline = dict(zip(edited_tl["Milestone"], edited_tl["Target Date"].fillna("")))
+        _tl_milestones = ["Pre-study Finalized", "Decision", "Preliminary Execution Start"]
+        tl_cols = st.columns(len(_tl_milestones))
+        for _ti, _ms_name in enumerate(_tl_milestones):
+            with tl_cols[_ti]:
+                _cur_val = tl.get(_ms_name, "")
+                _date_val = None
+                if _cur_val:
+                    try:
+                        from datetime import datetime as _dt
+                        _date_val = _dt.strptime(str(_cur_val), "%Y-%m-%d").date()
+                    except (ValueError, TypeError):
+                        _date_val = None
+                _picked = st.date_input(_ms_name, value=_date_val, key=f"ps_tl_{_ti}", format="YYYY-MM-DD")
+                tl[_ms_name] = str(_picked) if _picked else ""
+        st.session_state.ps_timeline = tl
 
         # ── PRE-STUDY COMPLETENESS ─────────────────────────────
         ps_fields = {
