@@ -21,7 +21,7 @@ from fpdf import FPDF
 # Import from extracted library modules
 from landed_cost.models import FactoryAssumptions, ItemInputs
 from landed_cost.compute import compute_location, compute_sensitivity
-from landed_cost.investment import compute_investment_case
+from landed_cost.investment import compute_investment_case, compute_npv, compute_irr
 from landed_cost.lead_times import get_lead_time, estimate_lead_time, LEAD_TIME_MATRIX
 from landed_cost.formatters import fn, fp, fi, fa, dc
 from landed_cost.constants import (
@@ -54,6 +54,8 @@ INPUT_EDITOR_KEYS = [
     "ps_dep_editor", "ps_timeline_editor",
     "prop_risks_editor", "prop_fin_editor",
     "td_base_editor", "td_commercial_editor", "td_supply_editor", "td_financial_editor",
+    # Analysis Conclusion & Proposal enhancements
+    "prop_rexp_editor", "prop_milestones_editor", "prop_approvals_editor",
 ]
 _blue_border = f"border-left: 3px solid {INPUT_BLUE} !important; padding-left: 2px;"
 _fixed_rules = "\n".join(f"    .st-key-{k} {{ {_blue_border} }}" for k in INPUT_EDITOR_KEYS)
@@ -1880,6 +1882,37 @@ def init_state():
     if "active_page" not in st.session_state:
         st.session_state.active_page = "model"
     # ── GOVERNANCE TEMPLATE DEFAULTS ─────────────────────────
+    # ── ANALYSIS CONCLUSION GATE ────────────────────────────
+    if "conclusion_selected_option" not in st.session_state:
+        st.session_state.conclusion_selected_option = ""
+    if "conclusion_rationale" not in st.session_state:
+        st.session_state.conclusion_rationale = ""
+    if "conclusion_decision" not in st.session_state:
+        st.session_state.conclusion_decision = ""  # "Go" / "Conditional Go" / "No-Go" / ""
+    if "conclusion_conditions" not in st.session_state:
+        st.session_state.conclusion_conditions = ""
+    if "conclusion_decided_by" not in st.session_state:
+        st.session_state.conclusion_decided_by = ""
+    if "conclusion_decided_date" not in st.session_state:
+        st.session_state.conclusion_decided_date = ""
+    # ── PROPOSAL ENHANCEMENTS ────────────────────────────────
+    if "prop_recommendation" not in st.session_state:
+        st.session_state.prop_recommendation = ""  # "Go" / "Conditional Go" / "No-Go" / ""
+    if "prop_conditions" not in st.session_state:
+        st.session_state.prop_conditions = ""
+    if "prop_risk_exposure" not in st.session_state:
+        st.session_state.prop_risk_exposure = [{"Risk": "", "Probability": "Medium", "Impact (M)": 0.0, "Mitigation": ""}]
+    if "prop_milestones" not in st.session_state:
+        st.session_state.prop_milestones = [{"Milestone": "", "Owner": "", "Target Date": "", "Status": "Pending"}]
+    if "prop_approvals" not in st.session_state:
+        st.session_state.prop_approvals = [{"Approver": "", "Role": "", "Decision": "", "Date": "", "Comments": ""}]
+    # ── PRE-STUDY FACTORY SCOPING ────────────────────────────
+    if "ps_factories_included" not in st.session_state:
+        st.session_state.ps_factories_included = ""
+    if "ps_factories_excluded" not in st.session_state:
+        st.session_state.ps_factories_excluded = ""
+    if "ps_scoping_rationale" not in st.session_state:
+        st.session_state.ps_scoping_rationale = ""
     if "ps_strategic_rationale" not in st.session_state:
         st.session_state.ps_strategic_rationale = ""
     if "ps_purpose" not in st.session_state:
@@ -2921,6 +2954,109 @@ def render_executive_summary_page():
             i_tbl += '</tbody></table>'
             st.markdown(i_tbl, unsafe_allow_html=True)
 
+    # ── ANALYSIS CONCLUSION GATE ─────────────────────────────
+    st.markdown(f'<div class="sec">Analysis Conclusion — Option Selection</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Record the recommended option and decision rationale. This creates an auditable link between the cost analysis and the governance workflow. Complete this section before proceeding to Transfer Feasibility.</div>', unsafe_allow_html=True)
+
+    # Auto-populate recommended option from model results if not set
+    if not st.session_state.conclusion_selected_option.strip() and all_results:
+        if ranked_for_verdict:
+            v_best = ranked_for_verdict[0]
+            v_delta = adj_totals[v_best] - base_adj_op
+            if v_delta > 0:
+                st.session_state.conclusion_selected_option = v_best
+
+    conc_c1, conc_c2 = st.columns([1, 1])
+    with conc_c1:
+        # Option selector — all factories
+        option_choices = [""] + all_fnames
+        current_idx = 0
+        if st.session_state.conclusion_selected_option in option_choices:
+            current_idx = option_choices.index(st.session_state.conclusion_selected_option)
+        selected = st.selectbox(
+            "Recommended Manufacturing Location",
+            options=option_choices,
+            index=current_idx,
+            key="conclusion_option_select",
+            format_func=lambda x: x if x else "— Select recommended option —",
+        )
+        st.session_state.conclusion_selected_option = selected
+
+        # Show key metrics for selected option
+        if selected and selected in all_fnames:
+            sel_op = adj_totals.get(selected, 0)
+            sel_rev = total_rev.get(selected, 0)
+            sel_om = sel_op / sel_rev * 100 if sel_rev else 0
+            delta_vs_base = sel_op - adj_totals.get(base_fn, 0)
+            is_base_selected = (selected == base_fn)
+            metric_color = NAVY if is_base_selected else (GREEN if delta_vs_base > 0 else RED)
+            st.markdown(f'''<div style="background:#f8f9fb;border:1px solid {BORDER};border-left:3px solid {metric_color};padding:0.6rem 0.9rem;margin:0.3rem 0;font-family:Inter,sans-serif;font-size:0.76rem;">
+                <strong>{selected}</strong> — Annual OP: <strong>{fi(sel_op, dz=False)} {currency}</strong> | OM: <strong>{sel_om:.1f}%</strong>
+                {f' | Delta vs Base: <span style="color:{GREEN if delta_vs_base > 0 else RED};font-weight:600;">{fi(delta_vs_base, acct=True)} {currency}</span>' if not is_base_selected else ' (Base Case)'}
+            </div>''', unsafe_allow_html=True)
+
+        st.markdown(f'<div class="sec-sm">Decision</div>', unsafe_allow_html=True)
+        decision_options = ["", "Go", "Conditional Go", "No-Go"]
+        current_dec_idx = 0
+        if st.session_state.conclusion_decision in decision_options:
+            current_dec_idx = decision_options.index(st.session_state.conclusion_decision)
+        decision = st.selectbox(
+            "Decision",
+            options=decision_options,
+            index=current_dec_idx,
+            key="conclusion_decision_select",
+            format_func=lambda x: x if x else "— Select decision —",
+        )
+        st.session_state.conclusion_decision = decision
+
+        if decision == "Conditional Go":
+            st.session_state.conclusion_conditions = st.text_area(
+                "Conditions for Proceeding",
+                value=st.session_state.conclusion_conditions,
+                key="conclusion_conditions_input", height=80,
+                placeholder="List conditions that must be met before proceeding (e.g. customer approval, quality audit pass)...")
+
+        # Decision record
+        dr_c1, dr_c2 = st.columns(2)
+        with dr_c1:
+            st.session_state.conclusion_decided_by = st.text_input(
+                "Decided By", value=st.session_state.conclusion_decided_by,
+                key="conclusion_decided_by_input",
+                placeholder="Name / role of decision maker")
+        with dr_c2:
+            st.session_state.conclusion_decided_date = st.text_input(
+                "Decision Date", value=st.session_state.conclusion_decided_date,
+                key="conclusion_decided_date_input",
+                placeholder="e.g. 2025-03-15")
+
+    with conc_c2:
+        st.markdown(f'<div class="sec-sm">Rationale</div>', unsafe_allow_html=True)
+        st.session_state.conclusion_rationale = st.text_area(
+            "Rationale", value=st.session_state.conclusion_rationale,
+            key="conclusion_rationale_input", height=200, label_visibility="collapsed",
+            placeholder="Explain why this option was selected over alternatives:\n\n- Financial advantage (OP uplift, margin improvement)\n- Strategic fit (capacity, market proximity, risk diversification)\n- NWC impact assessment\n- Key trade-offs and risks accepted\n- Factors that ruled out other options...")
+
+        # Completeness check
+        conc_complete = bool(
+            st.session_state.conclusion_selected_option
+            and st.session_state.conclusion_decision
+            and st.session_state.conclusion_rationale.strip()
+            and st.session_state.conclusion_decided_by.strip()
+        )
+        if conc_complete:
+            st.markdown(f'''<div style="background:#f0faf3;border:1px solid {GREEN};border-left:3px solid {GREEN};padding:0.5rem 0.8rem;margin:0.4rem 0;font-family:Inter,sans-serif;font-size:0.73rem;color:{GREEN};">
+                Analysis Conclusion complete — ready to proceed to Transfer Feasibility.
+            </div>''', unsafe_allow_html=True)
+        else:
+            missing = []
+            if not st.session_state.conclusion_selected_option: missing.append("Recommended Option")
+            if not st.session_state.conclusion_decision: missing.append("Decision")
+            if not st.session_state.conclusion_rationale.strip(): missing.append("Rationale")
+            if not st.session_state.conclusion_decided_by.strip(): missing.append("Decided By")
+            st.markdown(f'''<div style="background:#fff8e6;border:1px solid #e6a817;border-left:3px solid #e6a817;padding:0.5rem 0.8rem;margin:0.4rem 0;font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};">
+                Incomplete — missing: {", ".join(missing)}
+            </div>''', unsafe_allow_html=True)
+
     # Footer
     st.markdown(f'<div style="margin-top:1.5rem;padding-top:0.5rem;border-top:1px solid {BORDER};font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};text-align:center;">{data_classification} | {project_name} | Generated by Manufacturing Location Analyzer</div>', unsafe_allow_html=True)
 
@@ -2933,7 +3069,17 @@ def save_project_json():
         "project_name": st.session_state.get("project_name", ""),
         "project_items": st.session_state.get("project_items", []),
         "next_id": st.session_state.get("next_id", 1),
+        # Analysis Conclusion
+        "conclusion_selected_option": st.session_state.get("conclusion_selected_option", ""),
+        "conclusion_rationale": st.session_state.get("conclusion_rationale", ""),
+        "conclusion_decision": st.session_state.get("conclusion_decision", ""),
+        "conclusion_conditions": st.session_state.get("conclusion_conditions", ""),
+        "conclusion_decided_by": st.session_state.get("conclusion_decided_by", ""),
+        "conclusion_decided_date": st.session_state.get("conclusion_decided_date", ""),
         # Governance — Pre-study
+        "ps_factories_included": st.session_state.get("ps_factories_included", ""),
+        "ps_factories_excluded": st.session_state.get("ps_factories_excluded", ""),
+        "ps_scoping_rationale": st.session_state.get("ps_scoping_rationale", ""),
         "ps_strategic_rationale": st.session_state.get("ps_strategic_rationale", ""),
         "ps_purpose": st.session_state.get("ps_purpose", ""),
         "ps_risk_of_inaction": st.session_state.get("ps_risk_of_inaction", ""),
@@ -2955,6 +3101,11 @@ def save_project_json():
         "prop_cash_out": st.session_state.get("prop_cash_out"),
         "prop_timeplan": st.session_state.get("prop_timeplan", ""),
         "prop_risks": st.session_state.get("prop_risks", []),
+        "prop_recommendation": st.session_state.get("prop_recommendation", ""),
+        "prop_conditions": st.session_state.get("prop_conditions", ""),
+        "prop_risk_exposure": st.session_state.get("prop_risk_exposure", []),
+        "prop_milestones": st.session_state.get("prop_milestones", []),
+        "prop_approvals": st.session_state.get("prop_approvals", []),
         # Governance — Transfer Feasibility
         "td_transfer_to": st.session_state.get("td_transfer_to", ""),
         "td_transfer_from": st.session_state.get("td_transfer_from", ""),
@@ -3475,6 +3626,58 @@ This provides the local risk percentage.</li>
                 )
                 plotly_chart(fig_cf)
 
+                # ── STRESS-TESTED NPV ──────────────────────────────
+                st.markdown(f'<div class="sec-sm">Stress-Tested NPV — Scenario Analysis</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};margin-bottom:0.5rem;font-family:Inter,sans-serif;">Base case uses model inputs. Downside applies -20% to annual savings and +20% to investment. Upside applies +20% to savings and -10% to investment.</div>', unsafe_allow_html=True)
+
+                scenarios = [
+                    ("Downside (-20% savings, +20% cost)", -0.20, 0.20),
+                    ("Base Case", 0.0, 0.0),
+                    ("Upside (+20% savings, -10% cost)", 0.20, -0.10),
+                ]
+                sc_hdr = "".join(f'<th>{ic["factory_name"]}</th>' for ic in inv_results if ic["total_investment"] > 0 or ic["annual_savings"] != 0)
+                sc_tbl = f'<table class="ib-table"><thead><tr><th>Scenario</th>{sc_hdr}</tr></thead><tbody>'
+
+                for sc_label, savings_adj, cost_adj in scenarios:
+                    sc_cells = ""
+                    for ic in inv_results:
+                        if ic["total_investment"] == 0 and ic["annual_savings"] == 0:
+                            continue
+                        adj_savings = [s * (1 + savings_adj) for s in ic["annual_savings_by_year"]]
+                        adj_investment = ic["total_investment"] * (1 + cost_adj)
+                        adj_cf = [-adj_investment] + adj_savings
+                        sc_npv = compute_npv(adj_cf, company_wacc)
+                        cls = "delta-pos" if sc_npv > 0 else ("delta-neg" if sc_npv < 0 else "")
+                        is_base = savings_adj == 0.0 and cost_adj == 0.0
+                        weight = "font-weight:700;" if is_base else ""
+                        sc_cells += f'<td class="{cls}" style="{weight}">{fi(sc_npv, acct=True, dz=False)}</td>'
+                    row_cls = "row-bold" if savings_adj == 0.0 else ""
+                    sc_tbl += f'<tr class="{row_cls}"><td>{sc_label}</td>{sc_cells}</tr>'
+
+                # Add IRR row per scenario
+                sc_tbl += f'<tr class="row-separator">{"<td></td>" * (1 + sum(1 for ic in inv_results if ic["total_investment"] > 0 or ic["annual_savings"] != 0))}</tr>'
+                for sc_label, savings_adj, cost_adj in scenarios:
+                    sc_cells = ""
+                    for ic in inv_results:
+                        if ic["total_investment"] == 0 and ic["annual_savings"] == 0:
+                            continue
+                        _compute_irr = compute_irr
+                        adj_savings = [s * (1 + savings_adj) for s in ic["annual_savings_by_year"]]
+                        adj_investment = ic["total_investment"] * (1 + cost_adj)
+                        adj_cf = [-adj_investment] + adj_savings
+                        sc_irr = _compute_irr(adj_cf)
+                        if sc_irr is not None:
+                            cls = "delta-pos" if sc_irr > company_wacc else "delta-neg"
+                            sc_cells += f'<td class="{cls}">{sc_irr*100:.1f}%</td>'
+                        else:
+                            sc_cells += f'<td>{dash}</td>'
+                    row_cls = "row-bold" if savings_adj == 0.0 else ""
+                    irr_label = sc_label.replace("NPV", "IRR") if "NPV" in sc_label else sc_label
+                    sc_tbl += f'<tr class="{row_cls}"><td>IRR: {sc_label.split("(")[0].strip()}</td>{sc_cells}</tr>'
+
+                sc_tbl += '</tbody></table>'
+                st.markdown(sc_tbl, unsafe_allow_html=True)
+
         # Footer for investment page
         st.markdown("---")
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Required Investments Analysis</span>", unsafe_allow_html=True)
@@ -3641,6 +3844,32 @@ Compares full cost-to-serve across factory locations, including material, labour
                 "Questions", value=st.session_state.ps_questions,
                 key="ps_questions_input", height=100, label_visibility="collapsed",
                 placeholder="List the key questions that need to be answered during the pre-study phase...")
+
+            # ── FACTORY SCOPING RATIONALE ──────────────────────
+            st.markdown(f'<div class="sec-sm">Factory Scoping — Included & Excluded</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-bottom:0.3rem;font-family:Inter,sans-serif;">Document which factories were included in the analysis and, critically, which were excluded and why. This ensures the evaluation scope is transparent and auditable.</div>', unsafe_allow_html=True)
+
+            # Auto-populate from model if available
+            all_factory_names_ps = st.session_state.get("_all_factory_names", [])
+            if all_factory_names_ps and not st.session_state.ps_factories_included.strip():
+                st.session_state.ps_factories_included = ", ".join(all_factory_names_ps)
+
+            scope_c1, scope_c2 = st.columns(2)
+            with scope_c1:
+                st.session_state.ps_factories_included = st.text_area(
+                    "Factories Included", value=st.session_state.ps_factories_included,
+                    key="ps_incl_input", height=70, label_visibility="visible",
+                    placeholder="e.g. Gothenburg (base), Shanghai, Pune")
+            with scope_c2:
+                st.session_state.ps_factories_excluded = st.text_area(
+                    "Factories Excluded", value=st.session_state.ps_factories_excluded,
+                    key="ps_excl_input", height=70, label_visibility="visible",
+                    placeholder="e.g. Schweinfurt, Dalian, Guadalajara")
+
+            st.session_state.ps_scoping_rationale = st.text_area(
+                "Scoping Rationale", value=st.session_state.ps_scoping_rationale,
+                key="ps_scope_rationale_input", height=100, label_visibility="visible",
+                placeholder="Explain the rationale for factory inclusion/exclusion:\n\n- Why were certain factories included? (e.g. existing capability, capacity headroom, strategic corridor)\n- Why were others excluded? (e.g. no relevant capability, at capacity, geopolitical risk, no established supply chain, technology mismatch)\n- Any constraints that narrowed the scope (e.g. customer proximity requirements, regulatory barriers)")
 
         with ps_right:
             # Cross-functional dependencies
@@ -3888,79 +4117,167 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
             Proposal <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
         </div>""", unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">One-page decision summary for the Factory Council. Financial figures are auto-populated from the Required Investments analysis where available.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Decision summary for the Factory Council. Includes structured recommendation, quantified risk exposure, milestone tracking, and formal approval log. Financial figures are auto-populated from the Required Investments analysis where available.</div>', unsafe_allow_html=True)
 
-        # Auto-generate direction from model results if not already set
-        if not st.session_state.prop_direction.strip() and all_results:
-            try:
-                best_name, best_delta = "", 0.0
-                base_om = 0.0
-                for item_data in all_results:
-                    results = item_data.get("results", [])
-                    if len(results) >= 2:
-                        base_om = results[0].get("operating_margin_pct", 0)
-                        for r in results[1:]:
-                            delta = r.get("operating_margin_pct", 0) - base_om
-                            if delta > best_delta:
-                                best_delta = delta
-                                best_name = r.get("name", "")
-                if best_name:
-                    base_name = all_results[0]["results"][0].get("name", "Base") if all_results[0].get("results") else "Base"
-                    st.session_state.prop_direction = (
-                        f"Transfer production from {base_name} to {best_name}, "
-                        f"achieving {best_delta:+.1f}pp operating margin improvement."
-                    )
-            except (KeyError, IndexError):
-                pass
+        # ── RECOMMENDATION ─────────────────────────────────────
+        st.markdown(f'<div class="sec">Recommendation</div>', unsafe_allow_html=True)
 
-        prop_left, prop_right = st.columns([2, 3])
-        with prop_left:
+        # Pull conclusion from Analysis Summary if available
+        conclusion_opt = st.session_state.get("conclusion_selected_option", "")
+        conclusion_dec = st.session_state.get("conclusion_decision", "")
+        if conclusion_opt and not st.session_state.prop_direction.strip():
+            st.session_state.prop_direction = f"Recommended location: {conclusion_opt}"
+
+        rec_c1, rec_c2 = st.columns([1, 2])
+        with rec_c1:
+            rec_options = ["", "Go", "Conditional Go", "No-Go"]
+            current_rec_idx = 0
+            if st.session_state.prop_recommendation in rec_options:
+                current_rec_idx = rec_options.index(st.session_state.prop_recommendation)
+            # Auto-populate from conclusion gate if empty
+            if not st.session_state.prop_recommendation and conclusion_dec in rec_options:
+                st.session_state.prop_recommendation = conclusion_dec
+                current_rec_idx = rec_options.index(conclusion_dec) if conclusion_dec in rec_options else 0
+            recommendation = st.selectbox(
+                "Recommendation to Factory Council",
+                options=rec_options,
+                index=current_rec_idx,
+                key="prop_rec_select",
+                format_func=lambda x: x if x else "— Select recommendation —",
+            )
+            st.session_state.prop_recommendation = recommendation
+
+            # Recommendation verdict box
+            if recommendation:
+                rec_colors = {"Go": GREEN, "Conditional Go": "#e6a817", "No-Go": RED}
+                rec_icons = {"Go": "\u2714", "Conditional Go": "\u26a0", "No-Go": "\u2716"}
+                rc = rec_colors.get(recommendation, NAVY)
+                ri = rec_icons.get(recommendation, "")
+                st.markdown(f'''<div style="background:#f8f9fb;border:1px solid {BORDER};border-left:4px solid {rc};padding:0.7rem 1rem;margin:0.4rem 0;font-family:Inter,sans-serif;">
+                    <div style="font-size:1rem;font-weight:700;color:{rc};">{ri} {recommendation}</div>
+                </div>''', unsafe_allow_html=True)
+
+            if recommendation == "Conditional Go":
+                st.session_state.prop_conditions = st.text_area(
+                    "Conditions for Proceeding",
+                    value=st.session_state.prop_conditions,
+                    key="prop_conditions_input", height=80,
+                    placeholder="List conditions that must be met:\n- Customer approval obtained\n- Quality audit passed\n- FX hedge in place...")
+
+        with rec_c2:
             st.markdown(f'<div class="sec-sm">Direction</div>', unsafe_allow_html=True)
             st.session_state.prop_direction = st.text_area(
                 "Direction", value=st.session_state.prop_direction,
-                key="prop_direction_input", height=160, label_visibility="collapsed",
+                key="prop_direction_input", height=120, label_visibility="collapsed",
                 placeholder="Describe the recommended direction and key rationale...")
 
-        with prop_right:
-            # Benefits & Key Details (bundled)
             st.markdown(f'<div class="sec-sm">Benefits & Key Details</div>', unsafe_allow_html=True)
             st.session_state.prop_benefits = st.text_area(
                 "Benefits", value=st.session_state.prop_benefits,
-                key="prop_benefits_input", height=140, label_visibility="collapsed",
-                placeholder="List key benefits and relevant details (use bullet points):\n- Margin improvement of X.Xpp\n  - Lower VA cost at receiving site\n- Risk diversification\n- Relevant technical / market details...")
+                key="prop_benefits_input", height=100, label_visibility="collapsed",
+                placeholder="List key benefits (use bullet points):\n- Margin improvement of X.Xpp\n- Risk diversification\n- Capacity headroom...")
 
-            # Financials & Time Plan — proper numeric inputs
-            st.markdown(f'<div class="sec-sm">Financials & Time Plan</div>', unsafe_allow_html=True)
-            # Auto-populate investment total from model
-            auto_inv = 0.0
-            if all_results:
-                for item_data in all_results:
-                    for ic in item_data.get("investment_cases", []):
-                        auto_inv += ic.get("total_investment", 0)
-            auto_inv_m = auto_inv / 1e6 if auto_inv else 0.0
+        # ── FINANCIALS & TIME PLAN ─────────────────────────────
+        st.markdown(f'<div class="sec-sm">Financials & Time Plan</div>', unsafe_allow_html=True)
+        auto_inv = 0.0
+        if all_results:
+            for item_data in all_results:
+                for ic in item_data.get("investment_cases", []):
+                    auto_inv += ic.get("total_investment", 0)
+        auto_inv_m = auto_inv / 1e6 if auto_inv else 0.0
 
-            fc1, fc2, fc3 = st.columns(3)
-            with fc1:
-                inv_val = st.session_state.prop_total_investment if st.session_state.prop_total_investment is not None else (auto_inv_m if auto_inv_m else None)
-                new_inv = st.number_input(
-                    f"Total Investment (M{currency})", value=inv_val,
-                    min_value=0.0, step=0.5, format="%.1f", key="prop_inv_input")
-                st.session_state.prop_total_investment = new_inv
-                if auto_inv_m > 0:
-                    st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};margin-top:-0.5rem;font-style:italic;">Auto-calculated: {auto_inv_m:.1f} M{currency}</div>', unsafe_allow_html=True)
-            with fc2:
-                new_cash = st.number_input(
-                    f"Cash Out (M{currency})", value=st.session_state.prop_cash_out or 0.0,
-                    min_value=0.0, step=0.5, format="%.1f", key="prop_cash_input")
-                st.session_state.prop_cash_out = new_cash
-            with fc3:
-                st.session_state.prop_timeplan = st.text_input(
-                    "Time Plan", value=st.session_state.prop_timeplan,
-                    key="prop_timeplan_input",
-                    placeholder="e.g. May '25 — Dec '26")
+        fc1, fc2, fc3 = st.columns(3)
+        with fc1:
+            inv_val = st.session_state.prop_total_investment if st.session_state.prop_total_investment is not None else (auto_inv_m if auto_inv_m else None)
+            new_inv = st.number_input(
+                f"Total Investment (M{currency})", value=inv_val,
+                min_value=0.0, step=0.5, format="%.1f", key="prop_inv_input")
+            st.session_state.prop_total_investment = new_inv
+            if auto_inv_m > 0:
+                st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};margin-top:-0.5rem;font-style:italic;">Auto-calculated: {auto_inv_m:.1f} M{currency}</div>', unsafe_allow_html=True)
+        with fc2:
+            new_cash = st.number_input(
+                f"Cash Out (M{currency})", value=st.session_state.prop_cash_out or 0.0,
+                min_value=0.0, step=0.5, format="%.1f", key="prop_cash_input")
+            st.session_state.prop_cash_out = new_cash
+        with fc3:
+            st.session_state.prop_timeplan = st.text_input(
+                "Time Plan", value=st.session_state.prop_timeplan,
+                key="prop_timeplan_input",
+                placeholder="e.g. May '25 — Dec '26")
 
-        # Dependencies, Risks & Mitigations (full width)
+        # ── QUANTIFIED RISK EXPOSURE ───────────────────────────
+        st.markdown(f'<div class="sec">Risk Exposure</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Quantify each risk with probability and financial impact. This enables the Factory Council to weigh the total risk-adjusted exposure against the expected benefits.</div>', unsafe_allow_html=True)
+
+        rexp_df = pd.DataFrame(st.session_state.prop_risk_exposure)
+        if "Risk" not in rexp_df.columns:
+            rexp_df = pd.DataFrame([{"Risk": "", "Probability": "Medium", "Impact (M)": 0.0, "Mitigation": ""}])
+        edited_rexp = st.data_editor(
+            rexp_df, use_container_width=True, num_rows="dynamic", key="prop_rexp_editor",
+            hide_index=True,
+            column_config={
+                "Risk": st.column_config.TextColumn("Risk / Dependency", width=220),
+                "Probability": st.column_config.SelectboxColumn("Probability", options=["Low", "Medium", "High"], width=100),
+                "Impact (M)": st.column_config.NumberColumn(f"Impact (M{currency})", format="%.1f", min_value=0.0, width=120),
+                "Mitigation": st.column_config.TextColumn("Mitigation Strategy", width=260),
+            })
+        st.session_state.prop_risk_exposure = edited_rexp.to_dict("records")
+
+        # Risk exposure summary
+        prob_weights = {"Low": 0.15, "Medium": 0.40, "High": 0.75}
+        total_exposure = 0.0
+        weighted_exposure = 0.0
+        for rr in st.session_state.prop_risk_exposure:
+            impact = float(rr.get("Impact (M)", 0) or 0)
+            total_exposure += impact
+            weighted_exposure += impact * prob_weights.get(rr.get("Probability", "Medium"), 0.40)
+        if total_exposure > 0:
+            st.markdown(f'''<div style="display:flex;gap:1.5rem;margin:0.4rem 0 0.6rem 0;font-family:Inter,sans-serif;">
+                <div class="kpi" style="flex:1;"><div class="lbl">Total Gross Exposure</div><div class="val">{total_exposure:.1f} M{currency}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Probability-Weighted Exposure</div><div class="val" style="color:{RED if weighted_exposure > (st.session_state.prop_total_investment or 0) * 0.3 else NAVY};">{weighted_exposure:.1f} M{currency}</div><div class="det">Low=15%, Medium=40%, High=75%</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Exposure / Investment Ratio</div><div class="val">{weighted_exposure / st.session_state.prop_total_investment * 100:.0f}%</div><div class="det">of total investment</div></div>
+            </div>''', unsafe_allow_html=True) if st.session_state.prop_total_investment and st.session_state.prop_total_investment > 0 else st.markdown(f'''<div style="display:flex;gap:1.5rem;margin:0.4rem 0 0.6rem 0;font-family:Inter,sans-serif;">
+                <div class="kpi" style="flex:1;"><div class="lbl">Total Gross Exposure</div><div class="val">{total_exposure:.1f} M{currency}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Probability-Weighted Exposure</div><div class="val">{weighted_exposure:.1f} M{currency}</div><div class="det">Low=15%, Medium=40%, High=75%</div></div>
+            </div>''', unsafe_allow_html=True)
+
+        # ── MILESTONE TRACKER ──────────────────────────────────
+        st.markdown(f'<div class="sec">Milestone Tracker</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Track key execution milestones with clear ownership and target dates. Each milestone should have a single accountable owner.</div>', unsafe_allow_html=True)
+
+        ms_df = pd.DataFrame(st.session_state.prop_milestones)
+        if "Milestone" not in ms_df.columns:
+            ms_df = pd.DataFrame([{"Milestone": "", "Owner": "", "Target Date": "", "Status": "Pending"}])
+        edited_ms = st.data_editor(
+            ms_df, use_container_width=True, num_rows="dynamic", key="prop_milestones_editor",
+            hide_index=True,
+            column_config={
+                "Milestone": st.column_config.TextColumn("Milestone", width=250),
+                "Owner": st.column_config.TextColumn("Accountable Owner", width=160),
+                "Target Date": st.column_config.TextColumn("Target Date", width=120),
+                "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "In Progress", "Complete", "At Risk", "Blocked"], width=110),
+            })
+        st.session_state.prop_milestones = edited_ms.to_dict("records")
+
+        # Milestone summary bar
+        ms_counts = {"Pending": 0, "In Progress": 0, "Complete": 0, "At Risk": 0, "Blocked": 0}
+        for ms in st.session_state.prop_milestones:
+            s = ms.get("Status", "Pending")
+            if s in ms_counts:
+                ms_counts[s] += 1
+        total_ms = sum(ms_counts.values())
+        if total_ms > 0 and any(ms.get("Milestone", "").strip() for ms in st.session_state.prop_milestones):
+            ms_colors = {"Complete": GREEN, "In Progress": ACCENT_BLUE, "Pending": GREY_TEXT, "At Risk": "#e6a817", "Blocked": RED}
+            ms_parts = " ".join(
+                f'<span style="color:{ms_colors.get(k, GREY_TEXT)};font-weight:600;">{v} {k}</span>'
+                for k, v in ms_counts.items() if v > 0
+            )
+            st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};margin:0.3rem 0 0.6rem 0;padding:0.4rem 0.8rem;background:#fafbfc;border:1px solid {BORDER};border-radius:2px;">{ms_parts}</div>', unsafe_allow_html=True)
+
+        # ── DEPENDENCIES, RISKS & MITIGATIONS (legacy) ─────────
         st.markdown(f'<div class="sec-sm">Dependencies, Risks & Mitigations</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-bottom:0.3rem;font-family:Inter,sans-serif;">Qualitative risk register. For quantified impact assessment, use the Risk Exposure section above.</div>', unsafe_allow_html=True)
         risk_df = pd.DataFrame(st.session_state.prop_risks)
         if "Risk" not in risk_df.columns:
             risk_df = pd.DataFrame([{"Risk": "", "Mitigation": ""}])
@@ -3973,18 +4290,54 @@ Compares full cost-to-serve across factory locations, including material, labour
             })
         st.session_state.prop_risks = edited_risks.to_dict("records")
 
-        # Team — read-only reference from Pre-study
+        # ── APPROVAL LOG ───────────────────────────────────────
+        st.markdown(f'<div class="sec">Approval & Decision Log</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Record formal approvals from each decision-maker. This creates an auditable trail for the Factory Council governance process.</div>', unsafe_allow_html=True)
+
+        appr_df = pd.DataFrame(st.session_state.prop_approvals)
+        if "Approver" not in appr_df.columns:
+            appr_df = pd.DataFrame([{"Approver": "", "Role": "", "Decision": "", "Date": "", "Comments": ""}])
+        edited_appr = st.data_editor(
+            appr_df, use_container_width=True, num_rows="dynamic", key="prop_approvals_editor",
+            hide_index=True,
+            column_config={
+                "Approver": st.column_config.TextColumn("Approver Name", width=160),
+                "Role": st.column_config.TextColumn("Role / Function", width=140),
+                "Decision": st.column_config.SelectboxColumn("Decision", options=["", "Approved", "Approved with Conditions", "Rejected", "Deferred"], width=160),
+                "Date": st.column_config.TextColumn("Date", width=100),
+                "Comments": st.column_config.TextColumn("Comments / Conditions", width=220),
+            })
+        st.session_state.prop_approvals = edited_appr.to_dict("records")
+
+        # Approval summary
+        appr_counts = {"Approved": 0, "Approved with Conditions": 0, "Rejected": 0, "Deferred": 0, "Pending": 0}
+        for ap in st.session_state.prop_approvals:
+            d = ap.get("Decision", "")
+            if d in appr_counts:
+                appr_counts[d] += 1
+            elif ap.get("Approver", "").strip() and not d:
+                appr_counts["Pending"] += 1
+        total_appr = sum(appr_counts.values())
+        if total_appr > 0 and any(ap.get("Approver", "").strip() for ap in st.session_state.prop_approvals):
+            appr_colors = {"Approved": GREEN, "Approved with Conditions": "#e6a817", "Rejected": RED, "Deferred": GREY_TEXT, "Pending": MUTED}
+            appr_parts = " ".join(
+                f'<span style="color:{appr_colors.get(k, GREY_TEXT)};font-weight:600;">{v} {k}</span>'
+                for k, v in appr_counts.items() if v > 0
+            )
+            st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};margin:0.3rem 0 0.6rem 0;padding:0.4rem 0.8rem;background:#fafbfc;border:1px solid {BORDER};border-radius:2px;">{appr_parts}</div>', unsafe_allow_html=True)
+
+        # ── TEAM ───────────────────────────────────────────────
         st.markdown(f'<div class="sec-sm">Team</div>', unsafe_allow_html=True)
         team_data = {
             "Role": ["Initiative Sponsor", "Initiative Lead", "Main Entity(s)", "Pre-study Team"],
             "Name": [
-                st.session_state.ps_sponsor or "—",
-                st.session_state.ps_lead or "—",
-                st.session_state.ps_main_entity or "—",
-                st.session_state.ps_team.replace("\n", ", ") if st.session_state.ps_team else "—",
+                st.session_state.ps_sponsor or "\u2014",
+                st.session_state.ps_lead or "\u2014",
+                st.session_state.ps_main_entity or "\u2014",
+                st.session_state.ps_team.replace("\n", ", ") if st.session_state.ps_team else "\u2014",
             ],
         }
-        has_team = any(v != "—" for v in team_data["Name"])
+        has_team = any(v != "\u2014" for v in team_data["Name"])
         if has_team:
             team_html = '<table class="ib-table"><thead><tr><th>Role</th><th>Name</th></tr></thead><tbody>'
             for role, name in zip(team_data["Role"], team_data["Name"]):
@@ -4066,12 +4419,18 @@ Compares full cost-to-serve across factory locations, including material, labour
                     for gk in ("ps_strategic_rationale", "ps_purpose", "ps_risk_of_inaction",
                                "ps_key_risks", "ps_background", "ps_reason", "ps_questions", "ps_sponsor",
                                "ps_lead", "ps_main_entity", "ps_impact_entities", "ps_team",
+                               "ps_factories_included", "ps_factories_excluded", "ps_scoping_rationale",
                                "prop_direction", "prop_benefits", "prop_timeplan",
+                               "prop_recommendation", "prop_conditions",
+                               "conclusion_selected_option", "conclusion_rationale",
+                               "conclusion_decision", "conclusion_conditions",
+                               "conclusion_decided_by", "conclusion_decided_date",
                                "td_transfer_to", "td_transfer_from", "td_product_line",
                                "td_material_family", "td_transfer_volume", "td_indicative_timing"):
                         if gk in proj:
                             st.session_state[gk] = proj[gk]
                     for gk_obj in ("ps_dependencies", "ps_timeline", "prop_risks",
+                                   "prop_risk_exposure", "prop_milestones", "prop_approvals",
                                    "td_requirements"):
                         if gk_obj in proj:
                             st.session_state[gk_obj] = proj[gk_obj]
