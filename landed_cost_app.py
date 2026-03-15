@@ -177,15 +177,13 @@ st.markdown(f"""
     [data-baseweb="checkbox"] > div {{
         border-radius: 1px !important;
     }}
-    header {{background: transparent !important; visibility: hidden;}}
+    header {{background: transparent !important; height: 0 !important; min-height: 0 !important; padding: 0 !important;}}
     header [data-testid="stDecoration"] {{display: none;}}
-    /* Keep sidebar always visible (non-collapsible) */
-    [data-testid="collapsedControl"] {{display: none !important;}}
-    section[data-testid="stSidebar"] button[kind="header"] {{display: none !important;}}
-    section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {{display: none !important;}}
+    /* Sidebar toggle — navy button with white arrow, fixed top-left */
+    [data-testid="collapsedControl"] {{position: fixed; top: 0.5rem; left: 0.5rem; z-index: 999; background: {NAVY}; border-radius: 4px; padding: 0.25rem;}}
+    [data-testid="collapsedControl"] svg {{fill: white !important; color: white !important;}}
     section[data-testid="stSidebar"] {{
         min-width: 21rem !important; max-width: 21rem !important;
-        transform: none !important; visibility: visible !important;
         background: #f0f2f6 !important;
     }}
     section[data-testid="stSidebar"] > div {{
