@@ -4083,6 +4083,21 @@ Compares full cost-to-serve across factory locations, including material, labour
                 except Exception:
                     st.error("Invalid project file.")
 
+    # ── Product scope row ──
+    ps1, ps2, ps3 = st.columns([2, 2, 4])
+    with ps1:
+        pl_df = pd.DataFrame({"Product Line": [st.session_state.td_product_line]})
+        edited_pl = st.data_editor(pl_df, use_container_width=True, num_rows="fixed",
+            key="proj_pl", hide_index=True,
+            column_config={"Product Line": st.column_config.TextColumn("Product Line", width=200)})
+        st.session_state.td_product_line = str(edited_pl.loc[0, "Product Line"] or "")
+    with ps2:
+        mf_df = pd.DataFrame({"Material Family": [st.session_state.td_material_family]})
+        edited_mf = st.data_editor(mf_df, use_container_width=True, num_rows="fixed",
+            key="proj_mf", hide_index=True,
+            column_config={"Material Family": st.column_config.TextColumn("Material Family", width=200)})
+        st.session_state.td_material_family = str(edited_mf.loc[0, "Material Family"] or "")
+
     # ── SHARED FACTORY SETUP ──────────────────────────────────────
     st.markdown('<div class="sec" id="sec-factory-config">Shared Factory Configuration</div>', unsafe_allow_html=True)
 
