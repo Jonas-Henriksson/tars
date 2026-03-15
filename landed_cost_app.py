@@ -1402,6 +1402,12 @@ def export_excel_project(project_data):
         prop_rec = st.session_state.get("prop_recommendation", "")
         if prop_rec:
             ws.write(r, 0, "Recommendation", hl); ws.write(r, 1, prop_rec, lb); r += 1
+        _dec_by = st.session_state.get("conclusion_decided_by", "")
+        _dec_date = st.session_state.get("conclusion_decided_date", "")
+        if _dec_by:
+            ws.write(r, 0, "Decided By", hl); ws.write(r, 1, _dec_by, lf); r += 1
+        if _dec_date:
+            ws.write(r, 0, "Decision Date", hl); ws.write(r, 1, _dec_date, lf); r += 1
         for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits"),
                            ("Time Plan", "prop_timeplan")]:
             ws.write(r, 0, label, hl)
@@ -1907,6 +1913,18 @@ def export_pdf_project(all_results, ccy, project_name):
             pdf.set_text_color(*rc)
             pdf.cell(0, 7, f"Recommendation: {prop_rec}", ln=True)
             pdf.set_text_color(dark_r, dark_g, dark_b)
+            pdf.ln(2)
+        _pdf_dec_by = st.session_state.get("conclusion_decided_by", "")
+        _pdf_dec_date = st.session_state.get("conclusion_decided_date", "")
+        if _pdf_dec_by or _pdf_dec_date:
+            pdf.set_font("Helvetica", "B", 7)
+            pdf.cell(30, 5, "Decided By:", border=0)
+            pdf.set_font("Helvetica", "", 7)
+            pdf.cell(60, 5, _safe(_pdf_dec_by or "—"), border=0)
+            pdf.set_font("Helvetica", "B", 7)
+            pdf.cell(30, 5, "Decision Date:", border=0)
+            pdf.set_font("Helvetica", "", 7)
+            pdf.cell(0, 5, _safe(_pdf_dec_date or "—"), ln=True, border=0)
             pdf.ln(2)
         for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits")]:
             txt = st.session_state.get(key, "")
@@ -3646,7 +3664,7 @@ def render_executive_summary_page():
 
     # ── ANALYSIS CONCLUSION GATE ─────────────────────────────
     st.markdown(f'<div class="sec">Analysis Conclusion — Option Selection</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Record the recommended option and decision rationale. This creates an auditable link between the cost analysis and the governance workflow. Complete this section before proceeding to Transfer Feasibility.</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Record the recommended option and rationale. The formal decision (Go / No-Go) and decision record are captured on the Proposal page.</div>', unsafe_allow_html=True)
 
     # Auto-populate recommended option from model results if not set
     if not st.session_state.conclusion_selected_option.strip() and all_results:
@@ -3685,40 +3703,6 @@ def render_executive_summary_page():
                 {f' | Delta vs Base: <span style="color:{GREEN if delta_vs_base > 0 else RED};font-weight:600;">{fi(delta_vs_base, acct=True)} {currency}</span>' if not is_base_selected else ' (Base Case)'}
             </div>''', unsafe_allow_html=True)
 
-        st.markdown(f'<div class="sec-sm">Decision</div>', unsafe_allow_html=True)
-        decision_options = ["", "Go", "Conditional Go", "No-Go"]
-        current_dec_idx = 0
-        if st.session_state.conclusion_decision in decision_options:
-            current_dec_idx = decision_options.index(st.session_state.conclusion_decision)
-        decision = st.selectbox(
-            "Decision",
-            options=decision_options,
-            index=current_dec_idx,
-            key="conclusion_decision_select",
-            format_func=lambda x: x if x else "— Select decision —",
-        )
-        st.session_state.conclusion_decision = decision
-
-        if decision == "Conditional Go":
-            st.session_state.conclusion_conditions = st.text_area(
-                "Conditions for Proceeding",
-                value=st.session_state.conclusion_conditions,
-                key="conclusion_conditions_input", height=80,
-                placeholder="List conditions that must be met before proceeding (e.g. customer approval, quality audit pass)...")
-
-        # Decision record
-        dr_c1, dr_c2 = st.columns(2)
-        with dr_c1:
-            st.session_state.conclusion_decided_by = st.text_input(
-                "Decided By", value=st.session_state.conclusion_decided_by,
-                key="conclusion_decided_by_input",
-                placeholder="Name / role of decision maker")
-        with dr_c2:
-            st.session_state.conclusion_decided_date = st.text_input(
-                "Decision Date", value=st.session_state.conclusion_decided_date,
-                key="conclusion_decided_date_input",
-                placeholder="e.g. 2025-03-15")
-
     with conc_c2:
         st.markdown(f'<div class="sec-sm">Rationale</div>', unsafe_allow_html=True)
         st.session_state.conclusion_rationale = st.text_area(
@@ -3729,9 +3713,7 @@ def render_executive_summary_page():
         # Completeness check
         conc_complete = bool(
             st.session_state.conclusion_selected_option
-            and st.session_state.conclusion_decision
             and st.session_state.conclusion_rationale.strip()
-            and st.session_state.conclusion_decided_by.strip()
         )
         if conc_complete:
             st.markdown(f'''<div style="background:#f0faf3;border:1px solid {GREEN};border-left:3px solid {GREEN};padding:0.5rem 0.8rem;margin:0.4rem 0;font-family:Inter,sans-serif;font-size:0.73rem;color:{GREEN};">
@@ -3740,9 +3722,7 @@ def render_executive_summary_page():
         else:
             missing = []
             if not st.session_state.conclusion_selected_option: missing.append("Recommended Option")
-            if not st.session_state.conclusion_decision: missing.append("Decision")
             if not st.session_state.conclusion_rationale.strip(): missing.append("Rationale")
-            if not st.session_state.conclusion_decided_by.strip(): missing.append("Decided By")
             st.markdown(f'''<div style="background:#fff8e6;border:1px solid #e6a817;border-left:3px solid #e6a817;padding:0.5rem 0.8rem;margin:0.4rem 0;font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};">
                 Incomplete — missing: {", ".join(missing)}
             </div>''', unsafe_allow_html=True)
@@ -5524,14 +5504,8 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         # Pull conclusion from Analysis Summary if available
         conclusion_opt = st.session_state.get("conclusion_selected_option", "")
-        conclusion_dec = st.session_state.get("conclusion_decision", "")
         if conclusion_opt and not st.session_state.prop_direction.strip():
             st.session_state.prop_direction = f"Recommended location: {conclusion_opt}"
-
-        # Auto-populate recommendation from conclusion gate
-        rec_options = ["", "Go", "Conditional Go", "No-Go"]
-        if not st.session_state.prop_recommendation and conclusion_dec in rec_options:
-            st.session_state.prop_recommendation = conclusion_dec
 
         # Auto-calculate financials
         auto_inv = 0.0
@@ -5598,6 +5572,19 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.session_state.prop_benefits = str(_r2_edited.iloc[0]["Benefits & Key Details"] or "")
         if recommendation == "Conditional Go":
             st.session_state.prop_conditions = str(_r2_edited.iloc[0].get("Conditions", "") or "")
+
+        # Decision record
+        _dec_c1, _dec_c2 = st.columns(2)
+        with _dec_c1:
+            st.session_state.conclusion_decided_by = st.text_input(
+                "Decided By", value=st.session_state.conclusion_decided_by,
+                key="prop_decided_by_input",
+                placeholder="Name / role of decision maker")
+        with _dec_c2:
+            st.session_state.conclusion_decided_date = st.text_input(
+                "Decision Date", value=st.session_state.conclusion_decided_date,
+                key="prop_decided_date_input",
+                placeholder="e.g. 2025-03-15")
 
         # ── QUANTIFIED RISK EXPOSURE ───────────────────────────
         st.markdown(f'<div class="sec">Risk Exposure</div>', unsafe_allow_html=True)
@@ -5835,6 +5822,7 @@ Compares full cost-to-serve across factory locations, including material, labour
         # ── PROPOSAL COMPLETENESS ──────────────────────────────
         prop_fields = {
             "Recommendation": bool(st.session_state.prop_recommendation),
+            "Decided By": bool(st.session_state.conclusion_decided_by.strip()),
             "Direction": bool(st.session_state.prop_direction.strip()),
             "Benefits": bool(st.session_state.prop_benefits.strip()),
             "Total Investment": bool(st.session_state.prop_total_investment and st.session_state.prop_total_investment > 0),
