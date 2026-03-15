@@ -4703,28 +4703,23 @@ This provides the local risk percentage.</li>
         st.markdown(f'<div class="callout" style="font-size:0.72rem;">Costs incurred at the <strong>sending factory</strong> as a result of the transfer. These are not included in the per-item investment case but feed into the Total Cost of Transfer on the Executive Summary.</div>', unsafe_allow_html=True)
 
         _ss_costs = st.session_state.sending_site_costs
-        ss_c1, ss_c2, ss_c3 = st.columns(3)
-        with ss_c1:
-            _ss_costs["Asset Write-off / Impairment"] = st.number_input(
-                f"Asset Write-off / Impairment ({currency})",
-                value=_ss_costs.get("Asset Write-off / Impairment", 0.0),
-                min_value=0.0, step=100000.0, format="%,.0f",
-                key="ss_writeoff_input",
-                help="Book value of equipment, tooling, or leasehold improvements that will be written off when production ceases at the sending site")
-        with ss_c2:
-            _ss_costs["Severance / Social Plan"] = st.number_input(
-                f"Severance / Social Plan ({currency})",
-                value=_ss_costs.get("Severance / Social Plan", 0.0),
-                min_value=0.0, step=100000.0, format="%,.0f",
-                key="ss_severance_input",
-                help="Total severance, social plan, early retirement, or outplacement costs for affected employees at the sending site")
-        with ss_c3:
-            _ss_costs["Stranded Overhead"] = st.number_input(
-                f"Stranded Overhead ({currency})",
-                value=_ss_costs.get("Stranded Overhead", 0.0),
-                min_value=0.0, step=100000.0, format="%,.0f",
-                key="ss_stranded_input",
-                help="Fixed costs (rent, management, utilities) that remain at the sending site after volume is transferred but before full wind-down")
+        _ss_df = pd.DataFrame([{
+            f"Asset Write-off ({currency})": float(_ss_costs.get("Asset Write-off / Impairment", 0.0) or 0.0),
+            f"Severance / Social Plan ({currency})": float(_ss_costs.get("Severance / Social Plan", 0.0) or 0.0),
+            f"Stranded Overhead ({currency})": float(_ss_costs.get("Stranded Overhead", 0.0) or 0.0),
+        }])
+        _ss_edited = st.data_editor(
+            _ss_df, use_container_width=True, num_rows="fixed", hide_index=True,
+            key="ss_costs_editor",
+            column_config={
+                f"Asset Write-off ({currency})": st.column_config.NumberColumn(f"Asset Write-off ({currency})", format="%,.0f", min_value=0.0, step=100000.0),
+                f"Severance / Social Plan ({currency})": st.column_config.NumberColumn(f"Severance / Social Plan ({currency})", format="%,.0f", min_value=0.0, step=100000.0),
+                f"Stranded Overhead ({currency})": st.column_config.NumberColumn(f"Stranded Overhead ({currency})", format="%,.0f", min_value=0.0, step=100000.0),
+            },
+        )
+        _ss_costs["Asset Write-off / Impairment"] = float(_ss_edited.iloc[0][f"Asset Write-off ({currency})"] or 0.0)
+        _ss_costs["Severance / Social Plan"] = float(_ss_edited.iloc[0][f"Severance / Social Plan ({currency})"] or 0.0)
+        _ss_costs["Stranded Overhead"] = float(_ss_edited.iloc[0][f"Stranded Overhead ({currency})"] or 0.0)
         st.session_state.sending_site_costs = _ss_costs
 
         _ss_total = sum(_ss_costs.values())
