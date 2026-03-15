@@ -5229,20 +5229,28 @@ Compares full cost-to-serve across factory locations, including material, labour
                         f"app_{sec_key}_{ri}", value=row.get("Approver", ""),
                         key=f"td_{sec_key}_{ri}_app", label_visibility="collapsed")
                 with rc[3]:
-                    row["Date"] = st.text_input(
-                        f"dt_{sec_key}_{ri}", value=row.get("Date", ""),
+                    _date_val = row.get("Date", "")
+                    _parsed_date = None
+                    if _date_val:
+                        try:
+                            from datetime import datetime as _dt
+                            _parsed_date = _dt.strptime(str(_date_val), "%Y-%m-%d").date()
+                        except (ValueError, TypeError):
+                            _parsed_date = None
+                    _date_result = st.date_input(
+                        f"dt_{sec_key}_{ri}", value=_parsed_date,
                         key=f"td_{sec_key}_{ri}_dt", label_visibility="collapsed")
+                    row["Date"] = str(_date_result) if _date_result else ""
                 with rc[4]:
                     _st_opts = ["Pending", "Approved", "Rejected"]
                     _st_cur = row.get("Status", "Pending")
                     _st_idx = _st_opts.index(_st_cur) if _st_cur in _st_opts else 0
-                    _st_color_map = {"Pending": "#e6a817", "Approved": GREEN, "Rejected": RED}
+                    _st_color_map = {"Pending": ("#e6a817", "#fef9e7"), "Approved": (GREEN, "#e8f5e9"), "Rejected": (RED, "#fdecea")}
                     row["Status"] = st.selectbox(
                         f"st_{sec_key}_{ri}", options=_st_opts, index=_st_idx,
                         key=f"td_{sec_key}_{ri}_st", label_visibility="collapsed")
-                    # Tint the selectbox text colour via scoped CSS
-                    _sc_hex = _st_color_map.get(row["Status"], "#333")
-                    st.markdown(f"<style>[data-testid='stSelectbox']:has(#td_{sec_key}_{ri}_st) div[data-baseweb='select'] span {{color:{_sc_hex} !important;font-weight:600;}}</style>", unsafe_allow_html=True)
+                    _sc_fg, _sc_bg = _st_color_map.get(row["Status"], ("#333", "#f5f5f5"))
+                    st.markdown(f"<div style='font-size:0.65rem;font-weight:700;color:{_sc_fg};background:{_sc_bg};border-radius:4px;padding:2px 8px;text-align:center;margin-top:-0.5rem;'>{row['Status']}</div>", unsafe_allow_html=True)
 
                 # Inline follow-up (non-conditional) — show on same row below
                 if has_inline_followup:
