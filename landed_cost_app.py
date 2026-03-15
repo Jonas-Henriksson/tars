@@ -1402,12 +1402,6 @@ def export_excel_project(project_data):
         prop_rec = st.session_state.get("prop_recommendation", "")
         if prop_rec:
             ws.write(r, 0, "Recommendation", hl); ws.write(r, 1, prop_rec, lb); r += 1
-        _dec_by = st.session_state.get("conclusion_decided_by", "")
-        _dec_date = st.session_state.get("conclusion_decided_date", "")
-        if _dec_by:
-            ws.write(r, 0, "Decided By", hl); ws.write(r, 1, _dec_by, lf); r += 1
-        if _dec_date:
-            ws.write(r, 0, "Decision Date", hl); ws.write(r, 1, _dec_date, lf); r += 1
         for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits"),
                            ("Time Plan", "prop_timeplan")]:
             ws.write(r, 0, label, hl)
@@ -1914,18 +1908,6 @@ def export_pdf_project(all_results, ccy, project_name):
             pdf.cell(0, 7, f"Recommendation: {prop_rec}", ln=True)
             pdf.set_text_color(dark_r, dark_g, dark_b)
             pdf.ln(2)
-        _pdf_dec_by = st.session_state.get("conclusion_decided_by", "")
-        _pdf_dec_date = st.session_state.get("conclusion_decided_date", "")
-        if _pdf_dec_by or _pdf_dec_date:
-            pdf.set_font("Helvetica", "B", 7)
-            pdf.cell(30, 5, "Decided By:", border=0)
-            pdf.set_font("Helvetica", "", 7)
-            pdf.cell(60, 5, _safe(_pdf_dec_by or "—"), border=0)
-            pdf.set_font("Helvetica", "B", 7)
-            pdf.cell(30, 5, "Decision Date:", border=0)
-            pdf.set_font("Helvetica", "", 7)
-            pdf.cell(0, 5, _safe(_pdf_dec_date or "—"), ln=True, border=0)
-            pdf.ln(2)
         for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits")]:
             txt = st.session_state.get(key, "")
             if txt.strip():
@@ -2260,7 +2242,14 @@ def init_state():
     # ── PROPOSAL COMMUNICATION PLAN ───────────────────────────
     if "prop_comm_plan" not in st.session_state:
         st.session_state.prop_comm_plan = [
-            {"Stakeholder": "", "What": "", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Sending Site Management", "What": "Transfer decision & timeline", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Sending Site Workforce", "What": "Impact assessment, redeployment options", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Works Council / Union (Sending)", "What": "Formal consultation per local labour law", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Receiving Site Management", "What": "Capacity plan, resource requirements", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Receiving Site Workforce", "What": "Hiring plan, training schedule", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Customers", "What": "Requalification plan, supply continuity", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Key Suppliers", "What": "Sourcing changes, new delivery points", "When": "", "Channel": "", "Owner": ""},
+            {"Stakeholder": "Group / Division Leadership", "What": "Business case, governance approval", "When": "", "Channel": "", "Owner": ""},
         ]
     if "prop_direction" not in st.session_state:
         st.session_state.prop_direction = ""
@@ -3029,30 +3018,43 @@ def render_executive_summary_page():
             ))
 
     # Location markers — one trace per marker for individual text positioning
-    # Assign text positions to reduce overlap: spread based on longitude
-    _used_positions = []
-    _pos_options = ["top center", "bottom center", "top right", "bottom right", "top left", "bottom left", "middle right", "middle left"]
+    # Use offset-based positioning to avoid visual label overlap
+    _pos_offsets = {
+        "top center": (0, 6), "bottom center": (0, -6),
+        "top right": (8, 5), "bottom right": (8, -5),
+        "top left": (-8, 5), "bottom left": (-8, -5),
+        "middle right": (10, 0), "middle left": (-10, 0),
+    }
+    _pos_options = ["top center", "top right", "bottom center", "middle right", "top left", "bottom right", "middle left", "bottom left"]
+    _label_anchors = []  # (effective_lat, effective_lon) of each placed label
+    _chosen_positions = []
     for i in range(len(map_lats)):
-        lon_i = map_lons[i]
-        lat_i = map_lats[i]
-        # Check for nearby markers and pick non-overlapping position
-        best_pos = "top center"
-        for pi, pos in enumerate(_pos_options):
-            conflict = False
-            for j, (used_lat, used_lon, used_pos) in enumerate(_used_positions):
-                if abs(lat_i - used_lat) < 8 and abs(lon_i - used_lon) < 15 and pos == used_pos:
-                    conflict = True
-                    break
-            if not conflict:
+        lat_i, lon_i = map_lats[i], map_lons[i]
+        best_pos = _pos_options[0]
+        best_min_dist = -1
+        for pos in _pos_options:
+            off_lon, off_lat = _pos_offsets[pos]
+            eff_lat = lat_i + off_lat
+            eff_lon = lon_i + off_lon
+            # Find minimum distance to any existing label anchor
+            min_dist = float("inf")
+            for (a_lat, a_lon) in _label_anchors:
+                d = ((eff_lat - a_lat) ** 2 + (eff_lon - a_lon) ** 2) ** 0.5
+                min_dist = min(min_dist, d)
+            if min_dist > best_min_dist:
+                best_min_dist = min_dist
                 best_pos = pos
-                break
-        _used_positions.append((lat_i, lon_i, best_pos))
+        off_lon, off_lat = _pos_offsets[best_pos]
+        _label_anchors.append((lat_i + off_lat, lon_i + off_lon))
+        _chosen_positions.append(best_pos)
+
+    for i in range(len(map_lats)):
         fig_map.add_trace(go.Scattergeo(
             lat=[map_lats[i]], lon=[map_lons[i]],
             mode="markers+text",
             text=[map_labels[i]],
             customdata=[map_hover[i]],
-            textposition=best_pos,
+            textposition=_chosen_positions[i],
             textfont=dict(size=11, family="Inter, sans-serif", color=map_colors[i],
                           weight="bold"),
             marker=dict(size=[map_sizes[i]], color=[map_colors[i]], symbol=[map_symbols[i]],
@@ -3753,13 +3755,13 @@ def render_executive_summary_page():
     if _recommended_fns or _alternative_fns or _excluded_fns:
         _badge_parts = []
         if _recommended_fns:
-            _badge_parts.append(f'<span style="background:{GREEN};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-weight:600;font-size:0.7rem;">{_recommended_fns[0]}</span>')
+            _badge_parts.append(f'<span style="background:{GREEN};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-weight:600;font-size:0.7rem;margin-right:0.4rem;">Recommended: {_recommended_fns[0]}</span>')
         for _afn in _alternative_fns:
-            _badge_parts.append(f'<span style="background:{ACCENT_BLUE};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-weight:600;font-size:0.7rem;">{_afn}</span>')
+            _badge_parts.append(f'<span style="background:{ACCENT_BLUE};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-weight:600;font-size:0.7rem;margin-right:0.4rem;">Alternative: {_afn}</span>')
         if _excluded_fns:
             _excl_names = ", ".join(_excluded_fns)
             _badge_parts.append(f'<span style="background:{MUTED};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-size:0.68rem;">Excluded: {_excl_names}</span>')
-        st.markdown(f'<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin:0.4rem 0 0.6rem 0;font-family:Inter,sans-serif;">{"".join(_badge_parts)}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="display:flex;align-items:center;flex-wrap:wrap;margin:0.4rem 0 0.6rem 0;font-family:Inter,sans-serif;">{"".join(_badge_parts)}</div>', unsafe_allow_html=True)
 
     # Rationale
     st.markdown(f'<div class="sec-sm">Rationale</div>', unsafe_allow_html=True)
@@ -3798,7 +3800,7 @@ def save_project_json():
     history.append({
         "version": next_ver,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "author": st.session_state.get("conclusion_decided_by", ""),
+        "author": next((a.get("Approver", "") for a in st.session_state.get("prop_approvals", []) if a.get("Approver", "").strip()), ""),
         "summary": f"Save #{next_ver}",
     })
     st.session_state.version_history = history
@@ -5651,22 +5653,38 @@ Compares full cost-to-serve across factory locations, including material, labour
                             lat=[_ala2, _tla4], lon=[_alo2, _tlo4], mode="lines", name=f"Alternative: {_afn}",
                             line=dict(width=1.5, color=ACCENT_BLUE, dash="dot"), showlegend=True, hoverinfo="skip"))
 
-                # Markers with smart positioning
-                _pm_used_pos = []
-                _pm_pos_opts = ["top center", "bottom center", "top right", "bottom right", "top left", "bottom left", "middle right", "middle left"]
+                # Markers with offset-based label positioning
+                _pm_pos_offsets = {
+                    "top center": (0, 6), "bottom center": (0, -6),
+                    "top right": (8, 5), "bottom right": (8, -5),
+                    "top left": (-8, 5), "bottom left": (-8, -5),
+                    "middle right": (10, 0), "middle left": (-10, 0),
+                }
+                _pm_pos_opts = ["top center", "top right", "bottom center", "middle right", "top left", "bottom right", "middle left", "bottom left"]
+                _pm_label_anchors = []
+                _pm_chosen = []
                 for _mi in range(len(_pm_lats)):
-                    _best_pos = "top center"
-                    for _pi, _pos in enumerate(_pm_pos_opts):
-                        _conflict = False
-                        for _ula, _ulo, _upos in _pm_used_pos:
-                            if abs(_pm_lats[_mi] - _ula) < 8 and abs(_pm_lons[_mi] - _ulo) < 15 and _pos == _upos:
-                                _conflict = True; break
-                        if not _conflict:
-                            _best_pos = _pos; break
-                    _pm_used_pos.append((_pm_lats[_mi], _pm_lons[_mi], _best_pos))
+                    _mlat, _mlon = _pm_lats[_mi], _pm_lons[_mi]
+                    _best_pos = _pm_pos_opts[0]
+                    _best_dist = -1
+                    for _pos in _pm_pos_opts:
+                        _olon, _olat = _pm_pos_offsets[_pos]
+                        _elat, _elon = _mlat + _olat, _mlon + _olon
+                        _min_d = float("inf")
+                        for (_ala, _alo) in _pm_label_anchors:
+                            _d = ((_elat - _ala) ** 2 + (_elon - _alo) ** 2) ** 0.5
+                            _min_d = min(_min_d, _d)
+                        if _min_d > _best_dist:
+                            _best_dist = _min_d
+                            _best_pos = _pos
+                    _olon, _olat = _pm_pos_offsets[_best_pos]
+                    _pm_label_anchors.append((_mlat + _olat, _mlon + _olon))
+                    _pm_chosen.append(_best_pos)
+
+                for _mi in range(len(_pm_lats)):
                     _fig_pmap.add_trace(go.Scattergeo(
                         lat=[_pm_lats[_mi]], lon=[_pm_lons[_mi]], mode="markers+text",
-                        text=[_pm_labels[_mi]], customdata=[_pm_hover[_mi]], textposition=_best_pos,
+                        text=[_pm_labels[_mi]], customdata=[_pm_hover[_mi]], textposition=_pm_chosen[_mi],
                         textfont=dict(size=11, family="Inter, sans-serif", color=_pm_colors[_mi], weight="bold"),
                         marker=dict(size=[_pm_sizes[_mi]], color=[_pm_colors[_mi]], symbol=[_pm_symbols[_mi]],
                                     line=dict(width=1.5, color="white")),
@@ -5814,19 +5832,6 @@ Compares full cost-to-serve across factory locations, including material, labour
         if recommendation == "Conditional Go":
             st.session_state.prop_conditions = str(_r2_edited.iloc[0].get("Conditions", "") or "")
 
-        # Decision record
-        _dec_c1, _dec_c2 = st.columns(2)
-        with _dec_c1:
-            st.session_state.conclusion_decided_by = st.text_input(
-                "Decided By", value=st.session_state.conclusion_decided_by,
-                key="prop_decided_by_input",
-                placeholder="Name / role of decision maker")
-        with _dec_c2:
-            st.session_state.conclusion_decided_date = st.text_input(
-                "Decision Date", value=st.session_state.conclusion_decided_date,
-                key="prop_decided_date_input",
-                placeholder="e.g. 2025-03-15")
-
         # ── QUANTIFIED RISK EXPOSURE ───────────────────────────
         st.markdown(f'<div class="sec">Risk Exposure</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="callout" style="font-size:0.72rem;">Quantify each risk with probability and financial impact. This enables the decision board to weigh the total risk-adjusted exposure against the expected benefits.</div>', unsafe_allow_html=True)
@@ -5947,27 +5952,28 @@ Compares full cost-to-serve across factory locations, including material, labour
         else:
             st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-style:italic;">Complete the Workforce section on the Pre-study page to populate this summary.</div>', unsafe_allow_html=True)
 
-        wfp_c1, wfp_c2, wfp_c3 = st.columns(3)
-        with wfp_c1:
-            st.session_state.prop_severance_cost = st.number_input(
-                f"Severance / Social Plan (M{currency})", value=st.session_state.prop_severance_cost,
-                min_value=0.0, step=0.1, format="%.1f", key="prop_sev_input")
-        with wfp_c2:
-            st.session_state.prop_retraining_cost = st.number_input(
-                f"Retraining / Recruitment (M{currency})", value=st.session_state.prop_retraining_cost,
-                min_value=0.0, step=0.1, format="%.1f", key="prop_retrain_input")
-        with wfp_c3:
-            st.session_state.prop_workforce_timeline = st.text_input(
-                "Notification Timeline", value=st.session_state.prop_workforce_timeline,
-                key="prop_wf_timeline_input",
-                placeholder="e.g. Q2 '25 — works council, Q3 '25 — notices")
+        _wf_df = pd.DataFrame([{
+            f"Severance / Social Plan (M{currency})": st.session_state.prop_severance_cost,
+            f"Retraining / Recruitment (M{currency})": st.session_state.prop_retraining_cost,
+            "Notification Timeline": st.session_state.prop_workforce_timeline,
+            "Workforce Notes": st.session_state.prop_workforce_notes,
+        }])
+        _wf_edited = st.data_editor(
+            _wf_df, use_container_width=True, num_rows="fixed", hide_index=True,
+            key="prop_wf_editor",
+            column_config={
+                f"Severance / Social Plan (M{currency})": st.column_config.NumberColumn(f"Severance / Social Plan (M{currency})", format="%.1f", min_value=0.0, step=0.1, width=200),
+                f"Retraining / Recruitment (M{currency})": st.column_config.NumberColumn(f"Retraining / Recruitment (M{currency})", format="%.1f", min_value=0.0, step=0.1, width=200),
+                "Notification Timeline": st.column_config.TextColumn("Notification Timeline", width=200),
+                "Workforce Notes": st.column_config.TextColumn("Workforce Notes", width=280),
+            })
+        st.session_state.prop_severance_cost = float(_wf_edited.iloc[0][f"Severance / Social Plan (M{currency})"] or 0.0)
+        st.session_state.prop_retraining_cost = float(_wf_edited.iloc[0][f"Retraining / Recruitment (M{currency})"] or 0.0)
+        st.session_state.prop_workforce_timeline = str(_wf_edited.iloc[0]["Notification Timeline"] or "")
+        st.session_state.prop_workforce_notes = str(_wf_edited.iloc[0]["Workforce Notes"] or "")
         _wf_total_cost = st.session_state.prop_severance_cost + st.session_state.prop_retraining_cost
         if _wf_total_cost > 0:
             st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-family:Inter,sans-serif;margin:0.1rem 0 0.2rem 0;"><strong>Total Workforce Cost:</strong> {_wf_total_cost:.1f} M{currency}</div>', unsafe_allow_html=True)
-        st.session_state.prop_workforce_notes = st.text_area(
-            "Workforce Notes", value=st.session_state.prop_workforce_notes,
-            key="prop_wf_notes_input", height=50,
-            placeholder="Knowledge transfer plan, retention incentives, redeployment options...")
 
         # ── COMMUNICATION PLAN ────────────────────────────────
         st.markdown(f'<div class="sec">Communication Plan</div>', unsafe_allow_html=True)
@@ -6005,7 +6011,7 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         # ── APPROVAL LOG ───────────────────────────────────────
         st.markdown(f'<div class="sec">Approval & Decision Log</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Record formal approvals from each decision-maker. This creates an auditable trail for the governance process.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Record formal Go / No-Go decisions and approvals from each decision-maker. This is the single auditable record of who approved, when, and under what conditions.</div>', unsafe_allow_html=True)
 
         appr_df = pd.DataFrame(st.session_state.prop_approvals)
         if "Approver" not in appr_df.columns:
@@ -6063,7 +6069,6 @@ Compares full cost-to-serve across factory locations, including material, labour
         # ── PROPOSAL COMPLETENESS ──────────────────────────────
         prop_fields = {
             "Recommendation": bool(st.session_state.prop_recommendation),
-            "Decided By": bool(st.session_state.conclusion_decided_by.strip()),
             "Direction": bool(st.session_state.prop_direction.strip()),
             "Benefits": bool(st.session_state.prop_benefits.strip()),
             "Total Investment": bool(st.session_state.prop_total_investment and st.session_state.prop_total_investment > 0),
