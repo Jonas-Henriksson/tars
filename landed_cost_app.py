@@ -3719,8 +3719,8 @@ def main():
         st.markdown(f'<div class="callout">Company-wide financial parameters for investment analysis and performance benchmarking.<br>'
                     f'<span style="font-size:0.75rem;color:{MUTED};">'
                     f'<strong>WACC</strong> — Weighted-average cost of capital; typically 7–12 % for industrial companies. '
-                    f'Used as the discount rate for NPV calculations.&emsp;'
-                    f'<strong>Target Payback</strong> — Maximum acceptable years to recover the investment from annual savings.&emsp;'
+                    f'Used as the discount rate for NPV calculations.<br>'
+                    f'<strong>Target Payback</strong> — Maximum acceptable years to recover the investment from annual savings.<br>'
                     f'<strong>Target OM</strong> — Minimum operating margin threshold; options below this level are flagged in charts and tables.</span></div>', unsafe_allow_html=True)
 
         fin_col1, fin_col2, fin_col3 = st.columns([1, 1, 1])
