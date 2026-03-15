@@ -2946,14 +2946,15 @@ def render_executive_summary_page():
     alt_fnames = [fn_ for fn_ in all_fnames if fn_ != base_fn]
 
     # Build coordinate lists
-    map_lats, map_lons, map_labels, map_colors, map_sizes, map_symbols = [], [], [], [], [], []
+    map_lats, map_lons, map_labels, map_hover, map_colors, map_sizes, map_symbols = [], [], [], [], [], [], []
 
     # Target market marker
     if target_market and target_market in _COUNTRY_COORDS:
         lat, lon = _COUNTRY_COORDS[target_market]
         map_lats.append(lat)
         map_lons.append(lon)
-        map_labels.append(f"Target Market: {target_market}")
+        map_labels.append(target_market)
+        map_hover.append(f"Target Market: {target_market}")
         map_colors.append("#e67e22")
         map_sizes.append(18)
         map_symbols.append("star")
@@ -2964,7 +2965,8 @@ def render_executive_summary_page():
         lat, lon = _COUNTRY_COORDS[base_country]
         map_lats.append(lat)
         map_lons.append(lon)
-        map_labels.append(f"Current: {base_fn} ({base_country})")
+        map_labels.append(base_fn)
+        map_hover.append(f"Current: {base_fn} ({base_country})")
         map_colors.append(NAVY)
         map_sizes.append(16)
         map_symbols.append("circle")
@@ -2976,7 +2978,8 @@ def render_executive_summary_page():
             lat, lon = _COUNTRY_COORDS[ctry]
             map_lats.append(lat)
             map_lons.append(lon)
-            map_labels.append(f"Alternative: {fn_} ({ctry})")
+            map_labels.append(fn_)
+            map_hover.append(f"Alternative: {fn_} ({ctry})")
             map_colors.append(ACCENT_BLUE)
             map_sizes.append(14)
             map_symbols.append("diamond")
@@ -3023,18 +3026,38 @@ def render_executive_summary_page():
                 hoverinfo="skip",
             ))
 
-    # Location markers
-    fig_map.add_trace(go.Scattergeo(
-        lat=map_lats, lon=map_lons,
-        mode="markers+text",
-        text=map_labels,
-        textposition="top center",
-        textfont=dict(size=9, family="Inter, sans-serif", color=DARK_TEXT),
-        marker=dict(size=map_sizes, color=map_colors, symbol=map_symbols,
-                    line=dict(width=1, color="white")),
-        showlegend=False,
-        hovertemplate="%{text}<extra></extra>",
-    ))
+    # Location markers — one trace per marker for individual text positioning
+    # Assign text positions to reduce overlap: spread based on longitude
+    _used_positions = []
+    _pos_options = ["top center", "bottom center", "top right", "bottom right", "top left", "bottom left", "middle right", "middle left"]
+    for i in range(len(map_lats)):
+        lon_i = map_lons[i]
+        lat_i = map_lats[i]
+        # Check for nearby markers and pick non-overlapping position
+        best_pos = "top center"
+        for pi, pos in enumerate(_pos_options):
+            conflict = False
+            for j, (used_lat, used_lon, used_pos) in enumerate(_used_positions):
+                if abs(lat_i - used_lat) < 8 and abs(lon_i - used_lon) < 15 and pos == used_pos:
+                    conflict = True
+                    break
+            if not conflict:
+                best_pos = pos
+                break
+        _used_positions.append((lat_i, lon_i, best_pos))
+        fig_map.add_trace(go.Scattergeo(
+            lat=[map_lats[i]], lon=[map_lons[i]],
+            mode="markers+text",
+            text=[map_labels[i]],
+            customdata=[map_hover[i]],
+            textposition=best_pos,
+            textfont=dict(size=11, family="Inter, sans-serif", color=map_colors[i],
+                          weight="bold"),
+            marker=dict(size=[map_sizes[i]], color=[map_colors[i]], symbol=[map_symbols[i]],
+                        line=dict(width=1.5, color="white")),
+            showlegend=False,
+            hovertemplate="%{customdata}<extra></extra>",
+        ))
 
     fig_map.update_geos(
         showcountries=True, countrycolor="#d4d8e0",
