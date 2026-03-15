@@ -1319,13 +1319,13 @@ def export_excel_project(project_data):
         ws.set_column(1, 6, 18)
         ws.merge_range(0, 0, 0, 6, f"Transfer Details | {st.session_state.get('project_name', '')}", tf)
         r = 2
-        for label, key in [("Transfer To", "td_transfer_to"), ("Transfer From", "td_transfer_from"),
+        for label, key in [("Transfer From", "td_transfer_from"), ("Transfer To", "td_transfer_to"),
                            ("Product Line", "td_product_line"), ("Material Family", "td_material_family"),
                            ("Transfer Volume", "td_transfer_volume"), ("Indicative Timing", "td_indicative_timing")]:
             ws.write(r, 0, label, lb); ws.write(r, 1, st.session_state.get(key, ""), lf); r += 1
         r += 1
         td_reqs = st.session_state.get("td_requirements", {})
-        td_cols = ["Requirement", "Value", "Related Question", "Answer", "Approver", "Date", "Status", "Required Documents"]
+        td_cols = ["Requirement", "Value", "Follow-up", "Follow-up Answer", "Approver", "Date", "Status", "Required Documents"]
         for section, rows in td_reqs.items():
             ws.merge_range(r, 0, r, 6, section, sf) if 6 > 0 else ws.write(r, 0, section, sf)
             r += 1
@@ -1732,7 +1732,7 @@ def export_pdf_project(all_results, ccy, project_name):
         add_page_header(pdf, f"Transfer Details | {project_name}", f"{ccy}")
         # Header fields
         pdf.set_font("Helvetica", "B", 7)
-        for label, key in [("Transfer To", "td_transfer_to"), ("Transfer From", "td_transfer_from"),
+        for label, key in [("Transfer From", "td_transfer_from"), ("Transfer To", "td_transfer_to"),
                            ("Product Line", "td_product_line"), ("Transfer Volume", "td_transfer_volume")]:
             pdf.cell(30, 4.5, label + ":", border=0)
             pdf.set_font("Helvetica", "", 7)
@@ -1740,8 +1740,9 @@ def export_pdf_project(all_results, ccy, project_name):
             pdf.set_font("Helvetica", "B", 7)
         pdf.ln(6)
         # Requirements tables
-        td_col_w = [52, 20, 52, 20, 26, 20, 20, 30]
-        td_hdrs = ["Requirement", "Value", "Related Question", "Answer", "Approver", "Date", "Status", "Req. Documents"]
+        td_col_w = [65, 35, 30, 22, 22, 30]
+        td_hdrs = ["Requirement", "Value / Answer", "Approver", "Date", "Status", "Req. Documents"]
+        td_keys = ["Requirement", "Value", "Approver", "Date", "Status", "Required Documents"]
         for section, rows in td_reqs.items():
             pdf.set_font("Helvetica", "B", 7)
             pdf.set_fill_color(navy_r, navy_g, navy_b)
@@ -1754,9 +1755,22 @@ def export_pdf_project(all_results, ccy, project_name):
             pdf.ln()
             pdf.set_font("Helvetica", "", 6)
             for row in rows:
-                for ci, col in enumerate(td_hdrs):
+                for ci, col in enumerate(td_keys):
                     pdf.cell(td_col_w[ci], 4.5, _safe(str(row.get(col, ""))), border=1)
                 pdf.ln()
+                # Follow-up row if applicable
+                follow_up = row.get("Follow-up", "")
+                follow_up_ans = row.get("Follow-up Answer", "")
+                cond = row.get("Condition", "")
+                if follow_up and (cond != "if_no" or (row.get("Value", "").strip().lower() in ("no", "n", "false", "0"))):
+                    prefix = "If no: " if cond == "if_no" else ""
+                    pdf.set_font("Helvetica", "I", 6)
+                    pdf.cell(td_col_w[0], 4.5, _safe(f"  > {prefix}{follow_up}"), border=1)
+                    pdf.set_font("Helvetica", "", 6)
+                    pdf.cell(td_col_w[1], 4.5, _safe(follow_up_ans), border=1)
+                    for ci in range(2, len(td_col_w)):
+                        pdf.cell(td_col_w[ci], 4.5, "", border=1)
+                    pdf.ln()
             pdf.ln(2)
 
     buf = io.BytesIO()
@@ -1798,28 +1812,31 @@ EXAMPLE_ITEMS = [
 
 
 # ── GOVERNANCE TEMPLATE HELPERS ─────────────────────────────────
-# Transfer Details requirements: (Requirement, Related Question, Required Support Docs)
+# Transfer Details requirements:
+# Each tuple: (main_question, follow_up_question_or_None, follow_up_condition, required_docs)
+# follow_up_condition: "if_no" means only show follow-up when main answer is No/no;
+#                      None means always show the follow-up (stacked below main).
 _TD_BASE_REQS = [
-    ("Tail-end threshold (Q)", "Transfer volume (Q)", ""),
-    ("Factory strategy (Flexible/volume)", "Transfer volume type (Flexible/volume)", ""),
-    ("Established skills and capabilities (yes/no)", "If no, approved plan to establish capability?", "If no, high-level plan"),
-    ("Macro stability (yes/no)", "If no, approval to move ahead?", "If no, risk assessment"),
-    ("Remaining capacity (Q)", "Expected demand Y+5 (Q)", ""),
+    ("Tail-end threshold (Q)", "Transfer volume (Q)", None, ""),
+    ("Factory strategy (Flexible/volume)", "Transfer volume type (Flexible/volume)", None, ""),
+    ("Established skills and capabilities (yes/no)", "Approved plan to establish capability?", "if_no", "High-level plan"),
+    ("Macro stability (yes/no)", "Approval to move ahead?", "if_no", "Risk assessment"),
+    ("Remaining capacity (Q)", "Expected demand Y+5 (Q)", None, ""),
 ]
 _TD_COMMERCIAL_REQS = [
-    ("Confirmed acceptance rate (yes/no)", "Comment", ""),
-    ("Customer approval (yes/no)", "Comment", ""),
-    ("Current market demand in region (Q)", "Expected 5-year CAGR", ""),
-    ("Technology relevancy confirmed (yes/no)", "Comment", ""),
+    ("Confirmed acceptance rate (yes/no)", "Comment", None, ""),
+    ("Customer approval (yes/no)", "Comment", None, ""),
+    ("Current market demand in region (Q)", "Expected 5-year CAGR", None, ""),
+    ("Technology relevancy confirmed (yes/no)", "Comment", None, ""),
 ]
 _TD_SUPPLY_REQS = [
-    ("Aligned with Global product line manager", "Comment", ""),
-    ("Established supply chain (yes/no)", "If no, approved plan to establish supply?", "If no, high-level plan"),
+    ("Aligned with Global product line manager", "Comment", None, ""),
+    ("Established supply chain (yes/no)", "Approved plan to establish supply?", "if_no", "High-level plan"),
 ]
 _TD_FINANCIAL_REQS = [
-    ("Business case for both units in place", "Expected investment (Both units, MSEK)", "Business case"),
-    ("Payback period (Both units, Years)", "Expected total IRR (Both units, %)", ""),
-    ("NWC impact assessed (yes/no)", "Expected delta NWC vs. base (MSEK)", ""),
+    ("Business case for both units in place", "Expected investment (Both units, MSEK)", None, "Business case"),
+    ("Payback period (Both units, Years)", "Expected total IRR (Both units, %)", None, ""),
+    ("NWC impact assessed (yes/no)", "Expected delta NWC vs. base (MSEK)", None, ""),
 ]
 
 
@@ -1834,12 +1851,13 @@ def _default_td_requirements():
     result = {}
     for section, rows in sections.items():
         result[section] = []
-        for req, related, support_doc in rows:
+        for main_q, follow_up_q, condition, support_doc in rows:
             result[section].append({
-                "Requirement": req,
+                "Requirement": main_q,
                 "Value": "",
-                "Related Question": related,
-                "Answer": "",
+                "Follow-up": follow_up_q or "",
+                "Follow-up Answer": "",
+                "Condition": condition or "",
                 "Approver": "",
                 "Date": "",
                 "Status": "Pending",
@@ -3798,21 +3816,43 @@ Compares full cost-to-serve across factory locations, including material, labour
             Transfer Details <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
         </div>""", unsafe_allow_html=True)
 
-        # Auto-populate transfer to/from from factory config if empty
+        # Auto-populate transfer from/to from factory config if empty
         if not st.session_state.td_transfer_from and len(all_factory_names) >= 1:
             st.session_state.td_transfer_from = all_factory_names[0]
         if not st.session_state.td_transfer_to and len(all_factory_names) >= 2:
             st.session_state.td_transfer_to = all_factory_names[1]
 
-        # Header bar — six key-value pairs in styled boxes
+        # Auto-fetch transfer volume from analysis results (From factory)
+        _all_res = st.session_state.get("_all_results", [])
+        _td_total_ps_msek = ""
+        _td_total_qty = ""
+        if _all_res:
+            _from_name = st.session_state.td_transfer_from
+            _ps_sum = 0.0
+            _qty_sum = 0
+            for item in _all_res:
+                inp = item.get("_inputs_dc")
+                for r in item.get("results", []):
+                    if r.get("name") == _from_name:
+                        _ps_sum += r["ps"] * (inp.net_sales_qty if inp else 0)
+                        _qty_sum += inp.net_sales_qty if inp else 0
+            if _ps_sum > 0:
+                _td_total_ps_msek = f"{_ps_sum / 1e6:.1f} MSEK"
+            if _qty_sum > 0:
+                _td_total_qty = f"{_qty_sum:,.0f}"
+        # Auto-populate transfer volume if empty
+        if not st.session_state.td_transfer_volume and _td_total_ps_msek:
+            st.session_state.td_transfer_volume = _td_total_ps_msek
+
+        # Header bar — six key-value pairs in styled boxes (From first, then To)
         st.markdown(f"""<div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:1rem;">
-            <div style="flex:1;min-width:200px;background:{NAVY};color:#fff;padding:0.5rem 0.8rem;border-radius:3px;">
-                <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.06em;opacity:0.8;">Transfer to</div>
-                <div style="font-size:0.8rem;font-weight:600;">{st.session_state.td_transfer_to or '—'}</div>
-            </div>
             <div style="flex:1;min-width:200px;background:{NAVY};color:#fff;padding:0.5rem 0.8rem;border-radius:3px;">
                 <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.06em;opacity:0.8;">Transfer from</div>
                 <div style="font-size:0.8rem;font-weight:600;">{st.session_state.td_transfer_from or '—'}</div>
+            </div>
+            <div style="flex:1;min-width:200px;background:{NAVY};color:#fff;padding:0.5rem 0.8rem;border-radius:3px;">
+                <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.06em;opacity:0.8;">Transfer to</div>
+                <div style="font-size:0.8rem;font-weight:600;">{st.session_state.td_transfer_to or '—'}</div>
             </div>
             <div style="flex:1;min-width:150px;background:#e8edf5;padding:0.5rem 0.8rem;border-radius:3px;">
                 <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.06em;color:{GREY_TEXT};">Product Line</div>
@@ -3836,8 +3876,8 @@ Compares full cost-to-serve across factory locations, including material, labour
         with st.expander("Edit Transfer Header", expanded=False):
             hc1, hc2, hc3 = st.columns(3)
             with hc1:
-                st.session_state.td_transfer_to = st.text_input("Transfer To", value=st.session_state.td_transfer_to, key="td_to_input")
                 st.session_state.td_transfer_from = st.text_input("Transfer From", value=st.session_state.td_transfer_from, key="td_from_input")
+                st.session_state.td_transfer_to = st.text_input("Transfer To", value=st.session_state.td_transfer_to, key="td_to_input")
             with hc2:
                 st.session_state.td_product_line = st.text_input("Product Line", value=st.session_state.td_product_line, key="td_pl_input")
                 st.session_state.td_material_family = st.text_input("Material Family", value=st.session_state.td_material_family, key="td_mf_input")
@@ -3845,14 +3885,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                 st.session_state.td_transfer_volume = st.text_input("Transfer Volume", value=st.session_state.td_transfer_volume, key="td_vol_input")
                 st.session_state.td_indicative_timing = st.text_input("Indicative Timing", value=st.session_state.td_indicative_timing, key="td_timing_input")
 
-        # Approval status badge colors
-        _STATUS_COLORS = {
-            "Pending": f"background:#FFF3CD;color:#856404;",
-            "Approved": f"background:#D4EDDA;color:#155724;",
-            "Rejected": f"background:#F8D7DA;color:#721C24;",
-        }
-
-        # Requirements sections
+        # Requirements sections — custom-rendered rows with stacked questions & conditional follow-ups
         td_reqs = st.session_state.td_requirements
 
         _section_styles = {
@@ -3862,31 +3895,83 @@ Compares full cost-to-serve across factory locations, including material, labour
             "Financial Requirements": f"background:#A9C0E8;color:{DARK_TEXT};",
         }
 
+        _STATUS_BADGE = {
+            "Pending": "background:#FFF3CD;color:#856404;",
+            "Approved": "background:#D4EDDA;color:#155724;",
+            "Rejected": "background:#F8D7DA;color:#721C24;",
+        }
+
+        # Migrate old data format if needed (Related Question -> Follow-up)
+        for _sec_name, _sec_rows in td_reqs.items():
+            for _row in _sec_rows:
+                if "Related Question" in _row and "Follow-up" not in _row:
+                    _row["Follow-up"] = _row.pop("Related Question", "")
+                    _row["Follow-up Answer"] = _row.pop("Answer", "")
+                    _row.setdefault("Condition", "")
+
+        # Column header
+        st.markdown(f"""<div style="display:flex;gap:0;font-family:Inter,sans-serif;font-size:0.62rem;font-weight:600;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;padding:0.3rem 0;border-bottom:1px solid #ddd;margin-top:0.5rem;">
+            <div style="flex:3;padding-left:0.5rem;">Requirement</div>
+            <div style="flex:2;">Value / Answer</div>
+            <div style="flex:1.5;">Approver</div>
+            <div style="flex:1;">Date</div>
+            <div style="flex:1;">Status</div>
+            <div style="flex:1.5;">Required Documents</div>
+        </div>""", unsafe_allow_html=True)
+
         for section_name, rows in td_reqs.items():
             style = _section_styles.get(section_name, f"background:{NAVY};color:#fff;")
             st.markdown(f"""<div style="{style}padding:0.45rem 0.8rem;border-radius:3px 3px 0 0;margin-top:1rem;font-family:Inter,sans-serif;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
                 {section_name}
             </div>""", unsafe_allow_html=True)
 
-            section_df = pd.DataFrame(rows)
-            editor_key = f"td_{section_name.lower().replace(' ', '_').replace('&', 'and')}_editor"
-            edited_section = st.data_editor(
-                section_df, use_container_width=True, num_rows="fixed",
-                key=editor_key, hide_index=True,
-                column_config={
-                    "Requirement": st.column_config.TextColumn("Requirement", disabled=True, width=210),
-                    "Value": st.column_config.TextColumn("Value", width=140),
-                    "Related Question": st.column_config.TextColumn("Related Question", disabled=True, width=210),
-                    "Answer": st.column_config.TextColumn("Answer", width=140),
-                    "Approver": st.column_config.TextColumn("Approver", width=110),
-                    "Date": st.column_config.TextColumn("Date", width=85),
-                    "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "Approved", "Rejected"], width=95),
-                    "Required Documents": st.column_config.TextColumn("Required Documents", width=140),
-                },
-                disabled=["Requirement", "Related Question"])
-            td_reqs[section_name] = edited_section.to_dict("records")
+            for ri, row in enumerate(rows):
+                sec_key = section_name.lower().replace(" ", "_").replace("&", "and")
+                req_label = row["Requirement"]
+                follow_up = row.get("Follow-up", "")
+                condition = row.get("Condition", "")
+
+                # Main question row
+                c_req, c_val, c_approver, c_date, c_status, c_docs = st.columns([3, 2, 1.5, 1, 1, 1.5])
+                with c_req:
+                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};padding:0.35rem 0;'>{req_label}</div>", unsafe_allow_html=True)
+                with c_val:
+                    row["Value"] = st.text_input("val", value=row.get("Value", ""), key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed")
+                with c_approver:
+                    row["Approver"] = st.text_input("apr", value=row.get("Approver", ""), key=f"td_{sec_key}_{ri}_apr", label_visibility="collapsed")
+                with c_date:
+                    row["Date"] = st.text_input("dt", value=row.get("Date", ""), key=f"td_{sec_key}_{ri}_dt", label_visibility="collapsed")
+                with c_status:
+                    _status_opts = ["Pending", "Approved", "Rejected"]
+                    _cur_status = row.get("Status", "Pending")
+                    _si = _status_opts.index(_cur_status) if _cur_status in _status_opts else 0
+                    row["Status"] = st.selectbox("st", _status_opts, index=_si, key=f"td_{sec_key}_{ri}_st", label_visibility="collapsed")
+                with c_docs:
+                    row["Required Documents"] = st.text_input("doc", value=row.get("Required Documents", ""), key=f"td_{sec_key}_{ri}_doc", label_visibility="collapsed")
+
+                # Follow-up question (stacked below, with conditional logic for "if_no")
+                if follow_up:
+                    show_follow_up = True
+                    if condition == "if_no":
+                        main_val = (row.get("Value", "") or "").strip().lower()
+                        show_follow_up = main_val in ("no", "n", "false", "0")
+
+                    if show_follow_up:
+                        c_fq, c_fa, _, _, _, _ = st.columns([3, 2, 1.5, 1, 1, 1.5])
+                        with c_fq:
+                            _prefix = "If no: " if condition == "if_no" else ""
+                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.72rem;color:{GREY_TEXT};padding:0 0 0.35rem 1rem;font-style:italic;'>↳ {_prefix}{follow_up}</div>", unsafe_allow_html=True)
+                        with c_fa:
+                            row["Follow-up Answer"] = st.text_input("fua", value=row.get("Follow-up Answer", ""), key=f"td_{sec_key}_{ri}_fua", label_visibility="collapsed")
+
+                # Separator line between rows
+                st.markdown(f"<div style='border-bottom:1px solid #eee;margin:0;'></div>", unsafe_allow_html=True)
 
         st.session_state.td_requirements = td_reqs
+
+        # Auto-fetch quantity annotation for "Transfer volume (Q)" field
+        if _td_total_qty:
+            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.68rem;color:{GREY_TEXT};margin-top:0.3rem;'>Auto-fetched from analysis — Transfer quantity: <strong>{_td_total_qty}</strong> units</div>", unsafe_allow_html=True)
 
         # Approval summary
         total_reqs = sum(len(rows) for rows in td_reqs.values())
