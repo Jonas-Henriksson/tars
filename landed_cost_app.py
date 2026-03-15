@@ -3029,30 +3029,43 @@ def render_executive_summary_page():
             ))
 
     # Location markers — one trace per marker for individual text positioning
-    # Assign text positions to reduce overlap: spread based on longitude
-    _used_positions = []
-    _pos_options = ["top center", "bottom center", "top right", "bottom right", "top left", "bottom left", "middle right", "middle left"]
+    # Use offset-based positioning to avoid visual label overlap
+    _pos_offsets = {
+        "top center": (0, 6), "bottom center": (0, -6),
+        "top right": (8, 5), "bottom right": (8, -5),
+        "top left": (-8, 5), "bottom left": (-8, -5),
+        "middle right": (10, 0), "middle left": (-10, 0),
+    }
+    _pos_options = ["top center", "top right", "bottom center", "middle right", "top left", "bottom right", "middle left", "bottom left"]
+    _label_anchors = []  # (effective_lat, effective_lon) of each placed label
+    _chosen_positions = []
     for i in range(len(map_lats)):
-        lon_i = map_lons[i]
-        lat_i = map_lats[i]
-        # Check for nearby markers and pick non-overlapping position
-        best_pos = "top center"
-        for pi, pos in enumerate(_pos_options):
-            conflict = False
-            for j, (used_lat, used_lon, used_pos) in enumerate(_used_positions):
-                if abs(lat_i - used_lat) < 8 and abs(lon_i - used_lon) < 15 and pos == used_pos:
-                    conflict = True
-                    break
-            if not conflict:
+        lat_i, lon_i = map_lats[i], map_lons[i]
+        best_pos = _pos_options[0]
+        best_min_dist = -1
+        for pos in _pos_options:
+            off_lon, off_lat = _pos_offsets[pos]
+            eff_lat = lat_i + off_lat
+            eff_lon = lon_i + off_lon
+            # Find minimum distance to any existing label anchor
+            min_dist = float("inf")
+            for (a_lat, a_lon) in _label_anchors:
+                d = ((eff_lat - a_lat) ** 2 + (eff_lon - a_lon) ** 2) ** 0.5
+                min_dist = min(min_dist, d)
+            if min_dist > best_min_dist:
+                best_min_dist = min_dist
                 best_pos = pos
-                break
-        _used_positions.append((lat_i, lon_i, best_pos))
+        off_lon, off_lat = _pos_offsets[best_pos]
+        _label_anchors.append((lat_i + off_lat, lon_i + off_lon))
+        _chosen_positions.append(best_pos)
+
+    for i in range(len(map_lats)):
         fig_map.add_trace(go.Scattergeo(
             lat=[map_lats[i]], lon=[map_lons[i]],
             mode="markers+text",
             text=[map_labels[i]],
             customdata=[map_hover[i]],
-            textposition=best_pos,
+            textposition=_chosen_positions[i],
             textfont=dict(size=11, family="Inter, sans-serif", color=map_colors[i],
                           weight="bold"),
             marker=dict(size=[map_sizes[i]], color=[map_colors[i]], symbol=[map_symbols[i]],
@@ -5651,22 +5664,38 @@ Compares full cost-to-serve across factory locations, including material, labour
                             lat=[_ala2, _tla4], lon=[_alo2, _tlo4], mode="lines", name=f"Alternative: {_afn}",
                             line=dict(width=1.5, color=ACCENT_BLUE, dash="dot"), showlegend=True, hoverinfo="skip"))
 
-                # Markers with smart positioning
-                _pm_used_pos = []
-                _pm_pos_opts = ["top center", "bottom center", "top right", "bottom right", "top left", "bottom left", "middle right", "middle left"]
+                # Markers with offset-based label positioning
+                _pm_pos_offsets = {
+                    "top center": (0, 6), "bottom center": (0, -6),
+                    "top right": (8, 5), "bottom right": (8, -5),
+                    "top left": (-8, 5), "bottom left": (-8, -5),
+                    "middle right": (10, 0), "middle left": (-10, 0),
+                }
+                _pm_pos_opts = ["top center", "top right", "bottom center", "middle right", "top left", "bottom right", "middle left", "bottom left"]
+                _pm_label_anchors = []
+                _pm_chosen = []
                 for _mi in range(len(_pm_lats)):
-                    _best_pos = "top center"
-                    for _pi, _pos in enumerate(_pm_pos_opts):
-                        _conflict = False
-                        for _ula, _ulo, _upos in _pm_used_pos:
-                            if abs(_pm_lats[_mi] - _ula) < 8 and abs(_pm_lons[_mi] - _ulo) < 15 and _pos == _upos:
-                                _conflict = True; break
-                        if not _conflict:
-                            _best_pos = _pos; break
-                    _pm_used_pos.append((_pm_lats[_mi], _pm_lons[_mi], _best_pos))
+                    _mlat, _mlon = _pm_lats[_mi], _pm_lons[_mi]
+                    _best_pos = _pm_pos_opts[0]
+                    _best_dist = -1
+                    for _pos in _pm_pos_opts:
+                        _olon, _olat = _pm_pos_offsets[_pos]
+                        _elat, _elon = _mlat + _olat, _mlon + _olon
+                        _min_d = float("inf")
+                        for (_ala, _alo) in _pm_label_anchors:
+                            _d = ((_elat - _ala) ** 2 + (_elon - _alo) ** 2) ** 0.5
+                            _min_d = min(_min_d, _d)
+                        if _min_d > _best_dist:
+                            _best_dist = _min_d
+                            _best_pos = _pos
+                    _olon, _olat = _pm_pos_offsets[_best_pos]
+                    _pm_label_anchors.append((_mlat + _olat, _mlon + _olon))
+                    _pm_chosen.append(_best_pos)
+
+                for _mi in range(len(_pm_lats)):
                     _fig_pmap.add_trace(go.Scattergeo(
                         lat=[_pm_lats[_mi]], lon=[_pm_lons[_mi]], mode="markers+text",
-                        text=[_pm_labels[_mi]], customdata=[_pm_hover[_mi]], textposition=_best_pos,
+                        text=[_pm_labels[_mi]], customdata=[_pm_hover[_mi]], textposition=_pm_chosen[_mi],
                         textfont=dict(size=11, family="Inter, sans-serif", color=_pm_colors[_mi], weight="bold"),
                         marker=dict(size=[_pm_sizes[_mi]], color=[_pm_colors[_mi]], symbol=[_pm_symbols[_mi]],
                                     line=dict(width=1.5, color="white")),
