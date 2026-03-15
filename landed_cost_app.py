@@ -2084,7 +2084,7 @@ _TD_SUPPLY_REQS = [
 def _default_td_requirements():
     """Build the default transfer feasibility requirements structure."""
     sections = {
-        "Base Requirements": _TD_BASE_REQS,
+        "Operational Requirements": _TD_BASE_REQS,
         "Commercial Requirements": _TD_COMMERCIAL_REQS,
         "Product Line & Supply Chain Requirements": _TD_SUPPLY_REQS,
     }
@@ -5166,7 +5166,7 @@ Compares full cost-to-serve across factory locations, including material, labour
         td_reqs = st.session_state.td_requirements
 
         _section_styles = {
-            "Base Requirements": f"background:{NAVY};color:#fff;",
+            "Operational Requirements": f"background:{NAVY};color:#fff;",
             "Commercial Requirements": f"background:#4472C4;color:#fff;",
             "Product Line & Supply Chain Requirements": f"background:#7B9CD6;color:#fff;",
         }
