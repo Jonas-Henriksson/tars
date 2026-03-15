@@ -3753,13 +3753,13 @@ def render_executive_summary_page():
     if _recommended_fns or _alternative_fns or _excluded_fns:
         _badge_parts = []
         if _recommended_fns:
-            _badge_parts.append(f'<span style="background:{GREEN};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-weight:600;font-size:0.7rem;">{_recommended_fns[0]}</span>')
+            _badge_parts.append(f'<span style="background:{GREEN};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-weight:600;font-size:0.7rem;margin-right:0.4rem;">Recommended: {_recommended_fns[0]}</span>')
         for _afn in _alternative_fns:
-            _badge_parts.append(f'<span style="background:{ACCENT_BLUE};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-weight:600;font-size:0.7rem;">{_afn}</span>')
+            _badge_parts.append(f'<span style="background:{ACCENT_BLUE};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-weight:600;font-size:0.7rem;margin-right:0.4rem;">Alternative: {_afn}</span>')
         if _excluded_fns:
             _excl_names = ", ".join(_excluded_fns)
             _badge_parts.append(f'<span style="background:{MUTED};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-size:0.68rem;">Excluded: {_excl_names}</span>')
-        st.markdown(f'<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin:0.4rem 0 0.6rem 0;font-family:Inter,sans-serif;">{"".join(_badge_parts)}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="display:flex;align-items:center;flex-wrap:wrap;margin:0.4rem 0 0.6rem 0;font-family:Inter,sans-serif;">{"".join(_badge_parts)}</div>', unsafe_allow_html=True)
 
     # Rationale
     st.markdown(f'<div class="sec-sm">Rationale</div>', unsafe_allow_html=True)
