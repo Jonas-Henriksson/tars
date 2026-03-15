@@ -3953,20 +3953,10 @@ Compares full cost-to-serve across factory locations, including material, labour
         _is_c4 = "C4" in data_classification
         _wf_headcount = st.session_state.get("ps_workforce_headcount_from", 0)
         if _has_restructuring or _is_c4 or _wf_headcount > 0:
-            _warn_parts = []
-            if _has_restructuring:
-                _warn_parts.append("restructuring costs are included in the investment case")
-            if _wf_headcount > 0:
-                _warn_parts.append(f"workforce impact has been identified ({_wf_headcount} FTE at sending site)")
-            _trigger_text = " and ".join(_warn_parts) if _warn_parts else "the project classification is C4"
             _c4_border = RED if _is_c4 else "#e6a817"
-            st.markdown(f'''<div style="background:#fef9f0;border:1px solid {_c4_border};border-left:4px solid {_c4_border};padding:0.6rem 1rem;margin:0.4rem 0 0.7rem 0;font-family:Inter,sans-serif;font-size:0.72rem;">
-                <strong style="color:{_c4_border};">{"C4 — Strictly Confidential" if _is_c4 else "Classification Review Recommended"}</strong><br>
-                This analysis indicates {_trigger_text}. Manufacturing transfers with workforce implications
-                typically warrant <strong>C4 — Strictly Confidential</strong> classification to protect employee privacy
-                and comply with works-council/union notification requirements.
-                {"" if _is_c4 else f'<br><span style="color:{GREY_TEXT};font-size:0.68rem;">Consider upgrading the data classification from the project header.</span>'}
-            </div>''', unsafe_allow_html=True)
+            _c4_label = "C4 — Strictly Confidential" if _is_c4 else "Classification Review Recommended"
+            _c4_hint = "" if _is_c4 else " Consider upgrading from the project header."
+            st.markdown(f'<div style="background:#fef9f0;border-left:4px solid {_c4_border};padding:0.5rem 1rem;margin:0.2rem 0 0.6rem 0;font-family:Inter,sans-serif;font-size:0.72rem;"><strong style="color:{_c4_border};">{_c4_label}</strong> — Restructuring or workforce impact detected. Typically warrants C4 to protect employee privacy.{_c4_hint}</div>', unsafe_allow_html=True)
 
         ps_left, ps_right = st.columns([3, 2])
         with ps_left:
@@ -4042,38 +4032,37 @@ Compares full cost-to-serve across factory locations, including material, labour
         with ps_right:
             # ── WORKFORCE & ORGANIZATIONAL IMPACT ─────────────
             st.markdown(f'<div class="sec-sm">Workforce & Organizational Impact</div>', unsafe_allow_html=True)
-            st.markdown(f'<div style="font-size:0.68rem;color:{GREY_TEXT};margin-bottom:0.4rem;font-family:Inter,sans-serif;">Preliminary assessment of headcount implications. If FTEs are affected, consider upgrading to C4 classification.</div>', unsafe_allow_html=True)
             wf_c1, wf_c2 = st.columns(2)
             with wf_c1:
                 st.session_state.ps_workforce_headcount_from = st.number_input(
-                    "FTE Impact — Sending Site", value=st.session_state.ps_workforce_headcount_from,
+                    "FTE Sending Site", value=st.session_state.ps_workforce_headcount_from,
                     min_value=0, step=1, key="ps_wf_from_input",
-                    help="Estimated FTEs affected at the sending factory (reductions, redeployments)")
+                    help="Estimated FTEs affected at sending factory")
             with wf_c2:
                 st.session_state.ps_workforce_headcount_to = st.number_input(
-                    "FTE Impact — Receiving Site", value=st.session_state.ps_workforce_headcount_to,
+                    "FTE Receiving Site", value=st.session_state.ps_workforce_headcount_to,
                     min_value=0, step=1, key="ps_wf_to_input",
-                    help="Estimated new FTEs required at the receiving factory (hiring, training)")
-            wf_consult_opts = ["", "Yes — Works council / union", "Yes — Local labor authority", "Not required", "To be determined"]
+                    help="New FTEs required at receiving factory")
+            wf_consult_opts = ["", "Yes — Works council / union", "Yes — Labor authority", "Not required", "To be determined"]
             wf_consult_idx = 0
             if st.session_state.ps_workforce_consultation_required in wf_consult_opts:
                 wf_consult_idx = wf_consult_opts.index(st.session_state.ps_workforce_consultation_required)
             st.session_state.ps_workforce_consultation_required = st.selectbox(
-                "Formal Consultation Required?", options=wf_consult_opts, index=wf_consult_idx,
+                "Consultation Required", options=wf_consult_opts, index=wf_consult_idx,
                 key="ps_wf_consult_input",
                 format_func=lambda x: x if x else "— Select —")
-            sp_opts = ["", "Yes — social plan required", "No — natural attrition / redeployment", "To be assessed"]
+            sp_opts = ["", "Yes — social plan required", "No — attrition / redeployment", "To be assessed"]
             sp_idx = 0
             if st.session_state.ps_workforce_social_plan in sp_opts:
                 sp_idx = sp_opts.index(st.session_state.ps_workforce_social_plan)
             st.session_state.ps_workforce_social_plan = st.selectbox(
-                "Social Plan / Severance Obligation?", options=sp_opts, index=sp_idx,
+                "Social Plan / Severance", options=sp_opts, index=sp_idx,
                 key="ps_wf_social_input",
                 format_func=lambda x: x if x else "— Select —")
             st.session_state.ps_workforce_notes = st.text_area(
                 "Workforce Notes", value=st.session_state.ps_workforce_notes,
-                key="ps_wf_notes_input", height=60, label_visibility="visible",
-                placeholder="Additional context: retention risk, key-person dependencies, knowledge transfer plan, local labor market conditions...")
+                key="ps_wf_notes_input", height=50, label_visibility="visible",
+                placeholder="Retention risk, key-person dependencies, knowledge transfer plan...")
 
             # Cross-functional dependencies
             st.markdown(f'<div class="sec-sm">Cross-functional Dependencies & How to Manage</div>', unsafe_allow_html=True)
@@ -4388,11 +4377,9 @@ Compares full cost-to-serve across factory locations, including material, labour
         _wf_hc_prop = st.session_state.get("ps_workforce_headcount_from", 0)
         if _has_restr_prop or _is_c4_prop or _wf_hc_prop > 0:
             _c4b = RED if _is_c4_prop else "#e6a817"
-            st.markdown(f'''<div style="background:#fef9f0;border:1px solid {_c4b};border-left:4px solid {_c4b};padding:0.6rem 1rem;margin:0.2rem 0 0.7rem 0;font-family:Inter,sans-serif;font-size:0.72rem;">
-                <strong style="color:{_c4b};">{"C4 — Strictly Confidential" if _is_c4_prop else "Classification Review Recommended"}</strong>
-                &mdash; This proposal involves workforce restructuring. Restrict distribution to named recipients only.
-                {"" if _is_c4_prop else f' Consider upgrading data classification from the project header.'}
-            </div>''', unsafe_allow_html=True)
+            _c4l = "C4 — Strictly Confidential" if _is_c4_prop else "Classification Review Recommended"
+            _c4h = "" if _is_c4_prop else " Consider upgrading from the project header."
+            st.markdown(f'<div style="background:#fef9f0;border-left:4px solid {_c4b};padding:0.5rem 1rem;margin:0.2rem 0 0.6rem 0;font-family:Inter,sans-serif;font-size:0.72rem;"><strong style="color:{_c4b};">{_c4l}</strong> — Restructuring or workforce impact detected. Restrict distribution to named recipients.{_c4h}</div>', unsafe_allow_html=True)
 
         # ── RECOMMENDATION ─────────────────────────────────────
         st.markdown(f'<div class="sec">Recommendation</div>', unsafe_allow_html=True)
@@ -4552,7 +4539,7 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         # ── IMPLEMENTATION STRATEGY ────────────────────────────
         st.markdown(f'<div class="sec">Implementation Strategy</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Phase-gate execution plan. Each phase requires explicit go/no-go approval before proceeding. Define clear criteria so the Factory Council can monitor progress and intervene early if gates are not met.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Phase-gate execution plan. Each phase requires go/no-go approval before proceeding to the next.</div>', unsafe_allow_html=True)
 
         impl_df = pd.DataFrame(st.session_state.prop_impl_phases)
         if "Phase" not in impl_df.columns:
@@ -4561,11 +4548,11 @@ Compares full cost-to-serve across factory locations, including material, labour
             impl_df, use_container_width=True, num_rows="dynamic", key="prop_impl_editor",
             hide_index=True,
             column_config={
-                "Phase": st.column_config.TextColumn("Phase", width=170),
-                "Description": st.column_config.TextColumn("Key Activities", width=200),
-                "Go/No-Go Criteria": st.column_config.TextColumn("Go/No-Go Criteria", width=220),
+                "Phase": st.column_config.TextColumn("Phase", width=160),
+                "Description": st.column_config.TextColumn("Key Activities", width=210),
+                "Go/No-Go Criteria": st.column_config.TextColumn("Go/No-Go Criteria", width=210),
                 "Duration": st.column_config.TextColumn("Duration", width=90),
-                "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "In Progress", "Complete", "At Risk", "Blocked"], width=100),
+                "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "In Progress", "Complete", "At Risk", "Blocked"], width=110),
             })
         st.session_state.prop_impl_phases = edited_impl.to_dict("records")
 
@@ -4592,17 +4579,15 @@ Compares full cost-to-serve across factory locations, including material, labour
         _wf_social = st.session_state.get("ps_workforce_social_plan", "")
         if _wf_from > 0 or _wf_to > 0:
             st.markdown(f'''<div style="display:flex;gap:1.5rem;margin:0.2rem 0 0.5rem 0;font-family:Inter,sans-serif;">
-                <div class="kpi" style="flex:1;"><div class="lbl">FTE Reduction (Sending)</div><div class="val" style="color:{RED};">{_wf_from}</div></div>
-                <div class="kpi" style="flex:1;"><div class="lbl">FTE Addition (Receiving)</div><div class="val" style="color:{GREEN};">{_wf_to}</div></div>
-                <div class="kpi" style="flex:1;"><div class="lbl">Net FTE Impact</div><div class="val">{_wf_to - _wf_from:+d}</div></div>
-                <div class="kpi" style="flex:1;"><div class="lbl">Consultation Required</div><div class="val" style="font-size:0.82rem;">{_wf_consult or "—"}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">FTE Sending</div><div class="val" style="color:{RED};">{_wf_from}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">FTE Receiving</div><div class="val" style="color:{GREEN};">{_wf_to}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Net FTE</div><div class="val">{_wf_to - _wf_from:+d}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Consultation</div><div class="val" style="font-size:0.82rem;">{_wf_consult or "—"}</div></div>
+                <div class="kpi" style="flex:1;"><div class="lbl">Social Plan</div><div class="val" style="font-size:0.82rem;">{_wf_social.split("—")[0].strip() if _wf_social else "—"}</div></div>
             </div>''', unsafe_allow_html=True)
-            if _wf_social:
-                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-family:Inter,sans-serif;margin-bottom:0.3rem;"><strong>Social Plan:</strong> {_wf_social}</div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-style:italic;font-family:Inter,sans-serif;">No workforce impact data entered. Complete the Workforce & Organizational Impact section on the Pre-study page.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-style:italic;">Complete the Workforce section on the Pre-study page to populate this summary.</div>', unsafe_allow_html=True)
 
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Estimated financial impact of workforce changes. Include severance, retraining, recruitment, and relocation costs as applicable.</div>', unsafe_allow_html=True)
         wfp_c1, wfp_c2, wfp_c3 = st.columns(3)
         with wfp_c1:
             st.session_state.prop_severance_cost = st.number_input(
@@ -4616,15 +4601,18 @@ Compares full cost-to-serve across factory locations, including material, labour
             st.session_state.prop_workforce_timeline = st.text_input(
                 "Notification Timeline", value=st.session_state.prop_workforce_timeline,
                 key="prop_wf_timeline_input",
-                placeholder="e.g. Q2 '25 — works council, Q3 '25 — individual notices")
+                placeholder="e.g. Q2 '25 — works council, Q3 '25 — notices")
+        _wf_total_cost = st.session_state.prop_severance_cost + st.session_state.prop_retraining_cost
+        if _wf_total_cost > 0:
+            st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};font-family:Inter,sans-serif;margin:0.1rem 0 0.2rem 0;"><strong>Total Workforce Cost:</strong> {_wf_total_cost:.1f} M{currency}</div>', unsafe_allow_html=True)
         st.session_state.prop_workforce_notes = st.text_area(
-            "Workforce Implementation Notes", value=st.session_state.prop_workforce_notes,
-            key="prop_wf_notes_input", height=60,
-            placeholder="Knowledge transfer plan, retention incentives for key personnel, redeployment options within the group...")
+            "Workforce Notes", value=st.session_state.prop_workforce_notes,
+            key="prop_wf_notes_input", height=50,
+            placeholder="Knowledge transfer plan, retention incentives, redeployment options...")
 
         # ── COMMUNICATION PLAN ────────────────────────────────
         st.markdown(f'<div class="sec">Communication Plan</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Stakeholder communication matrix. Factory restructuring is highly sensitive — premature disclosure can trigger talent flight, supplier disruption, and media risk. Define who can know what, when, and through which channel.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Stakeholder communication matrix. Define who is informed, when, and through which channel. Premature disclosure can trigger talent flight and supplier disruption.</div>', unsafe_allow_html=True)
 
         comm_df = pd.DataFrame(st.session_state.prop_comm_plan)
         if "Stakeholder" not in comm_df.columns:
@@ -4633,11 +4621,11 @@ Compares full cost-to-serve across factory locations, including material, labour
             comm_df, use_container_width=True, num_rows="dynamic", key="prop_comm_editor",
             hide_index=True,
             column_config={
-                "Stakeholder": st.column_config.TextColumn("Stakeholder Group", width=170),
-                "What": st.column_config.TextColumn("Key Message / Scope", width=200),
-                "When": st.column_config.TextColumn("Timing", width=120),
+                "Stakeholder": st.column_config.TextColumn("Stakeholder Group", width=160),
+                "What": st.column_config.TextColumn("Message / Scope", width=210),
+                "When": st.column_config.TextColumn("Timing", width=110),
                 "Channel": st.column_config.SelectboxColumn("Channel", options=["1:1 Meeting", "Town Hall", "Written Notice", "Email", "Board Memo", "Press Release", "Works Council Session"], width=140),
-                "Owner": st.column_config.TextColumn("Owner", width=120),
+                "Owner": st.column_config.TextColumn("Owner", width=130),
             })
         st.session_state.prop_comm_plan = edited_comm.to_dict("records")
 
