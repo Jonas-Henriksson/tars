@@ -271,7 +271,7 @@ st.markdown(f"""
         color: {GREY_TEXT}; background: #fafbfc; margin: 0.5rem 0; line-height: 1.4; }}
     .callout strong {{ color: {DARK_TEXT}; }}
 
-    /* ── Executive Summary ── */
+    /* ── Analysis Summary ── */
     .exec-summary {{ background: #f8f9fb; border: 1px solid {BORDER}; border-left: 4px solid {NAVY};
         padding: 0.8rem 1.1rem; margin: 0.6rem 0; font-size: 0.76rem; line-height: 1.55;
         font-family: 'Inter', sans-serif; color: {DARK_TEXT}; }}
@@ -753,7 +753,7 @@ def build_tornado_chart(inputs, factory, is_base, ccy, overrides=None):
     return fig
 
 
-# ── EXECUTIVE SUMMARY NARRATIVE ──────────────────────────────
+# ── ANALYSIS SUMMARY NARRATIVE ──────────────────────────────
 def build_qualitative_summary(qualitative):
     """Build HTML block for qualitative strategic context."""
     if not qualitative:
@@ -820,7 +820,7 @@ def build_exec_summary(results, inputs, ccy):
             nwc_str = f' Lead time differential of {delta_lt:+d} days has negligible NWC impact at current cost of capital.'
 
     return f"""<div class="exec-summary">
-<div class="es-title">Executive Summary</div>
+<div class="es-title">Analysis Summary</div>
 For {item_desc}, {verdict}{annual_str}.{nwc_str}
 Analysis covers {len(results)} manufacturing location{"s" if len(results)>1 else ""} with {ccy} reporting.
 </div>"""
@@ -1402,6 +1402,12 @@ def export_excel_project(project_data):
         prop_rec = st.session_state.get("prop_recommendation", "")
         if prop_rec:
             ws.write(r, 0, "Recommendation", hl); ws.write(r, 1, prop_rec, lb); r += 1
+        _dec_by = st.session_state.get("conclusion_decided_by", "")
+        _dec_date = st.session_state.get("conclusion_decided_date", "")
+        if _dec_by:
+            ws.write(r, 0, "Decided By", hl); ws.write(r, 1, _dec_by, lf); r += 1
+        if _dec_date:
+            ws.write(r, 0, "Decision Date", hl); ws.write(r, 1, _dec_date, lf); r += 1
         for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits"),
                            ("Time Plan", "prop_timeplan")]:
             ws.write(r, 0, label, hl)
@@ -1908,6 +1914,18 @@ def export_pdf_project(all_results, ccy, project_name):
             pdf.cell(0, 7, f"Recommendation: {prop_rec}", ln=True)
             pdf.set_text_color(dark_r, dark_g, dark_b)
             pdf.ln(2)
+        _pdf_dec_by = st.session_state.get("conclusion_decided_by", "")
+        _pdf_dec_date = st.session_state.get("conclusion_decided_date", "")
+        if _pdf_dec_by or _pdf_dec_date:
+            pdf.set_font("Helvetica", "B", 7)
+            pdf.cell(30, 5, "Decided By:", border=0)
+            pdf.set_font("Helvetica", "", 7)
+            pdf.cell(60, 5, _safe(_pdf_dec_by or "—"), border=0)
+            pdf.set_font("Helvetica", "B", 7)
+            pdf.cell(30, 5, "Decision Date:", border=0)
+            pdf.set_font("Helvetica", "", 7)
+            pdf.cell(0, 5, _safe(_pdf_dec_date or "—"), ln=True, border=0)
+            pdf.ln(2)
         for label, key in [("Direction", "prop_direction"), ("Benefits & Key Details", "prop_benefits")]:
             txt = st.session_state.get(key, "")
             if txt.strip():
@@ -2122,6 +2140,8 @@ def init_state():
     # ── ANALYSIS CONCLUSION GATE ────────────────────────────
     if "conclusion_selected_option" not in st.session_state:
         st.session_state.conclusion_selected_option = ""
+    if "conclusion_option_statuses" not in st.session_state:
+        st.session_state.conclusion_option_statuses = {}  # {factory_name: "Recommended" | "Alternative" | "Excluded"}
     if "conclusion_rationale" not in st.session_state:
         st.session_state.conclusion_rationale = ""
     if "conclusion_decision" not in st.session_state:
@@ -2882,9 +2902,9 @@ _COUNTRY_COORDS: dict[str, tuple[float, float]] = {
 }
 
 
-# ── EXECUTIVE SUMMARY PAGE ────────────────────────────────────
+# ── ANALYSIS SUMMARY PAGE ────────────────────────────────────
 def render_executive_summary_page():
-    """Render the Executive Summary page — a CEO-level overview of the full case."""
+    """Render the Analysis Summary page — a CEO-level overview of the full case."""
     all_results = st.session_state.get("_all_results", [])
     company_wacc = st.session_state.get("_company_wacc", 0.08)
     target_payback = st.session_state.get("target_payback", 3)
@@ -2900,7 +2920,7 @@ def render_executive_summary_page():
         st.markdown('<div class="callout" style="font-size:0.76rem;">No analysis results available yet. Open <strong>Landed Cost Analysis</strong> first to configure the project and compute results.</div>', unsafe_allow_html=True)
         return
 
-    st.markdown(f'<div class="sec">Executive Summary — {project_name}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sec">Analysis Summary — {project_name}</div>', unsafe_allow_html=True)
 
     # IB-style project metadata strip
     n_items = len(all_results)
@@ -2928,14 +2948,15 @@ def render_executive_summary_page():
     alt_fnames = [fn_ for fn_ in all_fnames if fn_ != base_fn]
 
     # Build coordinate lists
-    map_lats, map_lons, map_labels, map_colors, map_sizes, map_symbols = [], [], [], [], [], []
+    map_lats, map_lons, map_labels, map_hover, map_colors, map_sizes, map_symbols = [], [], [], [], [], [], []
 
     # Target market marker
     if target_market and target_market in _COUNTRY_COORDS:
         lat, lon = _COUNTRY_COORDS[target_market]
         map_lats.append(lat)
         map_lons.append(lon)
-        map_labels.append(f"Target Market: {target_market}")
+        map_labels.append(target_market)
+        map_hover.append(f"Target Market: {target_market}")
         map_colors.append("#e67e22")
         map_sizes.append(18)
         map_symbols.append("star")
@@ -2946,7 +2967,8 @@ def render_executive_summary_page():
         lat, lon = _COUNTRY_COORDS[base_country]
         map_lats.append(lat)
         map_lons.append(lon)
-        map_labels.append(f"Current: {base_fn} ({base_country})")
+        map_labels.append(base_fn)
+        map_hover.append(f"Current: {base_fn} ({base_country})")
         map_colors.append(NAVY)
         map_sizes.append(16)
         map_symbols.append("circle")
@@ -2958,7 +2980,8 @@ def render_executive_summary_page():
             lat, lon = _COUNTRY_COORDS[ctry]
             map_lats.append(lat)
             map_lons.append(lon)
-            map_labels.append(f"Alternative: {fn_} ({ctry})")
+            map_labels.append(fn_)
+            map_hover.append(f"Alternative: {fn_} ({ctry})")
             map_colors.append(ACCENT_BLUE)
             map_sizes.append(14)
             map_symbols.append("diamond")
@@ -3005,18 +3028,38 @@ def render_executive_summary_page():
                 hoverinfo="skip",
             ))
 
-    # Location markers
-    fig_map.add_trace(go.Scattergeo(
-        lat=map_lats, lon=map_lons,
-        mode="markers+text",
-        text=map_labels,
-        textposition="top center",
-        textfont=dict(size=9, family="Inter, sans-serif", color=DARK_TEXT),
-        marker=dict(size=map_sizes, color=map_colors, symbol=map_symbols,
-                    line=dict(width=1, color="white")),
-        showlegend=False,
-        hovertemplate="%{text}<extra></extra>",
-    ))
+    # Location markers — one trace per marker for individual text positioning
+    # Assign text positions to reduce overlap: spread based on longitude
+    _used_positions = []
+    _pos_options = ["top center", "bottom center", "top right", "bottom right", "top left", "bottom left", "middle right", "middle left"]
+    for i in range(len(map_lats)):
+        lon_i = map_lons[i]
+        lat_i = map_lats[i]
+        # Check for nearby markers and pick non-overlapping position
+        best_pos = "top center"
+        for pi, pos in enumerate(_pos_options):
+            conflict = False
+            for j, (used_lat, used_lon, used_pos) in enumerate(_used_positions):
+                if abs(lat_i - used_lat) < 8 and abs(lon_i - used_lon) < 15 and pos == used_pos:
+                    conflict = True
+                    break
+            if not conflict:
+                best_pos = pos
+                break
+        _used_positions.append((lat_i, lon_i, best_pos))
+        fig_map.add_trace(go.Scattergeo(
+            lat=[map_lats[i]], lon=[map_lons[i]],
+            mode="markers+text",
+            text=[map_labels[i]],
+            customdata=[map_hover[i]],
+            textposition=best_pos,
+            textfont=dict(size=11, family="Inter, sans-serif", color=map_colors[i],
+                          weight="bold"),
+            marker=dict(size=[map_sizes[i]], color=[map_colors[i]], symbol=[map_symbols[i]],
+                        line=dict(width=1.5, color="white")),
+            showlegend=False,
+            hovertemplate="%{customdata}<extra></extra>",
+        ))
 
     fig_map.update_geos(
         showcountries=True, countrycolor="#d4d8e0",
@@ -3620,132 +3663,127 @@ def render_executive_summary_page():
         fx_data[fn_] = {"cost_currency": rec.get("Cost Currency", ""), "hedge_assumption": rec.get("Hedge Assumption", ""), "notes": rec.get("Notes", "")}
     st.session_state.fx_exposures = fx_data
 
-    # ── SCENARIO COMPARISON TABLE ────────────────────────────
-    st.markdown(f'<div class="sec-sm">Scenario Comparison — Side-by-Side</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Transfer decisions often compare 2\u20133 credible options. Use this table to capture trade-off commentary beyond the financial metrics.</div>', unsafe_allow_html=True)
-
-    sc_data = st.session_state.scenario_comparison
-    if not sc_data:
-        # Auto-populate from top alternatives
-        for fn_ in all_fnames:
-            sc_data.append({"Factory": fn_, "Pros": "", "Cons": "", "Trade-offs": ""})
-        st.session_state.scenario_comparison = sc_data
-
-    sc_df = pd.DataFrame(sc_data)
-    edited_sc = st.data_editor(
-        sc_df, use_container_width=True, num_rows="fixed", key="sc_editor",
-        hide_index=True,
-        column_config={
-            "Factory": st.column_config.TextColumn("Option", disabled=True, width=160),
-            "Pros": st.column_config.TextColumn("Pros / Strengths", width=220),
-            "Cons": st.column_config.TextColumn("Cons / Weaknesses", width=220),
-            "Trade-offs": st.column_config.TextColumn("Key Trade-offs", width=200),
-        },
-        disabled=["Factory"])
-    st.session_state.scenario_comparison = edited_sc.to_dict("records")
-
-    # ── ANALYSIS CONCLUSION GATE ─────────────────────────────
+    # ── ANALYSIS CONCLUSION — OPTION SELECTION ────────────────
     st.markdown(f'<div class="sec">Analysis Conclusion — Option Selection</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Record the recommended option and decision rationale. This creates an auditable link between the cost analysis and the governance workflow. Complete this section before proceeding to Transfer Feasibility.</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Set each option\'s status: <strong>Recommended</strong> (one), <strong>Alternative</strong> (kept for sensitivity / fallback in Proposal), or <strong>Excluded</strong> (discarded from further analysis). Add trade-off commentary to support your rationale.</div>', unsafe_allow_html=True)
 
-    # Auto-populate recommended option from model results if not set
-    if not st.session_state.conclusion_selected_option.strip() and all_results:
+    # Auto-populate statuses if empty
+    _opt_statuses = st.session_state.conclusion_option_statuses
+    if not _opt_statuses and all_results:
+        # Auto-assign: best alt = Recommended (if positive delta), base = Alternative, rest = blank
         if ranked_for_verdict:
             v_best = ranked_for_verdict[0]
             v_delta = adj_totals[v_best] - base_adj_op
             if v_delta > 0:
-                st.session_state.conclusion_selected_option = v_best
+                _opt_statuses[v_best] = "Recommended"
+                _opt_statuses[base_fn] = "Alternative"
+        st.session_state.conclusion_option_statuses = _opt_statuses
 
-    conc_c1, conc_c2 = st.columns([1, 1])
-    with conc_c1:
-        # Option selector — all factories
-        option_choices = [""] + all_fnames
-        current_idx = 0
-        if st.session_state.conclusion_selected_option in option_choices:
-            current_idx = option_choices.index(st.session_state.conclusion_selected_option)
-        selected = st.selectbox(
-            "Recommended Manufacturing Location",
-            options=option_choices,
-            index=current_idx,
-            key="conclusion_option_select",
-            format_func=lambda x: x if x else "— Select recommended option —",
-        )
-        st.session_state.conclusion_selected_option = selected
+    # Build scenario comparison table with Status column
+    sc_data = st.session_state.scenario_comparison
+    if not sc_data:
+        for fn_ in all_fnames:
+            sc_data.append({"Factory": fn_, "Pros": "", "Cons": "", "Trade-offs": ""})
+        st.session_state.scenario_comparison = sc_data
 
-        # Show key metrics for selected option
-        if selected and selected in all_fnames:
-            sel_op = adj_totals.get(selected, 0)
-            sel_rev = total_rev.get(selected, 0)
-            sel_om = sel_op / sel_rev * 100 if sel_rev else 0
-            delta_vs_base = sel_op - adj_totals.get(base_fn, 0)
-            is_base_selected = (selected == base_fn)
-            metric_color = NAVY if is_base_selected else (GREEN if delta_vs_base > 0 else RED)
-            st.markdown(f'''<div style="background:#f8f9fb;border:1px solid {BORDER};border-left:3px solid {metric_color};padding:0.6rem 0.9rem;margin:0.3rem 0;font-family:Inter,sans-serif;font-size:0.76rem;">
-                <strong>{selected}</strong> — Annual OP: <strong>{fi(sel_op, dz=False)} {currency}</strong> | OM: <strong>{sel_om:.1f}%</strong>
-                {f' | Delta vs Base: <span style="color:{GREEN if delta_vs_base > 0 else RED};font-weight:600;">{fi(delta_vs_base, acct=True)} {currency}</span>' if not is_base_selected else ' (Base Case)'}
-            </div>''', unsafe_allow_html=True)
+    # Merge status into scenario rows
+    _sc_rows = []
+    for fn_ in all_fnames:
+        existing = next((s for s in sc_data if s.get("Factory") == fn_), {})
+        _fn_op = adj_totals.get(fn_, 0)
+        _fn_rev = total_rev.get(fn_, 0)
+        _fn_om = _fn_op / _fn_rev * 100 if _fn_rev else 0
+        _fn_delta = _fn_op - adj_totals.get(base_fn, 0)
+        _is_base = (fn_ == base_fn)
+        _metrics = f"OM {_fn_om:.1f}%" + ("" if _is_base else f" | {'+' if _fn_delta > 0 else ''}{fi(_fn_delta, acct=True)} vs base")
+        _sc_rows.append({
+            "Factory": fn_,
+            "Status": _opt_statuses.get(fn_, ""),
+            "Annual OP": _fn_op,
+            "Metrics": _metrics,
+            "Pros": existing.get("Pros", ""),
+            "Cons": existing.get("Cons", ""),
+            "Trade-offs": existing.get("Trade-offs", ""),
+        })
 
-        st.markdown(f'<div class="sec-sm">Decision</div>', unsafe_allow_html=True)
-        decision_options = ["", "Go", "Conditional Go", "No-Go"]
-        current_dec_idx = 0
-        if st.session_state.conclusion_decision in decision_options:
-            current_dec_idx = decision_options.index(st.session_state.conclusion_decision)
-        decision = st.selectbox(
-            "Decision",
-            options=decision_options,
-            index=current_dec_idx,
-            key="conclusion_decision_select",
-            format_func=lambda x: x if x else "— Select decision —",
-        )
-        st.session_state.conclusion_decision = decision
+    _sc_df = pd.DataFrame(_sc_rows)
+    _edited_sc = st.data_editor(
+        _sc_df, use_container_width=True, num_rows="fixed", key="sc_editor",
+        hide_index=True,
+        column_config={
+            "Factory": st.column_config.TextColumn("Option", disabled=True, width=150),
+            "Status": st.column_config.SelectboxColumn("Status", options=["Recommended", "Alternative", "Excluded"], width=130),
+            "Annual OP": st.column_config.NumberColumn(f"Annual OP ({currency})", format="%,.0f", disabled=True, width=140),
+            "Metrics": st.column_config.TextColumn("Key Metrics", disabled=True, width=180),
+            "Pros": st.column_config.TextColumn("Pros / Strengths", width=180),
+            "Cons": st.column_config.TextColumn("Cons / Weaknesses", width=180),
+            "Trade-offs": st.column_config.TextColumn("Key Trade-offs", width=160),
+        },
+        disabled=["Factory", "Annual OP", "Metrics"])
 
-        if decision == "Conditional Go":
-            st.session_state.conclusion_conditions = st.text_area(
-                "Conditions for Proceeding",
-                value=st.session_state.conclusion_conditions,
-                key="conclusion_conditions_input", height=80,
-                placeholder="List conditions that must be met before proceeding (e.g. customer approval, quality audit pass)...")
+    # Persist statuses and scenario data
+    _new_statuses = {}
+    _new_sc_data = []
+    for i, fn_ in enumerate(all_fnames):
+        row = _edited_sc.iloc[i]
+        _status_val = str(row.get("Status", "") or "")
+        if _status_val:
+            _new_statuses[fn_] = _status_val
+        _new_sc_data.append({
+            "Factory": fn_,
+            "Pros": str(row.get("Pros", "") or ""),
+            "Cons": str(row.get("Cons", "") or ""),
+            "Trade-offs": str(row.get("Trade-offs", "") or ""),
+        })
+    st.session_state.conclusion_option_statuses = _new_statuses
+    st.session_state.scenario_comparison = _new_sc_data
 
-        # Decision record
-        dr_c1, dr_c2 = st.columns(2)
-        with dr_c1:
-            st.session_state.conclusion_decided_by = st.text_input(
-                "Decided By", value=st.session_state.conclusion_decided_by,
-                key="conclusion_decided_by_input",
-                placeholder="Name / role of decision maker")
-        with dr_c2:
-            st.session_state.conclusion_decided_date = st.text_input(
-                "Decision Date", value=st.session_state.conclusion_decided_date,
-                key="conclusion_decided_date_input",
-                placeholder="e.g. 2025-03-15")
+    # Derive recommended option from statuses
+    _recommended_fns = [fn_ for fn_, s in _new_statuses.items() if s == "Recommended"]
+    _alternative_fns = [fn_ for fn_, s in _new_statuses.items() if s == "Alternative"]
+    _excluded_fns = [fn_ for fn_, s in _new_statuses.items() if s == "Excluded"]
 
-    with conc_c2:
-        st.markdown(f'<div class="sec-sm">Rationale</div>', unsafe_allow_html=True)
-        st.session_state.conclusion_rationale = st.text_area(
-            "Rationale", value=st.session_state.conclusion_rationale,
-            key="conclusion_rationale_input", height=200, label_visibility="collapsed",
-            placeholder="Explain why this option was selected over alternatives:\n\n- Financial advantage (OP uplift, margin improvement)\n- Strategic fit (capacity, market proximity, risk diversification)\n- NWC impact assessment\n- Key trade-offs and risks accepted\n- Factors that ruled out other options...")
+    # Enforce single recommendation
+    if len(_recommended_fns) > 1:
+        st.markdown(f'<div style="background:#fff8e6;border:1px solid #e6a817;border-left:3px solid #e6a817;padding:0.4rem 0.8rem;margin:0.3rem 0;font-family:Inter,sans-serif;font-size:0.72rem;color:{GREY_TEXT};">Multiple options marked as Recommended — please select only one.</div>', unsafe_allow_html=True)
 
-        # Completeness check
-        conc_complete = bool(
-            st.session_state.conclusion_selected_option
-            and st.session_state.conclusion_decision
-            and st.session_state.conclusion_rationale.strip()
-            and st.session_state.conclusion_decided_by.strip()
-        )
-        if conc_complete:
-            st.markdown(f'''<div style="background:#f0faf3;border:1px solid {GREEN};border-left:3px solid {GREEN};padding:0.5rem 0.8rem;margin:0.4rem 0;font-family:Inter,sans-serif;font-size:0.73rem;color:{GREEN};">
-                Analysis Conclusion complete — ready to proceed to Transfer Feasibility.
-            </div>''', unsafe_allow_html=True)
-        else:
-            missing = []
-            if not st.session_state.conclusion_selected_option: missing.append("Recommended Option")
-            if not st.session_state.conclusion_decision: missing.append("Decision")
-            if not st.session_state.conclusion_rationale.strip(): missing.append("Rationale")
-            if not st.session_state.conclusion_decided_by.strip(): missing.append("Decided By")
-            st.markdown(f'''<div style="background:#fff8e6;border:1px solid #e6a817;border-left:3px solid #e6a817;padding:0.5rem 0.8rem;margin:0.4rem 0;font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};">
-                Incomplete — missing: {", ".join(missing)}
-            </div>''', unsafe_allow_html=True)
+    st.session_state.conclusion_selected_option = _recommended_fns[0] if len(_recommended_fns) == 1 else ""
+
+    # Status summary badges
+    if _recommended_fns or _alternative_fns or _excluded_fns:
+        _badge_parts = []
+        if _recommended_fns:
+            _badge_parts.append(f'<span style="background:{GREEN};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-weight:600;font-size:0.7rem;">{_recommended_fns[0]}</span>')
+        for _afn in _alternative_fns:
+            _badge_parts.append(f'<span style="background:{ACCENT_BLUE};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-weight:600;font-size:0.7rem;">{_afn}</span>')
+        if _excluded_fns:
+            _excl_names = ", ".join(_excluded_fns)
+            _badge_parts.append(f'<span style="background:{MUTED};color:white;padding:0.15rem 0.5rem;border-radius:2px;font-size:0.68rem;">Excluded: {_excl_names}</span>')
+        st.markdown(f'<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin:0.4rem 0 0.6rem 0;font-family:Inter,sans-serif;">{"".join(_badge_parts)}</div>', unsafe_allow_html=True)
+
+    # Rationale
+    st.markdown(f'<div class="sec-sm">Rationale</div>', unsafe_allow_html=True)
+    st.session_state.conclusion_rationale = st.text_area(
+        "Rationale", value=st.session_state.conclusion_rationale,
+        key="conclusion_rationale_input", height=150, label_visibility="collapsed",
+        placeholder="Explain why this option was selected over alternatives:\n\n- Financial advantage (OP uplift, margin improvement)\n- Strategic fit (capacity, market proximity, risk diversification)\n- Why alternatives were kept or excluded...")
+
+    # Completeness check
+    conc_complete = bool(
+        st.session_state.conclusion_selected_option
+        and st.session_state.conclusion_rationale.strip()
+    )
+    if conc_complete:
+        st.markdown(f'''<div style="background:#f0faf3;border:1px solid {GREEN};border-left:3px solid {GREEN};padding:0.5rem 0.8rem;margin:0.4rem 0;font-family:Inter,sans-serif;font-size:0.73rem;color:{GREEN};">
+            Analysis Conclusion complete — ready to proceed to Transfer Feasibility.
+        </div>''', unsafe_allow_html=True)
+    else:
+        missing = []
+        if not st.session_state.conclusion_selected_option: missing.append("Recommended Option (set exactly one)")
+        if not st.session_state.conclusion_rationale.strip(): missing.append("Rationale")
+        st.markdown(f'''<div style="background:#fff8e6;border:1px solid #e6a817;border-left:3px solid #e6a817;padding:0.5rem 0.8rem;margin:0.4rem 0;font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};">
+            Incomplete — missing: {", ".join(missing)}
+        </div>''', unsafe_allow_html=True)
 
     # Footer
     st.markdown(f'<div style="margin-top:1.5rem;padding-top:0.5rem;border-top:1px solid {BORDER};font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};text-align:center;">{data_classification} | {project_name} | Generated by Manufacturing Location Analyzer</div>', unsafe_allow_html=True)
@@ -3773,6 +3811,7 @@ def save_project_json():
         # Analysis Conclusion
         "conclusion_selected_option": st.session_state.get("conclusion_selected_option", ""),
         "conclusion_rationale": st.session_state.get("conclusion_rationale", ""),
+        "conclusion_option_statuses": st.session_state.get("conclusion_option_statuses", {}),
         "conclusion_decision": st.session_state.get("conclusion_decision", ""),
         "conclusion_conditions": st.session_state.get("conclusion_conditions", ""),
         "conclusion_decided_by": st.session_state.get("conclusion_decided_by", ""),
@@ -4700,31 +4739,26 @@ This provides the local risk percentage.</li>
 
         # ── SENDING-SITE IMPACT ────────────────────────────────
         st.markdown(f'<div class="sec">Sending-Site Impact</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Costs incurred at the <strong>sending factory</strong> as a result of the transfer. These are not included in the per-item investment case but feed into the Total Cost of Transfer on the Executive Summary.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Costs incurred at the <strong>sending factory</strong> as a result of the transfer. These are not included in the per-item investment case but feed into the Total Cost of Transfer on the Analysis Summary.</div>', unsafe_allow_html=True)
 
         _ss_costs = st.session_state.sending_site_costs
-        ss_c1, ss_c2, ss_c3 = st.columns(3)
-        with ss_c1:
-            _ss_costs["Asset Write-off / Impairment"] = st.number_input(
-                f"Asset Write-off / Impairment ({currency})",
-                value=_ss_costs.get("Asset Write-off / Impairment", 0.0),
-                min_value=0.0, step=100000.0, format="%,.0f",
-                key="ss_writeoff_input",
-                help="Book value of equipment, tooling, or leasehold improvements that will be written off when production ceases at the sending site")
-        with ss_c2:
-            _ss_costs["Severance / Social Plan"] = st.number_input(
-                f"Severance / Social Plan ({currency})",
-                value=_ss_costs.get("Severance / Social Plan", 0.0),
-                min_value=0.0, step=100000.0, format="%,.0f",
-                key="ss_severance_input",
-                help="Total severance, social plan, early retirement, or outplacement costs for affected employees at the sending site")
-        with ss_c3:
-            _ss_costs["Stranded Overhead"] = st.number_input(
-                f"Stranded Overhead ({currency})",
-                value=_ss_costs.get("Stranded Overhead", 0.0),
-                min_value=0.0, step=100000.0, format="%,.0f",
-                key="ss_stranded_input",
-                help="Fixed costs (rent, management, utilities) that remain at the sending site after volume is transferred but before full wind-down")
+        _ss_df = pd.DataFrame([{
+            f"Asset Write-off ({currency})": float(_ss_costs.get("Asset Write-off / Impairment", 0.0) or 0.0),
+            f"Severance / Social Plan ({currency})": float(_ss_costs.get("Severance / Social Plan", 0.0) or 0.0),
+            f"Stranded Overhead ({currency})": float(_ss_costs.get("Stranded Overhead", 0.0) or 0.0),
+        }])
+        _ss_edited = st.data_editor(
+            _ss_df, use_container_width=True, num_rows="fixed", hide_index=True,
+            key="ss_costs_editor",
+            column_config={
+                f"Asset Write-off ({currency})": st.column_config.NumberColumn(f"Asset Write-off ({currency})", format="%,.0f", min_value=0.0, step=100000.0),
+                f"Severance / Social Plan ({currency})": st.column_config.NumberColumn(f"Severance / Social Plan ({currency})", format="%,.0f", min_value=0.0, step=100000.0),
+                f"Stranded Overhead ({currency})": st.column_config.NumberColumn(f"Stranded Overhead ({currency})", format="%,.0f", min_value=0.0, step=100000.0),
+            },
+        )
+        _ss_costs["Asset Write-off / Impairment"] = float(_ss_edited.iloc[0][f"Asset Write-off ({currency})"] or 0.0)
+        _ss_costs["Severance / Social Plan"] = float(_ss_edited.iloc[0][f"Severance / Social Plan ({currency})"] or 0.0)
+        _ss_costs["Stranded Overhead"] = float(_ss_edited.iloc[0][f"Stranded Overhead ({currency})"] or 0.0)
         st.session_state.sending_site_costs = _ss_costs
 
         _ss_total = sum(_ss_costs.values())
@@ -4736,7 +4770,7 @@ This provides the local risk percentage.</li>
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v10.0 &middot; {st.session_state.project_name} &middot; Required Investments Analysis</span>", unsafe_allow_html=True)
         return
 
-    # ── EXECUTIVE SUMMARY PAGE ────────────────────────────────
+    # ── ANALYSIS SUMMARY PAGE ────────────────────────────────
     if st.session_state.active_page == "executive":
         render_executive_summary_page()
         st.markdown("---")
@@ -5504,10 +5538,8 @@ Compares full cost-to-serve across factory locations, including material, labour
         currency = st.session_state.get("currency", "SEK")
         all_results = st.session_state.get("_all_results", [])
 
-        st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
-            Proposal <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
-        </div>""", unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Decision summary for governance review. Includes structured recommendation, quantified risk exposure, milestone tracking, and formal approval log. Financial figures are auto-populated from the Required Investments analysis where available.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="sec">Proposal — {project_name}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Decision summary for governance review. Financial figures and sourcing map are auto-populated from the analysis. All fields are editable.</div>', unsafe_allow_html=True)
 
         # ── CLASSIFICATION-AWARE CALLOUT (PROPOSAL) ───────────
         _has_restr_prop = False
@@ -5524,19 +5556,197 @@ Compares full cost-to-serve across factory locations, including material, labour
             _c4h = "" if _is_c4_prop else " Consider upgrading from the project header."
             st.markdown(f'<div style="background:#fef9f0;border-left:4px solid {_c4b};padding:0.5rem 1rem;margin:0.2rem 0 0.6rem 0;font-family:Inter,sans-serif;font-size:0.72rem;"><strong style="color:{_c4b};">{_c4l}</strong> — Restructuring or workforce impact detected. Restrict distribution to named recipients.{_c4h}</div>', unsafe_allow_html=True)
 
-        # ── RECOMMENDATION ─────────────────────────────────────
-        st.markdown(f'<div class="sec">Recommendation</div>', unsafe_allow_html=True)
-
-        # Pull conclusion from Analysis Summary if available
+        # ── PROPOSAL SUMMARY HEADER (mirrors Analysis Summary) ──
+        factory_countries = st.session_state.get("_factory_countries", {})
+        target_market = st.session_state.get("target_market", "")
         conclusion_opt = st.session_state.get("conclusion_selected_option", "")
-        conclusion_dec = st.session_state.get("conclusion_decision", "")
+        _opt_statuses = st.session_state.get("conclusion_option_statuses", {})
+        _prop_alt_fns = [fn_ for fn_, s in _opt_statuses.items() if s == "Alternative"]
+
+        # Auto-populate direction from conclusion
         if conclusion_opt and not st.session_state.prop_direction.strip():
             st.session_state.prop_direction = f"Recommended location: {conclusion_opt}"
 
-        # Auto-populate recommendation from conclusion gate
-        rec_options = ["", "Go", "Conditional Go", "No-Go"]
-        if not st.session_state.prop_recommendation and conclusion_dec in rec_options:
-            st.session_state.prop_recommendation = conclusion_dec
+        # Gather factory names
+        _prop_all_fnames = []
+        for _item in all_results:
+            for _r in _item["results"]:
+                if _r["name"] not in _prop_all_fnames:
+                    _prop_all_fnames.append(_r["name"])
+        _prop_base_fn = _prop_all_fnames[0] if _prop_all_fnames else None
+        _prop_rec_fn = conclusion_opt if conclusion_opt else None
+
+        if all_results and _prop_base_fn:
+            # Project metadata strip
+            _prop_n_items = len(all_results)
+            _prop_date = date.today().strftime("%d %B %Y")
+            _alt_label = ", ".join(_prop_alt_fns) if _prop_alt_fns else "—"
+            st.markdown(f'''<div style="display:flex;gap:2rem;flex-wrap:wrap;font-family:Inter,sans-serif;font-size:0.7rem;color:{GREY_TEXT};margin:0.2rem 0 0.6rem 0;padding:0.5rem 0.9rem;background:#fafbfc;border:1px solid {BORDER};border-radius:2px;">
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Project</span><br>{project_name}</div>
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Date</span><br>{_prop_date}</div>
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Currency</span><br>{currency}</div>
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Target Market</span><br>{target_market or "N/A"}</div>
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Current Factory</span><br>{_prop_base_fn}</div>
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Recommended</span><br>{_prop_rec_fn or "—"}</div>
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Alternative{"s" if len(_prop_alt_fns) > 1 else ""}</span><br>{_alt_label}</div>
+                <div><span style="font-weight:600;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;font-size:0.62rem;">Classification</span><br>{data_classification}</div>
+            </div>''', unsafe_allow_html=True)
+
+            # ── Focused map (base + recommended + alternatives + target) ──
+            _pm_lats, _pm_lons, _pm_labels, _pm_hover, _pm_colors, _pm_sizes, _pm_symbols = [], [], [], [], [], [], []
+            if target_market and target_market in _COUNTRY_COORDS:
+                _tla, _tlo = _COUNTRY_COORDS[target_market]
+                _pm_lats.append(_tla); _pm_lons.append(_tlo)
+                _pm_labels.append(target_market); _pm_hover.append(f"Target Market: {target_market}")
+                _pm_colors.append("#e67e22"); _pm_sizes.append(18); _pm_symbols.append("star")
+
+            _base_ctry = factory_countries.get(_prop_base_fn, "")
+            if _base_ctry and _base_ctry in _COUNTRY_COORDS:
+                _bla, _blo = _COUNTRY_COORDS[_base_ctry]
+                _pm_lats.append(_bla); _pm_lons.append(_blo)
+                _pm_labels.append(_prop_base_fn); _pm_hover.append(f"Current: {_prop_base_fn} ({_base_ctry})")
+                _pm_colors.append(NAVY); _pm_sizes.append(16); _pm_symbols.append("circle")
+
+            if _prop_rec_fn and _prop_rec_fn != _prop_base_fn:
+                _rec_ctry = factory_countries.get(_prop_rec_fn, "")
+                if _rec_ctry and _rec_ctry in _COUNTRY_COORDS:
+                    _rla, _rlo = _COUNTRY_COORDS[_rec_ctry]
+                    _pm_lats.append(_rla); _pm_lons.append(_rlo)
+                    _pm_labels.append(_prop_rec_fn); _pm_hover.append(f"Recommended: {_prop_rec_fn} ({_rec_ctry})")
+                    _pm_colors.append(GREEN); _pm_sizes.append(16); _pm_symbols.append("diamond")
+
+            for _afn in _prop_alt_fns:
+                _actry = factory_countries.get(_afn, "")
+                if _actry and _actry in _COUNTRY_COORDS:
+                    _ala, _alo = _COUNTRY_COORDS[_actry]
+                    _pm_lats.append(_ala); _pm_lons.append(_alo)
+                    _pm_labels.append(_afn); _pm_hover.append(f"Alternative: {_afn} ({_actry})")
+                    _pm_colors.append(ACCENT_BLUE); _pm_sizes.append(13); _pm_symbols.append("diamond")
+
+            if len(_pm_lats) >= 2:
+                _fig_pmap = go.Figure()
+                # Current sourcing line
+                if _base_ctry and _base_ctry in _COUNTRY_COORDS and target_market and target_market in _COUNTRY_COORDS:
+                    _bla2, _blo2 = _COUNTRY_COORDS[_base_ctry]
+                    _tla2, _tlo2 = _COUNTRY_COORDS[target_market]
+                    _fig_pmap.add_trace(go.Scattergeo(
+                        lat=[_bla2, _tla2], lon=[_blo2, _tlo2], mode="lines", name="Current sourcing",
+                        line=dict(width=3, color=NAVY, dash="solid"), showlegend=True, hoverinfo="skip"))
+                # Recommended sourcing line
+                if _prop_rec_fn and _prop_rec_fn != _prop_base_fn:
+                    _rec_ctry2 = factory_countries.get(_prop_rec_fn, "")
+                    if _rec_ctry2 and _rec_ctry2 in _COUNTRY_COORDS and target_market and target_market in _COUNTRY_COORDS:
+                        _rla2, _rlo2 = _COUNTRY_COORDS[_rec_ctry2]
+                        _tla3, _tlo3 = _COUNTRY_COORDS[target_market]
+                        _fig_pmap.add_trace(go.Scattergeo(
+                            lat=[_rla2, _tla3], lon=[_rlo2, _tlo3], mode="lines", name=f"Proposed: {_prop_rec_fn}",
+                            line=dict(width=2.5, color=GREEN, dash="solid"), showlegend=True, hoverinfo="skip"))
+                # Alternative sourcing lines (dashed)
+                for _afn in _prop_alt_fns:
+                    _actry2 = factory_countries.get(_afn, "")
+                    if _actry2 and _actry2 in _COUNTRY_COORDS and target_market and target_market in _COUNTRY_COORDS:
+                        _ala2, _alo2 = _COUNTRY_COORDS[_actry2]
+                        _tla4, _tlo4 = _COUNTRY_COORDS[target_market]
+                        _fig_pmap.add_trace(go.Scattergeo(
+                            lat=[_ala2, _tla4], lon=[_alo2, _tlo4], mode="lines", name=f"Alternative: {_afn}",
+                            line=dict(width=1.5, color=ACCENT_BLUE, dash="dot"), showlegend=True, hoverinfo="skip"))
+
+                # Markers with smart positioning
+                _pm_used_pos = []
+                _pm_pos_opts = ["top center", "bottom center", "top right", "bottom right", "top left", "bottom left", "middle right", "middle left"]
+                for _mi in range(len(_pm_lats)):
+                    _best_pos = "top center"
+                    for _pi, _pos in enumerate(_pm_pos_opts):
+                        _conflict = False
+                        for _ula, _ulo, _upos in _pm_used_pos:
+                            if abs(_pm_lats[_mi] - _ula) < 8 and abs(_pm_lons[_mi] - _ulo) < 15 and _pos == _upos:
+                                _conflict = True; break
+                        if not _conflict:
+                            _best_pos = _pos; break
+                    _pm_used_pos.append((_pm_lats[_mi], _pm_lons[_mi], _best_pos))
+                    _fig_pmap.add_trace(go.Scattergeo(
+                        lat=[_pm_lats[_mi]], lon=[_pm_lons[_mi]], mode="markers+text",
+                        text=[_pm_labels[_mi]], customdata=[_pm_hover[_mi]], textposition=_best_pos,
+                        textfont=dict(size=11, family="Inter, sans-serif", color=_pm_colors[_mi], weight="bold"),
+                        marker=dict(size=[_pm_sizes[_mi]], color=[_pm_colors[_mi]], symbol=[_pm_symbols[_mi]],
+                                    line=dict(width=1.5, color="white")),
+                        showlegend=False, hovertemplate="%{customdata}<extra></extra>"))
+
+                _fig_pmap.update_geos(
+                    showcountries=True, countrycolor="#d4d8e0", showcoastlines=True, coastlinecolor="#b0b8c4",
+                    showland=True, landcolor="#f7f8fa", showocean=True, oceancolor="#eaf2fb", showlakes=False,
+                    projection_type="natural earth", lataxis_range=[-55, 75], lonaxis_range=[-140, 170])
+                _fig_pmap.update_layout(
+                    height=350, margin=dict(l=0, r=0, t=30, b=0), paper_bgcolor="white",
+                    font=dict(family="Inter, sans-serif", size=10, color=DARK_TEXT),
+                    legend=dict(orientation="h", yanchor="top", y=-0.02, xanchor="center", x=0.5, font=dict(size=10)),
+                    title=dict(text=f"Proposed Sourcing — {target_market}" if target_market else "Proposed Sourcing",
+                               font=dict(size=11, family="Inter, sans-serif", color=DARK_TEXT), x=0.5))
+                plotly_chart(_fig_pmap)
+
+            # ── Key financial metrics (base vs recommended + alternatives) ──
+            _prop_adj_totals = {fn_: 0.0 for fn_ in _prop_all_fnames}
+            _prop_rev_totals = {fn_: 0.0 for fn_ in _prop_all_fnames}
+            for _item in all_results:
+                for _r in _item["results"]:
+                    _prop_adj_totals[_r["name"]] += _r.get("annual_adj_op", _r["annual_op"])
+                    _prop_rev_totals[_r["name"]] += _r["annual_rev"]
+
+            _base_op_p = _prop_adj_totals.get(_prop_base_fn, 0)
+            _base_rev_p = _prop_rev_totals.get(_prop_base_fn, 0)
+            _base_om_p = _base_op_p / _base_rev_p * 100 if _base_rev_p else 0
+
+            # Build KPI card list: base + recommended + alternatives
+            _kpi_cards = []
+            _kpi_cards.append(("Current (Base Case)", _prop_base_fn, _base_op_p, _base_om_p, None, BASE_CASE_BG, NAVY))
+
+            if _prop_rec_fn and _prop_rec_fn != _prop_base_fn:
+                _rec_op_p = _prop_adj_totals.get(_prop_rec_fn, 0)
+                _rec_rev_p = _prop_rev_totals.get(_prop_rec_fn, 0)
+                _rec_om_p = _rec_op_p / _rec_rev_p * 100 if _rec_rev_p else 0
+                _delta_op_p = _rec_op_p - _base_op_p
+                _kpi_cards.append(("Recommended", _prop_rec_fn, _rec_op_p, _rec_om_p, _delta_op_p, "#fafafa", GREEN))
+
+            for _afn in _prop_alt_fns:
+                _a_op = _prop_adj_totals.get(_afn, 0)
+                _a_rev = _prop_rev_totals.get(_afn, 0)
+                _a_om = _a_op / _a_rev * 100 if _a_rev else 0
+                _a_delta = _a_op - _base_op_p
+                _kpi_cards.append(("Alternative", _afn, _a_op, _a_om, _a_delta, "#fafafa", ACCENT_BLUE))
+
+            _kpi_cols = st.columns(len(_kpi_cards))
+            for _ci, (_lbl, _fn, _op, _om, _delta, _bg, _accent) in enumerate(_kpi_cards):
+                _delta_html = ""
+                _bdr = f"border:1px solid {BORDER};"
+                if _delta is not None:
+                    _d_color = GREEN if _delta > 0 else RED
+                    _d_sign = "+" if _delta > 0 else ""
+                    _delta_html = f'<div style="font-size:0.68rem;color:{_d_color};font-weight:600;margin-top:0.05rem;">{_d_sign}{fi(_delta, acct=True)} vs base | OM {_om:.1f}%</div>'
+                    _bdr = f"border:1px solid {BORDER};border-left:3px solid {_accent};"
+                else:
+                    _delta_html = f'<div style="font-size:0.68rem;color:{MUTED};margin-top:0.05rem;">OM {_om:.1f}%</div>'
+                _kpi_cols[_ci].markdown(f'''<div style="background:{_bg};{_bdr}border-radius:2px;padding:0.7rem 0.9rem;text-align:center;">
+                    <div style="font-size:0.62rem;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:0.15rem;">{_lbl}</div>
+                    <div style="font-size:1.05rem;font-weight:700;color:{DARK_TEXT};">{fi(_op, dz=False)} {currency}</div>
+                    <div style="font-size:0.78rem;font-weight:600;color:{DARK_TEXT};margin-top:0.1rem;">{_fn}</div>
+                    {_delta_html}
+                </div>''', unsafe_allow_html=True)
+
+            # ── Alternatives callout ──────────────────────────────
+            if _prop_alt_fns and _prop_rec_fn:
+                _alt_summary_parts = []
+                for _afn in _prop_alt_fns:
+                    _a_op = _prop_adj_totals.get(_afn, 0)
+                    _a_om = _a_op / _prop_rev_totals.get(_afn, 1) * 100 if _prop_rev_totals.get(_afn, 0) else 0
+                    _a_delta = _a_op - _base_op_p
+                    _alt_summary_parts.append(f"<strong>{_afn}</strong> ({fi(_a_op, dz=False)} {currency}, OM {_a_om:.1f}%)")
+                st.markdown(f'''<div style="background:#f8f9fb;border:1px solid {BORDER};border-left:3px solid {ACCENT_BLUE};padding:0.6rem 0.9rem;margin:0.5rem 0 0.8rem 0;font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};line-height:1.5;">
+                    <span style="font-weight:700;color:{NAVY};font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;">Fallback Option{"s" if len(_prop_alt_fns) > 1 else ""}</span><br>
+                    If {_prop_rec_fn} is not feasible, {" or ".join(_alt_summary_parts)} {"remain" if len(_prop_alt_fns) > 1 else "remains"} viable and could be explored as {"alternatives" if len(_prop_alt_fns) > 1 else "an alternative"}.
+                </div>''', unsafe_allow_html=True)
+
+        # ── RECOMMENDATION ─────────────────────────────────────
+        st.markdown(f'<div class="sec">Recommendation</div>', unsafe_allow_html=True)
 
         # Auto-calculate financials
         auto_inv = 0.0
@@ -5547,7 +5757,7 @@ Compares full cost-to-serve across factory locations, including material, labour
         _ss_prop = st.session_state.get("sending_site_costs", {})
         auto_inv += sum(v for v in _ss_prop.values() if isinstance(v, (int, float)))
         auto_inv_m = auto_inv / 1e6 if auto_inv else 0.0
-        if st.session_state.prop_total_investment is None and auto_inv_m:
+        if not st.session_state.prop_total_investment and auto_inv_m:
             st.session_state.prop_total_investment = auto_inv_m
         _inv_val = st.session_state.prop_total_investment or 0.0
         _it_val = st.session_state.prop_internal_transfer or 0.0
@@ -5580,23 +5790,6 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.session_state.prop_timeplan = str(_r1_edited.iloc[0]["Time Plan"] or "")
         recommendation = st.session_state.prop_recommendation
 
-        # Auto-calc hint
-        if auto_inv_m > 0 or _it_val > 0:
-            _hints = []
-            if auto_inv_m > 0:
-                _hints.append(f"Investment auto-calculated: {auto_inv_m:.1f} M{currency}")
-            if _it_val > 0:
-                _hints.append(f"Net Cash Out = {st.session_state.prop_total_investment:.1f} \u2212 {_it_val:.1f}")
-            st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};font-style:italic;margin-top:-0.6rem;">{" · ".join(_hints)}</div>', unsafe_allow_html=True)
-
-        # Verdict badge
-        if recommendation:
-            rec_colors = {"Go": GREEN, "Conditional Go": "#e6a817", "No-Go": RED}
-            rec_icons = {"Go": "\u2714", "Conditional Go": "\u26a0", "No-Go": "\u2716"}
-            _rc = rec_colors.get(recommendation, NAVY)
-            _ri = rec_icons.get(recommendation, "")
-            st.markdown(f'<div style="display:inline-block;font-family:Inter,sans-serif;font-size:0.72rem;font-weight:700;color:{_rc};background:{_rc}14;border-radius:4px;padding:3px 12px;">{_ri} {recommendation}</div>', unsafe_allow_html=True)
-
         # ── Row 2: Direction, Benefits, Conditions (single-row data_editor)
         _r2_data = {
             "Direction": st.session_state.prop_direction,
@@ -5620,6 +5813,19 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.session_state.prop_benefits = str(_r2_edited.iloc[0]["Benefits & Key Details"] or "")
         if recommendation == "Conditional Go":
             st.session_state.prop_conditions = str(_r2_edited.iloc[0].get("Conditions", "") or "")
+
+        # Decision record
+        _dec_c1, _dec_c2 = st.columns(2)
+        with _dec_c1:
+            st.session_state.conclusion_decided_by = st.text_input(
+                "Decided By", value=st.session_state.conclusion_decided_by,
+                key="prop_decided_by_input",
+                placeholder="Name / role of decision maker")
+        with _dec_c2:
+            st.session_state.conclusion_decided_date = st.text_input(
+                "Decision Date", value=st.session_state.conclusion_decided_date,
+                key="prop_decided_date_input",
+                placeholder="e.g. 2025-03-15")
 
         # ── QUANTIFIED RISK EXPOSURE ───────────────────────────
         st.markdown(f'<div class="sec">Risk Exposure</div>', unsafe_allow_html=True)
@@ -5857,6 +6063,7 @@ Compares full cost-to-serve across factory locations, including material, labour
         # ── PROPOSAL COMPLETENESS ──────────────────────────────
         prop_fields = {
             "Recommendation": bool(st.session_state.prop_recommendation),
+            "Decided By": bool(st.session_state.conclusion_decided_by.strip()),
             "Direction": bool(st.session_state.prop_direction.strip()),
             "Benefits": bool(st.session_state.prop_benefits.strip()),
             "Total Investment": bool(st.session_state.prop_total_investment and st.session_state.prop_total_investment > 0),
@@ -6096,6 +6303,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                                    "td_customer_requalification", "td_tax_transfer_pricing",
                                    "td_esg", "td_steady_state",
                                    "fx_exposures", "scenario_comparison",
+                                   "conclusion_option_statuses",
                                    "actuals_vs_plan", "version_history"):
                         if gk_obj in proj:
                             st.session_state[gk_obj] = proj[gk_obj]
