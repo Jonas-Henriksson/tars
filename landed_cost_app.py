@@ -1731,7 +1731,8 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
         st.markdown(cagr_html, unsafe_allow_html=True)
 
     # Base costs (per unit)
-    st.markdown('<div class="sec-sm">Base Costs (Per Unit)</div>', unsafe_allow_html=True)
+    _base_fn_display = base_factory_name_shared or "Base Factory"
+    st.markdown(f'<div class="sec-sm">Base Costs (Per Unit) — {_base_fn_display}</div>', unsafe_allow_html=True)
 
     bc_data = {
         "Field": ["Material", "Variable VA", "Fixed VA"],
@@ -1741,9 +1742,9 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
             ex_item["fixed_va"] if ex_item else 0.0,
         ],
         "Guide": [
-            "Direct material cost per unit at base case",
-            "Variable VA cost per unit at base case",
-            "Fixed VA cost per unit at base case",
+            f"Direct material cost per unit at {_base_fn_display}",
+            f"Variable VA cost per unit at {_base_fn_display}",
+            f"Fixed VA cost per unit at {_base_fn_display}",
         ]
     }
     bc_df = pd.DataFrame(bc_data).set_index("Field")
