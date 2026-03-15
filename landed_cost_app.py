@@ -271,7 +271,7 @@ st.markdown(f"""
         color: {GREY_TEXT}; background: #fafbfc; margin: 0.5rem 0; line-height: 1.4; }}
     .callout strong {{ color: {DARK_TEXT}; }}
 
-    /* ── Executive Summary ── */
+    /* ── Analysis Summary ── */
     .exec-summary {{ background: #f8f9fb; border: 1px solid {BORDER}; border-left: 4px solid {NAVY};
         padding: 0.8rem 1.1rem; margin: 0.6rem 0; font-size: 0.76rem; line-height: 1.55;
         font-family: 'Inter', sans-serif; color: {DARK_TEXT}; }}
@@ -753,7 +753,7 @@ def build_tornado_chart(inputs, factory, is_base, ccy, overrides=None):
     return fig
 
 
-# ── EXECUTIVE SUMMARY NARRATIVE ──────────────────────────────
+# ── ANALYSIS SUMMARY NARRATIVE ──────────────────────────────
 def build_qualitative_summary(qualitative):
     """Build HTML block for qualitative strategic context."""
     if not qualitative:
@@ -820,7 +820,7 @@ def build_exec_summary(results, inputs, ccy):
             nwc_str = f' Lead time differential of {delta_lt:+d} days has negligible NWC impact at current cost of capital.'
 
     return f"""<div class="exec-summary">
-<div class="es-title">Executive Summary</div>
+<div class="es-title">Analysis Summary</div>
 For {item_desc}, {verdict}{annual_str}.{nwc_str}
 Analysis covers {len(results)} manufacturing location{"s" if len(results)>1 else ""} with {ccy} reporting.
 </div>"""
@@ -2900,9 +2900,9 @@ _COUNTRY_COORDS: dict[str, tuple[float, float]] = {
 }
 
 
-# ── EXECUTIVE SUMMARY PAGE ────────────────────────────────────
+# ── ANALYSIS SUMMARY PAGE ────────────────────────────────────
 def render_executive_summary_page():
-    """Render the Executive Summary page — a CEO-level overview of the full case."""
+    """Render the Analysis Summary page — a CEO-level overview of the full case."""
     all_results = st.session_state.get("_all_results", [])
     company_wacc = st.session_state.get("_company_wacc", 0.08)
     target_payback = st.session_state.get("target_payback", 3)
@@ -2918,7 +2918,7 @@ def render_executive_summary_page():
         st.markdown('<div class="callout" style="font-size:0.76rem;">No analysis results available yet. Open <strong>Landed Cost Analysis</strong> first to configure the project and compute results.</div>', unsafe_allow_html=True)
         return
 
-    st.markdown(f'<div class="sec">Executive Summary — {project_name}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sec">Analysis Summary — {project_name}</div>', unsafe_allow_html=True)
 
     # IB-style project metadata strip
     n_items = len(all_results)
@@ -4703,7 +4703,7 @@ This provides the local risk percentage.</li>
 
         # ── SENDING-SITE IMPACT ────────────────────────────────
         st.markdown(f'<div class="sec">Sending-Site Impact</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Costs incurred at the <strong>sending factory</strong> as a result of the transfer. These are not included in the per-item investment case but feed into the Total Cost of Transfer on the Executive Summary.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Costs incurred at the <strong>sending factory</strong> as a result of the transfer. These are not included in the per-item investment case but feed into the Total Cost of Transfer on the Analysis Summary.</div>', unsafe_allow_html=True)
 
         _ss_costs = st.session_state.sending_site_costs
         _ss_df = pd.DataFrame([{
@@ -4734,7 +4734,7 @@ This provides the local risk percentage.</li>
         st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v10.0 &middot; {st.session_state.project_name} &middot; Required Investments Analysis</span>", unsafe_allow_html=True)
         return
 
-    # ── EXECUTIVE SUMMARY PAGE ────────────────────────────────
+    # ── ANALYSIS SUMMARY PAGE ────────────────────────────────
     if st.session_state.active_page == "executive":
         render_executive_summary_page()
         st.markdown("---")
