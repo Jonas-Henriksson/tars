@@ -3896,111 +3896,6 @@ Compares full cost-to-serve across factory locations, including material, labour
             "Financial Requirements": f"background:#A9C0E8;color:{DARK_TEXT};",
         }
 
-        # Compact table CSS — page-level overrides for dense table feel
-        # These apply globally but only render on the Transfer Details page
-        st.markdown(f"""<style>
-        /* ── Transfer Details compact overrides ── */
-        /* Nuclear option: kill ALL spacing in the main block */
-        .stMainBlockContainer [data-testid="stVerticalBlockBorderWrapper"] {{
-            gap: 0 !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer [data-testid="stVerticalBlock"] {{
-            gap: 0 !important;
-        }}
-        .stMainBlockContainer [data-testid="column"] {{
-            padding: 0 !important;
-        }}
-        .stMainBlockContainer [data-testid="column"] > div {{
-            gap: 0 !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer [data-testid="stHorizontalBlock"] {{
-            gap: 0.25rem !important; align-items: center !important;
-            margin-top: 0.1rem !important; margin-bottom: 0.1rem !important;
-        }}
-        /* Kill every wrapper margin/padding */
-        .stMainBlockContainer .element-container {{
-            margin: 0 !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer .stMarkdown {{
-            margin: 0 !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer .stMarkdown p {{
-            margin: 0 !important;
-        }}
-        .stMainBlockContainer .stTextInput,
-        .stMainBlockContainer .stSelectbox,
-        .stMainBlockContainer .stDateInput {{
-            margin: 0 !important; padding: 0 !important;
-        }}
-        /* Text inputs — 1.4rem height */
-        .stMainBlockContainer .stTextInput > div {{
-            padding: 0 !important;
-        }}
-        .stMainBlockContainer .stTextInput > div > div {{
-            padding: 0 !important; min-height: 0 !important;
-        }}
-        .stMainBlockContainer .stTextInput > div > div > input {{
-            font-size: 0.68rem !important; padding: 0.1rem 0.3rem !important;
-            height: 1.4rem !important; min-height: 0 !important;
-            font-family: 'Inter', sans-serif !important; border-radius: 2px !important;
-        }}
-        /* Selectboxes — compact with centered text */
-        .stMainBlockContainer .stSelectbox > div {{
-            padding: 0 !important;
-        }}
-        .stMainBlockContainer .stSelectbox > div > div {{
-            min-height: 0 !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer .stSelectbox [data-baseweb="select"] {{
-            height: 1.4rem !important; min-height: 0 !important;
-        }}
-        .stMainBlockContainer .stSelectbox [data-baseweb="select"] > div {{
-            padding: 0 0.25rem !important; min-height: 0 !important;
-            height: 1.4rem !important; line-height: 1.4rem !important;
-        }}
-        .stMainBlockContainer .stSelectbox [data-baseweb="select"] > div > div {{
-            padding: 0 !important; font-size: 0.68rem !important;
-            font-family: 'Inter', sans-serif !important;
-            line-height: 1.4rem !important;
-        }}
-        .stMainBlockContainer .stSelectbox svg {{
-            width: 0.5rem !important; height: 0.5rem !important;
-            right: 0.2rem !important;
-        }}
-        /* Date inputs — compact with small placeholder */
-        .stMainBlockContainer .stDateInput > div {{
-            padding: 0 !important;
-        }}
-        .stMainBlockContainer .stDateInput > div > div {{
-            min-height: 0 !important; height: 1.4rem !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer .stDateInput [data-baseweb="input"] {{
-            height: 1.4rem !important; min-height: 0 !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer .stDateInput [data-baseweb="input"] > div {{
-            padding: 0 0.25rem !important;
-        }}
-        .stMainBlockContainer .stDateInput input {{
-            font-size: 0.68rem !important; padding: 0 !important;
-            height: 1.4rem !important; min-height: 0 !important;
-            font-family: 'Inter', sans-serif !important;
-        }}
-        .stMainBlockContainer .stDateInput input::placeholder {{
-            font-size: 0.58rem !important; color: #bbb !important;
-            letter-spacing: 0.02em !important;
-        }}
-        .stMainBlockContainer .stDateInput button {{
-            height: 1.4rem !important; width: 1.2rem !important; padding: 0 !important;
-        }}
-        .stMainBlockContainer .stDateInput button svg {{
-            width: 0.5rem !important; height: 0.5rem !important;
-        }}
-        /* Expander compact */
-        .stMainBlockContainer details summary {{
-            font-size: 0.72rem !important; padding: 0.3rem 0.5rem !important;
-        }}
-        </style>""", unsafe_allow_html=True)
-
         # Migrate old data format if needed
         for _sec_name, _sec_rows in td_reqs.items():
             for _row in _sec_rows:
@@ -4011,83 +3906,76 @@ Compares full cost-to-serve across factory locations, including material, labour
                 _row.pop("Required Documents", None)
                 if "Input Type" not in _row:
                     _row["Input Type"] = "yes_no" if "(yes/no)" in _row.get("Requirement", "") else "text"
-                # Migrate (Q) → (Quantity)
                 for _fld in ("Requirement", "Follow-up"):
                     if _fld in _row:
                         _row[_fld] = _row[_fld].replace("(Q)", "(Quantity)")
 
-        # Column header row
-        _hdr_style = f"font-family:Inter,sans-serif;font-size:0.58rem;font-weight:700;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;padding-bottom:0.2rem;"
-        hc1, hc2, hc3, hc4, hc5 = st.columns([3.5, 2, 1.5, 1.2, 1])
-        hc1.markdown(f"<div style='{_hdr_style}'>Requirement</div>", unsafe_allow_html=True)
-        hc2.markdown(f"<div style='{_hdr_style}'>Value / Answer</div>", unsafe_allow_html=True)
-        hc3.markdown(f"<div style='{_hdr_style}'>Approver</div>", unsafe_allow_html=True)
-        hc4.markdown(f"<div style='{_hdr_style}'>Date</div>", unsafe_allow_html=True)
-        hc5.markdown(f"<div style='{_hdr_style}'>Status</div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='border-bottom:2px solid {NAVY};margin:0 0 0.2rem 0;'></div>", unsafe_allow_html=True)
-
-        _yn_opts = ["—", "Yes", "No"]
-
+        # Build a flat table per section for data_editor, then handle follow-ups separately
         for section_name, rows in td_reqs.items():
             style = _section_styles.get(section_name, f"background:{NAVY};color:#fff;")
-            st.markdown(f"""<div style="{style}padding:0.25rem 0.6rem;border-radius:2px 2px 0 0;margin-top:0.5rem;margin-bottom:0.15rem;font-family:Inter,sans-serif;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+            st.markdown(f"""<div style="{style}padding:0.25rem 0.6rem;border-radius:2px 2px 0 0;margin-top:0.5rem;font-family:Inter,sans-serif;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
                 {section_name}
             </div>""", unsafe_allow_html=True)
 
-            for ri, row in enumerate(rows):
-                sec_key = section_name.lower().replace(" ", "_").replace("&", "and")
-                req_label = row["Requirement"]
+            # Build display rows: main requirement + stacked follow-up label
+            display_rows = []
+            for row in rows:
+                req = row["Requirement"]
                 follow_up = row.get("Follow-up", "")
                 condition = row.get("Condition", "")
-                input_type = row.get("Input Type", "text")
+                # Append follow-up label to requirement text
+                if follow_up and condition != "if_no":
+                    req_display = f"{req}\n↳ {follow_up}"
+                else:
+                    req_display = req
+                display_rows.append({
+                    "Requirement": req_display,
+                    "Value": row.get("Value", ""),
+                    "Approver": row.get("Approver", ""),
+                    "Date": row.get("Date", ""),
+                    "Status": row.get("Status", "Pending"),
+                })
 
-                # Main question row
-                c_req, c_val, c_approver, c_date, c_status = st.columns([3.5, 2, 1.5, 1.2, 1])
-                with c_req:
-                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.68rem;color:{DARK_TEXT};padding:0.1rem 0;line-height:1.25;'>{req_label}</div>", unsafe_allow_html=True)
-                with c_val:
-                    if input_type == "yes_no":
-                        _cur_val = row.get("Value", "")
-                        _yi = _yn_opts.index(_cur_val) if _cur_val in _yn_opts else 0
-                        row["Value"] = st.selectbox("val", _yn_opts, index=_yi, key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed")
-                    else:
-                        row["Value"] = st.text_input("val", value=row.get("Value", ""), key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed")
-                with c_approver:
-                    row["Approver"] = st.text_input("apr", value=row.get("Approver", ""), key=f"td_{sec_key}_{ri}_apr", label_visibility="collapsed")
-                with c_date:
-                    _cur_date = row.get("Date", "")
-                    _date_val = None
-                    if _cur_date:
-                        try:
-                            from datetime import datetime as _dt
-                            _date_val = _dt.strptime(_cur_date, "%Y-%m-%d").date()
-                        except (ValueError, TypeError):
-                            _date_val = None
-                    _picked = st.date_input("dt", value=_date_val, key=f"td_{sec_key}_{ri}_dt", label_visibility="collapsed")
-                    row["Date"] = _picked.strftime("%Y-%m-%d") if _picked else ""
-                with c_status:
-                    _status_opts = ["Pending", "Approved", "Rejected"]
-                    _cur_status = row.get("Status", "Pending")
-                    _si = _status_opts.index(_cur_status) if _cur_status in _status_opts else 0
-                    row["Status"] = st.selectbox("st", _status_opts, index=_si, key=f"td_{sec_key}_{ri}_st", label_visibility="collapsed")
+            sec_key = section_name.lower().replace(" ", "_").replace("&", "and")
+            section_df = pd.DataFrame(display_rows)
 
-                # Follow-up question (stacked below, with conditional logic for "if_no")
-                if follow_up:
-                    show_follow_up = True
-                    if condition == "if_no":
-                        main_val = (row.get("Value", "") or "").strip().lower()
-                        show_follow_up = main_val in ("no", "n")
+            # Determine which rows are yes/no type for the Value column
+            yn_rows = [i for i, r in enumerate(rows) if r.get("Input Type") == "yes_no"]
 
-                    if show_follow_up:
-                        c_fq, c_fa, _, _, _ = st.columns([3.5, 2, 1.5, 1.2, 1])
-                        with c_fq:
-                            _prefix = "If no: " if condition == "if_no" else ""
-                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.62rem;color:{GREY_TEXT};padding:0 0 0.05rem 0.8rem;font-style:italic;line-height:1.2;'>↳ {_prefix}{follow_up}</div>", unsafe_allow_html=True)
-                        with c_fa:
-                            row["Follow-up Answer"] = st.text_input("fua", value=row.get("Follow-up Answer", ""), key=f"td_{sec_key}_{ri}_fua", label_visibility="collapsed")
+            edited = st.data_editor(
+                section_df, use_container_width=True, num_rows="fixed",
+                key=f"td_{sec_key}_editor", hide_index=True,
+                column_config={
+                    "Requirement": st.column_config.TextColumn("Requirement", disabled=True, width=280),
+                    "Value": st.column_config.TextColumn("Value / Answer", width=140),
+                    "Approver": st.column_config.TextColumn("Approver", width=120),
+                    "Date": st.column_config.TextColumn("Date", width=90),
+                    "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "Approved", "Rejected"], width=90),
+                },
+                disabled=["Requirement"])
 
-                # Thin separator
-                st.markdown(f"<div style='border-bottom:1px solid #eee;margin:0;'></div>", unsafe_allow_html=True)
+            # Write back edited values
+            edited_records = edited.to_dict("records")
+            for i, rec in enumerate(edited_records):
+                rows[i]["Value"] = rec.get("Value", "")
+                rows[i]["Approver"] = rec.get("Approver", "")
+                rows[i]["Date"] = rec.get("Date", "")
+                rows[i]["Status"] = rec.get("Status", "Pending")
+
+            # Render conditional follow-up inputs (only for "if_no" rows where answer is No)
+            for ri, row in enumerate(rows):
+                condition = row.get("Condition", "")
+                follow_up = row.get("Follow-up", "")
+                if condition == "if_no" and follow_up:
+                    main_val = (row.get("Value", "") or "").strip().lower()
+                    if main_val in ("no", "n"):
+                        c1, c2 = st.columns([3.5, 6.5])
+                        with c1:
+                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};padding:0.15rem 0 0.15rem 1rem;font-style:italic;'>↳ If no: {follow_up}</div>", unsafe_allow_html=True)
+                        with c2:
+                            row["Follow-up Answer"] = st.text_input(
+                                "fua", value=row.get("Follow-up Answer", ""),
+                                key=f"td_{sec_key}_{ri}_fua", label_visibility="collapsed")
 
         st.session_state.td_requirements = td_reqs
 
