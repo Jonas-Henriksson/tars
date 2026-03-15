@@ -5467,35 +5467,42 @@ Compares full cost-to-serve across factory locations, including material, labour
             _ss = {"ramp_100_months": 0, "dual_sourcing_months": 0, "dual_sourcing_cost": 0.0, "quality_target": "", "yield_target": "", "notes": ""}
 
         _fin_currency_ss = st.session_state.get("currency", "SEK")
-        ss_c1, ss_c2 = st.columns(2)
-        with ss_c1:
-            _ss["ramp_100_months"] = st.number_input(
-                "Months to 100% volume ramp", value=int(_ss.get("ramp_100_months", 0)),
-                min_value=0, step=1, key="td_ss_ramp",
-                help="Expected number of months from execution start until the receiving site reaches full production volume")
-        with ss_c2:
-            _ss["dual_sourcing_months"] = st.number_input(
-                "Months of dual-sourcing", value=int(_ss.get("dual_sourcing_months", 0)),
-                min_value=0, step=1, key="td_ss_dual_months",
-                help="Duration where both sending and receiving sites produce in parallel to ensure supply continuity")
-        _ss["dual_sourcing_cost"] = st.number_input(
-            f"Estimated dual-sourcing cost ({_fin_currency_ss})", value=float(_ss.get("dual_sourcing_cost", 0.0)),
-            min_value=0.0, step=100000.0, format="%.0f", key="td_ss_dual_cost",
-            help="Additional cost of running both sites in parallel — typically includes duplicate overhead, logistics, quality monitoring, and yield loss at the new site. This feeds into the Total Cost of Transfer.")
-        ss_q1, ss_q2 = st.columns(2)
-        with ss_q1:
-            _ss["quality_target"] = st.text_input(
-                "Quality Target", value=_ss.get("quality_target", ""), key="td_ss_quality",
-                placeholder="e.g. PPM < 50, Cpk > 1.33, zero customer complaints",
-                help="Define specific, measurable quality KPIs the receiving site must meet before the sending site can be decommissioned")
-        with ss_q2:
-            _ss["yield_target"] = st.text_input(
-                "Yield Target", value=_ss.get("yield_target", ""), key="td_ss_yield",
-                placeholder="e.g. 95% first-pass yield by month 6",
-                help="First-pass yield = percentage of units produced correctly without rework. Target should match or exceed the sending site's current yield")
-        _ss["notes"] = st.text_area(
-            "Ramp-up Notes", value=_ss.get("notes", ""), key="td_ss_notes", height=60,
-            placeholder="Key assumptions, critical path items, dependencies on equipment delivery or customer approval...")
+
+        # Row 1: Ramp-up timeline & costs
+        _ss_r1_df = pd.DataFrame([{
+            "Months to 100% Volume": int(_ss.get("ramp_100_months", 0)),
+            "Months Dual-Sourcing": int(_ss.get("dual_sourcing_months", 0)),
+            f"Dual-Sourcing Cost ({_fin_currency_ss})": float(_ss.get("dual_sourcing_cost", 0.0)),
+        }])
+        _ss_r1_edited = st.data_editor(
+            _ss_r1_df, use_container_width=True, num_rows="fixed", hide_index=True,
+            key="td_ss_row1",
+            column_config={
+                "Months to 100% Volume": st.column_config.NumberColumn("Months to 100% Volume", min_value=0, step=1, format="%d", width=180),
+                "Months Dual-Sourcing": st.column_config.NumberColumn("Months Dual-Sourcing", min_value=0, step=1, format="%d", width=180),
+                f"Dual-Sourcing Cost ({_fin_currency_ss})": st.column_config.NumberColumn(f"Dual-Sourcing Cost ({_fin_currency_ss})", format="%,.0f", min_value=0.0, step=100000.0, width=200),
+            })
+        _ss["ramp_100_months"] = int(_ss_r1_edited.iloc[0]["Months to 100% Volume"] or 0)
+        _ss["dual_sourcing_months"] = int(_ss_r1_edited.iloc[0]["Months Dual-Sourcing"] or 0)
+        _ss["dual_sourcing_cost"] = float(_ss_r1_edited.iloc[0][f"Dual-Sourcing Cost ({_fin_currency_ss})"] or 0.0)
+
+        # Row 2: Quality & yield targets + notes
+        _ss_r2_df = pd.DataFrame([{
+            "Quality Target": _ss.get("quality_target", ""),
+            "Yield Target": _ss.get("yield_target", ""),
+            "Ramp-up Notes": _ss.get("notes", ""),
+        }])
+        _ss_r2_edited = st.data_editor(
+            _ss_r2_df, use_container_width=True, num_rows="fixed", hide_index=True,
+            key="td_ss_row2",
+            column_config={
+                "Quality Target": st.column_config.TextColumn("Quality Target", width=240),
+                "Yield Target": st.column_config.TextColumn("Yield Target", width=240),
+                "Ramp-up Notes": st.column_config.TextColumn("Ramp-up Notes", width=300),
+            })
+        _ss["quality_target"] = str(_ss_r2_edited.iloc[0]["Quality Target"] or "")
+        _ss["yield_target"] = str(_ss_r2_edited.iloc[0]["Yield Target"] or "")
+        _ss["notes"] = str(_ss_r2_edited.iloc[0]["Ramp-up Notes"] or "")
         st.session_state.td_steady_state = _ss
 
         # ── TRANSFER FEASIBILITY COMPLETENESS ──────────────────
