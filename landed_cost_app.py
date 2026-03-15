@@ -5714,7 +5714,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                 "Phase": st.column_config.TextColumn("Phase", width=160),
                 "Description": st.column_config.TextColumn("Key Activities", width=210),
                 "Go/No-Go Criteria": st.column_config.TextColumn("Go/No-Go Criteria", width=210),
-                "Duration": st.column_config.TextColumn("Duration", width=90),
+                "Duration": st.column_config.TextColumn("Duration (months)", width=110),
                 "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "In Progress", "Complete", "At Risk", "Blocked"], width=110),
             })
         st.session_state.prop_impl_phases = edited_impl.to_dict("records")
