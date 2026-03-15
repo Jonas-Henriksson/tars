@@ -1802,6 +1802,7 @@ _TD_SUPPLY_REQS = [
 _TD_FINANCIAL_REQS = [
     ("Business case for both units in place", "Expected investment (Both units, MSEK)"),
     ("Payback period (Both units, Years)", "Expected total IRR (Both units, %)"),
+    ("NWC impact assessed (yes/no)", "Expected delta NWC vs. base (MSEK)"),
 ]
 
 
