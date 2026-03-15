@@ -51,9 +51,8 @@ INPUT_EDITOR_KEYS = [
     "fc_editor", "country_editor", "assumption_matrix", "nwc_matrix",
     "wacc_editor", "target_pb_editor", "target_om_editor", "coc_editor",
     # Governance template inputs
-    "ps_dep_editor", "ps_timeline_editor",
+    "ps_dep_editor",
     "prop_risks_editor", "prop_fin_editor",
-    "td_base_editor", "td_commercial_editor", "td_supply_editor", "td_financial_editor",
     # Analysis Conclusion & Proposal enhancements
     "prop_rexp_editor", "prop_milestones_editor", "prop_approvals_editor",
     "prop_impl_editor", "prop_comm_editor",
@@ -2084,11 +2083,6 @@ _TD_SUPPLY_REQS = [
     ("Aligned with Global product line manager", "yes_no", "Comment", None),
     ("Established supply chain", "yes_no", "Approved plan to establish supply?", "if_no"),
 ]
-_TD_FINANCIAL_REQS = [
-    ("Business case for both units in place", "yes_no", "Expected investment (Both units, MSEK)", None),
-    ("Payback period (Both units, Years)", "text", "Expected total IRR (Both units, %)", None),
-    ("NWC impact assessed", "yes_no", "Expected delta NWC vs. base (MSEK)", None),
-]
 
 
 def _default_td_requirements():
@@ -2097,7 +2091,6 @@ def _default_td_requirements():
         "Base Requirements": _TD_BASE_REQS,
         "Commercial Requirements": _TD_COMMERCIAL_REQS,
         "Product Line & Supply Chain Requirements": _TD_SUPPLY_REQS,
-        "Financial Requirements": _TD_FINANCIAL_REQS,
     }
     result = {}
     for section, rows in sections.items():
@@ -2151,7 +2144,15 @@ def init_state():
     if "prop_risk_exposure" not in st.session_state:
         st.session_state.prop_risk_exposure = [{"Risk": "", "Probability": "Medium", "Impact (M)": 0.0, "Mitigation": ""}]
     if "prop_milestones" not in st.session_state:
-        st.session_state.prop_milestones = [{"Milestone": "", "Owner": "", "Target Date": "", "Status": "Pending"}]
+        st.session_state.prop_milestones = [
+            {"Milestone": "Pre-study approved", "Owner": "", "Target Date": "", "Status": "Pending"},
+            {"Milestone": "Supplier qualification complete", "Owner": "", "Target Date": "", "Status": "Pending"},
+            {"Milestone": "Equipment installed & validated", "Owner": "", "Target Date": "", "Status": "Pending"},
+            {"Milestone": "Pilot production run", "Owner": "", "Target Date": "", "Status": "Pending"},
+            {"Milestone": "Customer approval obtained", "Owner": "", "Target Date": "", "Status": "Pending"},
+            {"Milestone": "Full volume ramp-up", "Owner": "", "Target Date": "", "Status": "Pending"},
+            {"Milestone": "Sending site decommissioned", "Owner": "", "Target Date": "", "Status": "Pending"},
+        ]
     if "prop_approvals" not in st.session_state:
         st.session_state.prop_approvals = [{"Approver": "", "Role": "", "Decision": "", "Date": "", "Comments": ""}]
     # ── PRE-STUDY FACTORY SCOPING ────────────────────────────
@@ -2189,9 +2190,22 @@ def init_state():
         st.session_state.ps_team = ""
     if "ps_timeline" not in st.session_state:
         st.session_state.ps_timeline = {
-            "Pre-study Finalized": "", "Pre-study to FC": "",
-            "IRE Submission": "", "IRE to IC": "", "Project Execution Start": "",
+            "Pre-study Finalized": "", "Decision": "",
+            "Preliminary Execution Start": "",
         }
+    else:
+        # Migrate legacy keys
+        _tl = st.session_state.ps_timeline
+        _migrated = False
+        if "Pre-study to FC" in _tl and "Decision" not in _tl:
+            _tl["Decision"] = _tl.pop("Pre-study to FC"); _migrated = True
+        if "Project Execution Start" in _tl and "Preliminary Execution Start" not in _tl:
+            _tl["Preliminary Execution Start"] = _tl.pop("Project Execution Start"); _migrated = True
+        for _old_key in ("IRE Submission", "IRE to IC"):
+            if _old_key in _tl:
+                _tl.pop(_old_key); _migrated = True
+        if _migrated:
+            st.session_state.ps_timeline = _tl
     # ── PRE-STUDY WORKFORCE IMPACT ────────────────────────────
     if "ps_workforce_headcount_from" not in st.session_state:
         st.session_state.ps_workforce_headcount_from = 0
@@ -2220,6 +2234,13 @@ def init_state():
         st.session_state.prop_workforce_timeline = ""
     if "prop_workforce_notes" not in st.session_state:
         st.session_state.prop_workforce_notes = ""
+    # ── SENDING-SITE IMPACT ──────────────────────────────────
+    if "sending_site_costs" not in st.session_state:
+        st.session_state.sending_site_costs = {
+            "Asset Write-off / Impairment": 0.0,
+            "Severance / Social Plan": 0.0,
+            "Stranded Overhead": 0.0,
+        }
     # ── PROPOSAL COMMUNICATION PLAN ───────────────────────────
     if "prop_comm_plan" not in st.session_state:
         st.session_state.prop_comm_plan = [
@@ -2231,6 +2252,8 @@ def init_state():
         st.session_state.prop_benefits = ""
     if "prop_total_investment" not in st.session_state:
         st.session_state.prop_total_investment = None
+    if "prop_internal_transfer" not in st.session_state:
+        st.session_state.prop_internal_transfer = 0.0
     if "prop_cash_out" not in st.session_state:
         st.session_state.prop_cash_out = None
     if "prop_timeplan" not in st.session_state:
@@ -2279,12 +2302,29 @@ def init_state():
         }
     # ── STEADY-STATE OPERATING MODEL ─────────────────────────
     if "td_steady_state" not in st.session_state:
-        st.session_state.td_steady_state = [
-            {"Milestone": "Month 3", "Yield %": "", "Volume %": "", "Quality KPI": "", "Dual-Source Cost": "", "Notes": ""},
-            {"Milestone": "Month 6", "Yield %": "", "Volume %": "", "Quality KPI": "", "Dual-Source Cost": "", "Notes": ""},
-            {"Milestone": "Month 12", "Yield %": "", "Volume %": "", "Quality KPI": "", "Dual-Source Cost": "", "Notes": ""},
-            {"Milestone": "Month 24", "Yield %": "", "Volume %": "", "Quality KPI": "", "Dual-Source Cost": "", "Notes": ""},
-        ]
+        st.session_state.td_steady_state = {
+            "ramp_100_months": 0, "dual_sourcing_months": 0,
+            "dual_sourcing_cost": 0.0,
+            "quality_target": "", "yield_target": "", "notes": "",
+        }
+    elif isinstance(st.session_state.td_steady_state, list):
+        # Migrate old list-of-dicts format
+        _old_ss = st.session_state.td_steady_state
+        _ds_cost = 0.0
+        _ss_notes_m = ""
+        for _row in _old_ss:
+            try:
+                _ds_cost += float(str(_row.get("Dual-Source Cost", "0") or "0").replace(",", "").replace(" ", ""))
+            except (ValueError, TypeError):
+                pass
+            if _row.get("Notes", "").strip():
+                _ss_notes_m += _row.get("Notes", "") + "; "
+        st.session_state.td_steady_state = {
+            "ramp_100_months": 0, "dual_sourcing_months": 0,
+            "dual_sourcing_cost": _ds_cost,
+            "quality_target": "", "yield_target": "",
+            "notes": _ss_notes_m.rstrip("; "),
+        }
     # ── FX EXPOSURE ──────────────────────────────────────────
     if "fx_exposures" not in st.session_state:
         st.session_state.fx_exposures = {}  # factory_name -> {"cost_currency": "", "hedge_assumption": "", "notes": ""}
@@ -2299,7 +2339,7 @@ def init_state():
                 {"Metric": "CAPEX", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
                 {"Metric": "OPEX", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
                 {"Metric": "Ramp Timeline (months)", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
-                {"Metric": "Yield at Month 6", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
+                {"Metric": "Yield Target", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
                 {"Metric": "Annual Savings (Year 1)", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
                 {"Metric": "NWC Impact", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
             ],
@@ -2461,6 +2501,20 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
 
     # Cost overrides
     st.markdown('<div class="sec-sm">Cost Overrides (Optional)</div>', unsafe_allow_html=True)
+    st.markdown(f'''<div class="callout" style="font-size:0.72rem;">
+        Use overrides when you have <strong>actual quoted costs</strong> from a receiving factory that differ from the VA Ratio estimate.
+        Leave blank to let the model calculate costs using the VA Ratio from the assumptions matrix.<br>
+        <span style="color:{GREY_TEXT};font-size:0.68rem;line-height:1.6;">
+        <strong>When to override:</strong>&ensp;
+        You have a firm supplier quote for material at the receiving site&ensp;|&ensp;
+        Local labour rates are known and differ significantly from VA Ratio scaling&ensp;|&ensp;
+        The item uses a unique process not captured by the generic VA Ratio<br>
+        <strong>When to leave blank:</strong>&ensp;
+        Early-stage analysis with no site-specific quotes&ensp;|&ensp;
+        VA Ratio accurately reflects relative cost levels&ensp;|&ensp;
+        You want to test sensitivity to VA Ratio changes first
+        </span>
+    </div>''', unsafe_allow_html=True)
     OV_ROWS = ["Material", "Variable VA", "Fixed VA"]
     ov_cols = {cn: [None, None, None] for cn in factory_col_names_shared}
     # Pre-populate from batch overrides if available
@@ -2473,7 +2527,11 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
                 bov.get("variable_va"),
                 bov.get("fixed_va"),
             ]
-    ov_cols["Guide"] = ["Override material (blank = base)", "Override variable VA (blank = VA Ratio)", "Override fixed VA (blank = VA Ratio)"]
+    ov_cols["Guide"] = [
+        f"Override material cost per unit (blank = use base case {material:.2f})",
+        f"Override variable VA per unit (blank = base {variable_va:.2f} \u00d7 VA Ratio)",
+        f"Override fixed VA per unit (blank = base {fixed_va:.2f} \u00d7 VA Ratio)",
+    ]
     ov_df = pd.DataFrame(ov_cols, index=OV_ROWS)
 
     edited_ov = st.data_editor(
@@ -3241,7 +3299,7 @@ def render_executive_summary_page():
         if use_expander:
             narrative_container = st.expander(f"Item-Level Executive Narratives ({len(narrative_items)} items)", expanded=False)
         else:
-            narrative_container = st  # render directly
+            narrative_container = st.container()
 
         with narrative_container:
             for item in narrative_items:
@@ -3490,22 +3548,34 @@ def render_executive_summary_page():
             tct_capex += ic.get("capex", 0)
             tct_opex += ic.get("opex", 0)
             tct_restructuring += ic.get("restructuring", 0)
-    tct_severance = st.session_state.get("prop_severance_cost", 0.0) * 1e6
+    # Sending-site costs (from dedicated section on Investment page)
+    _ss_costs_tct = st.session_state.get("sending_site_costs", {})
+    tct_asset_writeoff = _ss_costs_tct.get("Asset Write-off / Impairment", 0.0)
+    tct_severance_ss = _ss_costs_tct.get("Severance / Social Plan", 0.0)
+    tct_stranded = _ss_costs_tct.get("Stranded Overhead", 0.0)
+    # Fall back to proposal-level severance if sending-site not filled
+    tct_severance = tct_severance_ss if tct_severance_ss > 0 else st.session_state.get("prop_severance_cost", 0.0) * 1e6
     tct_retraining = st.session_state.get("prop_retraining_cost", 0.0) * 1e6
     # Dual-sourcing estimate from steady-state model
-    tct_dual_source = 0.0
-    for ss in st.session_state.get("td_steady_state", []):
-        try:
-            tct_dual_source += float(str(ss.get("Dual-Source Cost", "0") or "0").replace(",", "").replace(" ", ""))
-        except (ValueError, TypeError):
-            pass
-    tct_total = tct_capex + tct_opex + tct_restructuring + tct_severance + tct_retraining + tct_dual_source
+    _ss_data = st.session_state.get("td_steady_state", {})
+    if isinstance(_ss_data, dict):
+        tct_dual_source = float(_ss_data.get("dual_sourcing_cost", 0.0) or 0.0)
+    else:
+        tct_dual_source = 0.0
+        for ss in _ss_data:
+            try:
+                tct_dual_source += float(str(ss.get("Dual-Source Cost", "0") or "0").replace(",", "").replace(" ", ""))
+            except (ValueError, TypeError):
+                pass
+    tct_total = tct_capex + tct_opex + tct_restructuring + tct_severance + tct_retraining + tct_dual_source + tct_asset_writeoff + tct_stranded
 
     tct_rows = [
         ("CAPEX (Tooling / Equipment)", tct_capex),
         ("OPEX (Project / Qualification)", tct_opex),
         ("Restructuring (Sending Site)", tct_restructuring),
+        ("Asset Write-off / Impairment", tct_asset_writeoff),
         ("Severance / Social Plan", tct_severance),
+        ("Stranded Overhead", tct_stranded),
         ("Retraining / Recruitment", tct_retraining),
         ("Dual-Sourcing Period Costs", tct_dual_source),
     ]
@@ -3556,7 +3626,7 @@ def render_executive_summary_page():
 
     # ── SCENARIO COMPARISON TABLE ────────────────────────────
     st.markdown(f'<div class="sec-sm">Scenario Comparison — Side-by-Side</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Factory Council decisions often compare 2\u20133 credible options. Use this table to capture trade-off commentary beyond the financial metrics.</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="callout" style="font-size:0.72rem;">Transfer decisions often compare 2\u20133 credible options. Use this table to capture trade-off commentary beyond the financial metrics.</div>', unsafe_allow_html=True)
 
     sc_data = st.session_state.scenario_comparison
     if not sc_data:
@@ -3733,6 +3803,7 @@ def save_project_json():
         "prop_direction": st.session_state.get("prop_direction", ""),
         "prop_benefits": st.session_state.get("prop_benefits", ""),
         "prop_total_investment": st.session_state.get("prop_total_investment"),
+        "prop_internal_transfer": st.session_state.get("prop_internal_transfer", 0.0),
         "prop_cash_out": st.session_state.get("prop_cash_out"),
         "prop_timeplan": st.session_state.get("prop_timeplan", ""),
         "prop_risks": st.session_state.get("prop_risks", []),
@@ -3746,6 +3817,7 @@ def save_project_json():
         "prop_retraining_cost": st.session_state.get("prop_retraining_cost", 0.0),
         "prop_workforce_timeline": st.session_state.get("prop_workforce_timeline", ""),
         "prop_workforce_notes": st.session_state.get("prop_workforce_notes", ""),
+        "sending_site_costs": st.session_state.get("sending_site_costs", {}),
         "prop_comm_plan": st.session_state.get("prop_comm_plan", []),
         # Governance — Pre-study Workforce
         "ps_workforce_headcount_from": st.session_state.get("ps_workforce_headcount_from", 0),
@@ -4126,8 +4198,8 @@ def main():
         st.markdown(f'<div class="callout">Company-wide financial parameters for investment analysis and performance benchmarking.<br>'
                     f'<span style="font-size:0.75rem;color:{MUTED};">'
                     f'<strong>WACC</strong> — Weighted-average cost of capital; typically 7–12 % for industrial companies. '
-                    f'Used as the discount rate for NPV calculations.&emsp;'
-                    f'<strong>Target Payback</strong> — Maximum acceptable years to recover the investment from annual savings.&emsp;'
+                    f'Used as the discount rate for NPV calculations.<br>'
+                    f'<strong>Target Payback</strong> — Maximum acceptable years to recover the investment from annual savings.<br>'
                     f'<strong>Target OM</strong> — Minimum operating margin threshold; options below this level are flagged in charts and tables.</span></div>', unsafe_allow_html=True)
 
         fin_col1, fin_col2, fin_col3 = st.columns([1, 1, 1])
@@ -4175,7 +4247,7 @@ def main():
 
         if cc_mode == "Company-wide rate":
             cc_data = {
-                "Component": CC_ROWS + ["**Total**"],
+                "Component": CC_ROWS + ["Total"],
                 "Rate (%)": cc_defaults + [sum(cc_defaults)],
                 "Guide": CC_GUIDES + ["Edit to override component sum — components will be ignored"],
             }
@@ -4191,11 +4263,11 @@ def main():
             # Check if Total was manually overridden
             component_sum = 0.0
             for i, row in edited_cc.iterrows():
-                if row["Component"] != "**Total**":
+                if row["Component"] != "Total":
                     v = row["Rate (%)"]
                     if v is not None and not pd.isna(v):
                         component_sum += float(v)
-            total_row_val = float(edited_cc.loc[edited_cc["Component"] == "**Total**", "Rate (%)"].values[0] or 0)
+            total_row_val = float(edited_cc.loc[edited_cc["Component"] == "Total", "Rate (%)"].values[0] or 0)
             if abs(total_row_val - component_sum) > 0.01:
                 global_cc_pct = total_row_val
                 st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};margin-top:0.2rem;">Override active — using <strong>{total_row_val:.1f}%</strong> instead of component sum ({component_sum:.1f}%)</div>', unsafe_allow_html=True)
@@ -4217,7 +4289,7 @@ def main():
                     vals = list(cc_defaults)
                 cc_cols[fn_] = vals + [sum(vals)]
             cc_cols["Guide"] = CC_GUIDES + ["Edit to override component sum — components will be ignored"]
-            cc_rows_with_total = CC_ROWS + ["**Total**"]
+            cc_rows_with_total = CC_ROWS + ["Total"]
             cc_df = pd.DataFrame(cc_cols, index=cc_rows_with_total)
 
             edited_cc = st.data_editor(
@@ -4236,7 +4308,7 @@ def main():
                     v = edited_cc.loc[row_name, fn_]
                     if v is not None and not pd.isna(v):
                         component_sum += float(v)
-                total_val = float(edited_cc.loc["**Total**", fn_] or 0)
+                total_val = float(edited_cc.loc["Total", fn_] or 0)
                 if abs(total_val - component_sum) > 0.01:
                     carrying_cost_rates[fn_] = total_val / 100.0
                     overrides.append(f"{fn_}: {total_val:.1f}% (components: {component_sum:.1f}%)")
@@ -4544,13 +4616,33 @@ This provides the local risk percentage.</li>
 
                 # ── STRESS-TESTED NPV ──────────────────────────────
                 st.markdown(f'<div class="sec-sm">Stress-Tested NPV — Scenario Analysis</div>', unsafe_allow_html=True)
-                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};margin-bottom:0.5rem;font-family:Inter,sans-serif;">Base case uses model inputs. Downside applies -20% to annual savings and +20% to investment. Upside applies +20% to savings and -10% to investment.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-size:0.72rem;color:{GREY_TEXT};margin-bottom:0.5rem;font-family:Inter,sans-serif;">Base case uses model inputs. Downside reduces savings magnitude by 20% and increases investment by 20%. Upside increases savings magnitude by 20% and reduces investment by 10%. Adjustments work on the absolute value of savings, so the direction is always correct even when savings are negative.</div>', unsafe_allow_html=True)
 
+                # Scenarios: (label, savings_adjustment, cost_adjustment)
+                # When savings are negative (alternative is worse than base), the
+                # "worse NPV" direction is *more* negative savings.  We want the
+                # Downside row to always show the worse NPV and Upside the better
+                # one.  To achieve this we adjust the *magnitude* of savings and
+                # apply the directional sign back, so the multiplier works
+                # correctly regardless of savings sign.
                 scenarios = [
-                    ("Downside (-20% savings, +20% cost)", -0.20, 0.20),
+                    ("Downside", -0.20, 0.20),
                     ("Base Case", 0.0, 0.0),
-                    ("Upside (+20% savings, -10% cost)", 0.20, -0.10),
+                    ("Upside", 0.20, -0.10),
                 ]
+
+                def _stress_savings(savings_list, adj):
+                    """Adjust savings by adj on the magnitude, preserving sign direction.
+
+                    For positive savings +20% means more savings (better).
+                    For negative savings +20% means less negative (also better).
+                    This avoids the paradox where +20% on a negative number
+                    makes it *more* negative (worse).
+                    """
+                    if adj == 0.0:
+                        return list(savings_list)
+                    return [s + abs(s) * adj if s != 0 else 0.0 for s in savings_list]
+
                 sc_hdr = "".join(f'<th>{ic["factory_name"]}</th>' for ic in inv_results if ic["total_investment"] > 0 or ic["annual_savings"] != 0)
                 sc_tbl = f'<table class="ib-table"><thead><tr><th>Scenario</th>{sc_hdr}</tr></thead><tbody>'
 
@@ -4559,16 +4651,23 @@ This provides the local risk percentage.</li>
                     for ic in inv_results:
                         if ic["total_investment"] == 0 and ic["annual_savings"] == 0:
                             continue
-                        adj_savings = [s * (1 + savings_adj) for s in ic["annual_savings_by_year"]]
+                        adj_savings = _stress_savings(ic["annual_savings_by_year"], savings_adj)
                         adj_investment = ic["total_investment"] * (1 + cost_adj)
                         adj_cf = [-adj_investment] + adj_savings
                         sc_npv = compute_npv(adj_cf, company_wacc)
                         cls = "delta-pos" if sc_npv > 0 else ("delta-neg" if sc_npv < 0 else "")
                         is_base = savings_adj == 0.0 and cost_adj == 0.0
                         weight = "font-weight:700;" if is_base else ""
+                        # Build descriptive label for the first factory only (all share same adjustments)
+                        if sc_label == "Downside":
+                            desc = f"Downside (savings {savings_adj*100:+.0f}% magnitude, cost {cost_adj*100:+.0f}%)"
+                        elif sc_label == "Upside":
+                            desc = f"Upside (savings {savings_adj*100:+.0f}% magnitude, cost {cost_adj*100:+.0f}%)"
+                        else:
+                            desc = sc_label
                         sc_cells += f'<td class="{cls}" style="{weight}">{fi(sc_npv, acct=True, dz=False)}</td>'
                     row_cls = "row-bold" if savings_adj == 0.0 else ""
-                    sc_tbl += f'<tr class="{row_cls}"><td>{sc_label}</td>{sc_cells}</tr>'
+                    sc_tbl += f'<tr class="{row_cls}"><td>{desc}</td>{sc_cells}</tr>'
 
                 # Add IRR row per scenario
                 sc_tbl += f'<tr class="row-separator">{"<td></td>" * (1 + sum(1 for ic in inv_results if ic["total_investment"] > 0 or ic["annual_savings"] != 0))}</tr>'
@@ -4577,19 +4676,17 @@ This provides the local risk percentage.</li>
                     for ic in inv_results:
                         if ic["total_investment"] == 0 and ic["annual_savings"] == 0:
                             continue
-                        _compute_irr = compute_irr
-                        adj_savings = [s * (1 + savings_adj) for s in ic["annual_savings_by_year"]]
+                        adj_savings = _stress_savings(ic["annual_savings_by_year"], savings_adj)
                         adj_investment = ic["total_investment"] * (1 + cost_adj)
                         adj_cf = [-adj_investment] + adj_savings
-                        sc_irr = _compute_irr(adj_cf)
+                        sc_irr = compute_irr(adj_cf)
                         if sc_irr is not None:
                             cls = "delta-pos" if sc_irr > company_wacc else "delta-neg"
                             sc_cells += f'<td class="{cls}">{sc_irr*100:.1f}%</td>'
                         else:
                             sc_cells += f'<td>{dash}</td>'
                     row_cls = "row-bold" if savings_adj == 0.0 else ""
-                    irr_label = sc_label.replace("NPV", "IRR") if "NPV" in sc_label else sc_label
-                    sc_tbl += f'<tr class="{row_cls}"><td>IRR: {sc_label.split("(")[0].strip()}</td>{sc_cells}</tr>'
+                    sc_tbl += f'<tr class="{row_cls}"><td>IRR: {sc_label}</td>{sc_cells}</tr>'
 
                 sc_tbl += '</tbody></table>'
                 st.markdown(sc_tbl, unsafe_allow_html=True)
@@ -4597,14 +4694,49 @@ This provides the local risk percentage.</li>
                     f'<div class="callout" style="margin-top:0.5rem;">'
                     f'<strong>How to read the scenarios:</strong> '
                     f'The <em>Base Case</em> uses your input assumptions as-is. '
-                    f'<em>Downside</em> stress-tests the investment by reducing annual savings by 20 % and increasing capex by 20 %. '
-                    f'<em>Upside</em> applies a 20 % savings uplift with a 10 % capex reduction.<br>'
+                    f'<em>Downside</em> stress-tests by reducing the magnitude of annual savings by 20 % and increasing investment cost by 20 %. '
+                    f'<em>Upside</em> increases savings magnitude by 20 % with a 10 % investment reduction. '
+                    f'Adjustments are applied to the absolute value of savings, so Upside always produces a better NPV than Downside — '
+                    f'even when the base-case savings are negative (i.e. when the alternative is costlier than the base).<br>'
                     f'<span style="font-size:0.75rem;color:{MUTED};">'
                     f'If the downside NPV turns negative, the investment is highly sensitive to savings assumptions — '
                     f'consider phased execution, risk-sharing arrangements, or additional due diligence before committing. '
                     f'IRR values below the company WACC ({st.session_state.get("company_wacc", 0.08)*100:.0f} %) indicate the project '
                     f'does not clear the cost-of-capital hurdle in that scenario.</span></div>',
                     unsafe_allow_html=True)
+
+        # ── SENDING-SITE IMPACT ────────────────────────────────
+        st.markdown(f'<div class="sec">Sending-Site Impact</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Costs incurred at the <strong>sending factory</strong> as a result of the transfer. These are not included in the per-item investment case but feed into the Total Cost of Transfer on the Executive Summary.</div>', unsafe_allow_html=True)
+
+        _ss_costs = st.session_state.sending_site_costs
+        ss_c1, ss_c2, ss_c3 = st.columns(3)
+        with ss_c1:
+            _ss_costs["Asset Write-off / Impairment"] = st.number_input(
+                f"Asset Write-off / Impairment ({currency})",
+                value=_ss_costs.get("Asset Write-off / Impairment", 0.0),
+                min_value=0.0, step=100000.0, format="%,.0f",
+                key="ss_writeoff_input",
+                help="Book value of equipment, tooling, or leasehold improvements that will be written off when production ceases at the sending site")
+        with ss_c2:
+            _ss_costs["Severance / Social Plan"] = st.number_input(
+                f"Severance / Social Plan ({currency})",
+                value=_ss_costs.get("Severance / Social Plan", 0.0),
+                min_value=0.0, step=100000.0, format="%,.0f",
+                key="ss_severance_input",
+                help="Total severance, social plan, early retirement, or outplacement costs for affected employees at the sending site")
+        with ss_c3:
+            _ss_costs["Stranded Overhead"] = st.number_input(
+                f"Stranded Overhead ({currency})",
+                value=_ss_costs.get("Stranded Overhead", 0.0),
+                min_value=0.0, step=100000.0, format="%,.0f",
+                key="ss_stranded_input",
+                help="Fixed costs (rent, management, utilities) that remain at the sending site after volume is transferred but before full wind-down")
+        st.session_state.sending_site_costs = _ss_costs
+
+        _ss_total = sum(_ss_costs.values())
+        if _ss_total > 0:
+            st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.78rem;font-weight:600;color:{NAVY};margin:0.3rem 0 0.5rem 0;">Total Sending-Site Impact: <strong>{_ss_total:,.0f} {currency}</strong></div>', unsafe_allow_html=True)
 
         # Footer for investment page
         st.markdown("---")
@@ -4723,11 +4855,10 @@ Compares full cost-to-serve across factory locations, including material, labour
     if st.session_state.active_page == "prestudy":
         project_name = st.session_state.project_name
         data_classification = st.session_state.get("data_classification", "C3 - Confidential")
-        st.markdown(f"""<div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.8rem;">
-            <div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};">Pre-study <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}</div>
-            <div style="background:{NAVY};color:#fff;font-size:0.62rem;font-weight:600;padding:0.2rem 0.7rem;border-radius:2px;text-transform:uppercase;letter-spacing:0.06em;">Footprint Optimization</div>
+        st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
+            Pre-study <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
         </div>""", unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Structured evaluation framework for the pre-study phase. Captures strategic rationale, current set-up, key questions, dependencies, and team. Complete this document before submitting a formal proposal to the Factory Council.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Structured evaluation framework for the pre-study phase. Captures strategic rationale, current set-up, key questions, dependencies, and team. Complete this document before submitting a formal proposal to the decision board.</div>', unsafe_allow_html=True)
 
         # ── CLASSIFICATION-AWARE CALLOUT ──────────────────────
         _has_restructuring = False
@@ -4745,150 +4876,176 @@ Compares full cost-to-serve across factory locations, including material, labour
             _c4_hint = "" if _is_c4 else " Consider upgrading from the project header."
             st.markdown(f'<div style="background:#fef9f0;border-left:4px solid {_c4_border};padding:0.5rem 1rem;margin:0.2rem 0 0.6rem 0;font-family:Inter,sans-serif;font-size:0.72rem;"><strong style="color:{_c4_border};">{_c4_label}</strong> — Restructuring or workforce impact detected. Typically warrants C4 to protect employee privacy.{_c4_hint}</div>', unsafe_allow_html=True)
 
-        ps_left, ps_right = st.columns([3, 2])
-        with ps_left:
-            # Strategic Rationale (merged from Strategic Context page)
-            st.markdown(f'<div class="sec-sm">Strategic Rationale</div>', unsafe_allow_html=True)
-            st.session_state.ps_strategic_rationale = st.text_area(
-                "Strategic Rationale", value=st.session_state.ps_strategic_rationale,
-                key="ps_strat_input", height=100, label_visibility="collapsed",
-                placeholder="Why is this transfer being considered? What strategic objective does it serve? (e.g. cost competitiveness, capacity, market proximity, risk diversification)")
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # SECTION 1 — PURPOSE & BACKGROUND
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        st.markdown(f'<div class="sec">Purpose & Background</div>', unsafe_allow_html=True)
 
-            st.markdown(f'<div class="sec-sm">Purpose & Objective</div>', unsafe_allow_html=True)
-            st.session_state.ps_purpose = st.text_area(
-                "Purpose", value=st.session_state.ps_purpose,
-                key="ps_purpose_input", height=80, label_visibility="collapsed",
-                placeholder="What is the specific goal of this evaluation? (e.g. annual sourcing review, new product launch, capacity constraint resolution)")
+        st.markdown(f'<div class="sec-sm">Strategic Rationale</div>', unsafe_allow_html=True)
+        st.session_state.ps_strategic_rationale = st.text_area(
+            "Strategic Rationale", value=st.session_state.ps_strategic_rationale,
+            key="ps_strat_input", height=100, label_visibility="collapsed",
+            placeholder="Why is this transfer being considered? What strategic objective does it serve? (e.g. cost competitiveness, capacity, market proximity, risk diversification)")
 
-            st.markdown(f'<div class="sec-sm">Background & Current Set-up</div>', unsafe_allow_html=True)
-            st.session_state.ps_background = st.text_area(
-                "Background", value=st.session_state.ps_background,
-                key="ps_bg_input", height=100, label_visibility="collapsed",
-                placeholder="Describe the current manufacturing set-up, volumes, and relevant context...")
+        st.markdown(f'<div class="sec-sm">Purpose & Objective</div>', unsafe_allow_html=True)
+        st.session_state.ps_purpose = st.text_area(
+            "Purpose", value=st.session_state.ps_purpose,
+            key="ps_purpose_input", height=80, label_visibility="collapsed",
+            placeholder="What is the specific goal of this evaluation? (e.g. annual sourcing review, new product launch, capacity constraint resolution)")
 
-            st.markdown(f'<div class="sec-sm">Reason to Change Current Set-up</div>', unsafe_allow_html=True)
-            st.session_state.ps_reason = st.text_area(
-                "Reason", value=st.session_state.ps_reason,
-                key="ps_reason_input", height=100, label_visibility="collapsed",
-                placeholder="Why is a change being considered? What triggers this evaluation?...")
+        st.markdown(f'<div class="sec-sm">Background & Current Set-up</div>', unsafe_allow_html=True)
+        st.session_state.ps_background = st.text_area(
+            "Background", value=st.session_state.ps_background,
+            key="ps_bg_input", height=100, label_visibility="collapsed",
+            placeholder="Describe the current manufacturing set-up, volumes, and relevant context...")
 
-            st.markdown(f'<div class="sec-sm">What Happens If We Don\'t Do This?</div>', unsafe_allow_html=True)
-            st.session_state.ps_risk_of_inaction = st.text_area(
-                "Risk of Inaction", value=st.session_state.ps_risk_of_inaction,
-                key="ps_inaction_input", height=80, label_visibility="collapsed",
-                placeholder="Describe the consequence of maintaining the status quo. (e.g. continued margin erosion, capacity bottleneck, single-source risk)")
+        st.markdown(f'<div class="sec-sm">Reason to Change Current Set-up</div>', unsafe_allow_html=True)
+        st.session_state.ps_reason = st.text_area(
+            "Reason", value=st.session_state.ps_reason,
+            key="ps_reason_input", height=100, label_visibility="collapsed",
+            placeholder="Why is a change being considered? What triggers this evaluation?...")
 
-            st.markdown(f'<div class="sec-sm">Key Risks & Mitigations</div>', unsafe_allow_html=True)
-            st.session_state.ps_key_risks = st.text_area(
-                "Key Risks", value=st.session_state.ps_key_risks,
-                key="ps_risks_input", height=80, label_visibility="collapsed",
-                placeholder="What are the main risks? (e.g. quality ramp-up, customer approval timeline, IP concerns, FX exposure, geopolitical risk)")
+        st.markdown(f'<div class="sec-sm">What Happens If We Don\'t Do This?</div>', unsafe_allow_html=True)
+        st.session_state.ps_risk_of_inaction = st.text_area(
+            "Risk of Inaction", value=st.session_state.ps_risk_of_inaction,
+            key="ps_inaction_input", height=80, label_visibility="collapsed",
+            placeholder="Describe the consequence of maintaining the status quo. (e.g. continued margin erosion, capacity bottleneck, single-source risk)")
 
-            st.markdown(f'<div class="sec-sm">Key Questions to Review</div>', unsafe_allow_html=True)
-            st.session_state.ps_questions = st.text_area(
-                "Questions", value=st.session_state.ps_questions,
-                key="ps_questions_input", height=100, label_visibility="collapsed",
-                placeholder="List the key questions that need to be answered during the pre-study phase...")
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # SECTION 2 — RISK ASSESSMENT
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        st.markdown(f'<div class="sec">Risk Assessment</div>', unsafe_allow_html=True)
 
-            # ── FACTORY SCOPING RATIONALE ──────────────────────
-            st.markdown(f'<div class="sec-sm">Factory Scoping — Included & Excluded</div>', unsafe_allow_html=True)
-            st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-bottom:0.3rem;font-family:Inter,sans-serif;">Document which factories were included in the analysis and, critically, which were excluded and why. This ensures the evaluation scope is transparent and auditable.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="sec-sm">Key Risks & Mitigations</div>', unsafe_allow_html=True)
+        st.session_state.ps_key_risks = st.text_area(
+            "Key Risks", value=st.session_state.ps_key_risks,
+            key="ps_risks_input", height=80, label_visibility="collapsed",
+            placeholder="What are the main risks? (e.g. quality ramp-up, customer approval timeline, IP concerns, FX exposure, geopolitical risk)")
 
-            # Auto-populate from model if available
-            all_factory_names_ps = st.session_state.get("_all_factory_names", [])
-            if all_factory_names_ps and not st.session_state.ps_factories_included.strip():
-                st.session_state.ps_factories_included = ", ".join(all_factory_names_ps)
+        st.markdown(f'<div class="sec-sm">Key Questions to Review</div>', unsafe_allow_html=True)
+        st.session_state.ps_questions = st.text_area(
+            "Questions", value=st.session_state.ps_questions,
+            key="ps_questions_input", height=100, label_visibility="collapsed",
+            placeholder="List the key questions that need to be answered during the pre-study phase...")
 
-            scope_c1, scope_c2 = st.columns(2)
-            with scope_c1:
-                st.session_state.ps_factories_included = st.text_area(
-                    "Factories Included", value=st.session_state.ps_factories_included,
-                    key="ps_incl_input", height=70, label_visibility="visible",
-                    placeholder="e.g. Gothenburg (base), Shanghai, Pune")
-            with scope_c2:
-                st.session_state.ps_factories_excluded = st.text_area(
-                    "Factories Excluded", value=st.session_state.ps_factories_excluded,
-                    key="ps_excl_input", height=70, label_visibility="visible",
-                    placeholder="e.g. Schweinfurt, Dalian, Guadalajara")
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # SECTION 3 — FACTORY SCOPE
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        st.markdown(f'<div class="sec">Factory Scope</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:0.7rem;color:{GREY_TEXT};margin-bottom:0.3rem;font-family:Inter,sans-serif;">Document which factories were included in the analysis and, critically, which were excluded and why. This ensures the evaluation scope is transparent and auditable.</div>', unsafe_allow_html=True)
 
-            st.session_state.ps_scoping_rationale = st.text_area(
-                "Scoping Rationale", value=st.session_state.ps_scoping_rationale,
-                key="ps_scope_rationale_input", height=100, label_visibility="visible",
-                placeholder="Explain the rationale for factory inclusion/exclusion:\n\n- Why were certain factories included? (e.g. existing capability, capacity headroom, strategic corridor)\n- Why were others excluded? (e.g. no relevant capability, at capacity, geopolitical risk, no established supply chain, technology mismatch)\n- Any constraints that narrowed the scope (e.g. customer proximity requirements, regulatory barriers)")
+        # Auto-populate from model if available
+        all_factory_names_ps = st.session_state.get("_all_factory_names", [])
+        if all_factory_names_ps and not st.session_state.ps_factories_included.strip():
+            st.session_state.ps_factories_included = ", ".join(all_factory_names_ps)
 
-        with ps_right:
-            # ── WORKFORCE & ORGANIZATIONAL IMPACT ─────────────
-            st.markdown(f'<div class="sec-sm">Workforce & Organizational Impact</div>', unsafe_allow_html=True)
-            wf_c1, wf_c2 = st.columns(2)
-            with wf_c1:
-                st.session_state.ps_workforce_headcount_from = st.number_input(
-                    "FTE Sending Site", value=st.session_state.ps_workforce_headcount_from,
-                    min_value=0, step=1, key="ps_wf_from_input",
-                    help="Estimated FTEs affected at sending factory")
-            with wf_c2:
-                st.session_state.ps_workforce_headcount_to = st.number_input(
-                    "FTE Receiving Site", value=st.session_state.ps_workforce_headcount_to,
-                    min_value=0, step=1, key="ps_wf_to_input",
-                    help="New FTEs required at receiving factory")
-            wf_consult_opts = ["", "Yes — Works council / union", "Yes — Labor authority", "Not required", "To be determined"]
-            wf_consult_idx = 0
-            if st.session_state.ps_workforce_consultation_required in wf_consult_opts:
-                wf_consult_idx = wf_consult_opts.index(st.session_state.ps_workforce_consultation_required)
-            st.session_state.ps_workforce_consultation_required = st.selectbox(
-                "Consultation Required", options=wf_consult_opts, index=wf_consult_idx,
-                key="ps_wf_consult_input",
-                format_func=lambda x: x if x else "— Select —")
-            sp_opts = ["", "Yes — social plan required", "No — attrition / redeployment", "To be assessed"]
-            sp_idx = 0
-            if st.session_state.ps_workforce_social_plan in sp_opts:
-                sp_idx = sp_opts.index(st.session_state.ps_workforce_social_plan)
-            st.session_state.ps_workforce_social_plan = st.selectbox(
-                "Social Plan / Severance", options=sp_opts, index=sp_idx,
-                key="ps_wf_social_input",
-                format_func=lambda x: x if x else "— Select —")
-            st.session_state.ps_workforce_notes = st.text_area(
-                "Workforce Notes", value=st.session_state.ps_workforce_notes,
-                key="ps_wf_notes_input", height=50, label_visibility="visible",
-                placeholder="Retention risk, key-person dependencies, knowledge transfer plan...")
+        scope_c1, scope_c2 = st.columns(2)
+        with scope_c1:
+            st.session_state.ps_factories_included = st.text_area(
+                "Factories Included", value=st.session_state.ps_factories_included,
+                key="ps_incl_input", height=70, label_visibility="visible",
+                placeholder="e.g. Gothenburg (base), Shanghai, Pune")
+        with scope_c2:
+            st.session_state.ps_factories_excluded = st.text_area(
+                "Factories Excluded", value=st.session_state.ps_factories_excluded,
+                key="ps_excl_input", height=70, label_visibility="visible",
+                placeholder="e.g. Schweinfurt, Dalian, Guadalajara")
 
-            # Cross-functional dependencies
-            st.markdown(f'<div class="sec-sm">Cross-functional Dependencies & How to Manage</div>', unsafe_allow_html=True)
-            dep_df = pd.DataFrame(st.session_state.ps_dependencies)
-            if "Dependency" not in dep_df.columns:
-                dep_df = pd.DataFrame([{"Dependency": "", "How to Manage": ""}])
-            edited_deps = st.data_editor(
-                dep_df, use_container_width=True, num_rows="dynamic", key="ps_dep_editor",
-                hide_index=True,
-                column_config={
-                    "Dependency": st.column_config.TextColumn("Dependency", width=180),
-                    "How to Manage": st.column_config.TextColumn("How to Manage", width=260),
-                })
-            st.session_state.ps_dependencies = edited_deps.to_dict("records")
+        st.session_state.ps_scoping_rationale = st.text_area(
+            "Scoping Rationale", value=st.session_state.ps_scoping_rationale,
+            key="ps_scope_rationale_input", height=100, label_visibility="visible",
+            placeholder="Explain the rationale for factory inclusion/exclusion:\n\n- Why were certain factories included? (e.g. existing capability, capacity headroom, strategic corridor)\n- Why were others excluded? (e.g. no relevant capability, at capacity, geopolitical risk, no established supply chain, technology mismatch)\n- Any constraints that narrowed the scope (e.g. customer proximity requirements, regulatory barriers)")
 
-            # Team
-            st.markdown(f'<div class="sec-sm">Team</div>', unsafe_allow_html=True)
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # SECTION 4 — WORKFORCE & ORGANIZATIONAL IMPACT
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        st.markdown(f'<div class="sec">Workforce & Organizational Impact</div>', unsafe_allow_html=True)
+
+        wf_c1, wf_c2 = st.columns(2)
+        with wf_c1:
+            st.session_state.ps_workforce_headcount_from = st.number_input(
+                "FTE Sending Site", value=st.session_state.ps_workforce_headcount_from,
+                min_value=0, step=1, key="ps_wf_from_input",
+                help="Estimated FTEs affected at sending factory")
+        with wf_c2:
+            st.session_state.ps_workforce_headcount_to = st.number_input(
+                "FTE Receiving Site", value=st.session_state.ps_workforce_headcount_to,
+                min_value=0, step=1, key="ps_wf_to_input",
+                help="New FTEs required at receiving factory")
+        wf_consult_opts = ["", "Yes — Works council / union", "Yes — Labor authority", "Not required", "To be determined"]
+        wf_consult_idx = 0
+        if st.session_state.ps_workforce_consultation_required in wf_consult_opts:
+            wf_consult_idx = wf_consult_opts.index(st.session_state.ps_workforce_consultation_required)
+        st.session_state.ps_workforce_consultation_required = st.selectbox(
+            "Consultation Required", options=wf_consult_opts, index=wf_consult_idx,
+            key="ps_wf_consult_input",
+            format_func=lambda x: x if x else "— Select —")
+        sp_opts = ["", "Yes — social plan required", "No — attrition / redeployment", "To be assessed"]
+        sp_idx = 0
+        if st.session_state.ps_workforce_social_plan in sp_opts:
+            sp_idx = sp_opts.index(st.session_state.ps_workforce_social_plan)
+        st.session_state.ps_workforce_social_plan = st.selectbox(
+            "Social Plan / Severance", options=sp_opts, index=sp_idx,
+            key="ps_wf_social_input",
+            format_func=lambda x: x if x else "— Select —")
+        st.session_state.ps_workforce_notes = st.text_area(
+            "Workforce Notes", value=st.session_state.ps_workforce_notes,
+            key="ps_wf_notes_input", height=50, label_visibility="visible",
+            placeholder="Retention risk, key-person dependencies, knowledge transfer plan...")
+
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # SECTION 5 — DEPENDENCIES
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        st.markdown(f'<div class="sec">Cross-functional Dependencies</div>', unsafe_allow_html=True)
+
+        dep_df = pd.DataFrame(st.session_state.ps_dependencies)
+        if "Dependency" not in dep_df.columns:
+            dep_df = pd.DataFrame([{"Dependency": "", "How to Manage": ""}])
+        edited_deps = st.data_editor(
+            dep_df, use_container_width=True, num_rows="dynamic", key="ps_dep_editor",
+            hide_index=True,
+            column_config={
+                "Dependency": st.column_config.TextColumn("Dependency", width=280),
+                "How to Manage": st.column_config.TextColumn("How to Manage", width=400),
+            })
+        st.session_state.ps_dependencies = edited_deps.to_dict("records")
+
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # SECTION 6 — TEAM & GOVERNANCE
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        st.markdown(f'<div class="sec">Team & Governance</div>', unsafe_allow_html=True)
+
+        team_c1, team_c2 = st.columns(2)
+        with team_c1:
             st.session_state.ps_sponsor = st.text_input("Initiative Sponsor", value=st.session_state.ps_sponsor, key="ps_sponsor_input")
+        with team_c2:
             st.session_state.ps_lead = st.text_input("Initiative Lead", value=st.session_state.ps_lead, key="ps_lead_input")
-            st.session_state.ps_main_entity = st.text_input("Main Entity(s)", value=st.session_state.ps_main_entity, key="ps_entity_input")
-            st.session_state.ps_impact_entities = st.text_input("Impact Assessment on Other Entity(s)", value=st.session_state.ps_impact_entities, key="ps_impact_input")
-            st.session_state.ps_team = st.text_area(
-                "Pre-study Team", value=st.session_state.ps_team,
-                key="ps_team_input", height=80, label_visibility="visible",
-                placeholder="Team members and their roles / regions...")
+        st.session_state.ps_team = st.text_area(
+            "Pre-study Team", value=st.session_state.ps_team,
+            key="ps_team_input", height=80, label_visibility="visible",
+            placeholder="Team members and their roles / regions...")
 
-            # Time Plan
-            st.markdown(f'<div class="sec-sm">Time Plan</div>', unsafe_allow_html=True)
-            tl = st.session_state.ps_timeline
-            tl_df = pd.DataFrame({"Milestone": list(tl.keys()), "Target Date": list(tl.values())})
-            edited_tl = st.data_editor(
-                tl_df, use_container_width=True, num_rows="fixed", key="ps_timeline_editor",
-                hide_index=True,
-                column_config={
-                    "Milestone": st.column_config.TextColumn("Milestone", disabled=True, width=200),
-                    "Target Date": st.column_config.TextColumn("Target Date", width=160),
-                },
-                disabled=["Milestone"])
-            st.session_state.ps_timeline = dict(zip(edited_tl["Milestone"], edited_tl["Target Date"].fillna("")))
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # SECTION 7 — TIME PLAN
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        st.markdown(f'<div class="sec">Time Plan</div>', unsafe_allow_html=True)
+
+        tl = st.session_state.ps_timeline
+        _tl_milestones = ["Pre-study Finalized", "Decision", "Preliminary Execution Start"]
+        tl_cols = st.columns(len(_tl_milestones))
+        for _ti, _ms_name in enumerate(_tl_milestones):
+            with tl_cols[_ti]:
+                _cur_val = tl.get(_ms_name, "")
+                _date_val = None
+                if _cur_val:
+                    try:
+                        from datetime import datetime as _dt
+                        _date_val = _dt.strptime(str(_cur_val), "%Y-%m-%d").date()
+                    except (ValueError, TypeError):
+                        _date_val = None
+                _picked = st.date_input(_ms_name, value=_date_val, key=f"ps_tl_{_ti}", format="YYYY-MM-DD")
+                tl[_ms_name] = str(_picked) if _picked else ""
+        st.session_state.ps_timeline = tl
 
         # ── PRE-STUDY COMPLETENESS ─────────────────────────────
         ps_fields = {
@@ -4931,11 +5088,15 @@ Compares full cost-to-serve across factory locations, including material, labour
             Transfer Feasibility <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
         </div>""", unsafe_allow_html=True)
 
-        # Auto-populate transfer from/to from factory config if empty
+        # Auto-populate transfer from/to from factory config & conclusion if empty
         if not st.session_state.td_transfer_from and len(all_factory_names) >= 1:
             st.session_state.td_transfer_from = all_factory_names[0]
-        if not st.session_state.td_transfer_to and len(all_factory_names) >= 2:
-            st.session_state.td_transfer_to = all_factory_names[1]
+        _conclusion_pick = st.session_state.get("conclusion_selected_option", "")
+        if not st.session_state.td_transfer_to:
+            if _conclusion_pick and _conclusion_pick in all_factory_names:
+                st.session_state.td_transfer_to = _conclusion_pick
+            elif len(all_factory_names) >= 2:
+                st.session_state.td_transfer_to = all_factory_names[1]
 
         # Auto-fetch transfer volume from analysis results (From factory)
         _all_res = st.session_state.get("_all_results", [])
@@ -4991,8 +5152,16 @@ Compares full cost-to-serve across factory locations, including material, labour
         with st.expander("Edit Transfer Header", expanded=False):
             hc1, hc2, hc3 = st.columns(3)
             with hc1:
-                st.session_state.td_transfer_from = st.text_input("Transfer From", value=st.session_state.td_transfer_from, key="td_from_input")
-                st.session_state.td_transfer_to = st.text_input("Transfer To", value=st.session_state.td_transfer_to, key="td_to_input")
+                _from_opts = [""] + all_factory_names
+                _from_idx = _from_opts.index(st.session_state.td_transfer_from) if st.session_state.td_transfer_from in _from_opts else 0
+                st.session_state.td_transfer_from = st.selectbox(
+                    "Transfer From", options=_from_opts, index=_from_idx, key="td_from_input",
+                    format_func=lambda x: x if x else "— Select —")
+                _to_opts = [""] + [f for f in all_factory_names if f != st.session_state.td_transfer_from]
+                _to_idx = _to_opts.index(st.session_state.td_transfer_to) if st.session_state.td_transfer_to in _to_opts else 0
+                st.session_state.td_transfer_to = st.selectbox(
+                    "Transfer To", options=_to_opts, index=_to_idx, key="td_to_input",
+                    format_func=lambda x: x if x else "— Select —")
             with hc2:
                 st.session_state.td_product_line = st.text_input("Product Line", value=st.session_state.td_product_line, key="td_pl_input")
                 st.session_state.td_material_family = st.text_input("Material Family", value=st.session_state.td_material_family, key="td_mf_input")
@@ -5007,7 +5176,6 @@ Compares full cost-to-serve across factory locations, including material, labour
             "Base Requirements": f"background:{NAVY};color:#fff;",
             "Commercial Requirements": f"background:#4472C4;color:#fff;",
             "Product Line & Supply Chain Requirements": f"background:#7B9CD6;color:#fff;",
-            "Financial Requirements": f"background:#A9C0E8;color:{DARK_TEXT};",
         }
 
         # Migrate old data format if needed
@@ -5031,65 +5199,79 @@ Compares full cost-to-serve across factory locations, including material, labour
                 {section_name}
             </div>""", unsafe_allow_html=True)
 
-            # Build display rows: main requirement + stacked follow-up label
-            display_rows = []
-            for row in rows:
+            sec_key = section_name.lower().replace(" ", "_").replace("&", "and")
+
+            # Column header row
+            _hdr_cols = st.columns([3.0, 1.8, 1.2, 1.0, 1.0])
+            for _ci, _lbl in enumerate(["Requirement", "Value / Answer", "Approver", "Date", "Status"]):
+                with _hdr_cols[_ci]:
+                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.6rem;font-weight:600;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.04em;padding:0.2rem 0;border-bottom:1px solid {BORDER};'>{_lbl}</div>", unsafe_allow_html=True)
+
+            # Render each requirement row with appropriate input types
+            for ri, row in enumerate(rows):
                 req = row["Requirement"]
                 follow_up = row.get("Follow-up", "")
                 condition = row.get("Condition", "")
-                # Append follow-up label to requirement text
-                if follow_up and condition != "if_no":
-                    req_display = f"{req}\n↳ {follow_up}"
-                else:
-                    req_display = req
-                display_rows.append({
-                    "Requirement": req_display,
-                    "Value": row.get("Value", ""),
-                    "Approver": row.get("Approver", ""),
-                    "Date": row.get("Date", ""),
-                    "Status": row.get("Status", "Pending"),
-                })
+                is_yn = row.get("Input Type") == "yes_no"
+                has_inline_followup = follow_up and condition != "if_no"
 
-            sec_key = section_name.lower().replace(" ", "_").replace("&", "and")
-            section_df = pd.DataFrame(display_rows)
+                rc = st.columns([3.0, 1.8, 1.2, 1.0, 1.0])
+                with rc[0]:
+                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.72rem;color:{DARK_TEXT};padding:0.55rem 0 0.2rem 0;'>{req}</div>", unsafe_allow_html=True)
+                with rc[1]:
+                    if is_yn:
+                        _yn_opts = ["", "Yes", "No"]
+                        _yn_cur = row.get("Value", "")
+                        _yn_idx = _yn_opts.index(_yn_cur) if _yn_cur in _yn_opts else 0
+                        row["Value"] = st.selectbox(
+                            f"val_{sec_key}_{ri}", options=_yn_opts, index=_yn_idx,
+                            key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed",
+                            format_func=lambda x: x if x else "— Select —")
+                    else:
+                        row["Value"] = st.text_input(
+                            f"val_{sec_key}_{ri}", value=row.get("Value", ""),
+                            key=f"td_{sec_key}_{ri}_val", label_visibility="collapsed")
+                with rc[2]:
+                    row["Approver"] = st.text_input(
+                        f"app_{sec_key}_{ri}", value=row.get("Approver", ""),
+                        key=f"td_{sec_key}_{ri}_app", label_visibility="collapsed")
+                with rc[3]:
+                    row["Date"] = st.text_input(
+                        f"dt_{sec_key}_{ri}", value=row.get("Date", ""),
+                        key=f"td_{sec_key}_{ri}_dt", label_visibility="collapsed")
+                with rc[4]:
+                    _st_opts = ["Pending", "Approved", "Rejected"]
+                    _st_cur = row.get("Status", "Pending")
+                    _st_idx = _st_opts.index(_st_cur) if _st_cur in _st_opts else 0
+                    _st_colors = {"Pending": f"color:#e6a817;", "Approved": f"color:{GREEN};", "Rejected": f"color:{RED};"}
+                    row["Status"] = st.selectbox(
+                        f"st_{sec_key}_{ri}", options=_st_opts, index=_st_idx,
+                        key=f"td_{sec_key}_{ri}_st", label_visibility="collapsed")
+                    # Color badge below selectbox
+                    _sc = _st_colors.get(row["Status"], "")
+                    st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.6rem;font-weight:700;{_sc}margin-top:-0.7rem;'>{row['Status']}</div>", unsafe_allow_html=True)
 
-            # Determine which rows are yes/no type for the Value column
-            yn_rows = [i for i, r in enumerate(rows) if r.get("Input Type") == "yes_no"]
+                # Inline follow-up (non-conditional) — show on same row below
+                if has_inline_followup:
+                    fu_cols = st.columns([3.0, 1.8, 3.2])
+                    with fu_cols[0]:
+                        st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};padding:0 0 0.3rem 1rem;font-style:italic;'>{follow_up}</div>", unsafe_allow_html=True)
+                    with fu_cols[1]:
+                        row["Follow-up Answer"] = st.text_input(
+                            f"fua_{sec_key}_{ri}", value=row.get("Follow-up Answer", ""),
+                            key=f"td_{sec_key}_{ri}_fua", label_visibility="collapsed")
 
-            edited = st.data_editor(
-                section_df, use_container_width=True, num_rows="fixed",
-                key=f"td_{sec_key}_editor", hide_index=True,
-                column_config={
-                    "Requirement": st.column_config.TextColumn("Requirement", disabled=True, width=280),
-                    "Value": st.column_config.TextColumn("Value / Answer", width=140),
-                    "Approver": st.column_config.TextColumn("Approver", width=120),
-                    "Date": st.column_config.TextColumn("Date", width=90),
-                    "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "Approved", "Rejected"], width=90),
-                },
-                disabled=["Requirement"])
-
-            # Write back edited values
-            edited_records = edited.to_dict("records")
-            for i, rec in enumerate(edited_records):
-                rows[i]["Value"] = rec.get("Value", "")
-                rows[i]["Approver"] = rec.get("Approver", "")
-                rows[i]["Date"] = rec.get("Date", "")
-                rows[i]["Status"] = rec.get("Status", "Pending")
-
-            # Render conditional follow-up inputs (only for "if_no" rows where answer is No)
-            for ri, row in enumerate(rows):
-                condition = row.get("Condition", "")
-                follow_up = row.get("Follow-up", "")
+                # Conditional follow-up (if_no) — only show when answer is No
                 if condition == "if_no" and follow_up:
                     main_val = (row.get("Value", "") or "").strip().lower()
                     if main_val in ("no", "n"):
-                        c1, c2 = st.columns([3.5, 6.5])
-                        with c1:
-                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{GREY_TEXT};padding:0.15rem 0 0.15rem 1rem;font-style:italic;'>↳ If no: {follow_up}</div>", unsafe_allow_html=True)
-                        with c2:
+                        fu_cols2 = st.columns([3.0, 1.8, 3.2])
+                        with fu_cols2[0]:
+                            st.markdown(f"<div style='font-family:Inter,sans-serif;font-size:0.65rem;color:{RED};padding:0 0 0.3rem 1rem;font-style:italic;'>If no: {follow_up}</div>", unsafe_allow_html=True)
+                        with fu_cols2[1]:
                             row["Follow-up Answer"] = st.text_input(
-                                "fua", value=row.get("Follow-up Answer", ""),
-                                key=f"td_{sec_key}_{ri}_fua", label_visibility="collapsed")
+                                "fua_no", value=row.get("Follow-up Answer", ""),
+                                key=f"td_{sec_key}_{ri}_fua_no", label_visibility="collapsed")
 
         st.session_state.td_requirements = td_reqs
 
@@ -5107,6 +5289,65 @@ Compares full cost-to-serve across factory locations, including material, labour
             <div><span style="display:inline-block;width:8px;height:8px;background:#FFF3CD;border:1px solid #856404;border-radius:2px;margin-right:0.2rem;"></span>Pending: <strong>{pending}</strong></div>
             <div><span style="display:inline-block;width:8px;height:8px;background:#F8D7DA;border:1px solid #721C24;border-radius:2px;margin-right:0.2rem;"></span>Rejected: <strong>{rejected}</strong></div>
         </div>""", unsafe_allow_html=True)
+
+        # ── FINANCIAL READINESS (auto-populated from analysis) ──
+        st.markdown(f"""<div style="background:#A9C0E8;color:{DARK_TEXT};padding:0.25rem 0.6rem;border-radius:2px 2px 0 0;margin-top:0.5rem;font-family:Inter,sans-serif;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+            Financial Readiness
+        </div>""", unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:0.68rem;color:{GREY_TEXT};margin:0.3rem 0 0.4rem 0;font-family:Inter,sans-serif;font-style:italic;">Auto-populated from the analysis model. Complete the relevant sections in Analysis & Required Investments to turn these green.</div>', unsafe_allow_html=True)
+
+        _all_res_fin = st.session_state.get("_all_results", [])
+        # Check 1: Investment cases populated
+        _inv_total = 0.0
+        for _item_fin in _all_res_fin:
+            for _ic_fin in _item_fin.get("investment", []):
+                _inv_total += _ic_fin.get("capex", 0) + _ic_fin.get("opex", 0) + _ic_fin.get("restructuring", 0)
+        _inv_ok = _inv_total > 0
+        # Check 2: Payback computed
+        _payback_vals = []
+        _irr_vals = []
+        for _item_fin in _all_res_fin:
+            for _ic_fin in _item_fin.get("investment", []):
+                pb = _ic_fin.get("simple_payback")
+                if pb is not None and pb > 0:
+                    _payback_vals.append(pb)
+                irr = _ic_fin.get("irr")
+                if irr is not None:
+                    _irr_vals.append(irr)
+        _payback_ok = len(_payback_vals) > 0
+        # Check 3: NWC impact assessed
+        _nwc_vals = []
+        for _item_fin in _all_res_fin:
+            for _r_fin in _item_fin.get("results", []):
+                dnwc = _r_fin.get("delta_nwc")
+                if dnwc is not None and dnwc != 0:
+                    _nwc_vals.append(dnwc)
+        _nwc_ok = len(_nwc_vals) > 0
+        # Check 4: Sending-site costs
+        _ss_costs_fin = st.session_state.get("sending_site_costs", {})
+        _ss_total_fin = sum(v for v in _ss_costs_fin.values() if isinstance(v, (int, float)))
+        _ss_ok = _ss_total_fin > 0
+
+        _fin_currency = st.session_state.get("currency", "SEK")
+        _fin_checks = [
+            ("Investment cases populated", _inv_ok,
+             f"{_inv_total:,.0f} {_fin_currency} total investment" if _inv_ok else "No investments entered in Required Investments"),
+            ("Payback & IRR computed", _payback_ok,
+             f"Payback: {min(_payback_vals):.1f}\u2013{max(_payback_vals):.1f} yr" + (f", IRR: {min(_irr_vals)*100:.0f}\u2013{max(_irr_vals)*100:.0f}%" if _irr_vals else "") if _payback_ok else "Enter investments to compute payback"),
+            ("NWC impact assessed", _nwc_ok,
+             f"Delta NWC range: {min(_nwc_vals):,.0f} to {max(_nwc_vals):,.0f} {_fin_currency}" if _nwc_ok else "Complete NWC assumptions in Financial Configuration"),
+            ("Sending-site costs captured", _ss_ok,
+             f"{_ss_total_fin:,.0f} {_fin_currency}" if _ss_ok else "Enter costs in Sending-Site Impact section on Required Investments page"),
+        ]
+
+        for _chk_name, _chk_ok, _chk_detail in _fin_checks:
+            _chk_color = GREEN if _chk_ok else "#e6a817"
+            _chk_icon = "\u2714" if _chk_ok else "\u25CB"
+            st.markdown(f"""<div style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0.5rem;border-bottom:1px solid #eee;font-family:Inter,sans-serif;">
+                <span style="color:{_chk_color};font-size:0.85rem;font-weight:700;">{_chk_icon}</span>
+                <span style="font-size:0.72rem;font-weight:600;color:{DARK_TEXT};min-width:180px;">{_chk_name}</span>
+                <span style="font-size:0.68rem;color:{GREY_TEXT};">{_chk_detail}</span>
+            </div>""", unsafe_allow_html=True)
 
         # ── CUSTOMER RE-QUALIFICATION TRACKER ────────────────────
         st.markdown(f'<div class="sec">Customer Re-qualification Tracker</div>', unsafe_allow_html=True)
@@ -5143,24 +5384,36 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         # ── TAX & TRANSFER PRICING ────────────────────────────────
         st.markdown(f'<div class="sec">Tax & Transfer Pricing</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Intercompany pricing, withholding taxes, permanent establishment risk, and tax incentives. These can materially affect the net landed cost but are often overlooked in initial comparisons.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Qualitative inputs — document key tax and transfer pricing considerations. These do not feed into the cost model but are required for a complete transfer proposal. Consult your tax advisor for specific guidance.</div>', unsafe_allow_html=True)
 
         ttp = st.session_state.td_tax_transfer_pricing
         tc1, tc2 = st.columns(2)
         with tc1:
-            ttp["intercompany_margin"] = st.text_input("Intercompany Margin Approach", value=ttp.get("intercompany_margin", ""), key="td_ttp_ic_margin", placeholder="e.g. Cost-plus 5%, arm's length")
-            ttp["withholding_tax"] = st.text_input("Withholding Tax (%)", value=ttp.get("withholding_tax", ""), key="td_ttp_wht", placeholder="e.g. 10% on royalties, 0% under treaty")
-            ttp["pe_risk"] = st.text_input("Permanent Establishment Risk", value=ttp.get("pe_risk", ""), key="td_ttp_pe", placeholder="e.g. No PE risk — independent entity")
+            ttp["intercompany_margin"] = st.text_input("Intercompany Margin Approach", value=ttp.get("intercompany_margin", ""), key="td_ttp_ic_margin",
+                placeholder="e.g. Cost-plus 5%, arm's length",
+                help="How the transfer price between entities is set. 'Cost-plus' adds a markup to manufacturing cost. 'Arm's length' means priced as if between unrelated parties. Tax authorities scrutinise this.")
+            ttp["withholding_tax"] = st.text_input("Withholding Tax (%)", value=ttp.get("withholding_tax", ""), key="td_ttp_wht",
+                placeholder="e.g. 10% on royalties, 0% under treaty",
+                help="Tax levied by the source country on payments (royalties, dividends, management fees) sent to the parent company. Can be reduced by bilateral tax treaties.")
+            ttp["pe_risk"] = st.text_input("Permanent Establishment Risk", value=ttp.get("pe_risk", ""), key="td_ttp_pe",
+                placeholder="e.g. No PE risk — independent entity",
+                help="If the receiving entity's activities create a taxable presence in the sending country (e.g. seconded employees, local contracts). Can trigger unexpected corporate tax obligations.")
         with tc2:
-            ttp["tax_incentives"] = st.text_input("Tax Incentives / Grants", value=ttp.get("tax_incentives", ""), key="td_ttp_incentives", placeholder="e.g. 5-year tax holiday, investment grant")
-            ttp["ftz_benefits"] = st.text_input("Free Trade Zone / SEZ Benefits", value=ttp.get("ftz_benefits", ""), key="td_ttp_ftz", placeholder="e.g. Duty-free imports for re-export")
-            ttp["rd_credits"] = st.text_input("R&D Credits / Patent Box", value=ttp.get("rd_credits", ""), key="td_ttp_rd", placeholder="e.g. 25% R&D tax credit applicable")
+            ttp["tax_incentives"] = st.text_input("Tax Incentives / Grants", value=ttp.get("tax_incentives", ""), key="td_ttp_incentives",
+                placeholder="e.g. 5-year tax holiday, investment grant",
+                help="Government incentives at the receiving site — tax holidays, reduced rates, investment grants, or subsidies that improve the net cost position.")
+            ttp["ftz_benefits"] = st.text_input("Free Trade Zone / SEZ Benefits", value=ttp.get("ftz_benefits", ""), key="td_ttp_ftz",
+                placeholder="e.g. Duty-free imports for re-export",
+                help="Free Trade Zone or Special Economic Zone benefits — may include duty exemptions, simplified customs, or reduced VAT on imported materials for re-export.")
+            ttp["rd_credits"] = st.text_input("R&D Credits / Patent Box", value=ttp.get("rd_credits", ""), key="td_ttp_rd",
+                placeholder="e.g. 25% R&D tax credit applicable",
+                help="Tax credits or deductions for R&D activities. Patent Box regimes tax IP income at reduced rates. Relevant if the transfer includes R&D or IP-intensive processes.")
         ttp["notes"] = st.text_area("Tax & Transfer Pricing Notes", value=ttp.get("notes", ""), key="td_ttp_notes", height=60, placeholder="Key assumptions, open questions, advisors consulted...")
         st.session_state.td_tax_transfer_pricing = ttp
 
         # ── ESG / CARBON IMPACT ───────────────────────────────────
         st.markdown(f'<div class="sec">ESG & Carbon Impact</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Environmental impact of the proposed transfer. Longer supply chains increase Scope 3 emissions. EU CBAM (Carbon Border Adjustment Mechanism) may create material cost exposure for carbon-intensive imports.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Qualitative inputs — document the environmental impact of the proposed transfer. Longer supply chains increase Scope 3 emissions. EU CBAM (Carbon Border Adjustment Mechanism) may create material cost exposure for carbon-intensive imports.</div>', unsafe_allow_html=True)
 
         esg = st.session_state.td_esg
         ec1, ec2 = st.columns(2)
@@ -5175,29 +5428,51 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         # ── STEADY-STATE OPERATING MODEL ─────────────────────────
         st.markdown(f'<div class="sec">Steady-State Operating Model</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Define the expected ramp trajectory. What does Month 3, 6, 12, and 24 look like? Include yield targets, volume ramp, quality KPIs, and dual-sourcing costs during transition.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Define the ramp-up plan for the receiving site. Months are counted from project execution start. During dual-sourcing, both sites run in parallel to ensure continuity.</div>', unsafe_allow_html=True)
 
-        ss_df = pd.DataFrame(st.session_state.td_steady_state)
-        if "Milestone" not in ss_df.columns:
-            ss_df = pd.DataFrame([{"Milestone": "Month 3", "Yield %": "", "Volume %": "", "Quality KPI": "", "Dual-Source Cost": "", "Notes": ""}])
-        edited_ss = st.data_editor(
-            ss_df, use_container_width=True, num_rows="dynamic", key="td_ss_editor",
-            hide_index=True,
-            column_config={
-                "Milestone": st.column_config.TextColumn("Milestone", width=100),
-                "Yield %": st.column_config.TextColumn("Yield Target", width=100),
-                "Volume %": st.column_config.TextColumn("Volume Ramp %", width=100),
-                "Quality KPI": st.column_config.TextColumn("Quality KPI", width=140),
-                "Dual-Source Cost": st.column_config.TextColumn("Dual-Source Cost", width=120),
-                "Notes": st.column_config.TextColumn("Notes", width=180),
-            })
-        st.session_state.td_steady_state = edited_ss.to_dict("records")
+        _ss = st.session_state.td_steady_state
+        if not isinstance(_ss, dict):
+            _ss = {"ramp_100_months": 0, "dual_sourcing_months": 0, "dual_sourcing_cost": 0.0, "quality_target": "", "yield_target": "", "notes": ""}
+
+        _fin_currency_ss = st.session_state.get("currency", "SEK")
+        ss_c1, ss_c2 = st.columns(2)
+        with ss_c1:
+            _ss["ramp_100_months"] = st.number_input(
+                "Months to 100% volume ramp", value=int(_ss.get("ramp_100_months", 0)),
+                min_value=0, step=1, key="td_ss_ramp",
+                help="Expected number of months from execution start until the receiving site reaches full production volume")
+        with ss_c2:
+            _ss["dual_sourcing_months"] = st.number_input(
+                "Months of dual-sourcing", value=int(_ss.get("dual_sourcing_months", 0)),
+                min_value=0, step=1, key="td_ss_dual_months",
+                help="Duration where both sending and receiving sites produce in parallel to ensure supply continuity")
+        _ss["dual_sourcing_cost"] = st.number_input(
+            f"Estimated dual-sourcing cost ({_fin_currency_ss})", value=float(_ss.get("dual_sourcing_cost", 0.0)),
+            min_value=0.0, step=100000.0, format="%,.0f", key="td_ss_dual_cost",
+            help="Additional cost of running both sites in parallel — typically includes duplicate overhead, logistics, quality monitoring, and yield loss at the new site. This feeds into the Total Cost of Transfer.")
+        ss_q1, ss_q2 = st.columns(2)
+        with ss_q1:
+            _ss["quality_target"] = st.text_input(
+                "Quality Target", value=_ss.get("quality_target", ""), key="td_ss_quality",
+                placeholder="e.g. PPM < 50, Cpk > 1.33, zero customer complaints",
+                help="Define specific, measurable quality KPIs the receiving site must meet before the sending site can be decommissioned")
+        with ss_q2:
+            _ss["yield_target"] = st.text_input(
+                "Yield Target", value=_ss.get("yield_target", ""), key="td_ss_yield",
+                placeholder="e.g. 95% first-pass yield by month 6",
+                help="First-pass yield = percentage of units produced correctly without rework. Target should match or exceed the sending site's current yield")
+        _ss["notes"] = st.text_area(
+            "Ramp-up Notes", value=_ss.get("notes", ""), key="td_ss_notes", height=60,
+            placeholder="Key assumptions, critical path items, dependencies on equipment delivery or customer approval...")
+        st.session_state.td_steady_state = _ss
 
         # ── TRANSFER FEASIBILITY COMPLETENESS ──────────────────
         td_fields = {
             "Transfer From": bool(st.session_state.td_transfer_from.strip()),
             "Transfer To": bool(st.session_state.td_transfer_to.strip()),
             "Product Line": bool(st.session_state.td_product_line.strip()),
+            "Tax & Transfer Pricing": bool(any(v.strip() for k, v in st.session_state.td_tax_transfer_pricing.items() if k != "notes" and isinstance(v, str))),
+            "ESG Assessment": bool(any(v.strip() for k, v in st.session_state.td_esg.items() if k != "sustainability_notes" and isinstance(v, str))),
         }
         # Count requirements with answers
         td_reqs = st.session_state.get("td_requirements", {})
@@ -5236,7 +5511,7 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
             Proposal <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
         </div>""", unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Decision summary for the Factory Council. Includes structured recommendation, quantified risk exposure, milestone tracking, and formal approval log. Financial figures are auto-populated from the Required Investments analysis where available.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Decision summary for governance review. Includes structured recommendation, quantified risk exposure, milestone tracking, and formal approval log. Financial figures are auto-populated from the Required Investments analysis where available.</div>', unsafe_allow_html=True)
 
         # ── CLASSIFICATION-AWARE CALLOUT (PROPOSAL) ───────────
         _has_restr_prop = False
@@ -5273,7 +5548,7 @@ Compares full cost-to-serve across factory locations, including material, labour
                 st.session_state.prop_recommendation = conclusion_dec
                 current_rec_idx = rec_options.index(conclusion_dec) if conclusion_dec in rec_options else 0
             recommendation = st.selectbox(
-                "Recommendation to Factory Council",
+                "Recommendation",
                 options=rec_options,
                 index=current_rec_idx,
                 key="prop_rec_select",
@@ -5318,23 +5593,39 @@ Compares full cost-to-serve across factory locations, including material, labour
             for item_data in all_results:
                 for ic in item_data.get("investment_cases", []):
                     auto_inv += ic.get("total_investment", 0)
+        # Include sending-site costs in total investment
+        _ss_prop = st.session_state.get("sending_site_costs", {})
+        auto_inv += sum(v for v in _ss_prop.values() if isinstance(v, (int, float)))
         auto_inv_m = auto_inv / 1e6 if auto_inv else 0.0
 
-        fc1, fc2, fc3 = st.columns(3)
+        fc1, fc2, fc3, fc4 = st.columns(4)
         with fc1:
             inv_val = st.session_state.prop_total_investment if st.session_state.prop_total_investment is not None else (auto_inv_m if auto_inv_m else None)
             new_inv = st.number_input(
                 f"Total Investment (M{currency})", value=inv_val,
-                min_value=0.0, step=0.5, format="%.1f", key="prop_inv_input")
+                min_value=0.0, step=0.5, format="%.1f", key="prop_inv_input",
+                help="Sum of CAPEX, OPEX, restructuring, and sending-site costs from Required Investments. Includes both cash and non-cash items (e.g. internal equipment transfers).")
             st.session_state.prop_total_investment = new_inv
             if auto_inv_m > 0:
                 st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};margin-top:-0.5rem;font-style:italic;">Auto-calculated: {auto_inv_m:.1f} M{currency}</div>', unsafe_allow_html=True)
         with fc2:
-            new_cash = st.number_input(
-                f"Cash Out (M{currency})", value=st.session_state.prop_cash_out or 0.0,
-                min_value=0.0, step=0.5, format="%.1f", key="prop_cash_input")
-            st.session_state.prop_cash_out = new_cash
+            new_it = st.number_input(
+                f"Internal Transfer (M{currency})", value=st.session_state.prop_internal_transfer or 0.0,
+                min_value=0.0, step=0.5, format="%.1f", key="prop_it_input",
+                help="Equipment or assets transferred between group entities at book value. Counts as investment at the receiving unit but has no net cash impact at group level.")
+            st.session_state.prop_internal_transfer = new_it
         with fc3:
+            # Auto-suggest net cash out if internal transfer is set
+            _suggested_cash = max(0.0, (new_inv or 0.0) - (new_it or 0.0))
+            _cash_val = st.session_state.prop_cash_out if st.session_state.prop_cash_out else _suggested_cash
+            new_cash = st.number_input(
+                f"Net Cash Out (M{currency})", value=_cash_val,
+                min_value=0.0, step=0.5, format="%.1f", key="prop_cash_input",
+                help="Actual cash expenditure at group level. Equals Total Investment minus Internal Equipment Transfers. This is the real funding requirement.")
+            st.session_state.prop_cash_out = new_cash
+            if new_it > 0:
+                st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};margin-top:-0.5rem;font-style:italic;">= Investment ({new_inv:.1f}) − Transfer ({new_it:.1f})</div>', unsafe_allow_html=True)
+        with fc4:
             st.session_state.prop_timeplan = st.text_input(
                 "Time Plan", value=st.session_state.prop_timeplan,
                 key="prop_timeplan_input",
@@ -5342,7 +5633,7 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         # ── QUANTIFIED RISK EXPOSURE ───────────────────────────
         st.markdown(f'<div class="sec">Risk Exposure</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Quantify each risk with probability and financial impact. This enables the Factory Council to weigh the total risk-adjusted exposure against the expected benefits.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Quantify each risk with probability and financial impact. This enables the decision board to weigh the total risk-adjusted exposure against the expected benefits.</div>', unsafe_allow_html=True)
 
         rexp_df = pd.DataFrame(st.session_state.prop_risk_exposure)
         if "Risk" not in rexp_df.columns:
@@ -5423,19 +5714,19 @@ Compares full cost-to-serve across factory locations, including material, labour
                 "Phase": st.column_config.TextColumn("Phase", width=160),
                 "Description": st.column_config.TextColumn("Key Activities", width=210),
                 "Go/No-Go Criteria": st.column_config.TextColumn("Go/No-Go Criteria", width=210),
-                "Duration": st.column_config.TextColumn("Duration", width=90),
+                "Duration": st.column_config.TextColumn("Duration (months)", width=110),
                 "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "In Progress", "Complete", "At Risk", "Blocked"], width=110),
             })
         st.session_state.prop_impl_phases = edited_impl.to_dict("records")
 
-        # Phase summary bar
+        # Phase summary bar — only show when at least one phase has progressed
         ph_counts = {"Pending": 0, "In Progress": 0, "Complete": 0, "At Risk": 0, "Blocked": 0}
         for ph in st.session_state.prop_impl_phases:
             s = ph.get("Status", "Pending")
             if s in ph_counts:
                 ph_counts[s] += 1
-        total_ph = sum(ph_counts.values())
-        if total_ph > 0 and any(ph.get("Phase", "").strip() for ph in st.session_state.prop_impl_phases):
+        _has_progress = any(ph_counts.get(s, 0) > 0 for s in ("In Progress", "Complete", "At Risk", "Blocked"))
+        if _has_progress:
             ph_colors = {"Complete": GREEN, "In Progress": ACCENT_BLUE, "Pending": GREY_TEXT, "At Risk": "#e6a817", "Blocked": RED}
             ph_parts = " ".join(
                 f'<span style="color:{ph_colors.get(k, GREY_TEXT)};font-weight:600;">{v} {k}</span>'
@@ -5518,7 +5809,7 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         # ── APPROVAL LOG ───────────────────────────────────────
         st.markdown(f'<div class="sec">Approval & Decision Log</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Record formal approvals from each decision-maker. This creates an auditable trail for the Factory Council governance process.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="callout" style="font-size:0.72rem;">Record formal approvals from each decision-maker. This creates an auditable trail for the governance process.</div>', unsafe_allow_html=True)
 
         appr_df = pd.DataFrame(st.session_state.prop_approvals)
         if "Approver" not in appr_df.columns:
@@ -5597,7 +5888,7 @@ Compares full cost-to-serve across factory locations, including material, labour
             <div style="font-size:0.67rem;font-weight:700;color:{NAVY};text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.3rem;">Proposal Completeness</div>
             <div style="background:#eee;border-radius:2px;height:6px;margin-bottom:0.3rem;"><div style="background:{prop_color};height:6px;border-radius:2px;width:{prop_bar_width}%;"></div></div>
             <div style="font-size:0.72rem;color:{prop_color};font-weight:600;">{prop_done} of {prop_total} sections complete ({prop_pct:.0f}%)</div>
-            {f'<div style="font-size:0.68rem;color:{GREY_TEXT};margin-top:0.15rem;">Missing: {", ".join(prop_missing)}</div>' if prop_missing else f'<div style="font-size:0.68rem;color:{GREEN};margin-top:0.15rem;">Ready for Factory Council review</div>'}
+            {f'<div style="font-size:0.68rem;color:{GREY_TEXT};margin-top:0.15rem;">Missing: {", ".join(prop_missing)}</div>' if prop_missing else f'<div style="font-size:0.68rem;color:{GREEN};margin-top:0.15rem;">Ready for decision board review</div>'}
         </div>''', unsafe_allow_html=True)
 
         st.markdown("---")
@@ -5617,6 +5908,44 @@ Compares full cost-to-serve across factory locations, including material, labour
 
         avp = st.session_state.actuals_vs_plan
 
+        # Auto-populate Plan values from analysis model
+        _all_res_avp = st.session_state.get("_all_results", [])
+        _ss_avp = st.session_state.get("td_steady_state", {})
+        _conclusion_opt = st.session_state.get("conclusion_selected_option", "")
+        if _all_res_avp:
+            _avp_capex = 0.0
+            _avp_opex = 0.0
+            _avp_savings_y1 = 0.0
+            _avp_nwc = 0.0
+            for _item_avp in _all_res_avp:
+                for _ic_avp in _item_avp.get("investment", []):
+                    if not _conclusion_opt or _ic_avp.get("factory_name") == _conclusion_opt:
+                        _avp_capex += _ic_avp.get("capex", 0)
+                        _avp_opex += _ic_avp.get("opex", 0)
+                        _sav_by_yr = _ic_avp.get("annual_savings_by_year", [])
+                        if _sav_by_yr:
+                            _avp_savings_y1 += _sav_by_yr[0]
+                        else:
+                            _avp_savings_y1 += _ic_avp.get("annual_savings", 0)
+                for _r_avp in _item_avp.get("results", []):
+                    if _r_avp.get("name") == _conclusion_opt:
+                        _avp_nwc += _r_avp.get("delta_nwc", 0)
+            _avp_ramp = int(_ss_avp.get("ramp_100_months", 0)) if isinstance(_ss_avp, dict) else 0
+            _avp_yield = _ss_avp.get("yield_target", "") if isinstance(_ss_avp, dict) else ""
+            # Map metric names to auto values
+            _auto_plan = {
+                "CAPEX": f"{_avp_capex:,.0f}" if _avp_capex else "",
+                "OPEX": f"{_avp_opex:,.0f}" if _avp_opex else "",
+                "Ramp Timeline (months)": str(_avp_ramp) if _avp_ramp else "",
+                "Yield Target": _avp_yield,
+                "Annual Savings (Year 1)": f"{_avp_savings_y1:,.0f}" if _avp_savings_y1 else "",
+                "NWC Impact": f"{_avp_nwc:,.0f}" if _avp_nwc else "",
+            }
+            for _entry in avp.get("entries", []):
+                _m = _entry.get("Metric", "")
+                if _m in _auto_plan and _auto_plan[_m] and not _entry.get("Plan", "").strip():
+                    _entry["Plan"] = _auto_plan[_m]
+
         st.markdown(f'<div class="sec">Actuals vs. Plan Tracker</div>', unsafe_allow_html=True)
 
         avp_df = pd.DataFrame(avp.get("entries", []))
@@ -5633,6 +5962,18 @@ Compares full cost-to-serve across factory locations, including material, labour
                 "Notes": st.column_config.TextColumn("Notes / Explanation", width=240),
             })
         avp["entries"] = edited_avp.to_dict("records")
+
+        # Highlight overridden auto-fill values
+        if _all_res_avp:
+            _overrides = []
+            for _entry in avp["entries"]:
+                _m = _entry.get("Metric", "")
+                _user_val = _entry.get("Plan", "").strip()
+                _model_val = _auto_plan.get(_m, "").strip()
+                if _model_val and _user_val and _user_val != _model_val:
+                    _overrides.append(f"<strong>{_m}</strong>: model = {_model_val}, entered = {_user_val}")
+            if _overrides:
+                st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.65rem;color:#e6a817;margin:0.2rem 0 0.4rem 0;padding:0.3rem 0.6rem;background:#fef9f0;border-left:3px solid #e6a817;border-radius:2px;">Plan overrides detected (differs from model): {" &middot; ".join(_overrides)}</div>', unsafe_allow_html=True)
 
         # Auto-compute variance where possible
         for entry in avp["entries"]:
@@ -5768,13 +6109,38 @@ Compares full cost-to-serve across factory locations, including material, labour
                                    "actuals_vs_plan", "version_history"):
                         if gk_obj in proj:
                             st.session_state[gk_obj] = proj[gk_obj]
+                    # Migration: drop legacy Financial Requirements (now auto-check)
+                    if isinstance(st.session_state.get("td_requirements"), dict):
+                        st.session_state.td_requirements.pop("Financial Requirements", None)
+                    # Migration: convert old list-format steady-state to new dict
+                    if isinstance(st.session_state.get("td_steady_state"), list):
+                        _old_ss = st.session_state.td_steady_state
+                        _ds_cost = 0.0
+                        _ss_notes = ""
+                        for _row in _old_ss:
+                            try:
+                                _ds_cost += float(str(_row.get("Dual-Source Cost", "0") or "0").replace(",", "").replace(" ", ""))
+                            except (ValueError, TypeError):
+                                pass
+                            if _row.get("Notes", "").strip():
+                                _ss_notes += _row.get("Notes", "") + "; "
+                        st.session_state.td_steady_state = {
+                            "ramp_100_months": 0, "dual_sourcing_months": 0,
+                            "dual_sourcing_cost": _ds_cost,
+                            "quality_target": "", "yield_target": "",
+                            "notes": _ss_notes.rstrip("; "),
+                        }
                     if "prop_total_investment" in proj:
                         st.session_state.prop_total_investment = proj["prop_total_investment"]
+                    if "prop_internal_transfer" in proj:
+                        st.session_state.prop_internal_transfer = float(proj["prop_internal_transfer"] or 0)
                     if "prop_cash_out" in proj:
                         st.session_state.prop_cash_out = proj["prop_cash_out"]
                     for nk in ("prop_severance_cost", "prop_retraining_cost"):
                         if nk in proj:
                             st.session_state[nk] = float(proj[nk] or 0)
+                    if "sending_site_costs" in proj and isinstance(proj["sending_site_costs"], dict):
+                        st.session_state.sending_site_costs = proj["sending_site_costs"]
                     for nk_int in ("ps_workforce_headcount_from", "ps_workforce_headcount_to"):
                         if nk_int in proj:
                             st.session_state[nk_int] = int(proj[nk_int] or 0)
