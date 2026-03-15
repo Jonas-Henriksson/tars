@@ -4321,65 +4321,76 @@ Compares full cost-to-serve across factory locations, including material, labour
             "Financial Requirements": f"background:#A9C0E8;color:{DARK_TEXT};",
         }
 
-        # Compact table CSS — aggressively reduce all spacing for dense table feel
+        # Compact table CSS — page-level overrides for dense table feel
+        # These apply globally but only render on the Transfer Details page
         st.markdown(f"""<style>
         /* ── Transfer Details compact table overrides ── */
-        .td-compact .stTextInput,
-        .td-compact .stSelectbox,
-        .td-compact .stDateInput {{
-            margin-bottom: -0.6rem !important;
-        }}
-        .td-compact .stTextInput > div > div > input {{
+        /* Shrink all text inputs */
+        .stMainBlockContainer .stTextInput > div > div > input {{
             font-size: 0.7rem !important; padding: 0.15rem 0.35rem !important;
-            height: 1.6rem !important; min-height: 0 !important;
+            height: 1.5rem !important; min-height: 0 !important;
             font-family: 'Inter', sans-serif !important;
             border-radius: 2px !important;
         }}
-        .td-compact .stSelectbox > div > div {{
+        /* Shrink all selectboxes */
+        .stMainBlockContainer .stSelectbox > div > div {{
             min-height: 0 !important;
-            font-size: 0.7rem !important;
         }}
-        .td-compact .stSelectbox > div > div > div {{
-            font-size: 0.7rem !important; padding: 0.15rem 0.35rem !important;
-            min-height: 1.6rem !important; height: 1.6rem !important;
-            line-height: 1.6rem !important;
+        .stMainBlockContainer .stSelectbox > div > div > div {{
+            font-size: 0.7rem !important; padding: 0rem 0.3rem !important;
+            min-height: 1.5rem !important; height: 1.5rem !important;
             font-family: 'Inter', sans-serif !important;
             border-radius: 2px !important;
             display: flex !important; align-items: center !important;
         }}
-        .td-compact .stSelectbox svg {{
-            width: 0.7rem !important; height: 0.7rem !important;
+        .stMainBlockContainer .stSelectbox [data-baseweb="select"] > div {{
+            padding-top: 0 !important; padding-bottom: 0 !important;
         }}
-        .td-compact .stDateInput > div > div {{
+        .stMainBlockContainer .stSelectbox svg {{
+            width: 0.65rem !important; height: 0.65rem !important;
+        }}
+        /* Shrink date inputs */
+        .stMainBlockContainer .stDateInput > div > div {{
             min-height: 0 !important;
         }}
-        .td-compact .stDateInput > div > div > input {{
+        .stMainBlockContainer .stDateInput > div > div > input {{
             font-size: 0.7rem !important; padding: 0.15rem 0.35rem !important;
-            height: 1.6rem !important; min-height: 0 !important;
+            height: 1.5rem !important; min-height: 0 !important;
             font-family: 'Inter', sans-serif !important;
             border-radius: 2px !important;
         }}
-        .td-compact .stDateInput button {{
-            height: 1.6rem !important; width: 1.6rem !important;
+        .stMainBlockContainer .stDateInput [data-baseweb="input"] {{
             padding: 0 !important;
         }}
-        .td-compact .stDateInput button svg {{
-            width: 0.7rem !important; height: 0.7rem !important;
+        .stMainBlockContainer .stDateInput button {{
+            height: 1.5rem !important; width: 1.5rem !important;
+            padding: 0 !important;
         }}
-        /* Reduce vertical gap between Streamlit elements inside columns */
-        .td-compact [data-testid="stVerticalBlockBorderWrapper"],
-        .td-compact [data-testid="stVerticalBlock"] {{
-            gap: 0 !important;
+        .stMainBlockContainer .stDateInput button svg {{
+            width: 0.65rem !important; height: 0.65rem !important;
         }}
-        .td-compact [data-testid="column"] {{
-            padding-top: 0 !important; padding-bottom: 0 !important;
+        /* Collapse vertical gaps between elements */
+        .stMainBlockContainer [data-testid="stVerticalBlockBorderWrapper"] {{
+            gap: 0rem !important;
         }}
-        /* Reduce markdown container padding */
-        .td-compact [data-testid="stMarkdownContainer"] {{
-            margin: 0 !important; padding: 0 !important;
+        .stMainBlockContainer [data-testid="stVerticalBlock"] {{
+            gap: 0rem !important;
         }}
-        .td-compact [data-testid="stMarkdownContainer"] p {{
-            margin: 0 !important;
+        .stMainBlockContainer [data-testid="column"] > div {{
+            gap: 0rem !important;
+        }}
+        /* Tighten horizontal rule margins */
+        .stMainBlockContainer [data-testid="stHorizontalBlock"] {{
+            gap: 0.4rem !important;
+        }}
+        /* Kill default element bottom margin */
+        .stMainBlockContainer .stTextInput,
+        .stMainBlockContainer .stSelectbox,
+        .stMainBlockContainer .stDateInput {{
+            margin-bottom: 0 !important;
+        }}
+        .stMainBlockContainer .element-container {{
+            margin-bottom: 0 !important;
         }}
         </style>""", unsafe_allow_html=True)
 
@@ -4397,9 +4408,6 @@ Compares full cost-to-serve across factory locations, including material, labour
                 for _fld in ("Requirement", "Follow-up"):
                     if _fld in _row:
                         _row[_fld] = _row[_fld].replace("(Q)", "(Quantity)")
-
-        # Open compact wrapper
-        st.markdown('<div class="td-compact">', unsafe_allow_html=True)
 
         # Column header row
         _hdr_style = f"font-family:Inter,sans-serif;font-size:0.58rem;font-weight:700;color:{GREY_TEXT};text-transform:uppercase;letter-spacing:0.06em;padding-bottom:0.2rem;"
@@ -4473,9 +4481,6 @@ Compares full cost-to-serve across factory locations, including material, labour
 
                 # Thin separator
                 st.markdown(f"<div style='border-bottom:1px solid #eee;margin:0.1rem 0;'></div>", unsafe_allow_html=True)
-
-        # Close compact wrapper
-        st.markdown('</div>', unsafe_allow_html=True)
 
         st.session_state.td_requirements = td_reqs
 
