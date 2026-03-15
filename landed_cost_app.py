@@ -2339,7 +2339,7 @@ def init_state():
                 {"Metric": "CAPEX", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
                 {"Metric": "OPEX", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
                 {"Metric": "Ramp Timeline (months)", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
-                {"Metric": "Yield at Month 6", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
+                {"Metric": "Yield Target", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
                 {"Metric": "Annual Savings (Year 1)", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
                 {"Metric": "NWC Impact", "Plan": "", "Actual": "", "Variance": "", "Notes": ""},
             ],
@@ -5907,6 +5907,44 @@ Compares full cost-to-serve across factory locations, including material, labour
         st.markdown(f'<div class="callout" style="font-size:0.72rem;">Post-decision tracking. Compare planned vs. actual outcomes to close the feedback loop and build institutional credibility for future analyses. Update this section as actuals become available during the transfer execution.</div>', unsafe_allow_html=True)
 
         avp = st.session_state.actuals_vs_plan
+
+        # Auto-populate Plan values from analysis model
+        _all_res_avp = st.session_state.get("_all_results", [])
+        _ss_avp = st.session_state.get("td_steady_state", {})
+        _conclusion_opt = st.session_state.get("conclusion_selected_option", "")
+        if _all_res_avp:
+            _avp_capex = 0.0
+            _avp_opex = 0.0
+            _avp_savings_y1 = 0.0
+            _avp_nwc = 0.0
+            for _item_avp in _all_res_avp:
+                for _ic_avp in _item_avp.get("investment", []):
+                    if not _conclusion_opt or _ic_avp.get("factory_name") == _conclusion_opt:
+                        _avp_capex += _ic_avp.get("capex", 0)
+                        _avp_opex += _ic_avp.get("opex", 0)
+                        _sav_by_yr = _ic_avp.get("annual_savings_by_year", [])
+                        if _sav_by_yr:
+                            _avp_savings_y1 += _sav_by_yr[0]
+                        else:
+                            _avp_savings_y1 += _ic_avp.get("annual_savings", 0)
+                for _r_avp in _item_avp.get("results", []):
+                    if _r_avp.get("name") == _conclusion_opt:
+                        _avp_nwc += _r_avp.get("delta_nwc", 0)
+            _avp_ramp = int(_ss_avp.get("ramp_100_months", 0)) if isinstance(_ss_avp, dict) else 0
+            _avp_yield = _ss_avp.get("yield_target", "") if isinstance(_ss_avp, dict) else ""
+            # Map metric names to auto values
+            _auto_plan = {
+                "CAPEX": f"{_avp_capex:,.0f}" if _avp_capex else "",
+                "OPEX": f"{_avp_opex:,.0f}" if _avp_opex else "",
+                "Ramp Timeline (months)": str(_avp_ramp) if _avp_ramp else "",
+                "Yield Target": _avp_yield,
+                "Annual Savings (Year 1)": f"{_avp_savings_y1:,.0f}" if _avp_savings_y1 else "",
+                "NWC Impact": f"{_avp_nwc:,.0f}" if _avp_nwc else "",
+            }
+            for _entry in avp.get("entries", []):
+                _m = _entry.get("Metric", "")
+                if _m in _auto_plan and _auto_plan[_m] and not _entry.get("Plan", "").strip():
+                    _entry["Plan"] = _auto_plan[_m]
 
         st.markdown(f'<div class="sec">Actuals vs. Plan Tracker</div>', unsafe_allow_html=True)
 
