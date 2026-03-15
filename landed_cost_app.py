@@ -2510,28 +2510,47 @@ This provides the local risk percentage.</li>
                 # Build year-by-year savings from sales projection
                 alt_factory = next((f for f in factories_list if f.name == an), None)
                 projection = dc_inputs.sales_projection if dc_inputs else []
+                nwc_all = st.session_state.get("_nwc_assumptions", {})
+                cc_rates = st.session_state.get("_carrying_cost_rates", {})
                 if projection and dc_inputs and alt_factory and base_factory:
                     from dataclasses import replace
                     savings_by_year = []
+                    base_nwc_inv = nwc_all.get(base_factory.name, {})
+                    alt_nwc_inv = nwc_all.get(an, {})
+                    base_cc = cc_rates.get(base_factory.name, 0.18)
+                    alt_cc = cc_rates.get(an, 0.18)
+                    base_lt = get_lead_time(factory_countries.get(base_factory.name, ""),
+                                            factory_countries.get(base_factory.name, ""))
+                    alt_lt = get_lead_time(factory_countries.get(base_factory.name, ""),
+                                           factory_countries.get(an, ""))
+                    ov = get_ov_fn(an) if get_ov_fn else {}
                     for p in projection:
                         yr_inputs = replace(dc_inputs,
                                                net_sales_value=float(p["value"]),
                                                net_sales_qty=int(p["qty"]))
-                        base_lt = get_lead_time(factory_countries.get(base_factory.name, ""),
-                                                factory_countries.get(base_factory.name, ""))
-                        alt_lt = get_lead_time(factory_countries.get(base_factory.name, ""),
-                                               factory_countries.get(an, ""))
-                        ov = get_ov_fn(an) if get_ov_fn else {}
                         base_r = compute_location(yr_inputs, base_factory, is_base=True,
-                                                  lead_time_days=base_lt,
-                                                  company_wacc=company_wacc)
+                                    lead_time_days=base_lt, base_lead_time_days=base_lt,
+                                    cost_of_capital=base_cc,
+                                    safety_stock_days=base_nwc_inv.get("safety_stock_days", 0),
+                                    base_safety_stock_days=base_nwc_inv.get("safety_stock_days", 0),
+                                    cycle_stock_days=base_nwc_inv.get("cycle_stock_days", 0),
+                                    base_cycle_stock_days=base_nwc_inv.get("cycle_stock_days", 0),
+                                    payment_terms_days=base_nwc_inv.get("payment_terms_days", 0),
+                                    base_payment_terms_days=base_nwc_inv.get("payment_terms_days", 0))
                         alt_r_yr = compute_location(yr_inputs, alt_factory, overrides=ov,
-                                                    lead_time_days=alt_lt,
-                                                    company_wacc=company_wacc)
-                        base_op = base_r.get("annual_adj_op", base_r["annual_op"])
-                        alt_op = alt_r_yr.get("annual_adj_op", alt_r_yr["annual_op"])
-                        savings_by_year.append(alt_op - base_op)
-                    annual_savings = savings_by_year
+                                    lead_time_days=alt_lt, base_lead_time_days=base_lt,
+                                    cost_of_capital=alt_cc,
+                                    safety_stock_days=alt_nwc_inv.get("safety_stock_days", 0),
+                                    base_safety_stock_days=base_nwc_inv.get("safety_stock_days", 0),
+                                    cycle_stock_days=alt_nwc_inv.get("cycle_stock_days", 0),
+                                    base_cycle_stock_days=base_nwc_inv.get("cycle_stock_days", 0),
+                                    payment_terms_days=alt_nwc_inv.get("payment_terms_days", 0),
+                                    base_payment_terms_days=base_nwc_inv.get("payment_terms_days", 0))
+                        if base_r and alt_r_yr:
+                            base_op = base_r.get("annual_adj_op", base_r["annual_op"])
+                            alt_op = alt_r_yr.get("annual_adj_op", alt_r_yr["annual_op"])
+                            savings_by_year.append(alt_op - base_op)
+                    annual_savings = savings_by_year if savings_by_year else 0.0
                 else:
                     base_adj_annual_op = results[0].get("annual_adj_op", results[0]["annual_op"])
                     annual_savings = alt_r.get("annual_adj_op", alt_r["annual_op"]) - base_adj_annual_op
@@ -3264,6 +3283,8 @@ Compares full cost-to-serve across factory locations, including material, labour
     st.session_state["_all_results"] = all_results
     st.session_state["_company_wacc"] = company_wacc
     st.session_state["_factory_countries"] = factory_countries
+    st.session_state["_nwc_assumptions"] = nwc_assumptions
+    st.session_state["_carrying_cost_rates"] = carrying_cost_rates
 
     # ── FOOTER ────────────────────────────────────────────────
     st.markdown("---")
