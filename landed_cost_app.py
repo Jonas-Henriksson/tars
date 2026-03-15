@@ -1709,6 +1709,27 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
     net_sales_value = sales_projection[0]["value"] if sales_projection else 0.0
     net_sales_qty = sales_projection[0]["qty"] if sales_projection else 0
 
+    # CAGR details
+    if len(sales_projection) >= 2 and net_sales_value > 0 and net_sales_qty > 0:
+        last_p = sales_projection[-1]
+        n_years = len(sales_projection) - 1
+        val_y1, val_yn = net_sales_value, last_p["value"]
+        qty_y1, qty_yn = net_sales_qty, last_p["qty"]
+        val_cagr = ((val_yn / val_y1) ** (1 / n_years) - 1) * 100 if val_y1 > 0 and val_yn > 0 else 0.0
+        qty_cagr = ((qty_yn / qty_y1) ** (1 / n_years) - 1) * 100 if qty_y1 > 0 and qty_yn > 0 else 0.0
+        price_y1 = val_y1 / qty_y1 if qty_y1 else 0
+        price_yn = val_yn / qty_yn if qty_yn else 0
+        price_cagr = ((price_yn / price_y1) ** (1 / n_years) - 1) * 100 if price_y1 > 0 and price_yn > 0 else 0.0
+        cagr_html = (
+            f'<div style="font-family:Inter,sans-serif;font-size:0.68rem;color:{GREY_TEXT};margin:0.2rem 0 0.5rem 0;">'
+            f'CAGR (Y1\u2013Y{n_proj_years}): '
+            f'Revenue <strong>{val_cagr:+.1f}%</strong> &nbsp;\u00b7&nbsp; '
+            f'Volume <strong>{qty_cagr:+.1f}%</strong> &nbsp;\u00b7&nbsp; '
+            f'Price/Unit <strong>{price_cagr:+.1f}%</strong>'
+            f'</div>'
+        )
+        st.markdown(cagr_html, unsafe_allow_html=True)
+
     # Base costs (per unit)
     st.markdown('<div class="sec-sm">Base Costs (Per Unit)</div>', unsafe_allow_html=True)
 
