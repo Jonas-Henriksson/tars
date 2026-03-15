@@ -2991,7 +2991,7 @@ def main():
         ("Landed Cost Analysis", "model"),
         ("Required Investments", "investment"),
         ("Financial Configuration", "financial"),
-        ("Executive Summary", "executive"),
+        ("Analysis Summary", "executive"),
     ]
     info_pages = [
         ("About & Methodology", "about"),
@@ -3484,7 +3484,7 @@ This provides the local risk percentage.</li>
     if st.session_state.active_page == "executive":
         render_executive_summary_page()
         st.markdown("---")
-        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Executive Summary</span>", unsafe_allow_html=True)
+        st.markdown(f"<span style='font-size:0.65rem;color:{MUTED};letter-spacing:0.02em;'>Landed Cost Comparison v9.0 &middot; {st.session_state.project_name} &middot; Analysis Summary</span>", unsafe_allow_html=True)
         return
 
     # ── Reference pages: render in main window ──
