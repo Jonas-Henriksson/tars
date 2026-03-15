@@ -5536,99 +5536,97 @@ Compares full cost-to-serve across factory locations, including material, labour
         if conclusion_opt and not st.session_state.prop_direction.strip():
             st.session_state.prop_direction = f"Recommended location: {conclusion_opt}"
 
-        rec_c1, rec_c2 = st.columns([1, 2])
-        with rec_c1:
-            rec_options = ["", "Go", "Conditional Go", "No-Go"]
-            current_rec_idx = 0
-            if st.session_state.prop_recommendation in rec_options:
-                current_rec_idx = rec_options.index(st.session_state.prop_recommendation)
-            # Auto-populate from conclusion gate if empty
-            if not st.session_state.prop_recommendation and conclusion_dec in rec_options:
-                st.session_state.prop_recommendation = conclusion_dec
-                current_rec_idx = rec_options.index(conclusion_dec) if conclusion_dec in rec_options else 0
-            recommendation = st.selectbox(
-                "Recommendation",
-                options=rec_options,
-                index=current_rec_idx,
-                key="prop_rec_select",
-                format_func=lambda x: x if x else "— Select recommendation —",
-            )
-            st.session_state.prop_recommendation = recommendation
+        # Build recommendation data for compact data_editor matrix
+        rec_options = ["", "Go", "Conditional Go", "No-Go"]
+        current_rec_idx = 0
+        if st.session_state.prop_recommendation in rec_options:
+            current_rec_idx = rec_options.index(st.session_state.prop_recommendation)
+        if not st.session_state.prop_recommendation and conclusion_dec in rec_options:
+            st.session_state.prop_recommendation = conclusion_dec
 
-            # Recommendation verdict box
-            if recommendation:
-                rec_colors = {"Go": GREEN, "Conditional Go": "#e6a817", "No-Go": RED}
-                rec_icons = {"Go": "\u2714", "Conditional Go": "\u26a0", "No-Go": "\u2716"}
-                rc = rec_colors.get(recommendation, NAVY)
-                ri = rec_icons.get(recommendation, "")
-                st.markdown(f'''<div style="background:#f8f9fb;border:1px solid {BORDER};border-left:4px solid {rc};padding:0.7rem 1rem;margin:0.4rem 0;font-family:Inter,sans-serif;">
-                    <div style="font-size:1rem;font-weight:700;color:{rc};">{ri} {recommendation}</div>
-                </div>''', unsafe_allow_html=True)
-
-            if recommendation == "Conditional Go":
-                st.session_state.prop_conditions = st.text_area(
-                    "Conditions for Proceeding",
-                    value=st.session_state.prop_conditions,
-                    key="prop_conditions_input", height=80,
-                    placeholder="List conditions that must be met:\n- Customer approval obtained\n- Quality audit passed\n- FX hedge in place...")
-
-        with rec_c2:
-            st.markdown(f'<div class="sec-sm">Direction</div>', unsafe_allow_html=True)
-            st.session_state.prop_direction = st.text_area(
-                "Direction", value=st.session_state.prop_direction,
-                key="prop_direction_input", height=120, label_visibility="collapsed",
-                placeholder="Describe the recommended direction and key rationale...")
-
-            st.markdown(f'<div class="sec-sm">Benefits & Key Details</div>', unsafe_allow_html=True)
-            st.session_state.prop_benefits = st.text_area(
-                "Benefits", value=st.session_state.prop_benefits,
-                key="prop_benefits_input", height=100, label_visibility="collapsed",
-                placeholder="List key benefits (use bullet points):\n- Margin improvement of X.Xpp\n- Risk diversification\n- Capacity headroom...")
-
-        # ── FINANCIALS & TIME PLAN ─────────────────────────────
-        st.markdown(f'<div class="sec-sm">Financials & Time Plan</div>', unsafe_allow_html=True)
+        # Auto-calculate financials
         auto_inv = 0.0
         if all_results:
             for item_data in all_results:
                 for ic in item_data.get("investment_cases", []):
                     auto_inv += ic.get("total_investment", 0)
-        # Include sending-site costs in total investment
         _ss_prop = st.session_state.get("sending_site_costs", {})
         auto_inv += sum(v for v in _ss_prop.values() if isinstance(v, (int, float)))
         auto_inv_m = auto_inv / 1e6 if auto_inv else 0.0
+        _inv_val = st.session_state.prop_total_investment if st.session_state.prop_total_investment is not None else (auto_inv_m if auto_inv_m else 0.0)
+        _it_val = st.session_state.prop_internal_transfer or 0.0
+        _suggested_cash = max(0.0, (_inv_val or 0.0) - (_it_val or 0.0))
+        _cash_val = st.session_state.prop_cash_out if st.session_state.prop_cash_out else _suggested_cash
 
-        fc1, fc2, fc3, fc4 = st.columns(4)
-        with fc1:
-            inv_val = st.session_state.prop_total_investment if st.session_state.prop_total_investment is not None else (auto_inv_m if auto_inv_m else None)
-            new_inv = st.number_input(
-                f"Total Investment (M{currency})", value=inv_val,
-                min_value=0.0, step=0.5, format="%.1f", key="prop_inv_input",
-                help="Sum of CAPEX, OPEX, restructuring, and sending-site costs from Required Investments. Includes both cash and non-cash items (e.g. internal equipment transfers).")
-            st.session_state.prop_total_investment = new_inv
-            if auto_inv_m > 0:
-                st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};margin-top:-0.5rem;font-style:italic;">Auto-calculated: {auto_inv_m:.1f} M{currency}</div>', unsafe_allow_html=True)
-        with fc2:
-            new_it = st.number_input(
-                f"Internal Transfer (M{currency})", value=st.session_state.prop_internal_transfer or 0.0,
-                min_value=0.0, step=0.5, format="%.1f", key="prop_it_input",
-                help="Equipment or assets transferred between group entities at book value. Counts as investment at the receiving unit but has no net cash impact at group level.")
-            st.session_state.prop_internal_transfer = new_it
-        with fc3:
-            # Auto-suggest net cash out if internal transfer is set
-            _suggested_cash = max(0.0, (new_inv or 0.0) - (new_it or 0.0))
-            _cash_val = st.session_state.prop_cash_out if st.session_state.prop_cash_out else _suggested_cash
-            new_cash = st.number_input(
-                f"Net Cash Out (M{currency})", value=_cash_val,
-                min_value=0.0, step=0.5, format="%.1f", key="prop_cash_input",
-                help="Actual cash expenditure at group level. Equals Total Investment minus Internal Equipment Transfers. This is the real funding requirement.")
-            st.session_state.prop_cash_out = new_cash
-            if new_it > 0:
-                st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};margin-top:-0.5rem;font-style:italic;">= Investment ({new_inv:.1f}) − Transfer ({new_it:.1f})</div>', unsafe_allow_html=True)
-        with fc4:
-            st.session_state.prop_timeplan = st.text_input(
-                "Time Plan", value=st.session_state.prop_timeplan,
-                key="prop_timeplan_input",
-                placeholder="e.g. May '25 — Dec '26")
+        # Unified proposal summary matrix
+        _prop_rows = [
+            {"Field": "Recommendation", "Value": st.session_state.prop_recommendation},
+            {"Field": f"Total Investment (M{currency})", "Value": f"{_inv_val:.1f}" if _inv_val else ""},
+            {"Field": f"Internal Transfer (M{currency})", "Value": f"{_it_val:.1f}" if _it_val else ""},
+            {"Field": f"Net Cash Out (M{currency})", "Value": f"{_cash_val:.1f}" if _cash_val else ""},
+            {"Field": "Time Plan", "Value": st.session_state.prop_timeplan},
+            {"Field": "Direction", "Value": st.session_state.prop_direction},
+            {"Field": "Benefits & Key Details", "Value": st.session_state.prop_benefits},
+        ]
+        if st.session_state.prop_recommendation == "Conditional Go":
+            _prop_rows.insert(1, {"Field": "Conditions for Proceeding", "Value": st.session_state.prop_conditions})
+
+        _prop_df = pd.DataFrame(_prop_rows)
+        _prop_edited = st.data_editor(
+            _prop_df,
+            use_container_width=True,
+            num_rows="fixed",
+            hide_index=True,
+            key="prop_summary_matrix",
+            column_config={
+                "Field": st.column_config.TextColumn("Field", width=220, disabled=True),
+                "Value": st.column_config.TextColumn("Value", width=500),
+            },
+        )
+
+        # Write edited values back to session state
+        _prop_map = {}
+        for _pi, _pr in enumerate(_prop_rows):
+            _prop_map[_pr["Field"]] = _pi
+        for _pi in range(len(_prop_edited)):
+            _field = _prop_edited.iloc[_pi]["Field"]
+            _val = str(_prop_edited.iloc[_pi]["Value"] or "")
+            if _field == "Recommendation":
+                st.session_state.prop_recommendation = _val if _val in rec_options else ""
+            elif _field.startswith("Total Investment"):
+                try:
+                    st.session_state.prop_total_investment = float(_val) if _val else 0.0
+                except ValueError:
+                    pass
+            elif _field.startswith("Internal Transfer"):
+                try:
+                    st.session_state.prop_internal_transfer = float(_val) if _val else 0.0
+                except ValueError:
+                    pass
+            elif _field.startswith("Net Cash Out"):
+                try:
+                    st.session_state.prop_cash_out = float(_val) if _val else 0.0
+                except ValueError:
+                    pass
+            elif _field == "Time Plan":
+                st.session_state.prop_timeplan = _val
+            elif _field == "Direction":
+                st.session_state.prop_direction = _val
+            elif _field == "Benefits & Key Details":
+                st.session_state.prop_benefits = _val
+            elif _field == "Conditions for Proceeding":
+                st.session_state.prop_conditions = _val
+
+        recommendation = st.session_state.prop_recommendation
+        # Compact verdict indicator
+        if recommendation:
+            rec_colors = {"Go": GREEN, "Conditional Go": "#e6a817", "No-Go": RED}
+            rec_icons = {"Go": "\u2714", "Conditional Go": "\u26a0", "No-Go": "\u2716"}
+            _rc = rec_colors.get(recommendation, NAVY)
+            _ri = rec_icons.get(recommendation, "")
+            st.markdown(f'<div style="display:inline-block;font-family:Inter,sans-serif;font-size:0.72rem;font-weight:700;color:{_rc};background:{_rc}14;border-radius:4px;padding:3px 12px;margin-top:-0.3rem;">{_ri} {recommendation}</div>', unsafe_allow_html=True)
+        if auto_inv_m > 0:
+            st.markdown(f'<div style="font-size:0.62rem;color:{GREY_TEXT};font-style:italic;">Investment auto-calculated: {auto_inv_m:.1f} M{currency}</div>', unsafe_allow_html=True)
 
         # ── QUANTIFIED RISK EXPOSURE ───────────────────────────
         st.markdown(f'<div class="sec">Risk Exposure</div>', unsafe_allow_html=True)
