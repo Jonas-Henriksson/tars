@@ -2314,8 +2314,11 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
     pfx = f"i{item_id}_"
     today = date.today()
 
-    # Item header
+    # Item header — batch data overrides example data
+    batch = st.session_state.get(f"{pfx}batch_data")
     ex_item = EXAMPLE_ITEMS[idx] if ex and idx < len(EXAMPLE_ITEMS) else None
+    if batch:
+        ex_item = batch  # batch upload data takes priority
 
     txt_data = {
         "Field": ["Item Number", "Designation", "Destination", "Comment"],
@@ -2474,6 +2477,16 @@ def render_item(idx, item_id, base_factory_name_shared, factory_col_names_shared
     </div>''', unsafe_allow_html=True)
     OV_ROWS = ["Material", "Variable VA", "Fixed VA"]
     ov_cols = {cn: [None, None, None] for cn in factory_col_names_shared}
+    # Pre-populate from batch overrides if available
+    batch_ovs = st.session_state.get(f"{pfx}batch_overrides", [])
+    for bov in batch_ovs:
+        fn_ov = bov.get("factory_name", "")
+        if fn_ov in ov_cols:
+            ov_cols[fn_ov] = [
+                bov.get("material"),
+                bov.get("variable_va"),
+                bov.get("fixed_va"),
+            ]
     ov_cols["Guide"] = [
         f"Override material cost per unit (blank = use base case {material:.2f})",
         f"Override variable VA per unit (blank = base {variable_va:.2f} \u00d7 VA Ratio)",
@@ -3081,22 +3094,187 @@ def render_executive_summary_page():
             <div style="font-size:0.7rem;{d_cls}margin-top:0.1rem;">{d_sign}{fi(delta, acct=True)} vs base | OM {fn_om:.1f}%</div>
         </div>''', unsafe_allow_html=True)
 
-    # ── EXECUTIVE NARRATIVE ──────────────────────────────────
-    # Auto-generated narrative for each item
-    for item in all_results:
-        results = item["results"]
-        inp_data = item["inputs"]
-        if len(results) >= 2:
-            from landed_cost.models import ItemInputs
-            inp_obj = ItemInputs(
-                item_number=inp_data.get("item_number", ""),
-                designation=inp_data.get("designation", ""),
-                net_sales_value=0, net_sales_qty=0,
-                material=0, variable_va=0, fixed_va=0,
-            )
-            summary_html = build_exec_summary(results, inp_obj, currency)
-            if summary_html:
-                st.markdown(summary_html, unsafe_allow_html=True)
+    # ── PORTFOLIO HEATMAP ────────────────────────────────────
+    # Visual matrix: items (rows) x factories (columns) — scalable for 20-30+ items
+    if len(all_results) >= 2 and len(all_fnames) >= 2:
+        st.markdown(f'<div class="sec-sm">Portfolio Profitability Matrix</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.7rem;color:{GREY_TEXT};margin:-0.2rem 0 0.4rem 0;">Operating margin (%) by item and factory. Green = above target ({target_om*100:.0f}%), red = below. Hover for detail.</div>', unsafe_allow_html=True)
+
+        # Build the matrix data
+        item_labels = []
+        om_matrix = []
+        op_matrix = []
+        rev_matrix = []
+        annot_matrix = []
+        for item in all_results:
+            inp = item["inputs"]
+            lbl = inp.get("item_number", "")
+            if inp.get("designation"):
+                lbl = f"{lbl} {inp['designation']}" if lbl else inp["designation"]
+            lbl = lbl[:40] if len(lbl) > 40 else lbl
+            item_labels.append(lbl or f"Item {len(item_labels)+1}")
+
+            om_row = []
+            op_row = []
+            rev_row = []
+            annot_row = []
+            for fn_ in all_fnames:
+                match = [r for r in item["results"] if r["name"] == fn_]
+                if match:
+                    r = match[0]
+                    om_val = r.get("adj_om", r["om"]) * 100
+                    op_val = r.get("annual_adj_op", r["annual_op"])
+                    rev_val = r["annual_rev"]
+                    om_row.append(om_val)
+                    op_row.append(op_val)
+                    rev_row.append(rev_val)
+                    annot_row.append(f"{om_val:.1f}%")
+                else:
+                    om_row.append(None)
+                    op_row.append(None)
+                    rev_row.append(None)
+                    annot_row.append("")
+            om_matrix.append(om_row)
+            op_matrix.append(op_row)
+            rev_matrix.append(rev_row)
+            annot_matrix.append(annot_row)
+
+        # Custom hover text
+        hover_text = []
+        for i, item_lbl in enumerate(item_labels):
+            hover_row = []
+            for j, fn_ in enumerate(all_fnames):
+                if om_matrix[i][j] is not None:
+                    hover_row.append(
+                        f"<b>{item_lbl}</b><br>"
+                        f"Factory: {fn_}<br>"
+                        f"OM: {om_matrix[i][j]:.1f}%<br>"
+                        f"Annual OP: {fi(op_matrix[i][j], dz=False)}<br>"
+                        f"Revenue: {fi(rev_matrix[i][j], dz=False)}"
+                    )
+                else:
+                    hover_row.append("")
+            hover_text.append(hover_row)
+
+        # Build heatmap — green above target OM, red below
+        target_om_pct = target_om * 100
+        fig_hm = go.Figure(data=go.Heatmap(
+            z=om_matrix,
+            x=all_fnames,
+            y=item_labels,
+            text=annot_matrix,
+            texttemplate="%{text}",
+            textfont=dict(size=10, family="Inter, sans-serif"),
+            hovertext=hover_text,
+            hovertemplate="%{hovertext}<extra></extra>",
+            colorscale=[
+                [0.0, "#c62828"],
+                [0.35, "#ef9a9a"],
+                [0.5, "#fff9c4"],
+                [0.65, "#a5d6a7"],
+                [1.0, "#2e7d32"],
+            ],
+            zmid=target_om_pct,
+            colorbar=dict(
+                title=dict(text="OM %", font=dict(size=10)),
+                tickfont=dict(size=9),
+                thickness=12,
+                len=0.8,
+            ),
+        ))
+
+        # Mark best factory per item with a star overlay
+        best_x, best_y, best_text = [], [], []
+        for i, item_lbl in enumerate(item_labels):
+            valid = [(j, om_matrix[i][j]) for j in range(len(all_fnames)) if om_matrix[i][j] is not None]
+            if valid:
+                best_j = max(valid, key=lambda x: x[1])[0]
+                best_x.append(all_fnames[best_j])
+                best_y.append(item_lbl)
+                best_text.append("\u2605")
+
+        fig_hm.add_trace(go.Scatter(
+            x=best_x, y=best_y, mode="text",
+            text=best_text,
+            textfont=dict(size=14, color="white"),
+            showlegend=False, hoverinfo="skip",
+        ))
+
+        hm_height = max(300, min(800, 50 + len(item_labels) * 28))
+        fig_hm.update_layout(
+            height=hm_height,
+            margin=dict(l=10, r=10, t=30, b=40),
+            paper_bgcolor="white",
+            plot_bgcolor="white",
+            font=dict(family="Inter, sans-serif", size=10, color=DARK_TEXT),
+            xaxis=dict(side="top", tickangle=0, tickfont=dict(size=10)),
+            yaxis=dict(autorange="reversed", tickfont=dict(size=9)),
+        )
+        plotly_chart(fig_hm)
+
+        st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.66rem;color:{GREY_TEXT};text-align:center;margin:-0.3rem 0 0.5rem 0;">\u2605 = Best location per item &nbsp;|&nbsp; Values show NWC-adjusted operating margin where available</div>', unsafe_allow_html=True)
+
+    # ── PORTFOLIO ITEM RANKING TABLE ─────────────────────────
+    # Condensed table showing each item, its best factory, delta, and verdict
+    if len(all_results) >= 2:
+        st.markdown(f'<div class="sec-sm">Item Transfer Ranking</div>', unsafe_allow_html=True)
+        rank_html = f'<table class="ib-table"><thead><tr><th>#</th><th>Item</th><th>Revenue ({currency})</th><th>Current OM</th><th>Best Alternative</th><th>Best OM</th><th>OM Delta</th><th>Annual OP Uplift</th><th>Verdict</th></tr></thead><tbody>'
+        item_rank_data = []
+        for item in all_results:
+            inp = item["inputs"]
+            results_i = item["results"]
+            if len(results_i) < 2:
+                continue
+            lbl = inp.get("item_number", "")
+            if inp.get("designation"):
+                lbl = f"{lbl} {inp['designation']}" if lbl else inp["designation"]
+            base_r = results_i[0]
+            base_om_i = base_r.get("adj_om", base_r["om"]) * 100
+            base_op_i = base_r.get("annual_adj_op", base_r["annual_op"])
+            best_alt = max(results_i[1:], key=lambda r: r.get("annual_adj_op", r["annual_op"]))
+            best_om_i = best_alt.get("adj_om", best_alt["om"]) * 100
+            best_op_i = best_alt.get("annual_adj_op", best_alt["annual_op"])
+            delta_om = best_om_i - base_om_i
+            delta_op = best_op_i - base_op_i
+            item_rank_data.append((lbl, base_r["annual_rev"], base_om_i, best_alt["name"], best_om_i, delta_om, delta_op))
+
+        # Sort by OP uplift descending
+        item_rank_data.sort(key=lambda x: x[6], reverse=True)
+        for rank_i, (lbl, rev, b_om, best_name, best_om_v, d_om, d_op) in enumerate(item_rank_data, 1):
+            if d_op > 0:
+                verdict = f'<span style="color:{GREEN};font-weight:600;">Transfer</span>'
+            elif abs(d_om) < 0.5:
+                verdict = f'<span style="color:#e6a817;font-weight:600;">Neutral</span>'
+            else:
+                verdict = f'<span style="color:{RED};font-weight:600;">Keep</span>'
+            d_cls = dc(d_op)
+            rank_html += f'<tr><td>{rank_i}</td><td style="text-align:left;">{lbl}</td><td>{fi(rev, dz=False)}</td><td>{b_om:.1f}%</td><td>{best_name}</td><td>{best_om_v:.1f}%</td><td class="{d_cls}">{d_om:+.1f}pp</td><td class="{d_cls}">{fi(d_op, acct=True)}</td><td>{verdict}</td></tr>'
+        rank_html += '</tbody></table>'
+        st.markdown(rank_html, unsafe_allow_html=True)
+
+    # ── EXECUTIVE NARRATIVE (collapsible for large portfolios) ──
+    narrative_items = [item for item in all_results if len(item["results"]) >= 2]
+    if narrative_items:
+        use_expander = len(narrative_items) > 5
+        if use_expander:
+            narrative_container = st.expander(f"Item-Level Executive Narratives ({len(narrative_items)} items)", expanded=False)
+        else:
+            narrative_container = st.container()
+
+        with narrative_container:
+            for item in narrative_items:
+                results_n = item["results"]
+                inp_data = item["inputs"]
+                from landed_cost.models import ItemInputs
+                inp_obj = ItemInputs(
+                    item_number=inp_data.get("item_number", ""),
+                    designation=inp_data.get("designation", ""),
+                    net_sales_value=0, net_sales_qty=0,
+                    material=0, variable_va=0, fixed_va=0,
+                )
+                summary_html = build_exec_summary(results_n, inp_obj, currency)
+                if summary_html:
+                    st.markdown(summary_html, unsafe_allow_html=True)
 
     # ── LANDED COST COMPARISON TABLE ─────────────────────────
     st.markdown(f'<div class="sec-sm">Landed Cost Comparison — All Items</div>', unsafe_allow_html=True)
@@ -3618,6 +3796,253 @@ def save_project_json():
         # Version History
         "version_history": history,
     }, indent=2)
+
+
+# ── BATCH EXCEL UPLOAD ────────────────────────────────────────
+
+def _generate_batch_template(factory_names: list[str], currency: str) -> bytes:
+    """Generate an Excel template for batch item upload."""
+    import xlsxwriter
+    output = io.BytesIO()
+    wb = xlsxwriter.Workbook(output, {"in_memory": True})
+
+    # Styles
+    hdr_fmt = wb.add_format({"bold": True, "bg_color": "#1a2332", "font_color": "white",
+                             "font_size": 9, "font_name": "Arial", "border": 1})
+    guide_fmt = wb.add_format({"italic": True, "font_color": "#6c757d", "font_size": 9,
+                               "font_name": "Arial", "text_wrap": True, "border": 1})
+    cell_fmt = wb.add_format({"font_size": 10, "font_name": "Arial", "border": 1})
+    num_fmt = wb.add_format({"font_size": 10, "font_name": "Arial", "border": 1, "num_format": "#,##0.00"})
+    int_fmt = wb.add_format({"font_size": 10, "font_name": "Arial", "border": 1, "num_format": "#,##0"})
+    sec_fmt = wb.add_format({"bold": True, "bg_color": "#e8ecf0", "font_size": 9,
+                             "font_name": "Arial", "border": 1})
+
+    # ── Items sheet ──
+    ws = wb.add_worksheet("Items")
+    ws.set_column("A:A", 18)
+    ws.set_column("B:B", 28)
+
+    # Headers
+    cols = ["Item Number", "Designation", "Destination", "Comment",
+            f"Material ({currency}/unit)", f"Variable VA ({currency}/unit)", f"Fixed VA ({currency}/unit)",
+            "Y1 Revenue", "Y1 Qty", "Y2 Revenue", "Y2 Qty",
+            "Y3 Revenue", "Y3 Qty", "Y4 Revenue", "Y4 Qty",
+            "Y5 Revenue", "Y5 Qty"]
+    for c, col in enumerate(cols):
+        ws.write(0, c, col, hdr_fmt)
+        ws.set_column(c, c, max(14, len(col) + 2))
+
+    # Guide row
+    guides = ["Unique ID", "Item description", "Target market", "Scope/reason",
+              "Direct material cost at base factory", "Variable value-added at base factory",
+              "Fixed value-added at base factory",
+              "Year 1 net sales value", "Year 1 net sales qty",
+              "Year 2 net sales value", "Year 2 net sales qty",
+              "Year 3 net sales value", "Year 3 net sales qty",
+              "Year 4 net sales value (optional)", "Year 4 net sales qty (optional)",
+              "Year 5 net sales value (optional)", "Year 5 net sales qty (optional)"]
+    for c, g in enumerate(guides):
+        ws.write(1, c, g, guide_fmt)
+
+    # Example row
+    ws.write(2, 0, "1001", cell_fmt)
+    ws.write(2, 1, "Bearing Assembly XR-200", cell_fmt)
+    ws.write(2, 2, "USA", cell_fmt)
+    ws.write(2, 3, "Annual sourcing review", cell_fmt)
+    ws.write(2, 4, 18.50, num_fmt)
+    ws.write(2, 5, 14.20, num_fmt)
+    ws.write(2, 6, 7.80, num_fmt)
+    ws.write(2, 7, 121280000, int_fmt)
+    ws.write(2, 8, 2570000, int_fmt)
+
+    # ── Cost Overrides sheet (optional) ──
+    ws2 = wb.add_worksheet("Cost Overrides")
+    ov_cols = ["Item Number", "Factory Name", f"Material ({currency}/unit)",
+               f"Variable VA ({currency}/unit)", f"Fixed VA ({currency}/unit)"]
+    for c, col in enumerate(ov_cols):
+        ws2.write(0, c, col, hdr_fmt)
+        ws2.set_column(c, c, max(16, len(col) + 2))
+    ov_guides = ["Must match Items sheet", "Must match a factory name from the model",
+                 "Override material (blank = use base)", "Override variable VA (blank = use VA ratio)",
+                 "Override fixed VA (blank = use VA ratio)"]
+    for c, g in enumerate(ov_guides):
+        ws2.write(1, c, g, guide_fmt)
+
+    # ── Investment Inputs sheet (optional) ──
+    ws3 = wb.add_worksheet("Investments")
+    inv_cols = ["Item Number", "Factory Name",
+                f"CAPEX ({currency})", f"OPEX ({currency})", f"Restructuring ({currency})",
+                "Analysis Horizon (Years)"]
+    for c, col in enumerate(inv_cols):
+        ws3.write(0, c, col, hdr_fmt)
+        ws3.set_column(c, c, max(16, len(col) + 2))
+    inv_guides = ["Must match Items sheet", "Receiving factory name",
+                  "Capital expenditure for tooling/equipment", "One-time project/transfer costs",
+                  "Restructuring/severance at sending site", "Default: 10 years"]
+    for c, g in enumerate(inv_guides):
+        ws3.write(1, c, g, guide_fmt)
+
+    # ── Instructions sheet ──
+    ws4 = wb.add_worksheet("Instructions")
+    ws4.set_column("A:A", 80)
+    instructions = [
+        "BATCH ITEM UPLOAD — INSTRUCTIONS",
+        "",
+        "1. Fill in the 'Items' sheet with one row per item (starting at row 3).",
+        "2. Required fields: Item Number, Designation, Material, Variable VA, Fixed VA, Y1 Revenue, Y1 Qty.",
+        "3. Y4-Y5 projections are optional — leave blank if only 3-year projection is needed.",
+        "4. 'Cost Overrides' sheet is optional — only fill if specific factories need per-unit cost overrides.",
+        "5. 'Investments' sheet is optional — fill to pre-populate investment analysis inputs.",
+        "",
+        "IMPORTANT:",
+        "- Factory names in 'Cost Overrides' and 'Investments' must exactly match the factory names configured in the model.",
+        f"- All monetary values should be in {currency}.",
+        "- Row 2 (guide row) will be ignored during import.",
+        f"- Configured factories: {', '.join(factory_names)}" if factory_names else "",
+    ]
+    for r, line in enumerate(instructions):
+        ws4.write(r, 0, line, sec_fmt if r == 0 else cell_fmt)
+
+    wb.close()
+    output.seek(0)
+    return output.getvalue()
+
+
+def _parse_batch_upload(uploaded_file, currency: str) -> tuple[list[dict], list[dict], list[dict], list[str]]:
+    """Parse a batch upload Excel file. Returns (items, overrides, investments, warnings)."""
+    warnings = []
+    items = []
+    overrides = []
+    investments = []
+
+    try:
+        xls = pd.ExcelFile(uploaded_file, engine="openpyxl")
+    except Exception as e:
+        return [], [], [], [f"Could not read Excel file: {e}"]
+
+    # ── Parse Items sheet ──
+    if "Items" in xls.sheet_names:
+        df = pd.read_excel(xls, sheet_name="Items", header=0, skiprows=[1])  # skip guide row
+        for idx, row in df.iterrows():
+            item_number = str(row.get("Item Number", "") or "").strip()
+            designation = str(row.get("Designation", "") or "").strip()
+            if not item_number and not designation:
+                continue  # skip empty rows
+
+            material = float(row.get(f"Material ({currency}/unit)", 0) or 0)
+            variable_va = float(row.get(f"Variable VA ({currency}/unit)", 0) or 0)
+            fixed_va = float(row.get(f"Fixed VA ({currency}/unit)", 0) or 0)
+
+            # Sales projection
+            projection = []
+            for y in range(1, 6):
+                rev_col = f"Y{y} Revenue"
+                qty_col = f"Y{y} Qty"
+                rev = row.get(rev_col)
+                qty = row.get(qty_col)
+                if rev is not None and not pd.isna(rev) and float(rev) > 0:
+                    projection.append({
+                        "year": y,
+                        "value": float(rev),
+                        "qty": int(float(qty)) if qty is not None and not pd.isna(qty) else 0,
+                    })
+
+            if not projection:
+                warnings.append(f"Item '{item_number or designation}': No sales data found, skipping.")
+                continue
+
+            items.append({
+                "item_number": item_number,
+                "designation": designation,
+                "destination": str(row.get("Destination", "") or "").strip(),
+                "comment": str(row.get("Comment", "") or "").strip(),
+                "material": material,
+                "variable_va": variable_va,
+                "fixed_va": fixed_va,
+                "net_sales_value": projection[0]["value"],
+                "net_sales_qty": projection[0]["qty"],
+                "sales_projection": projection,
+            })
+    else:
+        warnings.append("No 'Items' sheet found in the uploaded file.")
+
+    # ── Parse Cost Overrides sheet ──
+    if "Cost Overrides" in xls.sheet_names:
+        df_ov = pd.read_excel(xls, sheet_name="Cost Overrides", header=0, skiprows=[1])
+        for _, row in df_ov.iterrows():
+            item_num = str(row.get("Item Number", "") or "").strip()
+            factory = str(row.get("Factory Name", "") or "").strip()
+            if not item_num or not factory:
+                continue
+            ov_entry = {"item_number": item_num, "factory_name": factory}
+            mat = row.get(f"Material ({currency}/unit)")
+            vva = row.get(f"Variable VA ({currency}/unit)")
+            fva = row.get(f"Fixed VA ({currency}/unit)")
+            if mat is not None and not pd.isna(mat):
+                ov_entry["material"] = float(mat)
+            if vva is not None and not pd.isna(vva):
+                ov_entry["variable_va"] = float(vva)
+            if fva is not None and not pd.isna(fva):
+                ov_entry["fixed_va"] = float(fva)
+            overrides.append(ov_entry)
+
+    # ── Parse Investments sheet ──
+    if "Investments" in xls.sheet_names:
+        df_inv = pd.read_excel(xls, sheet_name="Investments", header=0, skiprows=[1])
+        for _, row in df_inv.iterrows():
+            item_num = str(row.get("Item Number", "") or "").strip()
+            factory = str(row.get("Factory Name", "") or "").strip()
+            if not item_num or not factory:
+                continue
+            inv_entry = {"item_number": item_num, "factory_name": factory}
+            capex = row.get(f"CAPEX ({currency})")
+            opex = row.get(f"OPEX ({currency})")
+            restr = row.get(f"Restructuring ({currency})")
+            hz = row.get("Analysis Horizon (Years)")
+            if capex is not None and not pd.isna(capex):
+                inv_entry["capex"] = float(capex)
+            if opex is not None and not pd.isna(opex):
+                inv_entry["opex"] = float(opex)
+            if restr is not None and not pd.isna(restr):
+                inv_entry["restructuring"] = float(restr)
+            if hz is not None and not pd.isna(hz):
+                inv_entry["horizon_years"] = int(float(hz))
+            investments.append(inv_entry)
+
+    if not items:
+        warnings.append("No valid items found in the upload.")
+
+    return items, overrides, investments, warnings
+
+
+def _apply_batch_items(items: list[dict], overrides: list[dict], investments: list[dict]):
+    """Apply parsed batch data to session state, creating item entries."""
+    # Build item list
+    new_items = []
+    start_id = st.session_state.get("next_id", 1)
+
+    for i, item in enumerate(items):
+        item_id = start_id + i
+        new_items.append({"id": item_id})
+
+        # Pre-populate text fields via session state keys that render_item reads
+        pfx = f"i{item_id}_"
+
+        # Store batch data for render_item to pick up
+        st.session_state[f"{pfx}batch_data"] = item
+
+        # Build override data for this item
+        item_ovs = [ov for ov in overrides if ov["item_number"] == item["item_number"]]
+        if item_ovs:
+            st.session_state[f"{pfx}batch_overrides"] = item_ovs
+
+        # Build investment data for this item
+        item_invs = [inv for inv in investments if inv["item_number"] == item["item_number"]]
+        if item_invs:
+            st.session_state[f"{pfx}batch_investments"] = item_invs
+
+    st.session_state.project_items = new_items
+    st.session_state.next_id = start_id + len(items)
 
 
 # ── MAIN ──────────────────────────────────────────────────────
@@ -5676,6 +6101,59 @@ Compares full cost-to-serve across factory locations, including material, labour
 
     # ── ITEM TABS ─────────────────────────────────────────────
     st.markdown('<div class="sec" id="sec-item-analysis">Item Analysis</div>', unsafe_allow_html=True)
+
+    # Batch upload section
+    all_factory_names_batch = [base_factory_name] + factory_col_names
+    with st.expander("Batch Upload (Excel)", expanded=False):
+        st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.73rem;color:{GREY_TEXT};line-height:1.5;margin-bottom:0.5rem;">Upload an Excel file to import multiple items at once. Download the template first, fill in your data, then upload. Factory configuration (above) must be set up before importing.</div>', unsafe_allow_html=True)
+
+        bu_c1, bu_c2 = st.columns(2)
+        with bu_c1:
+            try:
+                template_data = _generate_batch_template(all_factory_names_batch, currency)
+                st.download_button(
+                    "Download Template",
+                    data=template_data,
+                    file_name=f"Batch_Upload_Template_{currency}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="batch_template_dl",
+                    use_container_width=True,
+                )
+            except ImportError:
+                st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.72rem;color:{GREY_TEXT};">Template generation requires xlsxwriter.</div>', unsafe_allow_html=True)
+        with bu_c2:
+            batch_file = st.file_uploader(
+                "Upload Items (.xlsx)",
+                type=["xlsx"],
+                key="batch_upload",
+                label_visibility="collapsed",
+            )
+
+        if batch_file is not None:
+            items_parsed, ovs_parsed, invs_parsed, parse_warnings = _parse_batch_upload(batch_file, currency)
+
+            if parse_warnings:
+                for w in parse_warnings:
+                    st.warning(w)
+
+            if items_parsed:
+                st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.76rem;color:{DARK_TEXT};margin:0.3rem 0;"><strong>{len(items_parsed)}</strong> items found &nbsp;|&nbsp; <strong>{len(ovs_parsed)}</strong> cost overrides &nbsp;|&nbsp; <strong>{len(invs_parsed)}</strong> investment entries</div>', unsafe_allow_html=True)
+
+                # Preview table
+                preview_df = pd.DataFrame([{
+                    "Item": f"{it['item_number']} {it['designation']}".strip(),
+                    "Material": it["material"],
+                    "Var. VA": it["variable_va"],
+                    "Fixed VA": it["fixed_va"],
+                    "Y1 Revenue": it["net_sales_value"],
+                    "Y1 Qty": it["net_sales_qty"],
+                    "Years": len(it.get("sales_projection", [])),
+                } for it in items_parsed])
+                st.dataframe(preview_df, use_container_width=True, hide_index=True, height=min(200, 35 + len(items_parsed) * 35))
+
+                if st.button("Import Items", key="batch_import_btn", type="primary", use_container_width=True):
+                    _apply_batch_items(items_parsed, ovs_parsed, invs_parsed)
+                    st.rerun()
 
     # Add / remove item buttons
     bc1, bc2, _ = st.columns([1, 1, 6])
