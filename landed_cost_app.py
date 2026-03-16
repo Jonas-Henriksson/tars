@@ -2240,17 +2240,21 @@ def init_state():
             "Stranded Overhead": 0.0,
         }
     # ── PROPOSAL COMMUNICATION PLAN ───────────────────────────
+    _comm_plan_defaults = [
+        {"Stakeholder": "Sending Site Management", "What": "Transfer decision & timeline", "When": "", "Channel": "", "Owner": ""},
+        {"Stakeholder": "Sending Site Workforce", "What": "Impact assessment, redeployment options", "When": "", "Channel": "", "Owner": ""},
+        {"Stakeholder": "Works Council / Union (Sending)", "What": "Formal consultation per local labour law", "When": "", "Channel": "", "Owner": ""},
+        {"Stakeholder": "Receiving Site Management", "What": "Capacity plan, resource requirements", "When": "", "Channel": "", "Owner": ""},
+        {"Stakeholder": "Receiving Site Workforce", "What": "Hiring plan, training schedule", "When": "", "Channel": "", "Owner": ""},
+        {"Stakeholder": "Customers", "What": "Requalification plan, supply continuity", "When": "", "Channel": "", "Owner": ""},
+        {"Stakeholder": "Key Suppliers", "What": "Sourcing changes, new delivery points", "When": "", "Channel": "", "Owner": ""},
+        {"Stakeholder": "Group / Division Leadership", "What": "Business case, governance approval", "When": "", "Channel": "", "Owner": ""},
+    ]
     if "prop_comm_plan" not in st.session_state:
-        st.session_state.prop_comm_plan = [
-            {"Stakeholder": "Sending Site Management", "What": "Transfer decision & timeline", "When": "", "Channel": "", "Owner": ""},
-            {"Stakeholder": "Sending Site Workforce", "What": "Impact assessment, redeployment options", "When": "", "Channel": "", "Owner": ""},
-            {"Stakeholder": "Works Council / Union (Sending)", "What": "Formal consultation per local labour law", "When": "", "Channel": "", "Owner": ""},
-            {"Stakeholder": "Receiving Site Management", "What": "Capacity plan, resource requirements", "When": "", "Channel": "", "Owner": ""},
-            {"Stakeholder": "Receiving Site Workforce", "What": "Hiring plan, training schedule", "When": "", "Channel": "", "Owner": ""},
-            {"Stakeholder": "Customers", "What": "Requalification plan, supply continuity", "When": "", "Channel": "", "Owner": ""},
-            {"Stakeholder": "Key Suppliers", "What": "Sourcing changes, new delivery points", "When": "", "Channel": "", "Owner": ""},
-            {"Stakeholder": "Group / Division Leadership", "What": "Business case, governance approval", "When": "", "Channel": "", "Owner": ""},
-        ]
+        st.session_state.prop_comm_plan = _comm_plan_defaults
+    elif not any(c.get("Stakeholder", "").strip() for c in st.session_state.prop_comm_plan):
+        # Loaded project had only empty rows — restore defaults
+        st.session_state.prop_comm_plan = _comm_plan_defaults
     if "prop_direction" not in st.session_state:
         st.session_state.prop_direction = ""
     if "prop_benefits" not in st.session_state:
@@ -5826,6 +5830,13 @@ Compares full cost-to-serve across factory locations, including material, labour
                     _ben_adj[_r_b2["name"]] += _r_b2.get("annual_adj_op", _r_b2["annual_op"])
                     _ben_rev[_r_b2["name"]] += _r_b2["annual_rev"]
             _ben_parts = []
+            # Strategic rationale / reason to change (lead with the "why")
+            _ps_strat = st.session_state.get("ps_strategic_rationale", "").strip()
+            _ps_reason = st.session_state.get("ps_reason", "").strip()
+            if _ps_strat:
+                _ben_parts.append(_ps_strat[:200].rstrip(".") + ".")
+            elif _ps_reason:
+                _ben_parts.append(_ps_reason[:200].rstrip(".") + ".")
             # Financial delta
             if _prop_rec_fn != _prop_base_fn:
                 _b_rec_op = _ben_adj.get(_prop_rec_fn, 0)
@@ -5837,54 +5848,43 @@ Compares full cost-to-serve across factory locations, including material, labour
                 _b_base_om = _b_base_op / _b_base_rev * 100 if _b_base_rev else 0
                 _b_delta_pp = _b_rec_om - _b_base_om
                 if abs(_b_delta) > 0.5:
-                    _b_sign = "+" if _b_delta > 0 else ""
-                    _ben_parts.append(f"Annual OP impact: {_b_sign}{fi(_b_delta, acct=True)} {currency} ({_b_delta_pp:+.1f}pp margin vs base)")
+                    _b_verb = "improves" if _b_delta > 0 else "reduces"
+                    _ben_parts.append(f"The move {_b_verb} annual operating profit by {fi(abs(_b_delta), dz=False)} {currency} ({_b_delta_pp:+.1f}pp margin versus the current baseline).")
             # Investment
             if auto_inv_m > 0:
-                _ben_parts.append(f"Total investment: {auto_inv_m:.1f} M{currency}")
-            # Strategic rationale from pre-study
-            _ps_strat = st.session_state.get("ps_strategic_rationale", "").strip()
-            if _ps_strat:
-                _ben_parts.append(f"Strategic rationale: {_ps_strat[:200]}")
-            # Reason to change from pre-study
-            _ps_reason = st.session_state.get("ps_reason", "").strip()
-            if _ps_reason and not _ps_strat:
-                _ben_parts.append(f"Reason to change: {_ps_reason[:200]}")
+                _ben_parts.append(f"Total investment required is estimated at {auto_inv_m:.1f} M{currency}.")
             # NWC impact
             for _item_b in all_results:
                 for _r_b in _item_b.get("results", []):
                     if _r_b.get("name") == _prop_rec_fn:
                         _nwc = _r_b.get("nwc_carrying_cost_annual", 0)
                         if abs(_nwc) > 0.5:
-                            _nwc_dir = "increase" if _nwc > 0 else "release"
-                            _ben_parts.append(f"NWC impact: {fi(abs(_nwc), dz=False)} {currency} annual carrying cost {_nwc_dir}")
+                            if _nwc > 0:
+                                _ben_parts.append(f"Net working capital carrying costs increase by {fi(abs(_nwc), dz=False)} {currency} annually.")
+                            else:
+                                _ben_parts.append(f"The transfer releases {fi(abs(_nwc), dz=False)} {currency} in annual net working capital carrying costs.")
                         break
             if _ben_parts:
-                st.session_state.prop_benefits = " | ".join(_ben_parts)
+                st.session_state.prop_benefits = " ".join(_ben_parts)
 
-        # ── Row 2: Direction, Benefits, Conditions (single-row data_editor)
-        _r2_data = {
-            "Direction": st.session_state.prop_direction,
-            "Benefits & Key Details": st.session_state.prop_benefits,
-        }
+        # ── Row 2: Direction, Benefits, Conditions
+        _r2_cols = st.columns(2) if recommendation != "Conditional Go" else st.columns(3)
+        with _r2_cols[0]:
+            st.session_state.prop_direction = st.text_area(
+                "Direction", value=st.session_state.prop_direction,
+                key="prop_direction_input", height=100,
+                placeholder="Recommended location and strategic direction...")
+        with _r2_cols[1]:
+            st.session_state.prop_benefits = st.text_area(
+                "Benefits & Key Details", value=st.session_state.prop_benefits,
+                key="prop_benefits_input", height=100,
+                placeholder="Key financial and strategic benefits of the recommended option...")
         if recommendation == "Conditional Go":
-            _r2_data["Conditions"] = st.session_state.prop_conditions
-        _r2_df = pd.DataFrame([_r2_data])
-        _r2_config = {
-            "Direction": st.column_config.TextColumn("Direction", width=300),
-            "Benefits & Key Details": st.column_config.TextColumn("Benefits & Key Details", width=300),
-        }
-        if recommendation == "Conditional Go":
-            _r2_config["Conditions"] = st.column_config.TextColumn("Conditions for Proceeding", width=250)
-        _r2_edited = st.data_editor(
-            _r2_df, use_container_width=True, num_rows="fixed", hide_index=True,
-            key="prop_row2",
-            column_config=_r2_config,
-        )
-        st.session_state.prop_direction = str(_r2_edited.iloc[0]["Direction"] or "")
-        st.session_state.prop_benefits = str(_r2_edited.iloc[0]["Benefits & Key Details"] or "")
-        if recommendation == "Conditional Go":
-            st.session_state.prop_conditions = str(_r2_edited.iloc[0].get("Conditions", "") or "")
+            with _r2_cols[2]:
+                st.session_state.prop_conditions = st.text_area(
+                    "Conditions for Proceeding", value=st.session_state.prop_conditions,
+                    key="prop_conditions_input", height=100,
+                    placeholder="List conditions that must be met before proceeding...")
 
         # ── QUANTIFIED RISK EXPOSURE ───────────────────────────
         st.markdown(f'<div class="sec">Risk Exposure</div>', unsafe_allow_html=True)
