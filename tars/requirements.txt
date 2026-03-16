@@ -1,0 +1,7 @@
+python-telegram-bot[ext]
+anthropic
+msal
+httpx
+python-dotenv
+pytest
+pytest-asyncio
