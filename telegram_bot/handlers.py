@@ -1,6 +1,7 @@
 """Telegram bot command and message handlers."""
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from telegram import Update
@@ -14,6 +15,12 @@ from telegram.ext import (
 )
 
 from agent.core import clear_history, run
+from integrations.ms_auth import (
+    complete_device_flow,
+    get_token_silent,
+    is_configured,
+    start_device_flow,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +33,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "through Microsoft 365. Just tell me what you need.\n\n"
         "Commands:\n"
         "/start — This message\n"
+        "/login — Connect your Microsoft 365 account\n"
         "/clear — Reset our conversation\n"
         "/status — Check connected services\n\n"
         "Humor setting: 75%"
@@ -40,16 +48,67 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /status — show connection status."""
-    # Phase 1: No M365 integrations yet
+    if not is_configured():
+        m365_status = "⬜ Microsoft 365: Not configured (set MS_CLIENT_ID and MS_TENANT_ID)"
+    elif get_token_silent():
+        m365_status = "✅ Microsoft 365: Connected"
+    else:
+        m365_status = "🔑 Microsoft 365: Configured but not signed in (use /login)"
+
     await update.message.reply_text(
         "TARS Status\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "✅ Telegram: Connected\n"
         "✅ Claude AI: Ready\n"
-        "⬜ Microsoft 365: Not configured\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "M365 integration coming in a future update."
+        f"{m365_status}\n"
+        "━━━━━━━━━━━━━━━━━━━━"
     )
+
+
+async def login_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /login — start Microsoft 365 device-code authentication."""
+    if not is_configured():
+        await update.message.reply_text(
+            "Microsoft 365 is not configured.\n"
+            "Set MS_CLIENT_ID and MS_TENANT_ID in the .env file first."
+        )
+        return
+
+    # Check if already signed in
+    if get_token_silent():
+        await update.message.reply_text(
+            "You're already signed in to Microsoft 365. ✅"
+        )
+        return
+
+    try:
+        flow = start_device_flow()
+    except RuntimeError as exc:
+        await update.message.reply_text(f"Login failed: {exc}")
+        return
+
+    user_code = flow.get("user_code", "")
+    verification_uri = flow.get("verification_uri", "https://microsoft.com/devicelogin")
+
+    await update.message.reply_text(
+        "To sign in to Microsoft 365:\n\n"
+        f"1. Go to: {verification_uri}\n"
+        f"2. Enter code: {user_code}\n"
+        f"3. Sign in with your Microsoft account\n\n"
+        "Waiting for you to complete sign-in..."
+    )
+
+    # Complete the flow in a thread to avoid blocking the bot
+    try:
+        token = await asyncio.to_thread(complete_device_flow, flow)
+        await update.message.reply_text(
+            "Successfully connected to Microsoft 365! ✅\n\n"
+            "You can now ask me about your calendar, e.g.:\n"
+            '• "What\'s on my calendar this week?"\n'
+            '• "Schedule a meeting with Alex tomorrow at 2pm"'
+        )
+    except RuntimeError as exc:
+        await update.message.reply_text(f"Sign-in failed: {exc}")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -78,5 +137,6 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("clear", clear_command))
     app.add_handler(CommandHandler("status", status_command))
+    app.add_handler(CommandHandler("login", login_command))
     # Message handler — must be added last (catches all text)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
