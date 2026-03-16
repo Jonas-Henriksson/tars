@@ -102,7 +102,7 @@ st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     .stApp {{ font-family: 'Inter', -apple-system, sans-serif; background-color: #ffffff; }}
-    .block-container {{ padding: 1.5rem 2.5rem; max-width: 1400px; }}
+    .block-container {{ padding: 1.5rem 2.5rem; max-width: 1480px; }}
     #MainMenu, footer {{visibility: hidden;}}
     [data-testid="stFileUploader"] small,
     [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] div:last-child {{
@@ -212,7 +212,13 @@ st.markdown(f"""
         text-transform: uppercase;
     }}
     .stTextInput, .stNumberInput, .stSelectbox {{ margin-bottom: -0.2rem !important; }}
-    div[data-testid="stVerticalBlock"] > div {{ gap: 0.25rem; }}
+    .stTextArea {{ margin-bottom: -0.5rem !important; }}
+    .stTextArea textarea {{
+        font-family: 'Inter', sans-serif !important; font-size: 0.76rem !important;
+        border-radius: 1px !important; border: 1px solid #ccc !important;
+        line-height: 1.5 !important;
+    }}
+    div[data-testid="stVerticalBlock"] > div {{ gap: 0.3rem; }}
 
     /* ── IB Header (fixed) ── */
     .ib-header {{
@@ -222,7 +228,7 @@ st.markdown(f"""
         border-bottom: 1px solid #d4d8e0;
         position: fixed; top: 0; left: 21rem; right: 0; z-index: 999;
     }}
-    .ib-header-spacer {{ height: 4.2rem; }}
+    .ib-header-spacer {{ height: 4.5rem; }}
     .ib-header-left {{ display: flex; flex-direction: column; }}
     .ib-header h1 {{ font-family: 'Inter', sans-serif; font-size: 1.1rem; font-weight: 700; margin: 0 0 0.1rem 0; letter-spacing: -0.01em; color: {NAVY}; }}
     .ib-header .sub {{ font-size: 0.68rem; color: {GREY_TEXT}; letter-spacing: 0.04em; }}
@@ -231,19 +237,19 @@ st.markdown(f"""
     /* ── Sections ── */
     .sec {{ font-family: 'Inter', sans-serif; font-size: 0.7rem; font-weight: 700; color: {NAVY};
         text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 2px solid {NAVY};
-        padding-bottom: 0.25rem; margin: 1.6rem 0 0.7rem 0; scroll-margin-top: 6rem; }}
+        padding-bottom: 0.25rem; margin: 1.4rem 0 0.6rem 0; scroll-margin-top: 6rem; }}
     .sec-sm {{ font-family: 'Inter', sans-serif; font-size: 0.65rem; font-weight: 600; color: {GREY_TEXT};
-        text-transform: uppercase; letter-spacing: 0.08em; margin: 0.7rem 0 0.35rem 0; scroll-margin-top: 6rem; }}
+        text-transform: uppercase; letter-spacing: 0.08em; margin: 0.6rem 0 0.3rem 0; scroll-margin-top: 6rem; }}
 
     /* ── IB Tables ── */
     .ib-table {{ width: 100%; border-collapse: collapse; font-size: 0.76rem; font-family: 'Inter', sans-serif; }}
     .ib-table th {{ background: {NAVY}; color: white; font-weight: 600; font-size: 0.67rem;
-        text-transform: uppercase; letter-spacing: 0.04em; padding: 0.4rem 0.65rem;
+        text-transform: uppercase; letter-spacing: 0.04em; padding: 0.45rem 0.7rem;
         text-align: right; border-bottom: 2px solid {NAVY}; white-space: nowrap; }}
-    .ib-table th:first-child {{ text-align: left; padding-left: 0.7rem; }}
-    .ib-table td {{ padding: 0.3rem 0.65rem; text-align: right; border-bottom: 1px solid #eef0f2;
+    .ib-table th:first-child {{ text-align: left; padding-left: 0.75rem; }}
+    .ib-table td {{ padding: 0.35rem 0.7rem; text-align: right; border-bottom: 1px solid #eef0f2;
         color: {DARK_TEXT}; font-variant-numeric: tabular-nums; }}
-    .ib-table td:first-child {{ text-align: left; font-weight: 500; padding-left: 0.7rem; }}
+    .ib-table td:first-child {{ text-align: left; font-weight: 500; padding-left: 0.75rem; }}
     .ib-table tr:last-child td {{ border-bottom: none; }}
     .ib-table tr:nth-child(even) td {{ background: #fcfcfd; }}
     .ib-table .row-bold td {{ font-weight: 700; border-top: 1px solid #bbb; background: transparent; }}
@@ -254,11 +260,11 @@ st.markdown(f"""
     .ib-table .base-case {{ background: {BASE_CASE_BG} !important; }}
 
     /* ── KPI Cards ── */
-    .kpi {{ background: #fafafa; border: 1px solid {BORDER}; border-radius: 1px; padding: 0.7rem 0.9rem; text-align: center; }}
+    .kpi {{ background: #fafafa; border: 1px solid {BORDER}; border-radius: 1px; padding: 0.75rem 0.9rem; text-align: center; }}
     .kpi .lbl {{ font-size: 0.62rem; color: {GREY_TEXT}; text-transform: uppercase; letter-spacing: 0.06em;
-        font-weight: 600; margin-bottom: 0.15rem; }}
-    .kpi .val {{ font-size: 1.1rem; font-weight: 700; color: {DARK_TEXT}; font-variant-numeric: tabular-nums; }}
-    .kpi .det {{ font-size: 0.65rem; color: {MUTED}; margin-top: 0.1rem; }}
+        font-weight: 600; margin-bottom: 0.2rem; }}
+    .kpi .val {{ font-size: 1.15rem; font-weight: 700; color: {DARK_TEXT}; font-variant-numeric: tabular-nums; }}
+    .kpi .det {{ font-size: 0.66rem; color: {MUTED}; margin-top: 0.15rem; }}
 
     /* ── Delta Colors ── */
     .delta-pos {{ color: {GREEN} !important; font-weight: 600; }}
@@ -267,24 +273,24 @@ st.markdown(f"""
     .ib-table td.delta-neg {{ color: #b71c1c !important; font-weight: 600; }}
 
     /* ── Callouts ── */
-    .callout {{ border-left: 3px solid {NAVY}; padding: 0.5rem 0.9rem; font-size: 0.73rem;
-        color: {GREY_TEXT}; background: #fafbfc; margin: 0.5rem 0; line-height: 1.4; }}
+    .callout {{ border-left: 3px solid {NAVY}; padding: 0.55rem 0.9rem; font-size: 0.73rem;
+        color: {GREY_TEXT}; background: #fafbfc; margin: 0.5rem 0; line-height: 1.55; }}
     .callout strong {{ color: {DARK_TEXT}; }}
 
     /* ── Analysis Summary ── */
     .exec-summary {{ background: #f8f9fb; border: 1px solid {BORDER}; border-left: 4px solid {NAVY};
-        padding: 0.8rem 1.1rem; margin: 0.6rem 0; font-size: 0.76rem; line-height: 1.55;
+        padding: 0.8rem 1.1rem; margin: 0.5rem 0 0.7rem 0; font-size: 0.76rem; line-height: 1.6;
         font-family: 'Inter', sans-serif; color: {DARK_TEXT}; }}
     .exec-summary .es-title {{ font-size: 0.67rem; font-weight: 700; color: {NAVY}; text-transform: uppercase;
-        letter-spacing: 0.08em; margin-bottom: 0.4rem; }}
+        letter-spacing: 0.08em; margin-bottom: 0.35rem; }}
 
     /* ── User Guide ── */
-    .guide {{ font-family: 'Inter', sans-serif; font-size: 0.8rem; color: {DARK_TEXT}; line-height: 1.75; }}
-    .guide h2 {{ font-size: 0.92rem; font-weight: 700; color: {NAVY}; margin: 1.4rem 0 0.4rem 0;
-        border-bottom: 1px solid {BORDER}; padding-bottom: 0.25rem; text-transform: uppercase;
+    .guide {{ font-family: 'Inter', sans-serif; font-size: 0.8rem; color: {DARK_TEXT}; line-height: 1.8; }}
+    .guide h2 {{ font-size: 0.92rem; font-weight: 700; color: {NAVY}; margin: 1.6rem 0 0.5rem 0;
+        border-bottom: 1px solid {BORDER}; padding-bottom: 0.3rem; text-transform: uppercase;
         letter-spacing: 0.05em; }}
-    .guide h3 {{ font-size: 0.84rem; font-weight: 600; color: {DARK_TEXT}; margin: 0.9rem 0 0.3rem 0; }}
-    .guide p {{ margin: 0.3rem 0 0.6rem 0; }}
+    .guide h3 {{ font-size: 0.84rem; font-weight: 600; color: {DARK_TEXT}; margin: 1.1rem 0 0.35rem 0; }}
+    .guide p {{ margin: 0.35rem 0 0.7rem 0; }}
     .guide .tip {{ background: #e8f4fd; border-left: 3px solid {ACCENT_BLUE}; padding: 0.45rem 0.8rem;
         margin: 0.4rem 0; font-size: 0.76rem; border-radius: 0 2px 2px 0; }}
     .guide .tip strong {{ color: {NAVY}; }}
@@ -303,7 +309,7 @@ st.markdown(f"""
     .guide li {{ margin-bottom: 0.25rem; }}
 
     /* ── Confidentiality Footer ── */
-    .conf-footer {{ font-size: 0.6rem; color: {MUTED}; text-align: center; padding: 0.5rem 0; margin-top: 0.5rem;
+    .conf-footer {{ font-size: 0.6rem; color: {MUTED}; text-align: center; padding: 0.6rem 0; margin-top: 0.8rem;
         border-top: 1px solid #eee; letter-spacing: 0.02em; font-style: italic; }}
 
     div[data-testid="stDataEditor"] td:last-child {{
@@ -316,17 +322,17 @@ st.markdown(f"""
     /* IB Convention: Blue left border on editable data editors via key-based CSS classes */
 {_fixed_rules}
 {_dynamic_rules}
-    .stTabs [data-baseweb="tab-list"] {{ gap: 0px; border-bottom: 2px solid {NAVY}; }}
+    .stTabs [data-baseweb="tab-list"] {{ gap: 0px; border-bottom: 2px solid {NAVY}; overflow-x: auto; }}
     .stTabs [data-baseweb="tab"] {{
-        font-family: 'Inter', sans-serif; font-size: 0.74rem; font-weight: 500;
-        padding: 0.45rem 1.1rem; border-radius: 0; text-transform: uppercase;
-        letter-spacing: 0.03em;
+        font-family: 'Inter', sans-serif; font-size: 0.72rem; font-weight: 500;
+        padding: 0.4rem 0.85rem; border-radius: 0; text-transform: uppercase;
+        letter-spacing: 0.03em; white-space: nowrap; flex-shrink: 0;
     }}
     /* ── Sidebar Nav Buttons ── */
     .nav-sep {{
-        font-family: 'Inter', sans-serif; font-size: 0.65rem; font-weight: 700;
+        font-family: 'Inter', sans-serif; font-size: 0.63rem; font-weight: 700;
         color: {GREY_TEXT}; text-transform: uppercase; letter-spacing: 0.08em;
-        padding: 0.6rem 0 0.2rem 0; margin-top: 0.15rem;
+        padding: 0.55rem 0 0.2rem 0; margin-top: 0.2rem;
     }}
     section[data-testid="stSidebar"] .stButton {{
         margin-bottom: -0.35rem !important;
@@ -2052,6 +2058,106 @@ EXAMPLE_ITEMS = [
          {"year":3,"value":53200000.0,"qty":1400000},
          {"year":4,"value":57000000.0,"qty":1500000},
          {"year":5,"value":60800000.0,"qty":1600000},
+     ]},
+    {"item_number":"3012","designation":"Spherical Roller SKF-320","destination":"Central Europe",
+     "comment":"Volume consolidation","net_sales_value":88500000.0,"net_sales_qty":1850000,
+     "material":22.40,"variable_va":3.10,"fixed_va":2.85,
+     "sales_projection":[
+         {"year":1,"value":88500000.0,"qty":1850000},
+         {"year":2,"value":91600000.0,"qty":1910000},
+         {"year":3,"value":94800000.0,"qty":1970000},
+         {"year":4,"value":98200000.0,"qty":2040000},
+         {"year":5,"value":101800000.0,"qty":2110000},
+     ]},
+    {"item_number":"4078","designation":"Tapered Roller TRB-440","destination":"North America",
+     "comment":"Tariff mitigation study","net_sales_value":67200000.0,"net_sales_qty":980000,
+     "material":31.50,"variable_va":4.20,"fixed_va":3.60,
+     "sales_projection":[
+         {"year":1,"value":67200000.0,"qty":980000},
+         {"year":2,"value":70560000.0,"qty":1029000},
+         {"year":3,"value":74100000.0,"qty":1080000},
+         {"year":4,"value":77800000.0,"qty":1134000},
+         {"year":5,"value":81700000.0,"qty":1190000},
+     ]},
+    {"item_number":"5233","designation":"Linear Guide LG-15","destination":"East Asia",
+     "comment":"Regional supply strategy","net_sales_value":34800000.0,"net_sales_qty":2900000,
+     "material":5.20,"variable_va":1.45,"fixed_va":1.30,
+     "sales_projection":[
+         {"year":1,"value":34800000.0,"qty":2900000},
+         {"year":2,"value":38300000.0,"qty":3190000},
+         {"year":3,"value":42100000.0,"qty":3510000},
+         {"year":4,"value":46300000.0,"qty":3860000},
+         {"year":5,"value":50900000.0,"qty":4250000},
+     ]},
+    {"item_number":"6101","designation":"Deep Groove Ball DGB-6208","destination":"Southern Europe",
+     "comment":"Cost reduction initiative","net_sales_value":156000000.0,"net_sales_qty":5200000,
+     "material":10.80,"variable_va":1.65,"fixed_va":1.90,
+     "sales_projection":[
+         {"year":1,"value":156000000.0,"qty":5200000},
+         {"year":2,"value":159100000.0,"qty":5300000},
+         {"year":3,"value":162300000.0,"qty":5410000},
+         {"year":4,"value":165500000.0,"qty":5520000},
+         {"year":5,"value":168800000.0,"qty":5630000},
+     ]},
+    {"item_number":"7044","designation":"Needle Roller NK-28/16","destination":"Northern Europe",
+     "comment":"Dual-source qualification","net_sales_value":28400000.0,"net_sales_qty":4730000,
+     "material":2.15,"variable_va":0.85,"fixed_va":0.72,
+     "sales_projection":[
+         {"year":1,"value":28400000.0,"qty":4730000},
+         {"year":2,"value":29500000.0,"qty":4920000},
+         {"year":3,"value":30700000.0,"qty":5120000},
+         {"year":4,"value":31900000.0,"qty":5320000},
+         {"year":5,"value":33200000.0,"qty":5530000},
+     ]},
+    {"item_number":"8190","designation":"Cam Follower CF-24","destination":"North America",
+     "comment":"Nearshoring evaluation","net_sales_value":19200000.0,"net_sales_qty":640000,
+     "material":14.60,"variable_va":2.90,"fixed_va":2.50,
+     "sales_projection":[
+         {"year":1,"value":19200000.0,"qty":640000},
+         {"year":2,"value":20400000.0,"qty":680000},
+         {"year":3,"value":21700000.0,"qty":720000},
+         {"year":4,"value":23000000.0,"qty":760000},
+         {"year":5,"value":24400000.0,"qty":800000},
+     ]},
+    {"item_number":"9055","designation":"Thrust Ball 51110","destination":"Central Europe",
+     "comment":"Capacity rebalancing","net_sales_value":41600000.0,"net_sales_qty":3200000,
+     "material":5.80,"variable_va":1.20,"fixed_va":1.05,
+     "sales_projection":[
+         {"year":1,"value":41600000.0,"qty":3200000},
+         {"year":2,"value":42800000.0,"qty":3296000},
+         {"year":3,"value":44100000.0,"qty":3395000},
+         {"year":4,"value":45400000.0,"qty":3497000},
+         {"year":5,"value":46800000.0,"qty":3600000},
+     ]},
+    {"item_number":"1102","designation":"Angular Contact AC-7210","destination":"East Asia",
+     "comment":"New market entry","net_sales_value":73500000.0,"net_sales_qty":1470000,
+     "material":24.00,"variable_va":3.80,"fixed_va":3.20,
+     "sales_projection":[
+         {"year":1,"value":73500000.0,"qty":1470000},
+         {"year":2,"value":80900000.0,"qty":1617000},
+         {"year":3,"value":89000000.0,"qty":1779000},
+         {"year":4,"value":97900000.0,"qty":1957000},
+         {"year":5,"value":107700000.0,"qty":2153000},
+     ]},
+    {"item_number":"1215","designation":"Self-Aligning Ball SAB-2206","destination":"Southern Europe",
+     "comment":"Product rationalization","net_sales_value":22100000.0,"net_sales_qty":1700000,
+     "material":6.40,"variable_va":1.10,"fixed_va":0.95,
+     "sales_projection":[
+         {"year":1,"value":22100000.0,"qty":1700000},
+         {"year":2,"value":22500000.0,"qty":1734000},
+         {"year":3,"value":23000000.0,"qty":1768000},
+         {"year":4,"value":23400000.0,"qty":1804000},
+         {"year":5,"value":23900000.0,"qty":1840000},
+     ]},
+    {"item_number":"1308","designation":"Cylindrical Roller CRB-NU320","destination":"North America",
+     "comment":"Strategic relocation","net_sales_value":95400000.0,"net_sales_qty":1060000,
+     "material":42.50,"variable_va":5.80,"fixed_va":4.90,
+     "sales_projection":[
+         {"year":1,"value":95400000.0,"qty":1060000},
+         {"year":2,"value":100200000.0,"qty":1113000},
+         {"year":3,"value":105200000.0,"qty":1169000},
+         {"year":4,"value":110500000.0,"qty":1227000},
+         {"year":5,"value":116000000.0,"qty":1289000},
      ]},
 ]
 
@@ -4888,7 +4994,7 @@ Compares full cost-to-serve across factory locations, including material, labour
     if st.session_state.active_page == "prestudy":
         project_name = st.session_state.project_name
         data_classification = st.session_state.get("data_classification", "C3 - Confidential")
-        st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.8rem;">
+        st.markdown(f"""<div style="font-family:Inter,sans-serif;font-size:1.1rem;font-weight:700;color:{NAVY};margin-bottom:0.5rem;">
             Pre-study <span style="font-weight:400;color:{DARK_TEXT};">|</span> {project_name}
         </div>""", unsafe_allow_html=True)
         st.markdown(f'<div class="callout" style="font-size:0.72rem;">Structured evaluation framework for the pre-study phase. Captures strategic rationale, current set-up, key questions, dependencies, and team. Complete this document before submitting a formal proposal to the decision board.</div>', unsafe_allow_html=True)
@@ -6277,6 +6383,12 @@ Compares full cost-to-serve across factory locations, including material, labour
     # ── COST MODEL PAGE (active_page == "model") ──
 
     ex = st.session_state.ex
+
+    # Auto-expand project items to match EXAMPLE_ITEMS when example data is loaded
+    if ex and len(st.session_state.project_items) < len(EXAMPLE_ITEMS):
+        while len(st.session_state.project_items) < len(EXAMPLE_ITEMS):
+            st.session_state.project_items.append({"id": st.session_state.next_id})
+            st.session_state.next_id += 1
 
     # ── PROJECT HEADER ────────────────────────────────────────
     st.markdown('<div class="sec" id="sec-project-setup">Analysis Setup</div>', unsafe_allow_html=True)
