@@ -11,6 +11,7 @@ import sys
 from telegram.ext import ApplicationBuilder
 
 from config import TELEGRAM_BOT_TOKEN
+from integrations import init_integrations
 from telegram_bot.handlers import register_handlers
 
 logging.basicConfig(
@@ -26,6 +27,7 @@ def main() -> None:
         sys.exit(1)
 
     logger.info("Starting TARS...")
+    init_integrations()
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     register_handlers(app)
     logger.info("TARS is online. Polling for messages...")
