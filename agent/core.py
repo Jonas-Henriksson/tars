@@ -6,8 +6,8 @@ from typing import Any
 
 import anthropic
 
-from tars.agent.tools import TOOL_DEFINITIONS, execute_tool
-from tars.config import ANTHROPIC_API_KEY
+from agent.tools import TOOL_DEFINITIONS, execute_tool
+from config import ANTHROPIC_API_KEY
 
 SYSTEM_PROMPT = """\
 You are TARS, an executive assistant AI. You are direct, efficient, and \

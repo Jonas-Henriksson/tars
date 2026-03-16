@@ -1,4 +1,4 @@
 """Allow running TARS with: python -m tars"""
-from tars.app import main
+from app import main
 
 main()

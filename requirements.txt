@@ -1,8 +1,7 @@
-streamlit
-pandas
-numpy
-plotly
-openpyxl
-xlsxwriter
-fpdf2
+python-telegram-bot[ext]
+anthropic
+msal
+httpx
+python-dotenv
 pytest
+pytest-asyncio

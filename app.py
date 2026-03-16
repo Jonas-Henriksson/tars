@@ -3,8 +3,6 @@
 Entry point. Starts the Telegram bot with polling.
 
 Usage:
-    python -m tars.app
-    # or from the tars/ directory:
     python app.py
 """
 import logging
@@ -12,8 +10,8 @@ import sys
 
 from telegram.ext import ApplicationBuilder
 
-from tars.config import TELEGRAM_BOT_TOKEN
-from tars.telegram_bot.handlers import register_handlers
+from config import TELEGRAM_BOT_TOKEN
+from telegram_bot.handlers import register_handlers
 
 logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",

@@ -13,7 +13,7 @@ from telegram.ext import (
     filters,
 )
 
-from tars.agent.core import clear_history, run
+from agent.core import clear_history, run
 
 logger = logging.getLogger(__name__)
 

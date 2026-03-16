@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tars.agent.core import _get_history, clear_history, run
-from tars.agent.tools import TOOL_DEFINITIONS, execute_tool, register_tool
+from agent.core import _get_history, clear_history, run
+from agent.tools import TOOL_DEFINITIONS, execute_tool, register_tool
 
 
 class TestToolRegistry:
@@ -87,7 +87,7 @@ class TestAgentRun:
         mock_response.stop_reason = "end_turn"
         mock_response.content = [mock_text_block]
 
-        with patch("tars.agent.core.anthropic.Anthropic") as mock_cls:
+        with patch("agent.core.anthropic.Anthropic") as mock_cls:
             mock_client = MagicMock()
             mock_client.messages.create.return_value = mock_response
             mock_cls.return_value = mock_client
@@ -108,7 +108,7 @@ class TestAgentRun:
         mock_response.stop_reason = "end_turn"
         mock_response.content = [mock_text_block]
 
-        with patch("tars.agent.core.anthropic.Anthropic") as mock_cls:
+        with patch("agent.core.anthropic.Anthropic") as mock_cls:
             mock_client = MagicMock()
             mock_client.messages.create.return_value = mock_response
             mock_cls.return_value = mock_client

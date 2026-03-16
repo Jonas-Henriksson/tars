@@ -1,9 +1,0 @@
-__pycache__/
-*.pyc
-.pytest_cache/
-.env
-*.egg-info/
-dist/
-build/
-.mypy_cache/
-token_cache.json
