@@ -122,9 +122,27 @@ def run_quick_tunnel(
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         text=True,
     )
+
+    import threading
+
+    def _pipe_stderr():
+        for line in iter(proc.stderr.readline, ""):
+            line = line.strip()
+            if not line:
+                continue
+            if ".trycloudflare.com" in line or "cfargotunnel.com" in line:
+                for word in line.split():
+                    if word.startswith("https://"):
+                        proc._tars_url = word.rstrip("/")
+                        break
+            if any(kw in line.lower() for kw in ["err", "warn", "connection", "registered", "serving", "trycloudflare", "thank you"]):
+                log.info("  [cloudflared] %s", line)
+
+    proc._tars_url = None
+    threading.Thread(target=_pipe_stderr, daemon=True).start()
 
     tunnel_url = None
 
@@ -145,14 +163,18 @@ def run_quick_tunnel(
             continue
 
         # cloudflared prints the URL in its log output
+        # Also check URL from stderr thread
+        if not tunnel_url and getattr(proc, "_tars_url", None):
+            tunnel_url = proc._tars_url
+
         if ".trycloudflare.com" in line or "cfargotunnel.com" in line:
-            # Extract URL from the log line
             for word in line.split():
                 if word.startswith("https://") and ("trycloudflare.com" in word or "cfargotunnel.com" in word):
                     tunnel_url = word.rstrip("/")
                     break
 
-            if tunnel_url:
+        if tunnel_url and not getattr(proc, "_url_printed", False):
+                proc._url_printed = True
                 webhook_url = tunnel_url + "/api/notion/webhook"
                 log.info("=" * 60)
                 log.info("TUNNEL ACTIVE")
