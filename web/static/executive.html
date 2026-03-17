@@ -134,7 +134,12 @@
         .btn-cancel:hover { background: var(--border); }
         .btn-save { background: var(--accent); color: #fff; border-color: var(--accent); }
         .btn-save:hover { opacity: 0.9; }
-        .modal-source { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+        .modal-context { margin-top: 14px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border-subtle); border-radius: 6px; font-size: 12px; color: var(--text-secondary); line-height: 1.6; max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; display: none; }
+        .modal-context.visible { display: block; }
+        .modal-context-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 4px; }
+        .modal-topics { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+        .modal-topic-tag { background: var(--surface-raised); border: 1px solid var(--border); border-radius: 3px; padding: 2px 7px; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+        .modal-source { font-size: 11px; color: var(--text-muted); margin-top: 8px; }
         .modal-source a { color: var(--accent); text-decoration: none; }
         .modal-source a:hover { text-decoration: underline; }
 
@@ -217,6 +222,7 @@
                 <textarea id="modalSteps" placeholder="1. First step&#10;2. Second step&#10;3. ..."></textarea>
                 <div class="hint">Break down the task into clear, delegatable steps.</div>
             </div>
+            <div id="modalContext"></div>
             <div class="modal-source" id="modalSource"></div>
             <div class="modal-foot">
                 <button class="btn-cancel" onclick="closeModal()">Cancel</button>
@@ -492,6 +498,30 @@
             document.getElementById('modalDate').value = t.follow_up_date || '';
             document.getElementById('modalStatus').value = t.status || 'open';
             document.getElementById('modalSteps').value = t.steps || '';
+
+            // Source context
+            const ctx = document.getElementById('modalContext');
+            if (t.source_context || (t.topics && t.topics.length)) {
+                let ch = '';
+                if (t.source_context) {
+                    ch += '<div class="modal-context-label">Source Context</div>';
+                    ch += '<div class="modal-context visible">' + esc(t.source_context) + '</div>';
+                }
+                if (t.topics && t.topics.length && !(t.topics.length === 1 && t.topics[0] === 'general')) {
+                    ch += '<div class="modal-topics">';
+                    for (const topic of t.topics) {
+                        ch += '<span class="modal-topic-tag">' + esc(topic) + '</span>';
+                    }
+                    ch += '</div>';
+                }
+                ctx.innerHTML = ch;
+                ctx.style.display = 'block';
+            } else {
+                ctx.innerHTML = '';
+                ctx.style.display = 'none';
+            }
+
+            // Source link
             const src = document.getElementById('modalSource');
             if (t.source_title) {
                 src.innerHTML = 'Source: ' + (t.source_url ? '<a href="' + esc(t.source_url) + '" target="_blank">' + esc(t.source_title) + '</a>' : esc(t.source_title));

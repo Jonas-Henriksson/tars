@@ -91,6 +91,157 @@ def _extract_people(text: str, title: str) -> list[str]:
     return sorted(people)
 
 
+def _extract_source_context(text: str, description: str, window: int = 300) -> str:
+    """Extract surrounding text around where a task was found in the source.
+
+    Returns up to `window` chars of context around the task description.
+    """
+    desc_lower = description.lower()[:60]
+    idx = text.lower().find(desc_lower)
+    if idx == -1:
+        # Try partial match with first few words
+        words = description.split()[:4]
+        partial = " ".join(words).lower()
+        idx = text.lower().find(partial)
+    if idx == -1:
+        return ""
+    start = max(0, idx - window // 2)
+    end = min(len(text), idx + len(description) + window // 2)
+    snippet = text[start:end].strip()
+    if start > 0:
+        snippet = "..." + snippet
+    if end < len(text):
+        snippet = snippet + "..."
+    return snippet
+
+
+def _suggest_steps(description: str, source_context: str, topics: list[str],
+                   owner: str = "", delegated: bool = False) -> str:
+    """Generate suggested action steps based on task description and context.
+
+    Uses heuristics and keyword matching to produce practical steps.
+    """
+    desc_lower = description.lower()
+    ctx_lower = (source_context or "").lower()
+    combined = desc_lower + " " + ctx_lower
+    steps = []
+
+    # --- Pattern-based step generation ---
+
+    # Presentation / slide / deck tasks
+    if any(kw in desc_lower for kw in ["presentation", "slide", "deck", "ppt"]):
+        steps = [
+            "Gather latest data and inputs from stakeholders",
+            "Draft slide structure and key messages",
+            "Create/update slides with visuals and data",
+            "Review with stakeholders for feedback",
+            "Finalize and share with audience",
+        ]
+    # Meeting preparation
+    elif any(kw in desc_lower for kw in ["prepare for", "prep for", "meeting"]):
+        steps = [
+            "Review agenda and previous meeting notes",
+            "Gather updates and data points to share",
+            "Prepare talking points or materials",
+            "Send pre-read or agenda to participants",
+        ]
+    # Follow-up tasks
+    elif any(kw in desc_lower for kw in ["follow up", "follow-up", "check in", "check-in"]):
+        person = owner if delegated else ""
+        if not person:
+            # Try to extract person name from description
+            m = re.search(r"(?:with|from)\s+([A-Z][a-z]+)", description)
+            if m:
+                person = m.group(1)
+        steps = [
+            f"Reach out to {person or 'the relevant person'} for status update",
+            "Review any shared documents or deliverables",
+            "Document outcome and next steps",
+            "Set follow-up reminder if still pending",
+        ]
+    # Review / feedback tasks
+    elif any(kw in desc_lower for kw in ["review", "feedback", "approve"]):
+        steps = [
+            "Read through the document/deliverable thoroughly",
+            "Note questions, concerns, and suggestions",
+            "Share consolidated feedback with the author",
+            "Confirm revisions if needed",
+        ]
+    # Share / send / distribute
+    elif any(kw in desc_lower for kw in ["share", "send", "distribute", "forward"]):
+        steps = [
+            "Ensure the document/material is finalized",
+            "Identify recipients and distribution channel",
+            "Share with a brief context message",
+            "Confirm receipt if needed",
+        ]
+    # Update / modify / change
+    elif any(kw in desc_lower for kw in ["update", "modify", "revise", "change", "incorporate"]):
+        steps = [
+            "Review current version and identify what needs updating",
+            "Gather new inputs or data",
+            "Make the required changes",
+            "Review and validate the updates",
+            "Share updated version with stakeholders",
+        ]
+    # Organize / coordinate / plan
+    elif any(kw in desc_lower for kw in ["organize", "coordinate", "plan", "schedule", "set up", "arrange"]):
+        steps = [
+            "Define scope, participants, and logistics",
+            "Send invites or reserve resources",
+            "Prepare agenda or materials",
+            "Confirm attendance and final details",
+        ]
+    # Escalation tasks
+    elif any(kw in desc_lower for kw in ["escalat", "raise", "flag", "alert"]):
+        steps = [
+            "Document the issue with supporting details",
+            "Identify the right escalation path / person",
+            "Communicate the escalation clearly",
+            "Track resolution and follow up",
+        ]
+    # Ask / request / inquire
+    elif any(kw in desc_lower for kw in ["ask", "request", "inquire", "find out", "clarify"]):
+        steps = [
+            "Formulate clear questions",
+            "Reach out to the relevant person(s)",
+            "Document the response",
+            "Act on the information received",
+        ]
+    # Expand / extend / add
+    elif any(kw in desc_lower for kw in ["expand", "extend", "add", "include", "broaden"]):
+        steps = [
+            "Review the current scope",
+            "Identify what needs to be added",
+            "Draft the additional content",
+            "Integrate and review the expanded version",
+        ]
+    # Generic fallback: infer from topic
+    elif "strategy" in combined or "roadmap" in combined:
+        steps = [
+            "Review current strategy/roadmap status",
+            "Identify gaps or action items",
+            "Draft recommendations or updates",
+            "Align with stakeholders",
+        ]
+    else:
+        # Generic task steps
+        steps = [
+            "Clarify requirements and expected outcome",
+            "Gather necessary inputs or information",
+            "Complete the task",
+            "Review and share results",
+        ]
+
+    # Add context-aware refinements
+    if "deadline" in combined or "end of" in combined or "by " in combined:
+        steps.append("Verify timeline and set intermediate checkpoints")
+    if delegated and owner:
+        steps.insert(0, f"Confirm expectations and timeline with {owner}")
+
+    return "\n".join(f"{i+1}. {s}" for i, s in enumerate(steps))
+
+
 def _detect_delegations(text: str) -> list[dict]:
     """Detect delegated tasks: items assigned to other people."""
     delegations = []
@@ -368,6 +519,11 @@ async def scan_notion(max_pages: int = 50, full_scan: bool = False) -> dict:
 
             follow_up = _estimate_follow_up_date(d["description"], page_date)
             priority = _classify_priority(d["description"], is_delegated=True)
+            source_context = _extract_source_context(content, d["description"])
+            suggested_steps = _suggest_steps(
+                d["description"], source_context, topics,
+                owner=d["owner"], delegated=True,
+            )
 
             task = {
                 "id": uuid.uuid4().hex[:8],
@@ -377,10 +533,12 @@ async def scan_notion(max_pages: int = 50, full_scan: bool = False) -> dict:
                 "source_title": title,
                 "source_url": page_url,
                 "source_page_id": page_id,
+                "source_context": source_context,
                 "topics": topics,
                 "follow_up_date": follow_up,
                 "priority": priority,
                 "status": "open",
+                "steps": suggested_steps,
                 "created_at": now.isoformat(),
             }
             new_tasks.append(task)
@@ -394,6 +552,11 @@ async def scan_notion(max_pages: int = 50, full_scan: bool = False) -> dict:
 
             follow_up = _estimate_follow_up_date(ot["description"], page_date)
             priority = _classify_priority(ot["description"], is_delegated=False)
+            source_context = _extract_source_context(content, ot["description"])
+            suggested_steps = _suggest_steps(
+                ot["description"], source_context, topics,
+                owner="Me", delegated=False,
+            )
 
             task = {
                 "id": uuid.uuid4().hex[:8],
@@ -403,10 +566,12 @@ async def scan_notion(max_pages: int = 50, full_scan: bool = False) -> dict:
                 "source_title": title,
                 "source_url": page_url,
                 "source_page_id": page_id,
+                "source_context": source_context,
                 "topics": topics,
                 "follow_up_date": follow_up,
                 "priority": priority,
                 "status": "open",
+                "steps": suggested_steps,
                 "created_at": now.isoformat(),
             }
             new_tasks.append(task)
@@ -592,6 +757,16 @@ def _build_executive_summary(intel: dict) -> dict:
 
 
 def _summarize_task(task: dict) -> dict:
+    # Auto-generate steps for tasks that don't have any yet
+    steps = task.get("steps", "")
+    if not steps:
+        steps = _suggest_steps(
+            task.get("description", ""),
+            task.get("source_context", ""),
+            task.get("topics", []),
+            owner=task.get("owner", ""),
+            delegated=task.get("delegated", False),
+        )
     return {
         "id": task.get("id"),
         "description": task.get("description", ""),
@@ -600,12 +775,13 @@ def _summarize_task(task: dict) -> dict:
         "follow_up_date": task.get("follow_up_date"),
         "source_title": task.get("source_title", ""),
         "source_url": task.get("source_url", ""),
+        "source_context": task.get("source_context", ""),
         "age_days": task.get("age_days", 0),
         "quadrant": task.get("priority", {}).get("quadrant"),
         "quadrant_label": task.get("priority", {}).get("quadrant_label", ""),
         "topics": task.get("topics", []),
         "status": task.get("status", "open"),
-        "steps": task.get("steps", ""),
+        "steps": steps,
     }
 
 
