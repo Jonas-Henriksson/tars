@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TARS Graph</title>
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three-spritetext@1"></script>
+    <script src="https://unpkg.com/3d-force-graph@1"></script>
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -28,7 +31,7 @@
         .nav-links a.active { color: var(--text); background: var(--surface-raised); }
 
         /* Toolbar */
-        .toolbar { display: flex; align-items: flex-start; gap: 8px; padding: 10px 24px; border-bottom: 1px solid var(--border-subtle); background: var(--bg); max-width: 100%; flex-wrap: wrap; }
+        .toolbar { display: flex; align-items: flex-start; gap: 8px; padding: 10px 24px; border-bottom: 1px solid var(--border-subtle); background: var(--bg); max-width: 100%; flex-wrap: wrap; z-index: 40; position: relative; }
         .chip-groups { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; align-items: flex-start; }
         .chip-group { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
         .chip-group + .chip-group { padding-left: 8px; border-left: 1px solid var(--border-subtle); }
@@ -50,12 +53,12 @@
         .search-box::placeholder { color: var(--text-muted); }
 
         /* Main layout */
-        .graph-wrap { display: flex; height: calc(100vh - 90px); }
-        canvas { flex: 1; display: block; cursor: grab; }
-        canvas.dragging { cursor: grabbing; }
+        .graph-wrap { display: flex; height: calc(100vh - 90px); position: relative; }
+        #graph3d { flex: 1; }
+        #graph3d canvas { display: block; }
 
         /* Sidebar */
-        .sidebar { width: 0; overflow: hidden; border-left: 1px solid var(--border-subtle); background: var(--surface); transition: width 0.25s ease; flex-shrink: 0; }
+        .sidebar { width: 0; overflow: hidden; border-left: 1px solid var(--border-subtle); background: var(--surface); transition: width 0.25s ease; flex-shrink: 0; z-index: 30; }
         .sidebar.open { width: 340px; }
         .sidebar-inner { width: 340px; padding: 20px; overflow-y: auto; height: 100%; }
         .sidebar-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
@@ -90,15 +93,13 @@
         .sidebar-page-link a { color: var(--accent); text-decoration: none; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .sidebar-page-link a:hover { text-decoration: underline; }
 
-        /* Empty state */
-        .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); gap: 12px; }
-        .empty-state h2 { font-size: 18px; font-weight: 600; color: var(--text-secondary); }
-        .empty-state p { font-size: 13px; text-align: center; max-width: 400px; }
+        /* Node label overlay */
+        .node-label { color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 3px; background: rgba(0,0,0,0.6); white-space: nowrap; pointer-events: none; }
 
-        /* Tooltip */
-        .tooltip { position: fixed; padding: 6px 10px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--text); pointer-events: none; z-index: 100; white-space: nowrap; display: none; }
-        .tooltip.visible { display: block; }
-        .tooltip-type { color: var(--text-muted); font-size: 10px; text-transform: uppercase; margin-left: 6px; }
+        /* Legend */
+        .legend { position: absolute; bottom: 16px; left: 16px; display: flex; gap: 14px; z-index: 20; background: rgba(10,10,10,0.7); padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border-subtle); backdrop-filter: blur(8px); }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+        .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
 
         @media (max-width: 768px) {
             .sidebar.open { width: 280px; }
@@ -127,47 +128,40 @@
     </div>
 
     <div class="graph-wrap">
-        <canvas id="graphCanvas"></canvas>
+        <div id="graph3d"></div>
         <div class="sidebar" id="sidebar">
             <div class="sidebar-inner" id="sidebarContent"></div>
         </div>
+        <div class="legend">
+            <div class="legend-item"><div class="legend-dot" style="background: var(--node-person)"></div>People</div>
+            <div class="legend-item"><div class="legend-dot" style="background: var(--node-topic)"></div>Topics</div>
+            <div class="legend-item"><div class="legend-dot" style="background: var(--node-page)"></div>Pages</div>
+        </div>
     </div>
-
-    <div class="tooltip" id="tooltip"></div>
 
     <script>
     (function() {
         'use strict';
 
         // --- State ---
-        let graphData = null;   // {nodes, edges, tasks}
-        let nodes = [];         // [{id, label, type, weight, x, y, vx, vy, radius, color, url}]
-        let edges = [];         // [{source, target, type, weight}]
+        let graphData = null;
+        let graphNodes = [];
+        let graphEdges = [];
         let tasks = [];
-        let nodeMap = {};       // id -> node index
-        let adjacency = {};     // node index -> Set of neighbor indices
-        const canvas = document.getElementById('graphCanvas');
-        const ctx = canvas.getContext('2d');
-        const tooltip = document.getElementById('tooltip');
+        let nodeMap = {};       // id -> node object
+        let adjacency = {};     // id -> Set of neighbor ids
+        let selectedNodeId = null;
+        let hoveredNodeId = null;
+        let Graph = null;
+
         const sidebar = document.getElementById('sidebar');
         const sidebarContent = document.getElementById('sidebarContent');
         const searchBox = document.getElementById('searchBox');
         const chipsEl = document.getElementById('chips');
-
-        let hoveredNode = null;
-        let selectedNode = null;
-        let dragNode = null;
-        let simRunning = true;
-        let simFrame = 0;
-        let showPages = false;  // Only show pages when a node is selected
-
-        // Transform (pan + zoom)
-        let tx = 0, ty = 0, scale = 1;
-        let isPanning = false, panStartX = 0, panStartY = 0;
+        const graphEl = document.getElementById('graph3d');
 
         const NODE_COLORS = { person: '#3b82f6', topic: '#a855f7', page: '#f59e0b' };
-        const NODE_COLORS_RGB = { person: [59,130,246], topic: [168,85,247], page: [245,158,11] };
-        const NODE_COLORS_DIM = { person: 'rgba(59,130,246,0.08)', topic: 'rgba(168,85,247,0.08)', page: 'rgba(245,158,11,0.08)' };
+        const NODE_COLORS_HIGHLIGHT = { person: '#60a5fa', topic: '#c084fc', page: '#fbbf24' };
 
         // --- Load data ---
         async function loadGraph() {
@@ -183,95 +177,236 @@
         }
 
         function initGraph(data) {
-            nodes = [];
-            edges = [];
+            graphNodes = [];
+            graphEdges = [];
             nodeMap = {};
             adjacency = {};
 
-            // Build nodes — collect weights per type for relative sizing
+            // Compute max weight per type for normalization
             const weightsByType = { person: [], topic: [], page: [] };
             for (const n of data.nodes) {
-                const w = n.weight || 1;
-                if (weightsByType[n.type]) weightsByType[n.type].push(w);
+                if (weightsByType[n.type]) weightsByType[n.type].push(n.weight || 1);
             }
-            // Compute max weight per type for normalization
             const maxWeight = {};
             for (const t of ['person', 'topic', 'page']) {
                 maxWeight[t] = Math.max(1, ...weightsByType[t]);
             }
-            // Radius ranges per type
-            const radiusRange = { person: [6, 18], topic: [8, 22], page: [5, 12] };
+
+            // Node size ranges per type
+            const sizeRange = { person: [3, 10], topic: [4, 14], page: [2, 6] };
 
             for (const n of data.nodes) {
-                const idx = nodes.length;
                 const weight = n.weight || 1;
                 const type = n.type;
-                const [rMin, rMax] = radiusRange[type] || [6, 16];
-                // Log-normalized radius within type
+                const [sMin, sMax] = sizeRange[type] || [3, 8];
                 const norm = Math.log(1 + weight) / Math.log(1 + maxWeight[type]);
-                const radius = rMin + norm * (rMax - rMin);
-                nodes.push({
+                const size = sMin + norm * (sMax - sMin);
+
+                const node = {
                     id: n.id,
                     label: n.label,
                     type: type,
                     weight: weight,
                     url: n.url || '',
-                    x: 0, y: 0,
-                    vx: 0, vy: 0,
-                    radius: radius,
+                    val: size,
                     color: NODE_COLORS[type] || '#71717a',
-                    visible: type !== 'page',  // Hide pages by default
-                });
-                nodeMap[n.id] = idx;
-                adjacency[idx] = new Set();
+                    visible: type !== 'page',
+                };
+                graphNodes.push(node);
+                nodeMap[n.id] = node;
+                adjacency[n.id] = new Set();
             }
 
-            // Position in circle — use CSS dimensions (not DPR-scaled)
-            const dpr = window.devicePixelRatio || 1;
-            const cx = (canvas.width / dpr) / 2, cy = (canvas.height / dpr) / 2;
-            const r = Math.min(cx, cy) * 0.75;
-            const visibleNodes = nodes.filter(n => n.visible);
-            // Separate people and topics for better initial layout
-            const initPeople = visibleNodes.filter(n => n.type === 'person');
-            const initTopics = visibleNodes.filter(n => n.type === 'topic');
-            // Place people in outer ring
-            initPeople.forEach((n, i) => {
-                const angle = (2 * Math.PI * i) / initPeople.length;
-                n.x = cx + r * Math.cos(angle) + (Math.random() - 0.5) * 20;
-                n.y = cy + r * Math.sin(angle) + (Math.random() - 0.5) * 20;
-            });
-            // Place topics in inner ring
-            const innerR = r * 0.45;
-            initTopics.forEach((n, i) => {
-                const angle = (2 * Math.PI * i) / initTopics.length + 0.3;
-                n.x = cx + innerR * Math.cos(angle) + (Math.random() - 0.5) * 20;
-                n.y = cy + innerR * Math.sin(angle) + (Math.random() - 0.5) * 20;
-            });
-            // Position hidden page nodes near center
-            nodes.filter(n => !n.visible).forEach(n => {
-                n.x = cx + (Math.random() - 0.5) * 100;
-                n.y = cy + (Math.random() - 0.5) * 100;
-            });
-
-            // Build edges (only between existing nodes)
+            // Build edges
             for (const e of data.edges) {
-                const si = nodeMap[e.source];
-                const ti = nodeMap[e.target];
-                if (si !== undefined && ti !== undefined) {
-                    edges.push({ source: si, target: ti, type: e.type, weight: e.weight || 1 });
-                    adjacency[si].add(ti);
-                    adjacency[ti].add(si);
+                if (nodeMap[e.source] && nodeMap[e.target]) {
+                    graphEdges.push({
+                        source: e.source,
+                        target: e.target,
+                        type: e.type,
+                        weight: e.weight || 1,
+                    });
+                    adjacency[e.source].add(e.target);
+                    adjacency[e.target].add(e.source);
                 }
             }
 
-            // Reset view
-            tx = 0; ty = 0; scale = 1;
-            simFrame = 0;
-            alpha = 1.0;
-            simRunning = true;
-
             buildChips();
-            requestAnimationFrame(simLoop);
+            createGraph();
+        }
+
+        function createGraph() {
+            const visibleNodes = graphNodes.filter(n => n.visible);
+            const visibleIds = new Set(visibleNodes.map(n => n.id));
+            const visibleEdges = graphEdges.filter(e => {
+                const sid = typeof e.source === 'object' ? e.source.id : e.source;
+                const tid = typeof e.target === 'object' ? e.target.id : e.target;
+                return visibleIds.has(sid) && visibleIds.has(tid);
+            });
+
+            const graphWrap = document.querySelector('.graph-wrap');
+            const sidebarW = sidebar.classList.contains('open') ? 340 : 0;
+            const width = graphWrap.clientWidth - sidebarW;
+            const height = graphWrap.clientHeight;
+
+            if (Graph) {
+                // Update existing graph
+                Graph.graphData({ nodes: visibleNodes, links: visibleEdges })
+                     .width(width)
+                     .height(height);
+                return;
+            }
+
+            Graph = ForceGraph3D()(graphEl)
+                .width(width)
+                .height(height)
+                .backgroundColor('#0a0a0a')
+                .graphData({ nodes: visibleNodes, links: visibleEdges })
+
+                // --- Node appearance ---
+                .nodeVal(n => n.val)
+                .nodeColor(n => {
+                    if (selectedNodeId && n.id !== selectedNodeId && !adjacency[selectedNodeId].has(n.id)) {
+                        return 'rgba(60,60,70,0.3)';
+                    }
+                    if (n.id === hoveredNodeId || n.id === selectedNodeId) {
+                        return NODE_COLORS_HIGHLIGHT[n.type] || '#aaa';
+                    }
+                    return n.color;
+                })
+                .nodeOpacity(0.9)
+                .nodeResolution(20)
+
+                // --- Node labels ---
+                .nodeLabel(n => '')
+                .nodeThreeObject(n => {
+                    // Create a sprite label
+                    const sprite = new SpriteText(n.label);
+                    sprite.color = '#ffffff';
+                    sprite.textHeight = 2.5;
+                    sprite.fontFace = '-apple-system, BlinkMacSystemFont, sans-serif';
+                    sprite.fontWeight = '500';
+                    sprite.backgroundColor = false;
+                    sprite.padding = 1;
+                    // Position above node
+                    const nodeRadius = Math.cbrt(n.val) * 2;
+                    sprite.position.y = nodeRadius + 3;
+                    return sprite;
+                })
+                .nodeThreeObjectExtend(true)
+
+                // --- Link appearance ---
+                .linkWidth(e => Math.min(1.5, 0.2 + e.weight * 0.15))
+                .linkOpacity(0.15)
+                .linkColor(e => {
+                    const sid = typeof e.source === 'object' ? e.source.id : e.source;
+                    const tid = typeof e.target === 'object' ? e.target.id : e.target;
+                    if (selectedNodeId) {
+                        if (sid === selectedNodeId || tid === selectedNodeId) {
+                            const sourceNode = nodeMap[sid];
+                            return NODE_COLORS[sourceNode ? sourceNode.type : 'person'];
+                        }
+                        return 'rgba(40,40,50,0.1)';
+                    }
+                    const sourceNode = nodeMap[sid];
+                    return sourceNode ? sourceNode.color : '#555';
+                })
+                .linkDirectionalParticles(e => {
+                    const sid = typeof e.source === 'object' ? e.source.id : e.source;
+                    const tid = typeof e.target === 'object' ? e.target.id : e.target;
+                    if (selectedNodeId && (sid === selectedNodeId || tid === selectedNodeId)) {
+                        return 2;
+                    }
+                    return 0;
+                })
+                .linkDirectionalParticleWidth(1.2)
+                .linkDirectionalParticleSpeed(0.006)
+                .linkDirectionalParticleColor(e => {
+                    const sid = typeof e.source === 'object' ? e.source.id : e.source;
+                    const sourceNode = nodeMap[sid];
+                    return sourceNode ? NODE_COLORS_HIGHLIGHT[sourceNode.type] : '#fff';
+                })
+                .linkCurvature(0.15)
+                .linkCurveRotation(0.5)
+
+                // --- Force config ---
+                .d3Force('charge').strength(n => {
+                    return -80 * (n.val || 4);
+                });
+
+            // Additional force tuning
+            Graph.d3Force('link').distance(e => 60 + (e.weight || 1) * 5);
+            Graph.d3Force('center').strength(0.05);
+
+            // Warm up
+            Graph.d3AlphaDecay(0.02);
+            Graph.d3VelocityDecay(0.3);
+
+            // --- Interactions ---
+            Graph.onNodeClick(n => selectNode(n.id));
+            Graph.onNodeHover(n => {
+                hoveredNodeId = n ? n.id : null;
+                graphEl.style.cursor = n ? 'pointer' : 'default';
+                Graph.nodeColor(Graph.nodeColor()); // refresh
+            });
+            Graph.onBackgroundClick(() => {
+                selectedNodeId = null;
+                closeSidebar();
+                resetPageVisibility();
+                updateChipState();
+                refreshGraph();
+            });
+
+            // Add bloom post-processing
+            addBloomEffect();
+        }
+
+        function addBloomEffect() {
+            if (!Graph) return;
+            const renderer = Graph.renderer();
+            const scene = Graph.scene();
+            const camera = Graph.camera();
+
+            // Import three.js addons for bloom
+            import('https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js').then(({ EffectComposer }) => {
+                return Promise.all([
+                    Promise.resolve(EffectComposer),
+                    import('https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js'),
+                    import('https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js'),
+                ]);
+            }).then(([EffectComposer, { RenderPass }, { UnrealBloomPass }]) => {
+                const composer = new EffectComposer(renderer);
+                composer.addPass(new RenderPass(scene, camera));
+
+                const bloomPass = new UnrealBloomPass(
+                    { x: window.innerWidth, y: window.innerHeight },
+                    1.2,   // strength
+                    0.4,   // radius
+                    0.85   // threshold
+                );
+                composer.addPass(bloomPass);
+
+                // Override the render loop
+                Graph.postProcessingComposer(composer);
+            }).catch(e => {
+                console.log('Bloom not available, continuing without it:', e.message);
+            });
+        }
+
+        function refreshGraph() {
+            if (!Graph) return;
+            // Force color refresh
+            Graph.nodeColor(Graph.nodeColor());
+            Graph.linkColor(Graph.linkColor());
+            Graph.linkDirectionalParticles(Graph.linkDirectionalParticles());
+            Graph.linkOpacity(e => {
+                const sid = typeof e.source === 'object' ? e.source.id : e.source;
+                const tid = typeof e.target === 'object' ? e.target.id : e.target;
+                if (selectedNodeId) {
+                    return (sid === selectedNodeId || tid === selectedNodeId) ? 0.6 : 0.04;
+                }
+                return 0.15;
+            });
         }
 
         // --- Filter chips ---
@@ -280,8 +415,8 @@
         let topicsExpanded = false;
 
         function buildChips() {
-            const people = nodes.filter(n => n.type === 'person').sort((a, b) => b.weight - a.weight);
-            const topics = nodes.filter(n => n.type === 'topic').sort((a, b) => b.weight - a.weight);
+            const people = graphNodes.filter(n => n.type === 'person').sort((a, b) => b.weight - a.weight);
+            const topics = graphNodes.filter(n => n.type === 'topic').sort((a, b) => b.weight - a.weight);
 
             let html = '';
 
@@ -317,16 +452,10 @@
 
             chipsEl.innerHTML = html;
 
-            // Node chip clicks
             chipsEl.querySelectorAll('.chip[data-id]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const nid = btn.dataset.id;
-                    const idx = nodeMap[nid];
-                    if (idx !== undefined) selectNode(idx);
-                });
+                btn.addEventListener('click', () => selectNode(btn.dataset.id));
             });
 
-            // Expand toggle clicks
             chipsEl.querySelectorAll('.chip[data-toggle]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     if (btn.dataset.toggle === 'people') peopleExpanded = !peopleExpanded;
@@ -337,434 +466,68 @@
             });
         }
 
-        // --- Force simulation ---
-        let alpha = 1.0;  // Cooling factor — decreases each frame
-
-        function simLoop() {
-            if (!simRunning) return;
-            simStep();
-            render();
-            simFrame++;
-            alpha *= 0.97;  // Exponential cooling
-            if (alpha < 0.001) {
-                alpha = 0;
-                simRunning = false;
-            }
-            requestAnimationFrame(simLoop);
-        }
-
-        function simStep() {
-            const N = nodes.length;
-            const repK = 4000;        // Strong repulsion
-            const springK = 0.002;    // Very gentle springs
-            const springLen = 220;    // Long rest length for spacing
-            const gravity = 0.004;    // Gentle center pull
-            const damping = 0.55;     // Heavy damping
-            const dpr = window.devicePixelRatio || 1;
-            const cx = (canvas.width / dpr) / 2, cy = (canvas.height / dpr) / 2;
-
-            // Repulsion — radius-aware: bigger nodes push harder
-            for (let i = 0; i < N; i++) {
-                if (!nodes[i].visible) continue;
-                for (let j = i + 1; j < N; j++) {
-                    if (!nodes[j].visible) continue;
-                    let dx = nodes[j].x - nodes[i].x;
-                    let dy = nodes[j].y - nodes[i].y;
-                    let d2 = dx * dx + dy * dy;
-                    const minDist = nodes[i].radius + nodes[j].radius + 30;
-                    if (d2 < minDist * minDist) d2 = minDist * minDist * 0.5; // Strong push when overlapping
-                    if (d2 < 1) d2 = 1;
-                    const radiusFactor = (nodes[i].radius + nodes[j].radius) / 20;
-                    const f = (repK * alpha * radiusFactor) / d2;
-                    const d = Math.sqrt(d2);
-                    const fx = (dx / d) * f;
-                    const fy = (dy / d) * f;
-                    nodes[i].vx -= fx;
-                    nodes[i].vy -= fy;
-                    nodes[j].vx += fx;
-                    nodes[j].vy += fy;
-                }
-            }
-
-            // Spring (edges)
-            for (const e of edges) {
-                const a = nodes[e.source], b = nodes[e.target];
-                if (!a.visible || !b.visible) continue;
-                let dx = b.x - a.x;
-                let dy = b.y - a.y;
-                let d = Math.sqrt(dx * dx + dy * dy);
-                if (d < 1) d = 1;
-                const rest = springLen + (a.radius + b.radius);
-                const f = springK * alpha * (d - rest);
-                const fx = (dx / d) * f;
-                const fy = (dy / d) * f;
-                a.vx += fx;
-                a.vy += fy;
-                b.vx -= fx;
-                b.vy -= fy;
-            }
-
-            // Center gravity + damping + update
-            for (let i = 0; i < N; i++) {
-                const n = nodes[i];
-                if (!n.visible) continue;
-                if (dragNode === i) { n.vx = 0; n.vy = 0; continue; }
-                n.vx += (cx - n.x) * gravity * alpha;
-                n.vy += (cy - n.y) * gravity * alpha;
-                n.vx *= damping;
-                n.vy *= damping;
-                const maxV = 6;
-                n.vx = Math.max(-maxV, Math.min(maxV, n.vx));
-                n.vy = Math.max(-maxV, Math.min(maxV, n.vy));
-                n.x += n.vx;
-                n.y += n.vy;
-            }
-        }
-
-        function totalEnergy() {
-            let e = 0;
-            for (const n of nodes) {
-                if (!n.visible) continue;
-                e += n.vx * n.vx + n.vy * n.vy;
-            }
-            return e;
-        }
-
-        // --- Render ---
-        function render() {
-            const dpr = window.devicePixelRatio || 1;
-            const w = canvas.width / dpr, h = canvas.height / dpr;
-            ctx.save();
-            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            ctx.clearRect(0, 0, w, h);
-
-            ctx.save();
-            ctx.translate(tx, ty);
-            ctx.scale(scale, scale);
-
-            const activeSet = getActiveSet();
-            const hasFilter = selectedNode !== null || searchBox.value.trim() !== '';
-
-            // --- Draw edges as subtle curves ---
-            for (const e of edges) {
-                const a = nodes[e.source], b = nodes[e.target];
-                if (!a.visible || !b.visible) continue;
-                const active = !hasFilter || (activeSet.has(e.source) && activeSet.has(e.target));
-
-                // Curve control point — slight offset perpendicular to the line
-                const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-                const dx = b.x - a.x, dy = b.y - a.y;
-                const len = Math.sqrt(dx * dx + dy * dy);
-                const curveAmount = Math.min(20, len * 0.08);
-                const cpx = mx + (-dy / len) * curveAmount;
-                const cpy = my + (dx / len) * curveAmount;
-
-                ctx.beginPath();
-                ctx.moveTo(a.x, a.y);
-                ctx.quadraticCurveTo(cpx, cpy, b.x, b.y);
-
-                if (active) {
-                    const rgb = NODE_COLORS_RGB[a.type] || [250,250,250];
-                    const edgeAlpha = Math.min(0.35, 0.08 + e.weight * 0.04);
-                    ctx.strokeStyle = 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + edgeAlpha + ')';
-                    ctx.lineWidth = Math.min(2, 0.5 + e.weight * 0.25);
-                } else {
-                    ctx.strokeStyle = 'rgba(255,255,255,0.025)';
-                    ctx.lineWidth = 0.5;
-                }
-                ctx.stroke();
-            }
-
-            // --- Draw nodes with glow + gradient ---
-            for (let i = 0; i < nodes.length; i++) {
-                const n = nodes[i];
-                if (!n.visible) continue;
-                const active = !hasFilter || activeSet.has(i);
-                const isHovered = hoveredNode === i;
-                const isSelected = selectedNode === i;
-                const rgb = NODE_COLORS_RGB[n.type] || [113,113,122];
-
-                // Ambient glow for all active nodes
-                if (active) {
-                    const glowRadius = n.radius * 2.5;
-                    const glow = ctx.createRadialGradient(n.x, n.y, n.radius * 0.5, n.x, n.y, glowRadius);
-                    const glowAlpha = (isHovered || isSelected) ? 0.25 : 0.08;
-                    glow.addColorStop(0, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + glowAlpha + ')');
-                    glow.addColorStop(1, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0)');
-                    ctx.beginPath();
-                    ctx.arc(n.x, n.y, glowRadius, 0, Math.PI * 2);
-                    ctx.fillStyle = glow;
-                    ctx.fill();
-                }
-
-                // Main node — radial gradient for 3D sphere look
-                const grad = ctx.createRadialGradient(
-                    n.x - n.radius * 0.3, n.y - n.radius * 0.3, n.radius * 0.1,
-                    n.x, n.y, n.radius
-                );
-                if (active) {
-                    // Bright highlight in upper-left, saturated color at edge
-                    grad.addColorStop(0, 'rgba(' + Math.min(255, rgb[0]+80) + ',' + Math.min(255, rgb[1]+80) + ',' + Math.min(255, rgb[2]+80) + ',0.95)');
-                    grad.addColorStop(0.6, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.9)');
-                    grad.addColorStop(1, 'rgba(' + Math.floor(rgb[0]*0.6) + ',' + Math.floor(rgb[1]*0.6) + ',' + Math.floor(rgb[2]*0.6) + ',0.85)');
-                } else {
-                    grad.addColorStop(0, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.12)');
-                    grad.addColorStop(1, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.06)');
-                }
-
-                ctx.beginPath();
-                ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
-                ctx.fillStyle = grad;
-                ctx.fill();
-
-                // Subtle rim highlight
-                if (active) {
-                    ctx.beginPath();
-                    ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
-                    ctx.strokeStyle = 'rgba(' + Math.min(255, rgb[0]+40) + ',' + Math.min(255, rgb[1]+40) + ',' + Math.min(255, rgb[2]+40) + ',0.3)';
-                    ctx.lineWidth = 0.5;
-                    ctx.stroke();
-                }
-
-                // Selection ring
-                if (isSelected) {
-                    ctx.beginPath();
-                    ctx.arc(n.x, n.y, n.radius + 3, 0, Math.PI * 2);
-                    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                }
-
-                // Label
-                if (active || isHovered) {
-                    const fontSize = Math.max(10, Math.min(13, 10 + n.radius * 0.12));
-                    ctx.font = '500 ' + fontSize + 'px -apple-system, BlinkMacSystemFont, sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'top';
-                    const labelY = n.y + n.radius + 6;
-
-                    // Shadow for readability
-                    ctx.shadowColor = 'rgba(0,0,0,0.7)';
-                    ctx.shadowBlur = 4;
-                    ctx.shadowOffsetX = 0;
-                    ctx.shadowOffsetY = 1;
-
-                    ctx.fillStyle = active ? 'rgba(250,250,250,0.9)' : 'rgba(250,250,250,0.25)';
-                    ctx.fillText(n.label, n.x, labelY);
-
-                    // Reset shadow
-                    ctx.shadowColor = 'transparent';
-                    ctx.shadowBlur = 0;
-                }
-            }
-
-            ctx.restore();
-            ctx.restore();
-        }
-
-        function getActiveSet() {
-            const set = new Set();
-            const query = searchBox.value.trim().toLowerCase();
-
-            if (selectedNode !== null) {
-                set.add(selectedNode);
-                for (const neighbor of adjacency[selectedNode] || []) {
-                    if (nodes[neighbor].visible) set.add(neighbor);
-                }
-            }
-
-            if (query) {
-                for (let i = 0; i < nodes.length; i++) {
-                    if (nodes[i].visible && nodes[i].label.toLowerCase().includes(query)) {
-                        set.add(i);
-                        for (const neighbor of adjacency[i] || []) {
-                            if (nodes[neighbor].visible) set.add(neighbor);
-                        }
-                    }
-                }
-            }
-
-            return set;
-        }
-
-        // --- Interactions ---
-        function screenToWorld(sx, sy) {
-            return { x: (sx - tx) / scale, y: (sy - ty) / scale };
-        }
-
-        function hitTest(sx, sy) {
-            const { x, y } = screenToWorld(sx, sy);
-            let closest = null, minD = Infinity;
-            for (let i = 0; i < nodes.length; i++) {
-                if (!nodes[i].visible) continue;
-                const dx = nodes[i].x - x, dy = nodes[i].y - y;
-                const d = Math.sqrt(dx * dx + dy * dy);
-                if (d < nodes[i].radius + 4 && d < minD) {
-                    minD = d;
-                    closest = i;
-                }
-            }
-            return closest;
-        }
-
-        canvas.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-
-            if (isPanning) {
-                tx += e.clientX - panStartX;
-                ty += e.clientY - panStartY;
-                panStartX = e.clientX;
-                panStartY = e.clientY;
-                render();
-                return;
-            }
-
-            if (dragNode !== null) {
-                const w = screenToWorld(mx, my);
-                nodes[dragNode].x = w.x;
-                nodes[dragNode].y = w.y;
-                if (!simRunning) render();
-                return;
-            }
-
-            const hit = hitTest(mx, my);
-            if (hit !== hoveredNode) {
-                hoveredNode = hit;
-                canvas.style.cursor = hit !== null ? 'pointer' : 'grab';
-                if (hit !== null) {
-                    const n = nodes[hit];
-                    tooltip.innerHTML = esc(n.label) + '<span class="tooltip-type">' + n.type + '</span>';
-                    tooltip.style.left = (e.clientX + 14) + 'px';
-                    tooltip.style.top = (e.clientY - 10) + 'px';
-                    tooltip.classList.add('visible');
-                } else {
-                    tooltip.classList.remove('visible');
-                }
-                if (!simRunning) render();
-            } else if (hit !== null) {
-                tooltip.style.left = (e.clientX + 14) + 'px';
-                tooltip.style.top = (e.clientY - 10) + 'px';
-            }
-        });
-
-        canvas.addEventListener('mousedown', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-            const hit = hitTest(mx, my);
-
-            if (hit !== null) {
-                dragNode = hit;
-                canvas.classList.add('dragging');
-            } else {
-                isPanning = true;
-                panStartX = e.clientX;
-                panStartY = e.clientY;
-                canvas.classList.add('dragging');
-            }
-        });
-
-        canvas.addEventListener('mouseup', (e) => {
-            if (dragNode !== null) {
-                // If barely moved, treat as click
-                const rect = canvas.getBoundingClientRect();
-                const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-                const hit = hitTest(mx, my);
-                if (hit === dragNode) {
-                    selectNode(dragNode);
-                }
-                dragNode = null;
-            }
-            isPanning = false;
-            canvas.classList.remove('dragging');
-        });
-
-        canvas.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const rect = canvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-            const factor = e.deltaY < 0 ? 1.1 : 0.9;
-            const newScale = Math.min(5, Math.max(0.2, scale * factor));
-            // Zoom toward cursor
-            tx = mx - (mx - tx) * (newScale / scale);
-            ty = my - (my - ty) * (newScale / scale);
-            scale = newScale;
-            if (!simRunning) render();
-        }, { passive: false });
-
-        // Double-click to reset view
-        canvas.addEventListener('dblclick', () => {
-            tx = 0; ty = 0; scale = 1;
-            selectedNode = null;
-            closeSidebar();
-            resetPageVisibility();
-            updateChipState();
-            if (!simRunning) render();
-        });
-
-        // Search
-        searchBox.addEventListener('input', () => {
-            if (!simRunning) render();
-        });
-
         // --- Selection ---
-        function selectNode(idx) {
-            if (selectedNode === idx) {
-                // Deselect
-                selectedNode = null;
+        function selectNode(nodeId) {
+            if (selectedNodeId === nodeId) {
+                selectedNodeId = null;
                 closeSidebar();
                 resetPageVisibility();
             } else {
-                selectedNode = idx;
-                // Show page nodes connected to the selection
-                showConnectedPages(idx);
-                openSidebar(idx);
-                // Restart sim briefly to position new page nodes
-                if (!simRunning) {
-                    simFrame = 0;
-                    alpha = 0.3;  // Gentle restart, not full force
-                    simRunning = true;
-                    requestAnimationFrame(simLoop);
+                selectedNodeId = nodeId;
+                showConnectedPages(nodeId);
+                openSidebar(nodeId);
+
+                // Focus camera on node
+                const node = nodeMap[nodeId];
+                if (node && Graph) {
+                    const distance = 200;
+                    const distRatio = 1 + distance / Math.hypot(node.x || 0, node.y || 0, node.z || 0);
+                    Graph.cameraPosition(
+                        { x: (node.x || 0) * distRatio, y: (node.y || 0) * distRatio, z: (node.z || 0) * distRatio },
+                        node,
+                        1500
+                    );
                 }
             }
             updateChipState();
-            if (!simRunning) render();
+            refreshGraph();
         }
 
-        function showConnectedPages(idx) {
-            // Hide all pages first
-            for (const n of nodes) {
+        function showConnectedPages(nodeId) {
+            // Reset all page visibility
+            for (const n of graphNodes) {
                 if (n.type === 'page') n.visible = false;
             }
             // Show pages connected to selected node
-            for (const neighbor of adjacency[idx] || []) {
-                if (nodes[neighbor].type === 'page') {
-                    nodes[neighbor].visible = true;
-                    // Position near the selected node
-                    nodes[neighbor].x = nodes[idx].x + (Math.random() - 0.5) * 80;
-                    nodes[neighbor].y = nodes[idx].y + (Math.random() - 0.5) * 80;
+            for (const neighborId of adjacency[nodeId] || []) {
+                const neighbor = nodeMap[neighborId];
+                if (neighbor && neighbor.type === 'page') {
+                    neighbor.visible = true;
                 }
             }
+            // Rebuild graph data
+            createGraph();
         }
 
         function resetPageVisibility() {
-            for (const n of nodes) {
+            for (const n of graphNodes) {
                 if (n.type === 'page') n.visible = false;
             }
+            createGraph();
         }
 
         function updateChipState() {
-            chipsEl.querySelectorAll('.chip').forEach(btn => {
-                const nid = btn.dataset.id;
-                const idx = nodeMap[nid];
-                btn.classList.toggle('active', idx === selectedNode);
+            chipsEl.querySelectorAll('.chip[data-id]').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.id === selectedNodeId);
             });
         }
 
         // --- Sidebar ---
-        function openSidebar(idx) {
-            const node = nodes[idx];
+        function openSidebar(nodeId) {
+            const node = nodeMap[nodeId];
+            if (!node) return;
             sidebar.classList.add('open');
+            resizeGraph();
 
             let html = '<div class="sidebar-head">';
             html += '<div><div class="sidebar-title">' + esc(node.label) + '</div>';
@@ -772,24 +535,23 @@
             html += '<button class="sidebar-close" onclick="closeSidebarGlobal()">&times;</button></div>';
 
             if (node.type === 'person') {
-                html += renderPersonSidebar(idx, node);
+                html += renderPersonSidebar(nodeId, node);
             } else if (node.type === 'topic') {
-                html += renderTopicSidebar(idx, node);
+                html += renderTopicSidebar(nodeId, node);
             } else if (node.type === 'page') {
-                html += renderPageSidebar(idx, node);
+                html += renderPageSidebar(nodeId, node);
             }
 
             sidebarContent.innerHTML = html;
         }
 
-        function renderPersonSidebar(idx, node) {
+        function renderPersonSidebar(nodeId, node) {
             let html = '';
-            const neighbors = Array.from(adjacency[idx] || []);
-            const connTopics = neighbors.filter(i => nodes[i].type === 'topic').map(i => nodes[i]);
-            const connPages = neighbors.filter(i => nodes[i].type === 'page').map(i => nodes[i]);
+            const neighbors = Array.from(adjacency[nodeId] || []);
+            const connTopics = neighbors.filter(id => nodeMap[id] && nodeMap[id].type === 'topic').map(id => nodeMap[id]);
+            const connPages = neighbors.filter(id => nodeMap[id] && nodeMap[id].type === 'page').map(id => nodeMap[id]);
             const personTasks = tasks.filter(t => t.owner && t.owner.toLowerCase() === node.label.toLowerCase());
 
-            // Topics
             html += '<div class="sidebar-section">';
             html += '<div class="sidebar-label">Topics (' + connTopics.length + ')</div>';
             if (connTopics.length) {
@@ -801,7 +563,6 @@
             }
             html += '</div>';
 
-            // Tasks
             html += '<div class="sidebar-section">';
             html += '<div class="sidebar-label">Open Tasks (' + personTasks.length + ')</div>';
             if (personTasks.length) {
@@ -813,7 +574,6 @@
             }
             html += '</div>';
 
-            // Pages
             html += '<div class="sidebar-section">';
             html += '<div class="sidebar-label">Source Pages (' + connPages.length + ')</div>';
             if (connPages.length) {
@@ -828,14 +588,13 @@
             return html;
         }
 
-        function renderTopicSidebar(idx, node) {
+        function renderTopicSidebar(nodeId, node) {
             let html = '';
-            const neighbors = Array.from(adjacency[idx] || []);
-            const connPeople = neighbors.filter(i => nodes[i].type === 'person').map(i => nodes[i]);
-            const connPages = neighbors.filter(i => nodes[i].type === 'page').map(i => nodes[i]);
+            const neighbors = Array.from(adjacency[nodeId] || []);
+            const connPeople = neighbors.filter(id => nodeMap[id] && nodeMap[id].type === 'person').map(id => nodeMap[id]);
+            const connPages = neighbors.filter(id => nodeMap[id] && nodeMap[id].type === 'page').map(id => nodeMap[id]);
             const topicTasks = tasks.filter(t => t.topics && t.topics.includes(node.label));
 
-            // People
             html += '<div class="sidebar-section">';
             html += '<div class="sidebar-label">People (' + connPeople.length + ')</div>';
             if (connPeople.length) {
@@ -847,7 +606,6 @@
             }
             html += '</div>';
 
-            // Tasks
             html += '<div class="sidebar-section">';
             html += '<div class="sidebar-label">Open Tasks (' + topicTasks.length + ')</div>';
             if (topicTasks.length) {
@@ -859,7 +617,6 @@
             }
             html += '</div>';
 
-            // Pages
             html += '<div class="sidebar-section">';
             html += '<div class="sidebar-label">Source Pages (' + connPages.length + ')</div>';
             if (connPages.length) {
@@ -874,20 +631,18 @@
             return html;
         }
 
-        function renderPageSidebar(idx, node) {
+        function renderPageSidebar(nodeId, node) {
             let html = '';
-            const neighbors = Array.from(adjacency[idx] || []);
-            const connPeople = neighbors.filter(i => nodes[i].type === 'person').map(i => nodes[i]);
-            const connTopics = neighbors.filter(i => nodes[i].type === 'topic').map(i => nodes[i]);
+            const neighbors = Array.from(adjacency[nodeId] || []);
+            const connPeople = neighbors.filter(id => nodeMap[id] && nodeMap[id].type === 'person').map(id => nodeMap[id]);
+            const connTopics = neighbors.filter(id => nodeMap[id] && nodeMap[id].type === 'topic').map(id => nodeMap[id]);
 
-            // URL link
             if (node.url) {
                 html += '<div class="sidebar-section">';
                 html += '<a href="' + esc(node.url) + '" target="_blank" style="color:var(--accent);font-size:13px;">Open in Notion &rarr;</a>';
                 html += '</div>';
             }
 
-            // People
             html += '<div class="sidebar-section">';
             html += '<div class="sidebar-label">People (' + connPeople.length + ')</div>';
             if (connPeople.length) {
@@ -899,7 +654,6 @@
             }
             html += '</div>';
 
-            // Topics
             html += '<div class="sidebar-section">';
             html += '<div class="sidebar-label">Topics (' + connTopics.length + ')</div>';
             if (connTopics.length) {
@@ -911,7 +665,6 @@
             }
             html += '</div>';
 
-            // Tasks from this page
             const pageId = node.id.replace('page:', '');
             const pageTasks = tasks.filter(t => t.source_page_id === pageId);
             html += '<div class="sidebar-section">';
@@ -934,12 +687,8 @@
             html += '<div class="sidebar-task-desc">' + esc(t.description) + '</div>';
             html += '<div class="sidebar-task-meta">';
             html += '<span class="sidebar-badge ' + qClass + '">' + esc(t.quadrant_label || 'Defer') + '</span>';
-            if (t.follow_up_date) {
-                html += '<span>' + t.follow_up_date + '</span>';
-            }
-            if (t.owner) {
-                html += '<span>' + esc(t.owner) + '</span>';
-            }
+            if (t.follow_up_date) html += '<span>' + t.follow_up_date + '</span>';
+            if (t.owner) html += '<span>' + esc(t.owner) + '</span>';
             html += '</div></div>';
             return html;
         }
@@ -957,39 +706,53 @@
 
         function closeSidebar() {
             sidebar.classList.remove('open');
+            resizeGraph();
         }
-        // Expose for onclick
         window.closeSidebarGlobal = closeSidebar;
 
-        // --- Resize ---
-        function resize() {
-            const dpr = window.devicePixelRatio || 1;
-            const rect = canvas.parentElement.getBoundingClientRect();
+        function resizeGraph() {
+            if (!Graph) return;
+            const graphWrap = document.querySelector('.graph-wrap');
             const sidebarW = sidebar.classList.contains('open') ? 340 : 0;
-            canvas.width = (rect.width - sidebarW) * dpr;
-            canvas.height = rect.height * dpr;
-            canvas.style.width = (rect.width - sidebarW) + 'px';
-            canvas.style.height = rect.height + 'px';
-            // DPR scaling is handled in render() via setTransform
-            if (!simRunning) render();
+            Graph.width(graphWrap.clientWidth - sidebarW);
+            Graph.height(graphWrap.clientHeight);
         }
 
-        // Observe sidebar transitions
-        const resizeObs = new ResizeObserver(() => resize());
-        resizeObs.observe(canvas.parentElement);
-        window.addEventListener('resize', resize);
+        // --- Search ---
+        searchBox.addEventListener('input', () => {
+            const query = searchBox.value.trim().toLowerCase();
+            if (!Graph) return;
+            if (query) {
+                Graph.nodeColor(n => {
+                    if (n.label.toLowerCase().includes(query)) {
+                        return NODE_COLORS_HIGHLIGHT[n.type] || '#fff';
+                    }
+                    return 'rgba(60,60,70,0.2)';
+                });
+                Graph.linkOpacity(() => 0.03);
+            } else {
+                selectedNodeId = null;
+                Graph.nodeColor(n => n.color);
+                Graph.linkOpacity(() => 0.15);
+            }
+        });
 
         // --- Escape to deselect ---
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                selectedNode = null;
+                selectedNodeId = null;
                 closeSidebar();
                 resetPageVisibility();
                 updateChipState();
                 searchBox.value = '';
-                if (!simRunning) render();
+                refreshGraph();
             }
         });
+
+        // --- Resize ---
+        const resizeObs = new ResizeObserver(() => resizeGraph());
+        resizeObs.observe(document.querySelector('.graph-wrap'));
+        window.addEventListener('resize', resizeGraph);
 
         // --- Utilities ---
         function esc(s) {
@@ -1000,9 +763,9 @@
         }
 
         // --- Init ---
-        resize();
         loadGraph();
     })();
     </script>
+
 </body>
 </html>
