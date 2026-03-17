@@ -39,6 +39,19 @@
         .scan-toast.scan-success { border-color: var(--green); color: var(--green-text); }
         .scan-toast.scan-error { border-color: var(--red); color: var(--red-text); }
         .scan-spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        .scan-progress { display: none; margin-bottom: 16px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+        .scan-progress.visible { display: block; }
+        .scan-progress-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .scan-progress-info { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+        .scan-progress-spinner { width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+        .scan-progress-bar-track { width: 100%; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+        .scan-progress-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s ease; width: 0%; }
+        .scan-progress-bar-fill.cancelled { background: var(--yellow, #e6a817); }
+        .scan-progress-bar-fill.error { background: var(--red); }
+        .scan-progress-bar-fill.success { background: var(--green); }
+        .scan-progress-detail { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--text-muted); }
+        .scan-stop-btn { background: none; border: 1px solid var(--border); color: var(--text-muted); font-size: 11px; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+        .scan-stop-btn:hover { border-color: var(--red); color: var(--red-text, #ef4444); }
         @keyframes spin { to { transform: rotate(360deg); } }
 
         /* Stats */
@@ -177,6 +190,22 @@
             </div>
         </div>
         <div class="scan-toast" id="scanToast"><div class="scan-spinner" id="scanSpinner"></div><span id="scanToastMsg">Scanning...</span></div>
+        <div class="scan-progress" id="scanProgress">
+            <div class="scan-progress-header">
+                <div class="scan-progress-info">
+                    <div class="scan-progress-spinner" id="scanProgressSpinner"></div>
+                    <span id="scanProgressMsg">Preparing scan...</span>
+                </div>
+                <button class="scan-stop-btn" id="scanStopBtn" onclick="cancelScan()">Stop</button>
+            </div>
+            <div class="scan-progress-bar-track">
+                <div class="scan-progress-bar-fill" id="scanProgressFill"></div>
+            </div>
+            <div class="scan-progress-detail">
+                <span id="scanProgressPage">0 / 0 pages</span>
+                <span id="scanProgressTasks">0 new tasks</span>
+            </div>
+        </div>
         <div id="content"><div class="empty">Click "Scan New" to analyze your pages and build your intelligence profile.</div></div>
     </main>
 
@@ -267,26 +296,137 @@
             } catch(e) {}
         }
 
+        // Progress bar elements
+        const scanProgress = document.getElementById('scanProgress');
+        const scanProgressFill = document.getElementById('scanProgressFill');
+        const scanProgressMsg = document.getElementById('scanProgressMsg');
+        const scanProgressPage = document.getElementById('scanProgressPage');
+        const scanProgressTasks = document.getElementById('scanProgressTasks');
+        const scanProgressSpinner = document.getElementById('scanProgressSpinner');
+        const scanStopBtn = document.getElementById('scanStopBtn');
+        let activeScanId = null;
+        let activeScanReader = null;
+
+        function showProgress() {
+            scanProgress.classList.add('visible');
+            scanToast.className = 'scan-toast';
+            scanProgressFill.className = 'scan-progress-bar-fill';
+            scanProgressFill.style.width = '0%';
+            scanProgressMsg.textContent = 'Preparing scan...';
+            scanProgressPage.textContent = '0 / 0 pages';
+            scanProgressTasks.textContent = '0 new tasks';
+            scanProgressSpinner.style.display = 'block';
+            scanStopBtn.style.display = 'inline-block';
+        }
+
+        function updateProgress(data) {
+            if (data.total > 0) {
+                const pct = Math.round((data.current / data.total) * 100);
+                scanProgressFill.style.width = pct + '%';
+                scanProgressPage.textContent = data.current + ' / ' + data.total + ' pages';
+            }
+            if (data.page_title) {
+                scanProgressMsg.textContent = 'Processing: ' + data.page_title;
+            }
+            if (data.status === 'started') {
+                scanProgressMsg.textContent = 'Fetched ' + data.total + ' pages, starting scan...';
+            }
+            if (data.status === 'finalizing') {
+                scanProgressMsg.textContent = 'Finalizing — building executive summary...';
+                scanProgressFill.style.width = '100%';
+            }
+            scanProgressTasks.textContent = (data.new_tasks || 0) + ' new tasks';
+        }
+
+        function finishProgress(type, msg) {
+            scanProgressSpinner.style.display = 'none';
+            scanStopBtn.style.display = 'none';
+            scanProgressMsg.textContent = msg;
+            scanProgressFill.className = 'scan-progress-bar-fill ' + type;
+            if (type === 'success') scanProgressFill.style.width = '100%';
+            setTimeout(() => { scanProgress.classList.remove('visible'); }, 5000);
+        }
+
+        window.cancelScan = async function() {
+            if (!activeScanId) return;
+            scanStopBtn.disabled = true;
+            scanStopBtn.textContent = 'Stopping...';
+            try {
+                await fetch('/api/intel/scan/cancel?scan_id=' + activeScanId, { method: 'POST' });
+            } catch(e) {}
+        };
+
         window.runScan = async function(full) {
             scanBtn.disabled = true;
             fullScanBtn.disabled = true;
             scanBtn.textContent = 'Scanning...';
             const label = full ? 'Full scan' : 'Incremental scan';
-            showToast(label + ': scanning Notion pages...');
+            showProgress();
+            scanProgressMsg.textContent = label + ': fetching pages from Notion...';
+
             try {
-                const url = '/api/intel/scan' + (full ? '?full_scan=true' : '');
+                const url = '/api/intel/scan/stream' + (full ? '?full_scan=true' : '');
                 const resp = await fetch(url, { method: 'POST' });
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.error || 'Scan failed: ' + resp.status);
-                scanInfo.textContent = 'Last scan: ' + new Date().toLocaleString(undefined, {hour12:false}) + ' \u2014 ' + data.pages_scanned + ' pages';
-                showToast(label + ' complete \u2014 ' + data.pages_scanned + ' pages, ' + data.new_tasks_added + ' new tasks', 'success');
-                await loadIntel();
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    throw new Error(err || 'Scan failed: ' + resp.status);
+                }
+
+                const reader = resp.body.getReader();
+                activeScanReader = reader;
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let lastData = null;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.scan_id) activeScanId = data.scan_id;
+
+                            if (data.status === 'complete') {
+                                lastData = data;
+                                scanInfo.textContent = 'Last scan: ' + new Date().toLocaleString(undefined, {hour12:false}) + ' \u2014 ' + data.pages_scanned + ' pages';
+                                finishProgress('success', label + ' complete \u2014 ' + data.pages_scanned + ' pages, ' + data.new_tasks_added + ' new tasks');
+                                await loadIntel();
+                            } else if (data.status === 'cancelled') {
+                                lastData = data;
+                                finishProgress('cancelled', label + ' stopped at ' + data.current + '/' + data.total + ' pages');
+                                await loadIntel();
+                            } else if (data.status === 'error') {
+                                lastData = data;
+                                finishProgress('error', 'Scan failed: ' + data.message);
+                            } else {
+                                updateProgress(data);
+                            }
+                        } catch(e) {}
+                    }
+                }
+
+                // If we never got a final status, show generic success
+                if (!lastData || !['complete','cancelled','error'].includes(lastData.status)) {
+                    finishProgress('success', label + ' complete');
+                    await loadIntel();
+                }
             } catch(err) {
-                showToast('Scan failed: ' + err.message, 'error');
+                finishProgress('error', 'Scan failed: ' + err.message);
             }
+
+            activeScanId = null;
+            activeScanReader = null;
             scanBtn.disabled = false;
             fullScanBtn.disabled = false;
             scanBtn.textContent = 'Scan New';
+            scanStopBtn.disabled = false;
+            scanStopBtn.textContent = 'Stop';
         };
 
         // Keep a reference to the full data for the modal

@@ -11,6 +11,7 @@ Persists intelligence data in notion_intel.json.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -18,7 +19,7 @@ import uuid
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -455,7 +456,12 @@ def _sync_to_tracked_tasks(new_tasks: list[dict]) -> None:
 # Main scan
 # -----------------------------------------------------------------------
 
-async def scan_notion(max_pages: int = 50, full_scan: bool = False) -> dict:
+async def scan_notion(
+    max_pages: int = 50,
+    full_scan: bool = False,
+    on_progress: Optional[Callable[[dict], Any]] = None,
+    cancel_event: Optional[asyncio.Event] = None,
+) -> dict:
     """Scan Notion pages to build intelligence.
 
     By default performs an incremental scan — only pages edited since the
@@ -465,6 +471,8 @@ async def scan_notion(max_pages: int = 50, full_scan: bool = False) -> dict:
     Args:
         max_pages: Max pages to scan.
         full_scan: If True, ignore last scan timestamp and scan all pages.
+        on_progress: Optional async/sync callback receiving progress dicts.
+        cancel_event: Optional asyncio.Event; when set, scan stops early.
 
     Returns:
         Summary of scan results.
@@ -577,11 +585,38 @@ async def scan_notion(max_pages: int = 50, full_scan: bool = False) -> dict:
             new_tasks.append(task)
             existing_task_descs.add(ot["description"].lower())
 
-    for page in pages:
+    async def _emit_progress(current: int, total: int, title: str, status: str = "processing") -> None:
+        """Send progress update if callback is set."""
+        if on_progress:
+            msg = {
+                "status": status,
+                "current": current,
+                "total": total,
+                "page_title": title,
+                "new_tasks": len(new_tasks),
+                "errors": errors,
+            }
+            result = on_progress(msg)
+            if asyncio.iscoroutine(result):
+                await result
+
+    total_pages = len(pages)
+    await _emit_progress(0, total_pages, "", "started")
+
+    for idx, page in enumerate(pages):
+        # Check for cancellation
+        if cancel_event and cancel_event.is_set():
+            logger.info("Intel scan cancelled after %d/%d pages", idx, total_pages)
+            await _emit_progress(idx, total_pages, "", "cancelled")
+            break
+
+        page_title = page.get("title", "?")
+        await _emit_progress(idx, total_pages, page_title)
+
         try:
             content_data = await get_page_content(page["id"])
         except Exception as exc:
-            logger.warning("Failed to read page %s (%s): %s", page.get("title", "?"), page["id"], exc)
+            logger.warning("Failed to read page %s (%s): %s", page_title, page["id"], exc)
             errors += 1
             continue
 
@@ -607,6 +642,11 @@ async def scan_notion(max_pages: int = 50, full_scan: bool = False) -> dict:
                 )
             except Exception as exc:
                 logger.warning("Failed to read child page %s: %s", child.get("title", "?"), exc)
+
+    # Emit completion progress
+    was_cancelled = cancel_event and cancel_event.is_set()
+    if not was_cancelled:
+        await _emit_progress(total_pages, total_pages, "", "finalizing")
 
     # Merge into intel
     intel["topics"] = dict(topic_counter.most_common())

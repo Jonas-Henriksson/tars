@@ -14,8 +14,10 @@ import logging
 from pathlib import Path
 
 import httpx
+import asyncio
+
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -483,6 +485,86 @@ async def scan_intel(max_pages: int = 50, full_scan: bool = False):
     except Exception as exc:
         logger.exception("Intel scan failed")
         return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+# Active scan cancellation events keyed by a simple counter
+_active_scan_cancel: dict[str, asyncio.Event] = {}
+
+
+@app.post("/api/intel/scan/stream")
+async def scan_intel_stream(max_pages: int = 50, full_scan: bool = False):
+    """SSE endpoint that streams scan progress events."""
+    import json as _json
+    from integrations.intel import scan_notion
+
+    scan_id = str(id(asyncio.current_task()))
+    cancel_event = asyncio.Event()
+    _active_scan_cancel[scan_id] = cancel_event
+    progress_queue: asyncio.Queue = asyncio.Queue()
+
+    def on_progress(msg: dict) -> None:
+        msg["scan_id"] = scan_id
+        progress_queue.put_nowait(msg)
+
+    async def generate():
+        try:
+            # Start scan as background task
+            scan_task = asyncio.create_task(
+                scan_notion(
+                    max_pages=max_pages,
+                    full_scan=full_scan,
+                    on_progress=on_progress,
+                    cancel_event=cancel_event,
+                )
+            )
+
+            # Stream progress events
+            while not scan_task.done():
+                try:
+                    msg = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
+                    yield f"data: {_json.dumps(msg)}\n\n"
+                except asyncio.TimeoutError:
+                    # Send keepalive
+                    yield ": keepalive\n\n"
+
+            # Drain remaining progress messages
+            while not progress_queue.empty():
+                msg = progress_queue.get_nowait()
+                yield f"data: {_json.dumps(msg)}\n\n"
+
+            # Get result or error
+            result = scan_task.result()
+            result["status"] = "complete"
+            result["scan_id"] = scan_id
+            yield f"data: {_json.dumps(result)}\n\n"
+
+        except Exception as exc:
+            yield f"data: {_json.dumps({'status': 'error', 'message': str(exc), 'scan_id': scan_id})}\n\n"
+        finally:
+            _active_scan_cancel.pop(scan_id, None)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Scan-Id": scan_id,
+        },
+    )
+
+
+@app.post("/api/intel/scan/cancel")
+async def cancel_scan(scan_id: str = ""):
+    """Cancel an active scan."""
+    if scan_id and scan_id in _active_scan_cancel:
+        _active_scan_cancel[scan_id].set()
+        return JSONResponse({"message": "Scan cancellation requested."})
+    # Cancel all active scans if no specific ID
+    if not scan_id and _active_scan_cancel:
+        for ev in _active_scan_cancel.values():
+            ev.set()
+        return JSONResponse({"message": f"Cancelled {len(_active_scan_cancel)} active scan(s)."})
+    return JSONResponse({"message": "No active scan found."}, status_code=404)
 
 
 @app.patch("/api/intel/tasks/{task_id}")
