@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""Cloudflare Tunnel manager for TARS.
+"""Tunnel manager for TARS — supports Cloudflare and ngrok.
 
 Provides a public HTTPS URL so Notion can push webhook events to TARS,
 while keeping everything running on your local machine.
 
 Usage:
-    # Quick tunnel (temporary URL, no account needed):
+    # Auto-detect best available tunnel (tries Cloudflare first, falls back to ngrok):
     python -m scripts.tunnel
 
-    # With custom domain (requires Cloudflare account + tunnel setup):
-    python -m scripts.tunnel --name tars --hostname tars.yourdomain.com
+    # Force ngrok:
+    python -m scripts.tunnel --provider ngrok
 
-    # Restrict to webhook endpoint only (maximum security):
-    python -m scripts.tunnel --webhook-only
+    # Force Cloudflare:
+    python -m scripts.tunnel --provider cloudflare
+
+    # Named Cloudflare tunnel (requires CF account):
+    python -m scripts.tunnel --provider cloudflare --name tars --hostname tars.yourdomain.com
 
     # Show status:
     python -m scripts.tunnel --status
@@ -28,6 +31,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import urllib.request
 from pathlib import Path
 
@@ -37,55 +41,11 @@ log = logging.getLogger(__name__)
 _ROOT = Path(__file__).parent.parent
 _STATUS_FILE = _ROOT / "tunnel_status.json"
 
-_BASE_URL = "https://github.com/cloudflare/cloudflared/releases/latest/download/"
 
-def _cloudflared_url() -> str:
-    system = platform.system().lower()
-    machine = platform.machine().lower()
-    if system == "windows":
-        return _BASE_URL + ("cloudflared-windows-amd64.exe" if "64" in machine else "cloudflared-windows-386.exe")
-    if system == "darwin":
-        return _BASE_URL + ("cloudflared-darwin-arm64.tgz" if "arm" in machine else "cloudflared-darwin-amd64.tgz")
-    # Linux default
-    return _BASE_URL + ("cloudflared-linux-arm64" if "arm" in machine else "cloudflared-linux-amd64")
+# ── Helpers ───────────────────────────────────────────────────────────
 
-def _binary_name() -> str:
-    return "cloudflared.exe" if platform.system().lower() == "windows" else "cloudflared"
-
-
-def _find_cloudflared() -> str | None:
-    """Find cloudflared binary."""
-    path = shutil.which("cloudflared")
-    if path:
-        return path
-    local = _ROOT / "bin" / _binary_name()
-    if local.exists():
-        return str(local)
-    return None
-
-
-def install_cloudflared() -> str:
-    """Download cloudflared if not present. Returns path to binary."""
-    existing = _find_cloudflared()
-    if existing:
-        log.info("cloudflared found: %s", existing)
-        return existing
-
-    url = _cloudflared_url()
-    log.info("Downloading cloudflared for %s/%s...", platform.system(), platform.machine())
-    bin_dir = _ROOT / "bin"
-    bin_dir.mkdir(exist_ok=True)
-    target = bin_dir / _binary_name()
-
-    try:
-        urllib.request.urlretrieve(url, str(target))
-        if platform.system().lower() != "windows":
-            target.chmod(0o755)
-        log.info("Installed cloudflared to %s", target)
-        return str(target)
-    except Exception as e:
-        log.error("Failed to download cloudflared: %s", e)
-        sys.exit(1)
+def _is_windows() -> bool:
+    return platform.system().lower() == "windows"
 
 
 def _save_status(data: dict) -> None:
@@ -101,50 +61,118 @@ def _load_status() -> dict:
     return {}
 
 
-def run_quick_tunnel(
-    cloudflared: str,
-    port: int = 8080,
-    webhook_only: bool = False,
-) -> None:
-    """Run a quick tunnel (no Cloudflare account needed).
+def _print_tunnel_active(tunnel_url: str, port: int, provider: str) -> None:
+    webhook_url = tunnel_url + "/api/notion/webhook"
+    log.info("=" * 60)
+    log.info("TUNNEL ACTIVE (%s)", provider)
+    log.info("=" * 60)
+    log.info("Public URL:  %s", tunnel_url)
+    log.info("Webhook URL: %s", webhook_url)
+    log.info("")
+    log.info("Next steps:")
+    log.info("  1. Go to notion.so/my-integrations")
+    log.info("  2. Select your integration → Webhooks → add URL above")
+    log.info("  3. In TARS Settings: enable push")
+    log.info("=" * 60)
+    _save_status({
+        "running": True,
+        "url": tunnel_url,
+        "webhook_url": webhook_url,
+        "type": provider,
+        "port": port,
+    })
+    try:
+        from integrations.webhook_status import enable
+        enable()
+    except Exception:
+        pass
 
-    Gives a temporary public URL like https://random-name.trycloudflare.com
-    """
+
+def _setup_signals(on_exit):
+    signal.signal(signal.SIGINT, on_exit)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, on_exit)
+
+
+# ── Cloudflare ────────────────────────────────────────────────────────
+
+_CF_BASE = "https://github.com/cloudflare/cloudflared/releases/latest/download/"
+
+
+def _cf_binary_name() -> str:
+    return "cloudflared.exe" if _is_windows() else "cloudflared"
+
+
+def _cf_download_url() -> str:
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    if system == "windows":
+        return _CF_BASE + ("cloudflared-windows-amd64.exe" if "64" in machine else "cloudflared-windows-386.exe")
+    if system == "darwin":
+        return _CF_BASE + ("cloudflared-darwin-arm64.tgz" if "arm" in machine else "cloudflared-darwin-amd64.tgz")
+    return _CF_BASE + ("cloudflared-linux-arm64" if "arm" in machine else "cloudflared-linux-amd64")
+
+
+def _find_cloudflared() -> str | None:
+    path = shutil.which("cloudflared")
+    if path:
+        return path
+    local = _ROOT / "bin" / _cf_binary_name()
+    if local.exists():
+        return str(local)
+    return None
+
+
+def install_cloudflared() -> str | None:
+    existing = _find_cloudflared()
+    if existing:
+        return existing
+    url = _cf_download_url()
+    log.info("Downloading cloudflared for %s/%s...", platform.system(), platform.machine())
+    bin_dir = _ROOT / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    target = bin_dir / _cf_binary_name()
+    try:
+        urllib.request.urlretrieve(url, str(target))
+        if not _is_windows():
+            target.chmod(0o755)
+        log.info("Installed cloudflared to %s", target)
+        return str(target)
+    except Exception as e:
+        log.warning("Could not install cloudflared: %s", e)
+        return None
+
+
+def run_cloudflare_tunnel(port: int = 8080) -> None:
+    cloudflared = install_cloudflared()
+    if not cloudflared:
+        log.error("cloudflared not available — try --provider ngrok")
+        sys.exit(1)
+
     cmd = [cloudflared, "tunnel", "--url", f"http://localhost:{port}"]
-
-    if webhook_only:
-        # Use cloudflared's ingress rules to only expose the webhook path
-        log.info("Webhook-only mode: only /api/notion/webhook will be accessible")
-
-    log.info("Starting Cloudflare quick tunnel to localhost:%d...", port)
+    log.info("Starting Cloudflare tunnel to localhost:%d...", port)
     log.info("Press Ctrl+C to stop.\n")
 
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    tunnel_url = None
+    url_printed = False
 
-    import threading
-
-    def _pipe_stderr():
-        for line in iter(proc.stderr.readline, ""):
+    def _read_stream(stream):
+        for line in iter(stream.readline, ""):
             line = line.strip()
             if not line:
                 continue
-            if ".trycloudflare.com" in line or "cfargotunnel.com" in line:
+            nonlocal tunnel_url, url_printed
+            if (".trycloudflare.com" in line or "cfargotunnel.com" in line):
                 for word in line.split():
                     if word.startswith("https://"):
-                        proc._tars_url = word.rstrip("/")
+                        tunnel_url = word.rstrip("/")
                         break
-            if any(kw in line.lower() for kw in ["err", "warn", "connection", "registered", "serving", "trycloudflare", "thank you"]):
+            if any(kw in line.lower() for kw in ["err", "warn", "registered", "trycloudflare", "thank you", "failed"]):
                 log.info("  [cloudflared] %s", line)
 
-    proc._tars_url = None
-    threading.Thread(target=_pipe_stderr, daemon=True).start()
-
-    tunnel_url = None
+    threading.Thread(target=_read_stream, args=(proc.stdout,), daemon=True).start()
+    threading.Thread(target=_read_stream, args=(proc.stderr,), daemon=True).start()
 
     def _shutdown(sig, frame):
         log.info("\nShutting down tunnel...")
@@ -152,177 +180,278 @@ def run_quick_tunnel(
         _save_status({"running": False, "url": None})
         sys.exit(0)
 
-    signal.signal(signal.SIGINT, _shutdown)
-    if hasattr(signal, "SIGTERM"):
-        signal.signal(signal.SIGTERM, _shutdown)
+    _setup_signals(_shutdown)
 
-    # Read output and find the tunnel URL
-    for line in iter(proc.stdout.readline, ""):
-        line = line.strip()
-        if not line:
-            continue
+    while proc.poll() is None:
+        if tunnel_url and not url_printed:
+            url_printed = True
+            _print_tunnel_active(tunnel_url, port, "cloudflare")
+        import time; time.sleep(0.5)
 
-        # cloudflared prints the URL in its log output
-        # Also check URL from stderr thread
-        if not tunnel_url and getattr(proc, "_tars_url", None):
-            tunnel_url = proc._tars_url
-
-        if ".trycloudflare.com" in line or "cfargotunnel.com" in line:
-            for word in line.split():
-                if word.startswith("https://") and ("trycloudflare.com" in word or "cfargotunnel.com" in word):
-                    tunnel_url = word.rstrip("/")
-                    break
-
-        if tunnel_url and not getattr(proc, "_url_printed", False):
-                proc._url_printed = True
-                webhook_url = tunnel_url + "/api/notion/webhook"
-                log.info("=" * 60)
-                log.info("TUNNEL ACTIVE")
-                log.info("=" * 60)
-                log.info("Public URL:  %s", tunnel_url)
-                log.info("Webhook URL: %s", webhook_url)
-                log.info("")
-                log.info("To configure Notion webhooks:")
-                log.info("  1. Go to notion.so/my-integrations")
-                log.info("  2. Select your integration → Webhooks")
-                log.info("  3. Paste this webhook URL: %s", webhook_url)
-                log.info("  4. Enable push in TARS Settings page")
-                log.info("=" * 60)
-                log.info("")
-
-                _save_status({
-                    "running": True,
-                    "url": tunnel_url,
-                    "webhook_url": webhook_url,
-                    "type": "quick",
-                    "port": port,
-                })
-
-                # Also update webhook status to show the URL
-                try:
-                    from integrations.webhook_status import enable
-                    enable()
-                except Exception:
-                    pass
-
-        # Print cloudflared logs (filtered for readability)
-        if any(kw in line.lower() for kw in ["err", "warn", "connection", "registered", "serving"]):
-            log.info("  [cloudflared] %s", line)
-
-    proc.wait()
     _save_status({"running": False, "url": None})
+    rc = proc.returncode
+    if rc != 0:
+        log.error("cloudflared exited with code %d", rc)
+        log.info("Tip: if you see a TLS/certificate error, try: python -m scripts.tunnel --provider ngrok")
 
 
-def run_named_tunnel(
-    cloudflared: str,
-    name: str,
-    hostname: str,
-    port: int = 8080,
-) -> None:
-    """Run a named tunnel (requires Cloudflare account + tunnel login)."""
-    log.info("Starting named tunnel '%s' → %s → localhost:%d", name, hostname, port)
+def run_named_cf_tunnel(name: str, hostname: str, port: int = 8080) -> None:
+    cloudflared = install_cloudflared()
+    if not cloudflared:
+        sys.exit(1)
 
-    # Check if tunnel exists
-    result = subprocess.run(
-        [cloudflared, "tunnel", "list", "--output", "json"],
-        capture_output=True, text=True,
-    )
-
+    result = subprocess.run([cloudflared, "tunnel", "list", "--output", "json"], capture_output=True, text=True)
     tunnel_exists = False
     if result.returncode == 0:
         try:
-            tunnels = json.loads(result.stdout)
-            tunnel_exists = any(t.get("name") == name for t in tunnels)
+            tunnel_exists = any(t.get("name") == name for t in json.loads(result.stdout))
         except json.JSONDecodeError:
             pass
 
     if not tunnel_exists:
         log.info("Creating tunnel '%s'...", name)
         subprocess.run([cloudflared, "tunnel", "create", name], check=True)
-        log.info("Routing DNS: %s → tunnel '%s'", hostname, name)
-        subprocess.run(
-            [cloudflared, "tunnel", "route", "dns", name, hostname],
-            check=True,
-        )
+        subprocess.run([cloudflared, "tunnel", "route", "dns", name, hostname], check=True)
 
-    webhook_url = f"https://{hostname}/api/notion/webhook"
-    log.info("=" * 60)
-    log.info("NAMED TUNNEL: %s", hostname)
-    log.info("Webhook URL:  %s", webhook_url)
-    log.info("=" * 60)
-
-    _save_status({
-        "running": True,
-        "url": f"https://{hostname}",
-        "webhook_url": webhook_url,
-        "type": "named",
-        "name": name,
-        "hostname": hostname,
-        "port": port,
-    })
-
-    # Run the tunnel
-    cmd = [
-        cloudflared, "tunnel", "run",
-        "--url", f"http://localhost:{port}",
-        name,
-    ]
+    _print_tunnel_active(f"https://{hostname}", port, "cloudflare-named")
 
     def _shutdown(sig, frame):
-        log.info("\nShutting down tunnel...")
+        log.info("\nShutting down...")
         _save_status({"running": False, "url": None})
         sys.exit(0)
 
-    signal.signal(signal.SIGINT, _shutdown)
-    if hasattr(signal, "SIGTERM"):
-        signal.signal(signal.SIGTERM, _shutdown)
+    _setup_signals(_shutdown)
+    subprocess.run([cloudflared, "tunnel", "run", "--url", f"http://localhost:{port}", name])
 
-    subprocess.run(cmd)
 
+# ── ngrok ─────────────────────────────────────────────────────────────
+
+_NGROK_BASE = "https://bin.equinox.io/c/bNyj1mQVY4c/"
+
+
+def _ngrok_binary_name() -> str:
+    return "ngrok.exe" if _is_windows() else "ngrok"
+
+
+def _ngrok_download_url() -> str:
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    # Use the stable release zip
+    if system == "windows":
+        arch = "amd64" if "64" in machine else "386"
+        return f"https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-windows-{arch}.zip"
+    if system == "darwin":
+        arch = "arm64" if "arm" in machine else "amd64"
+        return f"https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-darwin-{arch}.zip"
+    arch = "arm64" if "arm" in machine else "amd64"
+    return f"https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-{arch}.tgz"
+
+
+def _find_ngrok() -> str | None:
+    path = shutil.which("ngrok")
+    if path:
+        return path
+    local = _ROOT / "bin" / _ngrok_binary_name()
+    if local.exists():
+        return str(local)
+    return None
+
+
+def install_ngrok() -> str | None:
+    existing = _find_ngrok()
+    if existing:
+        return existing
+
+    log.info("Downloading ngrok for %s/%s...", platform.system(), platform.machine())
+    bin_dir = _ROOT / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    url = _ngrok_download_url()
+    archive = bin_dir / ("ngrok-dl.zip" if url.endswith(".zip") else "ngrok-dl.tgz")
+
+    try:
+        urllib.request.urlretrieve(url, str(archive))
+    except Exception as e:
+        log.warning("Could not download ngrok: %s", e)
+        return None
+
+    # Extract
+    import zipfile, tarfile
+    target_dir = bin_dir
+    try:
+        if archive.suffix == ".zip":
+            with zipfile.ZipFile(str(archive)) as z:
+                z.extractall(str(target_dir))
+        else:
+            with tarfile.open(str(archive)) as t:
+                t.extractall(str(target_dir))
+        archive.unlink()
+    except Exception as e:
+        log.warning("Could not extract ngrok: %s", e)
+        return None
+
+    binary = bin_dir / _ngrok_binary_name()
+    if binary.exists():
+        if not _is_windows():
+            binary.chmod(0o755)
+        log.info("Installed ngrok to %s", binary)
+        return str(binary)
+
+    log.warning("ngrok binary not found after extraction")
+    return None
+
+
+def run_ngrok_tunnel(port: int = 8080, authtoken: str | None = None) -> None:
+    ngrok = _find_ngrok()
+
+    if not ngrok:
+        log.info("ngrok not found in PATH or bin/ — attempting download...")
+        ngrok = install_ngrok()
+
+    if not ngrok:
+        log.error("ngrok not available. Install it from https://ngrok.com/download")
+        log.error("Then run: ngrok config add-authtoken <your-token>")
+        sys.exit(1)
+
+    # Set authtoken if provided
+    if authtoken:
+        subprocess.run([ngrok, "config", "add-authtoken", authtoken], check=True)
+
+    # Check if authtoken is configured
+    result = subprocess.run([ngrok, "config", "check"], capture_output=True, text=True)
+    if result.returncode != 0 or "authtoken" not in (result.stdout + result.stderr).lower():
+        # Try to run anyway — ngrok will print a helpful error if token is missing
+        pass
+
+    cmd = [ngrok, "http", str(port), "--log", "stdout", "--log-format", "json"]
+    log.info("Starting ngrok tunnel to localhost:%d...", port)
+    log.info("Press Ctrl+C to stop.\n")
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    tunnel_url = None
+    url_printed = False
+
+    def _read_ngrok(stream):
+        nonlocal tunnel_url, url_printed
+        for line in iter(stream.readline, ""):
+            line = line.strip()
+            if not line:
+                continue
+            # ngrok JSON log lines
+            try:
+                entry = json.loads(line)
+                msg = entry.get("msg", "")
+                url = entry.get("url", "")
+                if url and url.startswith("https://"):
+                    tunnel_url = url.rstrip("/")
+                if "started tunnel" in msg.lower() and entry.get("url", "").startswith("https://"):
+                    tunnel_url = entry["url"].rstrip("/")
+                if any(kw in msg.lower() for kw in ["err", "failed", "auth"]):
+                    log.info("  [ngrok] %s", msg)
+            except json.JSONDecodeError:
+                # Plain text line — look for URL
+                if "ngrok-free.app" in line or "ngrok.io" in line or "ngrok-free.dev" in line:
+                    for word in line.split():
+                        if word.startswith("https://") and "ngrok" in word:
+                            tunnel_url = word.rstrip("/")
+                if any(kw in line.lower() for kw in ["err", "failed", "auth", "forwarding"]):
+                    log.info("  [ngrok] %s", line)
+
+    threading.Thread(target=_read_ngrok, args=(proc.stdout,), daemon=True).start()
+    threading.Thread(target=_read_ngrok, args=(proc.stderr,), daemon=True).start()
+
+    # Also poll ngrok's local API for the URL (most reliable method)
+    def _poll_ngrok_api():
+        nonlocal tunnel_url
+        import time
+        for _ in range(20):  # try for 10s
+            time.sleep(0.5)
+            try:
+                with urllib.request.urlopen("http://127.0.0.1:4040/api/tunnels", timeout=1) as resp:
+                    data = json.loads(resp.read())
+                    for t in data.get("tunnels", []):
+                        url = t.get("public_url", "")
+                        if url.startswith("https://"):
+                            tunnel_url = url.rstrip("/")
+                            return
+            except Exception:
+                pass
+
+    threading.Thread(target=_poll_ngrok_api, daemon=True).start()
+
+    def _shutdown(sig, frame):
+        log.info("\nShutting down tunnel...")
+        proc.terminate()
+        _save_status({"running": False, "url": None})
+        sys.exit(0)
+
+    _setup_signals(_shutdown)
+
+    import time
+    while proc.poll() is None:
+        if tunnel_url and not url_printed:
+            url_printed = True
+            _print_tunnel_active(tunnel_url, port, "ngrok")
+        time.sleep(0.5)
+
+    _save_status({"running": False, "url": None})
+    rc = proc.returncode
+    if rc != 0:
+        log.error("ngrok exited with code %d", rc)
+        log.info("If you see an auth error, run: ngrok config add-authtoken <your-token>")
+
+
+# ── Status ────────────────────────────────────────────────────────────
 
 def show_status() -> None:
-    """Show current tunnel status."""
     status = _load_status()
     if not status or not status.get("running"):
         log.info("No tunnel running.")
-        log.info("Start one with: python -m scripts.tunnel")
+        log.info("Start one with:  python -m scripts.tunnel")
         return
-
     log.info("Tunnel active:")
-    log.info("  Type:        %s", status.get("type", "unknown"))
+    log.info("  Provider:    %s", status.get("type", "unknown"))
     log.info("  Public URL:  %s", status.get("url", "?"))
     log.info("  Webhook URL: %s", status.get("webhook_url", "?"))
     log.info("  Port:        %s", status.get("port", "?"))
-    if status.get("hostname"):
-        log.info("  Hostname:    %s", status["hostname"])
 
+
+# ── Entry point ───────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="TARS Cloudflare Tunnel Manager")
-    parser.add_argument("--port", type=int, default=8080, help="Local port (default: 8080)")
-    parser.add_argument("--name", type=str, help="Named tunnel (requires CF account)")
-    parser.add_argument("--hostname", type=str, help="Custom hostname for named tunnel")
-    parser.add_argument("--webhook-only", action="store_true", help="Only expose webhook endpoint")
-    parser.add_argument("--status", action="store_true", help="Show tunnel status")
-    parser.add_argument("--install", action="store_true", help="Just install cloudflared")
+    parser = argparse.ArgumentParser(description="TARS Tunnel Manager (Cloudflare or ngrok)")
+    parser.add_argument("--port", type=int, default=8080, help="Local server port (default: 8080)")
+    parser.add_argument("--provider", choices=["cloudflare", "ngrok", "auto"], default="auto",
+                        help="Tunnel provider (default: auto — tries Cloudflare, falls back to ngrok)")
+    parser.add_argument("--authtoken", type=str, help="ngrok auth token (saves to config)")
+    parser.add_argument("--name", type=str, help="Named Cloudflare tunnel")
+    parser.add_argument("--hostname", type=str, help="Custom hostname for named CF tunnel")
+    parser.add_argument("--status", action="store_true", help="Show current tunnel status")
     args = parser.parse_args()
 
     if args.status:
         show_status()
         return
 
-    cloudflared = install_cloudflared()
+    provider = args.provider
 
-    if args.install:
-        return
+    if provider == "auto":
+        # Try Cloudflare first; if it fails use ngrok
+        log.info("Auto mode: trying Cloudflare first, ngrok as fallback")
+        cf = install_cloudflared()
+        provider = "cloudflare" if cf else "ngrok"
+        if not cf:
+            log.info("cloudflared not available — using ngrok")
 
-    if args.name:
-        if not args.hostname:
-            log.error("--hostname required with --name (e.g. --hostname tars.yourdomain.com)")
-            sys.exit(1)
-        run_named_tunnel(cloudflared, args.name, args.hostname, args.port)
+    if provider == "cloudflare":
+        if args.name:
+            if not args.hostname:
+                log.error("--hostname required with --name")
+                sys.exit(1)
+            run_named_cf_tunnel(args.name, args.hostname, args.port)
+        else:
+            run_cloudflare_tunnel(args.port)
     else:
-        run_quick_tunnel(cloudflared, args.port, args.webhook_only)
+        run_ngrok_tunnel(args.port, authtoken=args.authtoken)
 
 
 if __name__ == "__main__":
