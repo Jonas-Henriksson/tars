@@ -30,30 +30,57 @@
         .nav-links a:hover { color: var(--text-secondary); background: var(--surface); }
         .nav-links a.active { color: var(--text); background: var(--surface-raised); }
 
-        /* Toolbar */
-        .toolbar { display: flex; align-items: flex-start; gap: 8px; padding: 10px 24px; border-bottom: 1px solid var(--border-subtle); background: var(--bg); max-width: 100%; flex-wrap: wrap; z-index: 40; position: relative; }
-        .chip-groups { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; align-items: flex-start; }
-        .chip-group { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-        .chip-group + .chip-group { padding-left: 8px; border-left: 1px solid var(--border-subtle); }
-        .chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 14px; font-size: 12px; cursor: pointer; border: 1px solid var(--border); color: var(--text-muted); background: transparent; transition: all 0.15s; white-space: nowrap; font-family: inherit; }
-        .chip:hover { border-color: var(--text-muted); color: var(--text-secondary); }
-        .chip.active { border-color: var(--accent); color: var(--accent); background: var(--blue-dim); }
-        .chip.person { border-color: var(--node-person); color: var(--node-person); }
-        .chip.person.active { background: rgba(59,130,246,0.15); }
-        .chip.topic { border-color: var(--node-topic); color: var(--node-topic); }
-        .chip.topic.active { background: var(--purple-dim); }
-        .chip.expand-toggle { border-color: var(--border); color: var(--text-muted); font-size: 11px; padding: 4px 10px; }
-        .chip.expand-toggle:hover { border-color: var(--text-muted); color: var(--text-secondary); }
-        .chip-dot { width: 6px; height: 6px; border-radius: 50%; }
-        .chip-dot.person { background: var(--node-person); }
-        .chip-dot.topic { background: var(--node-topic); }
-        .chip-dot.page { background: var(--node-page); }
-        .search-box { padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12px; width: 180px; font-family: inherit; outline: none; transition: border-color 0.15s; flex-shrink: 0; }
-        .search-box:focus { border-color: var(--accent); }
-        .search-box::placeholder { color: var(--text-muted); }
+        /* Control Panel */
+        .ctrl-panel { position: absolute; top: 12px; right: 12px; width: 280px; z-index: 40; background: rgba(17,17,19,0.92); border: 1px solid var(--border); border-radius: 10px; backdrop-filter: blur(12px); max-height: calc(100vh - 120px); overflow-y: auto; }
+        .ctrl-panel::-webkit-scrollbar { width: 4px; }
+        .ctrl-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .ctrl-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); }
+        .ctrl-header-actions { display: flex; gap: 6px; }
+        .ctrl-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 4px; font-size: 14px; line-height: 1; }
+        .ctrl-btn:hover { color: var(--text); background: var(--surface-raised); }
+        .ctrl-section { border-bottom: 1px solid var(--border-subtle); }
+        .ctrl-section:last-child { border-bottom: none; }
+        .ctrl-section-head { display: flex; align-items: center; gap: 6px; padding: 10px 14px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 600; }
+        .ctrl-section-head:hover { background: rgba(255,255,255,0.02); }
+        .ctrl-section-head .chevron { font-size: 10px; color: var(--text-muted); transition: transform 0.2s; }
+        .ctrl-section-head .chevron.open { transform: rotate(90deg); }
+        .ctrl-section-body { padding: 0 14px 12px; display: none; }
+        .ctrl-section-body.open { display: block; }
+
+        /* Search within panel */
+        .ctrl-search { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12px; font-family: inherit; outline: none; margin-bottom: 8px; }
+        .ctrl-search:focus { border-color: var(--accent); }
+        .ctrl-search::placeholder { color: var(--text-muted); }
+
+        /* Groups */
+        .ctrl-group-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border-subtle); }
+        .ctrl-group-row:last-child { border-bottom: none; }
+        .ctrl-group-name { flex: 1; font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ctrl-group-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; cursor: pointer; border: 1px solid rgba(255,255,255,0.1); }
+        .ctrl-group-toggle { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 3px; line-height: 1; }
+        .ctrl-group-toggle:hover { color: var(--text); background: var(--surface-raised); }
+        .ctrl-group-toggle.hidden { opacity: 0.4; }
+
+        /* Display toggles */
+        .ctrl-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+        .ctrl-toggle-label { font-size: 12px; color: var(--text-secondary); }
+        .ctrl-switch { position: relative; width: 32px; height: 18px; cursor: pointer; }
+        .ctrl-switch input { opacity: 0; width: 0; height: 0; }
+        .ctrl-switch .slider { position: absolute; inset: 0; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 9px; transition: background 0.2s; }
+        .ctrl-switch .slider::before { content: ''; position: absolute; width: 12px; height: 12px; left: 2px; top: 2px; background: var(--text-muted); border-radius: 50%; transition: transform 0.2s, background 0.2s; }
+        .ctrl-switch input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+        .ctrl-switch input:checked + .slider::before { transform: translateX(14px); background: #fff; }
+
+        /* Force sliders */
+        .ctrl-slider-row { margin-bottom: 10px; }
+        .ctrl-slider-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: flex; justify-content: space-between; }
+        .ctrl-slider-val { color: var(--text-muted); font-size: 11px; }
+        .ctrl-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 2px; background: var(--surface-raised); outline: none; }
+        .ctrl-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; border: 2px solid var(--border); }
+        .ctrl-slider::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; border: 2px solid var(--border); }
 
         /* Main layout */
-        .graph-wrap { display: flex; height: calc(100vh - 90px); position: relative; }
+        .graph-wrap { display: flex; height: calc(100vh - 50px); position: relative; }
         #graph3d { flex: 1; }
         #graph3d canvas { display: block; }
 
@@ -122,20 +149,103 @@
         </div>
     </header>
 
-    <div class="toolbar" id="toolbar">
-        <div class="chip-groups" id="chips"></div>
-        <input type="text" class="search-box" id="searchBox" placeholder="Search nodes...">
-    </div>
-
     <div class="graph-wrap">
         <div id="graph3d"></div>
+
+        <!-- Control Panel -->
+        <div class="ctrl-panel" id="ctrlPanel">
+            <div class="ctrl-header">
+                <span style="font-size:13px;font-weight:600;">Graph Controls</span>
+                <div class="ctrl-header-actions">
+                    <button class="ctrl-btn" id="ctrlReset" title="Reset defaults">&#8635;</button>
+                    <button class="ctrl-btn" id="ctrlClose" title="Close panel">&#215;</button>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="ctrl-section">
+                <div class="ctrl-section-head" data-section="filters">
+                    <span class="chevron open">&#9656;</span> Filters
+                </div>
+                <div class="ctrl-section-body open" id="filtersBody">
+                    <input type="text" class="ctrl-search" id="searchBox" placeholder="Search nodes...">
+                    <div class="ctrl-toggle-row">
+                        <span class="ctrl-toggle-label">Orphan nodes</span>
+                        <label class="ctrl-switch"><input type="checkbox" id="toggleOrphans" checked><span class="slider"></span></label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Groups -->
+            <div class="ctrl-section">
+                <div class="ctrl-section-head" data-section="groups">
+                    <span class="chevron open">&#9656;</span> Groups
+                </div>
+                <div class="ctrl-section-body open" id="groupsBody">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Display -->
+            <div class="ctrl-section">
+                <div class="ctrl-section-head" data-section="display">
+                    <span class="chevron">&#9656;</span> Display
+                </div>
+                <div class="ctrl-section-body" id="displayBody">
+                    <div class="ctrl-toggle-row">
+                        <span class="ctrl-toggle-label">Labels</span>
+                        <label class="ctrl-switch"><input type="checkbox" id="toggleLabels" checked><span class="slider"></span></label>
+                    </div>
+                    <div class="ctrl-toggle-row">
+                        <span class="ctrl-toggle-label">Arrows</span>
+                        <label class="ctrl-switch"><input type="checkbox" id="toggleArrows"><span class="slider"></span></label>
+                    </div>
+                    <div class="ctrl-slider-row" style="margin-top:8px">
+                        <div class="ctrl-slider-label">Node size <span class="ctrl-slider-val" id="nodeSizeVal">1.0</span></div>
+                        <input type="range" class="ctrl-slider" id="nodeSize" min="0.2" max="3" step="0.1" value="1">
+                    </div>
+                    <div class="ctrl-slider-row">
+                        <div class="ctrl-slider-label">Link thickness <span class="ctrl-slider-val" id="linkThicknessVal">1.0</span></div>
+                        <input type="range" class="ctrl-slider" id="linkThickness" min="0.1" max="3" step="0.1" value="1">
+                    </div>
+                    <div class="ctrl-slider-row">
+                        <div class="ctrl-slider-label">Link opacity <span class="ctrl-slider-val" id="linkOpacityVal">0.15</span></div>
+                        <input type="range" class="ctrl-slider" id="linkOpacity" min="0.01" max="0.6" step="0.01" value="0.15">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Forces -->
+            <div class="ctrl-section">
+                <div class="ctrl-section-head" data-section="forces">
+                    <span class="chevron open">&#9656;</span> Forces
+                </div>
+                <div class="ctrl-section-body open" id="forcesBody">
+                    <div class="ctrl-slider-row">
+                        <div class="ctrl-slider-label">Center force <span class="ctrl-slider-val" id="centerForceVal">0.05</span></div>
+                        <input type="range" class="ctrl-slider" id="centerForce" min="0" max="0.3" step="0.005" value="0.05">
+                    </div>
+                    <div class="ctrl-slider-row">
+                        <div class="ctrl-slider-label">Repel force <span class="ctrl-slider-val" id="repelForceVal">80</span></div>
+                        <input type="range" class="ctrl-slider" id="repelForce" min="0" max="300" step="5" value="80">
+                    </div>
+                    <div class="ctrl-slider-row">
+                        <div class="ctrl-slider-label">Link force <span class="ctrl-slider-val" id="linkForceVal">1.0</span></div>
+                        <input type="range" class="ctrl-slider" id="linkForce" min="0" max="2" step="0.05" value="1">
+                    </div>
+                    <div class="ctrl-slider-row">
+                        <div class="ctrl-slider-label">Link distance <span class="ctrl-slider-val" id="linkDistanceVal">60</span></div>
+                        <input type="range" class="ctrl-slider" id="linkDistance" min="10" max="200" step="5" value="60">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toggle button when panel is closed -->
+        <button class="ctrl-btn" id="ctrlOpen" title="Open controls" style="position:absolute;top:12px;right:12px;z-index:39;background:rgba(17,17,19,0.85);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:16px;display:none;">&#9881;</button>
+
         <div class="sidebar" id="sidebar">
             <div class="sidebar-inner" id="sidebarContent"></div>
-        </div>
-        <div class="legend">
-            <div class="legend-item"><div class="legend-dot" style="background: var(--node-person)"></div>People</div>
-            <div class="legend-item"><div class="legend-dot" style="background: var(--node-topic)"></div>Topics</div>
-            <div class="legend-item"><div class="legend-dot" style="background: var(--node-page)"></div>Pages</div>
         </div>
     </div>
 
@@ -148,20 +258,58 @@
         let graphNodes = [];
         let graphEdges = [];
         let tasks = [];
-        let nodeMap = {};       // id -> node object
-        let adjacency = {};     // id -> Set of neighbor ids
+        let nodeMap = {};
+        let adjacency = {};
         let selectedNodeId = null;
         let hoveredNodeId = null;
         let Graph = null;
 
+        // Display settings
+        let showLabels = true;
+        let showArrows = false;
+        let nodeSizeMul = 1;
+        let linkThicknessMul = 1;
+        let baseLinkOpacity = 0.15;
+
+        // Force settings
+        let forceCenter = 0.05;
+        let forceRepel = 80;
+        let forceLink = 1;
+        let forceLinkDist = 60;
+
+        // Group visibility
+        let groupVisible = { person: true, topic: true, page: false };
+
         const sidebar = document.getElementById('sidebar');
         const sidebarContent = document.getElementById('sidebarContent');
         const searchBox = document.getElementById('searchBox');
-        const chipsEl = document.getElementById('chips');
         const graphEl = document.getElementById('graph3d');
+        const ctrlPanel = document.getElementById('ctrlPanel');
+        const groupsBody = document.getElementById('groupsBody');
 
         const NODE_COLORS = { person: '#3b82f6', topic: '#a855f7', page: '#f59e0b' };
         const NODE_COLORS_HIGHLIGHT = { person: '#60a5fa', topic: '#c084fc', page: '#fbbf24' };
+
+        // --- Control Panel: collapsible sections ---
+        document.querySelectorAll('.ctrl-section-head').forEach(head => {
+            head.addEventListener('click', () => {
+                const chevron = head.querySelector('.chevron');
+                const body = head.nextElementSibling;
+                const isOpen = body.classList.contains('open');
+                body.classList.toggle('open', !isOpen);
+                chevron.classList.toggle('open', !isOpen);
+            });
+        });
+
+        // Panel open/close
+        document.getElementById('ctrlClose').addEventListener('click', () => {
+            ctrlPanel.style.display = 'none';
+            document.getElementById('ctrlOpen').style.display = 'block';
+        });
+        document.getElementById('ctrlOpen').addEventListener('click', () => {
+            ctrlPanel.style.display = '';
+            document.getElementById('ctrlOpen').style.display = 'none';
+        });
 
         // --- Load data ---
         async function loadGraph() {
@@ -182,7 +330,6 @@
             nodeMap = {};
             adjacency = {};
 
-            // Compute max weight per type for normalization
             const weightsByType = { person: [], topic: [], page: [] };
             for (const n of data.nodes) {
                 if (weightsByType[n.type]) weightsByType[n.type].push(n.weight || 1);
@@ -191,8 +338,6 @@
             for (const t of ['person', 'topic', 'page']) {
                 maxWeight[t] = Math.max(1, ...weightsByType[t]);
             }
-
-            // Node size ranges per type
             const sizeRange = { person: [3, 10], topic: [4, 14], page: [2, 6] };
 
             for (const n of data.nodes) {
@@ -208,16 +353,16 @@
                     type: type,
                     weight: weight,
                     url: n.url || '',
-                    val: size,
+                    baseVal: size,
+                    val: size * nodeSizeMul,
                     color: NODE_COLORS[type] || '#71717a',
-                    visible: type !== 'page',
+                    visible: groupVisible[type] !== false,
                 };
                 graphNodes.push(node);
                 nodeMap[n.id] = node;
                 adjacency[n.id] = new Set();
             }
 
-            // Build edges
             for (const e of data.edges) {
                 if (nodeMap[e.source] && nodeMap[e.target]) {
                     graphEdges.push({
@@ -231,11 +376,51 @@
                 }
             }
 
-            buildChips();
+            buildGroups();
             createGraph();
         }
 
-        function createGraph() {
+        // --- Groups panel ---
+        function buildGroups() {
+            const groups = [
+                { key: 'person', label: 'People', color: NODE_COLORS.person, count: graphNodes.filter(n => n.type === 'person').length },
+                { key: 'topic', label: 'Topics', color: NODE_COLORS.topic, count: graphNodes.filter(n => n.type === 'topic').length },
+                { key: 'page', label: 'Pages', color: NODE_COLORS.page, count: graphNodes.filter(n => n.type === 'page').length },
+            ];
+
+            let html = '';
+            for (const g of groups) {
+                const vis = groupVisible[g.key] !== false;
+                html += '<div class="ctrl-group-row">';
+                html += '<span class="ctrl-group-name">' + esc(g.label) + ' <span style="color:var(--text-muted);font-size:11px">(' + g.count + ')</span></span>';
+                html += '<div class="ctrl-group-dot" style="background:' + g.color + (vis ? '' : ';opacity:0.2') + '"></div>';
+                html += '<button class="ctrl-group-toggle' + (vis ? '' : ' hidden') + '" data-group="' + g.key + '" title="Toggle visibility">' + (vis ? '&#10003;' : '&#10005;') + '</button>';
+                html += '</div>';
+            }
+            groupsBody.innerHTML = html;
+
+            groupsBody.querySelectorAll('.ctrl-group-toggle').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const key = btn.dataset.group;
+                    groupVisible[key] = !groupVisible[key];
+                    applyGroupVisibility();
+                    buildGroups();
+                });
+            });
+        }
+
+        function applyGroupVisibility() {
+            let showOrphans = document.getElementById('toggleOrphans').checked;
+            for (const n of graphNodes) {
+                n.visible = groupVisible[n.type] !== false;
+                if (n.visible && !showOrphans && (adjacency[n.id] || new Set()).size === 0) {
+                    n.visible = false;
+                }
+            }
+            updateGraphData();
+        }
+
+        function getVisibleData() {
             const visibleNodes = graphNodes.filter(n => n.visible);
             const visibleIds = new Set(visibleNodes.map(n => n.id));
             const visibleEdges = graphEdges.filter(e => {
@@ -243,6 +428,17 @@
                 const tid = typeof e.target === 'object' ? e.target.id : e.target;
                 return visibleIds.has(sid) && visibleIds.has(tid);
             });
+            return { nodes: visibleNodes, links: visibleEdges };
+        }
+
+        function updateGraphData() {
+            if (!Graph) return;
+            const data = getVisibleData();
+            Graph.graphData(data);
+        }
+
+        function createGraph() {
+            const data = getVisibleData();
 
             const graphWrap = document.querySelector('.graph-wrap');
             const sidebarW = sidebar.classList.contains('open') ? 340 : 0;
@@ -250,10 +446,7 @@
             const height = graphWrap.clientHeight;
 
             if (Graph) {
-                // Update existing graph
-                Graph.graphData({ nodes: visibleNodes, links: visibleEdges })
-                     .width(width)
-                     .height(height);
+                Graph.graphData(data).width(width).height(height);
                 return;
             }
 
@@ -261,10 +454,9 @@
                 .width(width)
                 .height(height)
                 .backgroundColor('#0a0a0a')
-                .graphData({ nodes: visibleNodes, links: visibleEdges })
+                .graphData(data)
 
-                // --- Node appearance ---
-                .nodeVal(n => n.val)
+                .nodeVal(n => n.baseVal * nodeSizeMul)
                 .nodeColor(n => {
                     if (selectedNodeId && n.id !== selectedNodeId && !adjacency[selectedNodeId].has(n.id)) {
                         return 'rgba(60,60,70,0.3)';
@@ -277,11 +469,9 @@
                 .nodeOpacity(0.9)
                 .nodeResolution(20)
 
-                // --- Node labels: use built-in HTML tooltip + 3D sprite if available ---
                 .nodeLabel(n => '<div class="node-label">' + esc(n.label) + ' <span style="opacity:0.5;font-size:10px">' + n.type + '</span></div>')
                 .nodeThreeObject(n => {
-                    // Create a sprite label using SpriteText if loaded
-                    if (typeof SpriteText === 'undefined') return null;
+                    if (!showLabels || typeof SpriteText === 'undefined') return null;
                     const sprite = new SpriteText(n.label);
                     sprite.color = '#ffffff';
                     sprite.textHeight = 2.5;
@@ -289,47 +479,42 @@
                     sprite.fontWeight = '500';
                     sprite.backgroundColor = false;
                     sprite.padding = 1;
-                    const nodeRadius = Math.cbrt(n.val) * 2;
+                    const nodeRadius = Math.cbrt(n.baseVal * nodeSizeMul) * 2;
                     sprite.position.y = nodeRadius + 3;
                     return sprite;
                 })
                 .nodeThreeObjectExtend(true)
 
-                // --- Link appearance ---
-                .linkWidth(e => Math.min(1.5, 0.2 + e.weight * 0.15))
-                .linkOpacity(0.15)
+                .linkWidth(e => Math.min(2, 0.2 + e.weight * 0.15) * linkThicknessMul)
+                .linkOpacity(baseLinkOpacity)
                 .linkColor(e => {
                     const sid = typeof e.source === 'object' ? e.source.id : e.source;
                     const tid = typeof e.target === 'object' ? e.target.id : e.target;
                     if (selectedNodeId) {
                         if (sid === selectedNodeId || tid === selectedNodeId) {
-                            const sourceNode = nodeMap[sid];
-                            return NODE_COLORS[sourceNode ? sourceNode.type : 'person'];
+                            return NODE_COLORS[nodeMap[sid] ? nodeMap[sid].type : 'person'];
                         }
                         return 'rgba(40,40,50,0.1)';
                     }
-                    const sourceNode = nodeMap[sid];
-                    return sourceNode ? sourceNode.color : '#555';
+                    return nodeMap[sid] ? nodeMap[sid].color : '#555';
                 })
+                .linkDirectionalArrowLength(showArrows ? 4 : 0)
+                .linkDirectionalArrowRelPos(1)
                 .linkDirectionalParticles(e => {
                     const sid = typeof e.source === 'object' ? e.source.id : e.source;
                     const tid = typeof e.target === 'object' ? e.target.id : e.target;
-                    if (selectedNodeId && (sid === selectedNodeId || tid === selectedNodeId)) {
-                        return 2;
-                    }
+                    if (selectedNodeId && (sid === selectedNodeId || tid === selectedNodeId)) return 2;
                     return 0;
                 })
                 .linkDirectionalParticleWidth(1.2)
                 .linkDirectionalParticleSpeed(0.006)
                 .linkDirectionalParticleColor(e => {
                     const sid = typeof e.source === 'object' ? e.source.id : e.source;
-                    const sourceNode = nodeMap[sid];
-                    return sourceNode ? NODE_COLORS_HIGHLIGHT[sourceNode.type] : '#fff';
+                    return nodeMap[sid] ? NODE_COLORS_HIGHLIGHT[nodeMap[sid].type] : '#fff';
                 })
                 .linkCurvature(0.15)
                 .linkCurveRotation(0.5)
 
-                // --- Interactions ---
                 .onNodeClick(n => selectNode(n.id))
                 .onNodeHover(n => {
                     hoveredNodeId = n ? n.id : null;
@@ -339,21 +524,26 @@
                     selectedNodeId = null;
                     closeSidebar();
                     resetPageVisibility();
-                    updateChipState();
                     refreshGraph();
                 })
 
-                // --- Warm up ---
                 .d3AlphaDecay(0.02)
                 .d3VelocityDecay(0.3);
 
-            // --- Force config (must be done after graph creation) ---
-            Graph.d3Force('charge').strength(n => -80 * (n.val || 4));
-            Graph.d3Force('link').distance(e => 60 + (e.weight || 1) * 5);
-            Graph.d3Force('center').strength(0.05);
+            // Force config
+            applyForces();
 
-            // Add bloom post-processing
+            // Bloom
             addBloomEffect();
+        }
+
+        function applyForces() {
+            if (!Graph) return;
+            Graph.d3Force('charge').strength(n => -forceRepel * (n.baseVal || 4));
+            Graph.d3Force('link').distance(e => forceLinkDist + (e.weight || 1) * 5).strength(forceLink > 0 ? forceLink * 0.05 : 0);
+            Graph.d3Force('center').strength(forceCenter);
+            // Reheat simulation
+            Graph.d3ReheatSimulation();
         }
 
         function addBloomEffect() {
@@ -362,7 +552,6 @@
             const scene = Graph.scene();
             const camera = Graph.camera();
 
-            // Import three.js addons for bloom
             import('https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js').then(({ EffectComposer }) => {
                 return Promise.all([
                     Promise.resolve(EffectComposer),
@@ -372,25 +561,19 @@
             }).then(([EffectComposer, { RenderPass }, { UnrealBloomPass }]) => {
                 const composer = new EffectComposer(renderer);
                 composer.addPass(new RenderPass(scene, camera));
-
                 const bloomPass = new UnrealBloomPass(
                     { x: window.innerWidth, y: window.innerHeight },
-                    1.2,   // strength
-                    0.4,   // radius
-                    0.85   // threshold
+                    1.2, 0.4, 0.85
                 );
                 composer.addPass(bloomPass);
-
-                // Override the render loop
                 Graph.postProcessingComposer(composer);
             }).catch(e => {
-                console.log('Bloom not available, continuing without it:', e.message);
+                console.log('Bloom not available:', e.message);
             });
         }
 
         function refreshGraph() {
             if (!Graph) return;
-            // Force color refresh
             Graph.nodeColor(Graph.nodeColor());
             Graph.linkColor(Graph.linkColor());
             Graph.linkDirectionalParticles(Graph.linkDirectionalParticles());
@@ -400,66 +583,80 @@
                 if (selectedNodeId) {
                     return (sid === selectedNodeId || tid === selectedNodeId) ? 0.6 : 0.04;
                 }
-                return 0.15;
+                return baseLinkOpacity;
             });
         }
 
-        // --- Filter chips ---
-        const CHIP_LIMIT = 10;
-        let peopleExpanded = false;
-        let topicsExpanded = false;
-
-        function buildChips() {
-            const people = graphNodes.filter(n => n.type === 'person').sort((a, b) => b.weight - a.weight);
-            const topics = graphNodes.filter(n => n.type === 'topic').sort((a, b) => b.weight - a.weight);
-
-            let html = '';
-
-            // People group
-            html += '<div class="chip-group" id="peopleGroup">';
-            const showPeople = peopleExpanded ? people : people.slice(0, CHIP_LIMIT);
-            for (const n of showPeople) {
-                html += '<button class="chip person" data-id="' + esc(n.id) + '"><span class="chip-dot person"></span>' + esc(n.label) + '</button>';
-            }
-            if (people.length > CHIP_LIMIT) {
-                if (peopleExpanded) {
-                    html += '<button class="chip expand-toggle" data-toggle="people">Show less</button>';
-                } else {
-                    html += '<button class="chip expand-toggle" data-toggle="people">+' + (people.length - CHIP_LIMIT) + ' more</button>';
-                }
-            }
-            html += '</div>';
-
-            // Topics group
-            html += '<div class="chip-group" id="topicsGroup">';
-            const showTopics = topicsExpanded ? topics : topics.slice(0, CHIP_LIMIT);
-            for (const n of showTopics) {
-                html += '<button class="chip topic" data-id="' + esc(n.id) + '"><span class="chip-dot topic"></span>' + esc(n.label) + '</button>';
-            }
-            if (topics.length > CHIP_LIMIT) {
-                if (topicsExpanded) {
-                    html += '<button class="chip expand-toggle" data-toggle="topics">Show less</button>';
-                } else {
-                    html += '<button class="chip expand-toggle" data-toggle="topics">+' + (topics.length - CHIP_LIMIT) + ' more</button>';
-                }
-            }
-            html += '</div>';
-
-            chipsEl.innerHTML = html;
-
-            chipsEl.querySelectorAll('.chip[data-id]').forEach(btn => {
-                btn.addEventListener('click', () => selectNode(btn.dataset.id));
-            });
-
-            chipsEl.querySelectorAll('.chip[data-toggle]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    if (btn.dataset.toggle === 'people') peopleExpanded = !peopleExpanded;
-                    if (btn.dataset.toggle === 'topics') topicsExpanded = !topicsExpanded;
-                    buildChips();
-                    updateChipState();
-                });
+        // --- Control Panel: Force sliders ---
+        function bindSlider(id, valId, setter) {
+            const slider = document.getElementById(id);
+            const valEl = document.getElementById(valId);
+            slider.addEventListener('input', () => {
+                const v = parseFloat(slider.value);
+                valEl.textContent = v.toFixed(v < 1 ? 2 : (v < 10 ? 1 : 0));
+                setter(v);
             });
         }
+
+        bindSlider('centerForce', 'centerForceVal', v => { forceCenter = v; applyForces(); });
+        bindSlider('repelForce', 'repelForceVal', v => { forceRepel = v; applyForces(); });
+        bindSlider('linkForce', 'linkForceVal', v => { forceLink = v; applyForces(); });
+        bindSlider('linkDistance', 'linkDistanceVal', v => { forceLinkDist = v; applyForces(); });
+
+        // Display sliders
+        bindSlider('nodeSize', 'nodeSizeVal', v => {
+            nodeSizeMul = v;
+            if (Graph) {
+                Graph.nodeVal(n => n.baseVal * nodeSizeMul);
+                Graph.nodeThreeObject(Graph.nodeThreeObject()); // refresh labels
+            }
+        });
+        bindSlider('linkThickness', 'linkThicknessVal', v => {
+            linkThicknessMul = v;
+            if (Graph) Graph.linkWidth(e => Math.min(2, 0.2 + e.weight * 0.15) * linkThicknessMul);
+        });
+        bindSlider('linkOpacity', 'linkOpacityVal', v => {
+            baseLinkOpacity = v;
+            if (Graph) Graph.linkOpacity(v);
+        });
+
+        // Display toggles
+        document.getElementById('toggleLabels').addEventListener('change', (e) => {
+            showLabels = e.target.checked;
+            if (Graph) Graph.nodeThreeObject(Graph.nodeThreeObject()); // refresh
+        });
+        document.getElementById('toggleArrows').addEventListener('change', (e) => {
+            showArrows = e.target.checked;
+            if (Graph) Graph.linkDirectionalArrowLength(showArrows ? 4 : 0);
+        });
+        document.getElementById('toggleOrphans').addEventListener('change', () => {
+            applyGroupVisibility();
+        });
+
+        // Reset button
+        document.getElementById('ctrlReset').addEventListener('click', () => {
+            // Reset all sliders
+            const defaults = {
+                centerForce: 0.05, repelForce: 80, linkForce: 1, linkDistance: 60,
+                nodeSize: 1, linkThickness: 1, linkOpacity: 0.15
+            };
+            for (const [id, val] of Object.entries(defaults)) {
+                const el = document.getElementById(id);
+                if (el) { el.value = val; el.dispatchEvent(new Event('input')); }
+            }
+            // Reset toggles
+            document.getElementById('toggleLabels').checked = true; showLabels = true;
+            document.getElementById('toggleArrows').checked = false; showArrows = false;
+            document.getElementById('toggleOrphans').checked = true;
+            // Reset groups
+            groupVisible = { person: true, topic: true, page: false };
+            applyGroupVisibility();
+            buildGroups();
+            if (Graph) {
+                Graph.linkDirectionalArrowLength(0);
+                Graph.nodeThreeObject(Graph.nodeThreeObject());
+            }
+        });
 
         // --- Selection ---
         function selectNode(nodeId) {
@@ -472,7 +669,6 @@
                 showConnectedPages(nodeId);
                 openSidebar(nodeId);
 
-                // Focus camera on node
                 const node = nodeMap[nodeId];
                 if (node && Graph) {
                     const distance = 200;
@@ -484,37 +680,27 @@
                     );
                 }
             }
-            updateChipState();
             refreshGraph();
         }
 
         function showConnectedPages(nodeId) {
-            // Reset all page visibility
             for (const n of graphNodes) {
                 if (n.type === 'page') n.visible = false;
             }
-            // Show pages connected to selected node
             for (const neighborId of adjacency[nodeId] || []) {
                 const neighbor = nodeMap[neighborId];
                 if (neighbor && neighbor.type === 'page') {
                     neighbor.visible = true;
                 }
             }
-            // Rebuild graph data
-            createGraph();
+            updateGraphData();
         }
 
         function resetPageVisibility() {
             for (const n of graphNodes) {
-                if (n.type === 'page') n.visible = false;
+                if (n.type === 'page') n.visible = groupVisible.page;
             }
-            createGraph();
-        }
-
-        function updateChipState() {
-            chipsEl.querySelectorAll('.chip[data-id]').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.id === selectedNodeId);
-            });
+            updateGraphData();
         }
 
         // --- Sidebar ---
@@ -728,7 +914,7 @@
             } else {
                 selectedNodeId = null;
                 Graph.nodeColor(n => n.color);
-                Graph.linkOpacity(() => 0.15);
+                Graph.linkOpacity(() => baseLinkOpacity);
             }
         });
 
@@ -738,7 +924,6 @@
                 selectedNodeId = null;
                 closeSidebar();
                 resetPageVisibility();
-                updateChipState();
                 searchBox.value = '';
                 refreshGraph();
             }
