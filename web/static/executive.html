@@ -54,15 +54,33 @@
         .scan-stop-btn:hover { border-color: var(--red); color: var(--red-text, #ef4444); }
         @keyframes spin { to { transform: rotate(360deg); } }
 
+        /* Attention hero */
+        .attention-hero { background: var(--surface); border: 1px solid var(--border-subtle); border-left: 3px solid var(--red); border-radius: 8px; padding: 16px 20px; margin: 16px 0; }
+        .attention-hero:empty { display: none; }
+        .attention-hero-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--red-text); margin-bottom: 10px; }
+        .attention-hero-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; }
+        .attention-hero-item:last-child { border-bottom: none; }
+        .attention-hero-badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
+        .attention-hero-badge.overdue { background: var(--red-dim); color: var(--red-text); }
+        .attention-hero-badge.today { background: var(--amber-dim); color: var(--amber-text); }
+        .attention-hero-desc { flex: 1; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .attention-hero-owner { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+        .attention-hero-date { font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
         /* Stats */
-        .stats { display: flex; gap: 1px; background: var(--border-subtle); border-radius: 8px; overflow: hidden; margin: 16px 0 24px; }
-        .stat { flex: 1; background: var(--surface); padding: 12px 16px; text-align: center; }
-        .stat-val { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+        .stats { display: flex; gap: 1px; background: var(--border-subtle); border-radius: 8px; overflow: hidden; margin: 0 0 24px; }
+        .stat { flex: 1; background: var(--surface); padding: 14px 16px; text-align: center; position: relative; }
+        .stat-val { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
         .stat-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-top: 2px; }
+        .stat.has-accent::before { content: ''; position: absolute; left: 0; top: 20%; bottom: 20%; width: 3px; border-radius: 0 2px 2px 0; }
+        .stat.accent-red::before { background: var(--red); }
+        .stat.accent-amber::before { background: var(--amber); }
+        .stat.accent-blue::before { background: var(--accent); }
 
         /* Matrix */
         .matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px; }
         .matrix-cell { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; min-height: 120px; transition: background 0.15s; min-width: 0; overflow: hidden; }
+        .matrix-cell.q1 { background: rgba(239, 68, 68, 0.04); border-color: rgba(239, 68, 68, 0.25); }
         .matrix-cell.drag-over { background: var(--surface-raised); border-color: var(--accent); }
         .matrix-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); cursor: pointer; user-select: none; }
         .matrix-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -109,19 +127,33 @@
         .section-count { font-size: 11px; color: var(--text-muted); }
 
         /* Follow-up list */
-        .fu-row { display: flex; align-items: baseline; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; }
-        .fu-row:last-child { border-bottom: none; }
-        .fu-date { min-width: 80px; font-size: 12px; font-variant-numeric: tabular-nums; }
-        .fu-desc { flex: 1; color: var(--text); }
+        .fu-list { display: flex; flex-direction: column; gap: 6px; }
+        .fu-row { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 6px; font-size: 13px; }
+        .fu-date { min-width: 80px; font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 500; }
+        .fu-desc { flex: 1; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .fu-owner { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
-        .fu-action { background: none; border: 1px solid var(--border); color: var(--text-muted); font-size: 11px; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+        .fu-action { background: none; border: 1px solid var(--border); color: var(--text-muted); font-size: 11px; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-family: inherit; transition: all 0.15s; flex-shrink: 0; }
         .fu-action:hover { color: var(--text); border-color: var(--text-muted); }
 
         /* Topics & People */
         .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
-        .tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
-        .tag { background: var(--surface-raised); border: 1px solid var(--border); border-radius: 4px; padding: 4px 10px; font-size: 12px; color: var(--text-secondary); display: flex; align-items: baseline; gap: 6px; }
-        .tag-count { color: var(--text-muted); font-size: 11px; }
+        .tag-list { display: flex; flex-wrap: wrap; gap: 5px; }
+        .tag { background: var(--surface-raised); border: 1px solid var(--border); border-radius: 4px; padding: 3px 9px; font-size: 12px; color: var(--text-secondary); display: flex; align-items: baseline; gap: 5px; transition: border-color 0.15s; }
+        .tag:hover { border-color: var(--text-muted); }
+        .tag-count { color: var(--text-muted); font-size: 10px; font-weight: 600; }
+
+        /* Compact follow-up sections */
+        .fu-compact { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        @media (max-width: 700px) { .fu-compact { grid-template-columns: 1fr; } }
+        .fu-compact .fu-row { padding: 6px 10px; font-size: 12px; }
+        .fu-compact .fu-desc { font-size: 12px; }
+
+        /* Delegation table */
+        .deleg-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+        .deleg-table th { text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); padding: 6px 10px; border-bottom: 1px solid var(--border); }
+        .deleg-table td { font-size: 13px; padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); }
+        .deleg-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+        .deleg-bar { height: 4px; border-radius: 2px; background: var(--accent); margin-top: 4px; }
 
         .empty { text-align: center; padding: 48px; color: var(--text-muted); font-size: 13px; }
 
@@ -510,14 +542,38 @@
 
             let html = '';
 
+            // Attention hero — overdue + due today
+            const today = new Date().toISOString().slice(0, 10);
+            const allItems = [...q1, ...q2, ...q3, ...q4];
+            const overdueItems = allItems.filter(t => t.follow_up_date && t.follow_up_date < today);
+            const todayItems = allItems.filter(t => t.follow_up_date && t.follow_up_date === today);
+            const urgentItems = [...overdueItems.map(t => ({...t, _urgency: 'overdue'})), ...todayItems.map(t => ({...t, _urgency: 'today'}))];
+
+            if (urgentItems.length > 0) {
+                html += '<div class="attention-hero" id="attentionHero">';
+                html += '<div class="attention-hero-title">Needs Your Attention (' + urgentItems.length + ')</div>';
+                for (const t of urgentItems.slice(0, 6)) {
+                    const badge = t._urgency === 'overdue' ? '<span class="attention-hero-badge overdue">OVERDUE</span>' : '<span class="attention-hero-badge today">TODAY</span>';
+                    html += '<div class="attention-hero-item">';
+                    const qLabel = t.quadrant === 1 ? 'Q1' : t.quadrant === 2 ? 'Q2' : t.quadrant === 3 ? 'Q3' : 'Q4';
+                    html += badge;
+                    html += '<span style="font-size:10px;color:var(--text-muted);font-weight:500">' + qLabel + '</span>';
+                    html += '<span class="attention-hero-desc">' + esc(t.description) + '</span>';
+                    html += '<span class="attention-hero-owner">' + esc(t.owner || '') + '</span>';
+                    html += '<span class="attention-hero-date ' + (t._urgency === 'overdue' ? 'date-overdue' : 'date-soon') + '">' + (t.follow_up_date || '') + '</span>';
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+
             // Stats (always show unfiltered counts)
             html += '<div class="stats">';
-            html += stat(es.total_open || 0, 'Open tasks', '--text');
-            html += stat(mx.q1_count || 0, 'Do first', '--red-text');
-            html += stat(mx.q2_count || 0, 'Schedule', '--accent');
-            html += stat(es.total_delegated || 0, 'Delegated', '--amber-text');
-            html += stat(es.total_overdue || 0, 'Overdue', '--red-text');
-            html += stat(Object.keys(data.people || {}).length, 'People', '--text-secondary');
+            html += stat(es.total_open || 0, 'Open tasks', '--text', '');
+            html += stat(mx.q1_count || 0, 'Do first', '--red-text', 'has-accent accent-red');
+            html += stat(mx.q2_count || 0, 'Schedule', '--accent', 'has-accent accent-blue');
+            html += stat(es.total_delegated || 0, 'Delegated', '--amber-text', 'has-accent accent-amber');
+            html += stat(es.total_overdue || 0, 'Overdue', '--red-text', '');
+            html += stat(Object.keys(data.people || {}).length, 'People', '--text-secondary', '');
             html += '</div>';
 
             // Eisenhower Matrix
@@ -537,12 +593,12 @@
                 html += '</div>';
             }
 
-            // Upcoming follow-ups
+            // Upcoming follow-ups — compact two-column
             const upcoming = filterByDate(es.upcoming_follow_ups || []);
             if (upcoming.length > 0) {
                 html += '<div class="section">';
                 html += secHead('Upcoming Follow-ups (7 days)', upcoming.length);
-                html += fuList(upcoming, 'date-soon');
+                html += fuListCompact(upcoming, 'date-soon');
                 html += '</div>';
             }
 
@@ -568,16 +624,19 @@
                 html += '</div>';
             }
 
-            // Delegation summary
+            // Delegation summary as table
             const deleg = es.delegation_summary || {};
             if (Object.keys(deleg).length > 0) {
+                const delegSorted = Object.entries(deleg).sort((a,b) => b[1] - a[1]);
+                const maxDeleg = Math.max(...delegSorted.map(d => d[1]), 1);
                 html += '<div class="section">';
                 html += secHead('Delegation Load', Object.keys(deleg).length + ' people');
-                html += '<div class="tag-list">';
-                for (const [p, c] of Object.entries(deleg).sort((a,b) => b[1] - a[1])) {
-                    html += '<span class="tag">' + esc(p) + '<span class="tag-count">' + c + ' tasks</span></span>';
+                html += '<table class="deleg-table"><thead><tr><th>Person</th><th style="text-align:right">Tasks</th></tr></thead><tbody>';
+                for (const [p, c] of delegSorted) {
+                    const pct = Math.round((c / maxDeleg) * 100);
+                    html += '<tr><td>' + esc(p) + '<div class="deleg-bar" style="width:' + pct + '%"></div></td><td>' + c + '</td></tr>';
                 }
-                html += '</div></div>';
+                html += '</tbody></table></div>';
             }
 
             content.innerHTML = html || '<div class="empty">No intelligence data yet.</div>';
@@ -770,8 +829,8 @@
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
         // ---- Render helpers ----
-        function stat(val, label, color) {
-            return '<div class="stat"><div class="stat-val" style="color:var(' + color + ')">' + val + '</div><div class="stat-lbl">' + label + '</div></div>';
+        function stat(val, label, color, cls) {
+            return '<div class="stat ' + (cls || '') + '"><div class="stat-val" style="color:var(' + color + ')">' + val + '</div><div class="stat-lbl">' + label + '</div></div>';
         }
 
         function matrixCell(cls, title, items, qnum) {
@@ -807,7 +866,7 @@
         function secHead(t, c) { return '<div class="section-head"><span class="section-title">' + t + '</span><span class="section-count">' + c + '</span></div>'; }
 
         function fuList(items, cls) {
-            let h = '';
+            let h = '<div class="fu-list">';
             for (const t of items) {
                 h += '<div class="fu-row">';
                 h += '<span class="fu-date ' + cls + '">' + (t.follow_up_date || '--') + '</span>';
@@ -816,6 +875,20 @@
                 h += '<button class="fu-action" data-id="' + t.id + '">Done</button>';
                 h += '</div>';
             }
+            h += '</div>';
+            return h;
+        }
+
+        function fuListCompact(items, cls) {
+            let h = '<div class="fu-compact">';
+            for (const t of items) {
+                h += '<div class="fu-row">';
+                h += '<span class="fu-date ' + cls + '">' + (t.follow_up_date || '--') + '</span>';
+                h += '<span class="fu-desc">' + esc(t.description) + '</span>';
+                h += '<span class="fu-owner">' + esc(t.owner || '') + '</span>';
+                h += '</div>';
+            }
+            h += '</div>';
             return h;
         }
 
@@ -830,7 +903,99 @@
 
         function esc(s) { if (!s) return ''; const el = document.createElement('span'); el.textContent = s; return el.innerHTML; }
 
-        loadIntel();
+        // Mock data for design evaluation
+        function getExecutiveMockData() {
+            const today = new Date().toISOString().slice(0,10);
+            const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+            const threeDaysAgo = new Date(Date.now() - 3*86400000).toISOString().slice(0,10);
+            const fiveDaysAgo = new Date(Date.now() - 5*86400000).toISOString().slice(0,10);
+            const twoDaysOut = new Date(Date.now() + 2*86400000).toISOString().slice(0,10);
+            const fourDaysOut = new Date(Date.now() + 4*86400000).toISOString().slice(0,10);
+            const weekOut = new Date(Date.now() + 7*86400000).toISOString().slice(0,10);
+            const twoWeeksOut = new Date(Date.now() + 14*86400000).toISOString().slice(0,10);
+
+            function mkTask(id, desc, owner, q, fuDate, topic, src, ctx, steps) {
+                return {
+                    id, description: desc, owner, quadrant: q, follow_up_date: fuDate || '',
+                    status: 'open', topics: topic ? [topic] : ['general'],
+                    source_title: src || '', source_url: '', source_context: ctx || '', steps: steps || '',
+                    created_at: fiveDaysAgo + 'T10:00:00Z',
+                };
+            }
+
+            const q1 = [
+                mkTask('t1', 'Finalize Q2 board deck — missing revenue slide', 'Me', 1, yesterday, 'Strategy', 'Board Prep Meeting', 'CFO flagged gap in revenue projections', 'Pull Q1 actuals from finance\nDraft projections for Q2-Q4'),
+                mkTask('t2', 'Approve vendor contract for Azure migration', 'Me', 1, today, 'Infrastructure', 'IT Review', 'Legal cleared; needs CEO sign-off by EOD', ''),
+                mkTask('t3', 'Respond to Acme Corp partnership proposal', 'Me', 1, today, 'Partnerships', 'Email from J. Smith', 'They want answer by Wednesday', 'Review terms sheet\nDiscuss with legal\nSend counter-proposal'),
+                mkTask('t4', 'Sign off on new hire packages (3 engineers)', 'Me', 1, twoDaysOut, 'HR', 'Hiring Pipeline Review', 'Candidates accepted; offers waiting approval'),
+                mkTask('t5', 'Review and approve crisis comms plan', 'Me', 1, today, 'Communications', 'PR Team Standup', 'Data breach scenario playbook needs sign-off'),
+            ];
+
+            const q2 = [
+                mkTask('t6', 'Prepare talking points for investor call Mar 25', 'Me', 2, weekOut, 'Investor Relations', 'IR Calendar', 'Quarterly update call with top 5 investors'),
+                mkTask('t7', 'Schedule deep-dive on AI product roadmap', 'Me', 2, fourDaysOut, 'Product', 'Product Sync', 'VP Product wants 90-min session to align on H2 priorities'),
+                mkTask('t8', 'Review security audit findings', 'Me', 2, weekOut, 'Security', 'CISO Weekly', '3 critical, 12 high findings from external pen test'),
+                mkTask('t9', 'Plan offsite agenda for leadership retreat', 'Me', 2, twoWeeksOut, 'Team', 'Leadership Meeting', 'Apr 15-16 retreat, need agenda by Apr 1'),
+                mkTask('t10', 'Evaluate M&A target — DataFlow Inc.', 'Me', 2, twoWeeksOut, 'Strategy', 'Corp Dev Update', 'Initial due diligence memo from bankers arrived'),
+                mkTask('t11', 'Draft OKRs for Q2', 'Me', 2, weekOut, 'Strategy', 'Planning Session', 'Need to cascade from board-level goals'),
+                mkTask('t12', 'Review customer NPS trends and churn report', 'Me', 2, fourDaysOut, 'Customer Success', 'CS Weekly', 'NPS dropped 5pts last month'),
+            ];
+
+            const q3 = [
+                mkTask('t13', 'Compile competitive analysis for board deck', 'Sarah Chen', 3, twoDaysOut, 'Strategy', 'Board Prep Meeting', 'Need market share data and competitor moves'),
+                mkTask('t14', 'Draft press release for product launch', 'Marcus Webb', 3, fourDaysOut, 'Communications', 'Marketing Standup', 'Launch date: April 1'),
+                mkTask('t15', 'Run reference checks on VP Sales candidates', 'Lisa Park', 3, threeDaysAgo, 'HR', 'Hiring Pipeline Review', '2 finalists, need references before next round'),
+                mkTask('t16', 'Prepare SOC2 compliance documentation', 'David Kim', 3, weekOut, 'Security', 'CISO Weekly', 'Auditor visit scheduled for April'),
+                mkTask('t17', 'Negotiate renewal terms with AWS', 'Raj Patel', 3, fourDaysOut, 'Infrastructure', 'Vendor Review', 'Contract expires May 1, aiming for 15% reduction'),
+                mkTask('t18', 'Update employee handbook for remote policy', 'Lisa Park', 3, twoWeeksOut, 'HR', 'People Ops Sync', 'New hybrid policy effective Q2'),
+                mkTask('t19', 'Build customer success dashboard', 'Sarah Chen', 3, weekOut, 'Customer Success', 'CS Weekly', 'Need real-time churn and health scores'),
+            ];
+
+            const q4 = [
+                mkTask('t20', 'Research carbon offset programs for ESG report', 'Marcus Webb', 4, twoWeeksOut, 'ESG', 'Board Request', 'Board wants ESG section in annual report'),
+                mkTask('t21', 'Explore partnership with university AI lab', 'David Kim', 4, twoWeeksOut, 'Innovation', 'CTO Suggestion', 'Could help with talent pipeline'),
+                mkTask('t22', 'Plan company summer event', 'Lisa Park', 4, twoWeeksOut, 'Team', 'People Ops Sync', 'Budget approved, need venue by May'),
+                mkTask('t23', 'Evaluate new CRM vendors', 'Raj Patel', 4, twoWeeksOut, 'Operations', 'Sales Ops', 'Current contract ends in 6 months'),
+            ];
+
+            return {
+                last_scan_at: new Date().toISOString(),
+                pages_scanned: 47,
+                executive_summary: {
+                    total_open: q1.length + q2.length + q3.length + q4.length,
+                    total_delegated: q3.length + q4.length - 2,
+                    total_overdue: 2,
+                    matrix: {
+                        q1_do_first: q1, q1_count: q1.length,
+                        q2_schedule: q2, q2_count: q2.length,
+                        q3_delegate: q3, q3_count: q3.length,
+                        q4_defer: q4, q4_count: q4.length,
+                    },
+                    overdue_follow_ups: [
+                        q1[0], // board deck
+                        q3[2], // reference checks
+                    ],
+                    upcoming_follow_ups: [
+                        q1[1], q1[2], q1[4], q1[3], q2[6], q3[0], q2[1],
+                    ],
+                    top_topics: { 'Strategy': 4, 'HR': 3, 'Security': 2, 'Infrastructure': 2, 'Communications': 2, 'Customer Success': 2, 'Product': 1, 'Partnerships': 1 },
+                    delegation_summary: { 'Sarah Chen': 2, 'Marcus Webb': 2, 'Lisa Park': 3, 'David Kim': 2, 'Raj Patel': 2 },
+                },
+                topics: { 'Strategy': 4, 'HR': 3, 'Security': 2, 'Infrastructure': 2, 'Communications': 2, 'Customer Success': 2, 'Product': 1, 'Partnerships': 1 },
+                people: { 'Sarah Chen': 2, 'Marcus Webb': 2, 'Lisa Park': 3, 'David Kim': 2, 'Raj Patel': 2 },
+            };
+        }
+
+        async function loadIntelWithMock() {
+            await loadIntel();
+            if (!currentIntel && new URLSearchParams(location.search).has('mock')) {
+                const mock = getExecutiveMockData();
+                scanInfo.textContent = 'Last scan: ' + new Date(mock.last_scan_at).toLocaleString(undefined, {hour12:false}) + ' — ' + mock.pages_scanned + ' pages';
+                renderIntel(mock);
+            }
+        }
+
+        loadIntelWithMock();
     })();
     </script>
 </body>

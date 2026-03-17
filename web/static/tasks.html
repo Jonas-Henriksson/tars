@@ -118,10 +118,19 @@
             background: var(--surface);
             padding: 14px 20px;
             text-align: center;
+            position: relative;
         }
 
         .summary-cell:first-child { border-radius: 8px 0 0 8px; }
         .summary-cell:last-child { border-radius: 0 8px 8px 0; }
+        .summary-cell.has-accent::before {
+            content: ''; position: absolute; left: 0; top: 20%; bottom: 20%; width: 3px;
+            border-radius: 0 2px 2px 0;
+        }
+        .summary-cell.accent-red::before { background: var(--red); }
+        .summary-cell.accent-amber::before { background: var(--amber); }
+        .summary-cell.accent-green::before { background: var(--green); }
+        .summary-cell.accent-blue::before { background: var(--accent); }
 
         .summary-value {
             font-size: 24px;
@@ -136,6 +145,12 @@
             letter-spacing: 0.06em;
             color: var(--text-muted);
             margin-top: 2px;
+        }
+        .summary-sub {
+            font-size: 10px;
+            color: var(--text-muted);
+            font-weight: 400;
+            margin-top: 1px;
         }
 
         .val-open { color: var(--text); }
@@ -261,6 +276,13 @@
             background: var(--surface);
         }
 
+        .task-table tbody tr.row-overdue {
+            background: rgba(239, 68, 68, 0.04);
+        }
+        .task-table tbody tr.row-overdue:hover {
+            background: rgba(239, 68, 68, 0.08);
+        }
+
         .task-table td {
             padding: 10px 12px;
             font-size: 13px;
@@ -272,7 +294,7 @@
         .col-owner { width: 130px; }
         .col-topic { width: 150px; }
         .col-source { width: 160px; }
-        .col-date { width: 100px; }
+        .col-date { width: 115px; }
         .col-actions { width: 80px; text-align: right; }
 
         /* Status badges */
@@ -328,6 +350,23 @@
             color: var(--text-muted);
             font-variant-numeric: tabular-nums;
         }
+        .date-cell.date-overdue { color: var(--red); font-weight: 600; }
+        .date-cell.date-soon { color: var(--amber-text); }
+        .date-cell.date-ok { color: var(--text-muted); }
+
+        /* Attention bar */
+        .attention-bar {
+            display: flex; gap: 16px; padding: 12px 16px; margin: 0 0 16px;
+            background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 8px;
+            font-size: 13px; color: var(--text-secondary); align-items: center; flex-wrap: wrap;
+        }
+        .attention-bar:empty { display: none; }
+        .attention-item { display: flex; align-items: center; gap: 6px; }
+        .attention-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .attention-dot.red { background: var(--red); }
+        .attention-dot.amber { background: var(--amber); }
+        .attention-dot.blue { background: var(--accent); }
+        .attention-count { font-weight: 600; color: var(--text); }
 
         /* Description */
         .task-desc {
@@ -362,20 +401,20 @@
 
         /* Group header rows */
         .group-header-row td {
-            padding: 16px 12px 8px;
-            border-bottom: 1px solid var(--border);
+            padding: 20px 12px 8px;
+            border-bottom: 2px solid var(--border);
+            background: var(--surface);
         }
 
         .group-header-row:first-child td {
-            padding-top: 8px;
+            padding-top: 10px;
         }
 
         .group-label {
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 600;
             color: var(--text);
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
+            letter-spacing: 0.02em;
         }
 
         .group-count {
@@ -383,8 +422,10 @@
             color: var(--text-muted);
             font-weight: 400;
             margin-left: 8px;
-            text-transform: none;
             letter-spacing: 0;
+        }
+        .group-overdue {
+            font-size: 11px; color: var(--red); font-weight: 500; margin-left: 8px;
         }
 
         /* Empty state */
@@ -494,15 +535,15 @@
             <div class="scan-info" id="scanInfo" style="font-size:12px; color:var(--text-muted);"></div>
         </div>
         <div class="summary-strip" id="summary">
-            <div class="summary-cell">
+            <div class="summary-cell has-accent accent-blue">
                 <div class="summary-value val-open" id="countOpen">--</div>
                 <div class="summary-label">Open</div>
             </div>
-            <div class="summary-cell">
+            <div class="summary-cell has-accent accent-amber">
                 <div class="summary-value val-followed" id="countFollowed">--</div>
                 <div class="summary-label">Followed up</div>
             </div>
-            <div class="summary-cell">
+            <div class="summary-cell has-accent accent-green">
                 <div class="summary-value val-done" id="countDone">--</div>
                 <div class="summary-label">Done</div>
             </div>
@@ -510,7 +551,12 @@
                 <div class="summary-value val-total" id="countTotal">--</div>
                 <div class="summary-label">Total</div>
             </div>
+            <div class="summary-cell has-accent accent-red">
+                <div class="summary-value" style="color:var(--red)" id="countOverdue">--</div>
+                <div class="summary-label">Overdue</div>
+            </div>
         </div>
+        <div class="attention-bar" id="attentionBar"></div>
 
         <div class="toolbar">
             <input type="text" class="search-input" id="searchInput" placeholder="Filter by description, owner, or topic...">
@@ -627,7 +673,10 @@
                 const resp = await fetch('/api/tasks?include_completed=true');
                 const data = await resp.json();
                 allTasks = data.tasks || [];
-                updateSummary(data);
+                if (allTasks.length === 0 && new URLSearchParams(location.search).has('mock')) {
+                    allTasks = getTasksMockData();
+                }
+                updateSummary({ tasks: allTasks });
                 render();
             } catch (err) {
                 container.innerHTML = '<div class="empty-state"><p>Failed to load tasks</p><p>' + err.message + '</p></div>';
@@ -644,15 +693,46 @@
             }
         }
 
+        function getDateClass(d) {
+            if (!d) return 'date-ok';
+            const today = new Date().toISOString().slice(0, 10);
+            if (d < today) return 'date-overdue';
+            const week = new Date(Date.now() + 7*86400000).toISOString().slice(0, 10);
+            if (d <= week) return 'date-soon';
+            return 'date-ok';
+        }
+
         function updateSummary(data) {
             const tasks = data.tasks || [];
             const open = tasks.filter(t => t.status === 'open').length;
             const followed = tasks.filter(t => t.status === 'followed_up').length;
             const done = tasks.filter(t => t.status === 'done').length;
+            const today = new Date().toISOString().slice(0, 10);
+            const weekOut = new Date(Date.now() + 7*86400000).toISOString().slice(0, 10);
+            const activeTasks = tasks.filter(t => t.status !== 'done');
+            const overdue = activeTasks.filter(t => t.follow_up_date && t.follow_up_date < today);
+            const dueThisWeek = activeTasks.filter(t => t.follow_up_date && t.follow_up_date >= today && t.follow_up_date <= weekOut);
+            const unassigned = activeTasks.filter(t => !t.owner || t.owner === 'Unassigned');
+
             document.getElementById('countOpen').textContent = open;
             document.getElementById('countFollowed').textContent = followed;
             document.getElementById('countDone').textContent = done;
             document.getElementById('countTotal').textContent = tasks.length;
+            document.getElementById('countOverdue').textContent = overdue.length;
+
+            // Attention bar
+            const bar = document.getElementById('attentionBar');
+            let attn = '';
+            if (overdue.length > 0) {
+                attn += '<span class="attention-item"><span class="attention-dot red"></span><span class="attention-count">' + overdue.length + '</span> overdue follow-up' + (overdue.length > 1 ? 's' : '') + ' need attention</span>';
+            }
+            if (dueThisWeek.length > 0) {
+                attn += '<span class="attention-item"><span class="attention-dot amber"></span><span class="attention-count">' + dueThisWeek.length + '</span> due this week</span>';
+            }
+            if (unassigned.length > 0) {
+                attn += '<span class="attention-item"><span class="attention-dot blue"></span><span class="attention-count">' + unassigned.length + '</span> unassigned</span>';
+            }
+            bar.innerHTML = attn;
         }
 
         // Filtering
@@ -732,13 +812,16 @@
             html += thCell('Owner', 'owner', 'col-owner');
             html += thCell('Topic', 'topic', 'col-topic');
             html += thCell('Source', 'source_title', 'col-source');
-            html += thCell('Date', 'created_at', 'col-date');
+            html += thCell('Due / Created', 'follow_up_date', 'col-date');
             html += '<th class="col-actions"></th>';
             html += '</tr></thead><tbody>';
 
             if (groups) {
+                const today = new Date().toISOString().slice(0, 10);
                 for (const g of groups) {
-                    html += '<tr class="group-header-row"><td colspan="' + cols + '"><span class="group-label">' + esc(g.key) + '</span><span class="group-count">' + g.tasks.length + '</span></td></tr>';
+                    const overdueInGroup = g.tasks.filter(t => t.status !== 'done' && t.follow_up_date && t.follow_up_date < today).length;
+                    const overdueHtml = overdueInGroup > 0 ? '<span class="group-overdue">' + overdueInGroup + ' overdue</span>' : '';
+                    html += '<tr class="group-header-row"><td colspan="' + cols + '"><span class="group-label">' + esc(g.key) + '</span><span class="group-count">' + g.tasks.length + '</span>' + overdueHtml + '</td></tr>';
                     for (const t of g.tasks) html += taskRow(t);
                 }
             } else {
@@ -786,7 +869,8 @@
         }
 
         function taskRow(t) {
-            const rowClass = t.status === 'done' ? 'row-done' : '';
+            const isOverdue = t.status !== 'done' && t.follow_up_date && getDateClass(t.follow_up_date) === 'date-overdue';
+            const rowClass = t.status === 'done' ? 'row-done' : (isOverdue ? 'row-overdue' : '');
             let html = '<tr class="' + rowClass + '" data-task-id="' + t.id + '">';
 
             // Status
@@ -810,12 +894,15 @@
                 html += '<td class="col-source"><span class="source-link">' + esc(truncate(t.source_title || '--', 24)) + '</span></td>';
             }
 
-            // Date — show Notion created date, with follow-up as sub-line
-            html += '<td class="col-date"><span class="date-cell">' + formatDate(t.created_at) + '</span>';
-            if (t.follow_up_date) {
-                html += '<div class="date-sub">Follow-up: ' + formatDate(t.follow_up_date) + '</div>';
+            // Date — show follow-up date prominently with urgency color, created as sub-line
+            if (t.follow_up_date && t.status !== 'done') {
+                const dc = getDateClass(t.follow_up_date);
+                html += '<td class="col-date"><span class="date-cell ' + dc + '">' + formatDate(t.follow_up_date) + '</span>';
+                html += '<div class="date-sub">Created: ' + formatDate(t.created_at) + '</div>';
+                html += '</td>';
+            } else {
+                html += '<td class="col-date"><span class="date-cell">' + formatDate(t.created_at) + '</span></td>';
             }
-            html += '</td>';
 
             // Actions
             html += '<td class="col-actions">';
@@ -1024,6 +1111,69 @@
                     el.textContent = 'No Notion scan yet. Go to Executive to scan.';
                 }
             } catch(e) {}
+        }
+
+        function getTasksMockData() {
+            const owners = ['Jonas', 'Stefan', 'Rachel', 'Karin', 'Matthias', 'Vakhat', 'Team', 'Me'];
+            const topics = ['platform-migration', 'supply-chain', 'security', 'budget', 'hiring', 'compliance', 'infrastructure', 'analytics'];
+            const statuses = ['open', 'open', 'open', 'open', 'followed_up', 'done', 'done'];
+            const sources = [
+                { title: 'Architecture Review - Platform Migration', url: 'https://notion.so/p1' },
+                { title: 'Supply Chain Sync', url: 'https://notion.so/p2' },
+                { title: '1:1 with Stefan', url: 'https://notion.so/p3' },
+                { title: 'Budget Planning Q2', url: 'https://notion.so/p4' },
+                { title: 'Security Audit Review', url: 'https://notion.so/p5' },
+                { title: 'Team Standup', url: 'https://notion.so/p6' },
+            ];
+            const descs = [
+                'Finalize vendor contract for cloud migration',
+                'Review updated security audit findings',
+                'Prepare board presentation on Q1 results',
+                'Sign off on new hire compensation packages',
+                'Update disaster recovery runbook',
+                'Schedule customer success review for Acme Corp',
+                'Complete compliance training modules',
+                'Draft RFP for analytics platform',
+                'Set up CI/CD pipeline for new microservices',
+                'Review supply chain forecasting model results',
+                'Approve Q2 marketing budget allocation',
+                'Coordinate office move logistics with facilities',
+                'Evaluate new monitoring tool proposals',
+                'Prepare quarterly investor update slides',
+                'Follow up on Azure cost optimization recommendations',
+                'Schedule architecture review for payment service',
+                'Review and approve updated data retention policy',
+                'Coordinate cross-team dependency mapping session',
+                'Draft job descriptions for senior engineer roles',
+                'Plan team offsite agenda for April',
+                'Review NPS survey results and draft action plan',
+                'Migrate legacy authentication to SSO provider',
+                'Complete annual vendor risk assessments',
+                'Set up automated regression test suite',
+                'Draft proposal for customer feedback portal',
+            ];
+            const tasks = [];
+            for (let i = 0; i < descs.length; i++) {
+                const status = statuses[i % statuses.length];
+                const daysAgo = Math.floor(Math.random() * 30) + 1;
+                const created = new Date(Date.now() - daysAgo * 86400000).toISOString();
+                const src = sources[i % sources.length];
+                const hasFollowUp = Math.random() > 0.4;
+                const followUp = hasFollowUp ? new Date(Date.now() + (Math.random() * 14 - 7) * 86400000).toISOString().slice(0, 10) : '';
+                tasks.push({
+                    id: 'mock-' + i,
+                    description: descs[i],
+                    owner: owners[i % owners.length],
+                    topic: topics[i % topics.length],
+                    status: status,
+                    source_url: src.url,
+                    source_title: src.title,
+                    created_at: created,
+                    follow_up_date: followUp,
+                    completed: status === 'done',
+                });
+            }
+            return tasks;
         }
 
         // Init
