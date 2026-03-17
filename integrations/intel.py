@@ -94,19 +94,27 @@ def _extract_people(text: str, title: str) -> list[str]:
 def _detect_delegations(text: str) -> list[dict]:
     """Detect delegated tasks: items assigned to other people."""
     delegations = []
+    seen: set[str] = set()
 
-    # Patterns: "[ ] @Name: do something", "ACTION: @Name do something"
+    # Patterns: "[ ] @Name: do something", "ACTION: @Name do something",
+    #           "- @Name: task", "• @Name task", "Name to/will/should do X"
     patterns = [
         re.compile(r"\[[ ]\]\s*@(\w[\w\s]*?)[\s:]+(.+)"),
         re.compile(r"(?:ACTION|TODO|TASK)[:\s]+@(\w[\w\s]*?)[\s:]+(.+)", re.IGNORECASE),
         re.compile(r"[•\-\*]\s*@(\w[\w\s]*?)[\s:]+(.+)"),
+        # "[ ] Name to/will/should verb ..."
+        re.compile(r"\[[ ]\]\s*([A-Z][a-z]+)\s+(?:to|will|should|needs? to)\s+(.{5,})"),
+        # "@Name verb ..." on its own line
+        re.compile(r"^[•\-\*\s]*@(\w+)\s+(.{8,})$", re.MULTILINE),
     ]
 
     for pattern in patterns:
         for match in pattern.finditer(text):
             owner = match.group(1).strip()
             desc = match.group(2).strip()
-            if owner and desc:
+            key = (owner.lower(), desc.lower()[:50])
+            if owner and desc and key not in seen:
+                seen.add(key)
                 delegations.append({"owner": owner, "description": desc})
 
     return delegations
@@ -191,6 +199,62 @@ def _classify_priority(text: str, is_delegated: bool, age_days: int = 0) -> dict
 
 
 # -----------------------------------------------------------------------
+# Notion page fetcher with pagination
+# -----------------------------------------------------------------------
+
+async def _fetch_all_pages(max_pages: int) -> list[dict]:
+    """Fetch pages from Notion with pagination support."""
+    import httpx
+
+    from integrations.notion import _format_page, _headers, is_configured
+    from integrations.notion import _BASE_URL
+
+    if not is_configured():
+        return []
+
+    pages: list[dict] = []
+    start_cursor: str | None = None
+    batch_size = min(max_pages, 100)
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        while len(pages) < max_pages:
+            body: dict[str, Any] = {
+                "filter": {"value": "page", "property": "object"},
+                "sort": {"direction": "descending", "timestamp": "last_edited_time"},
+                "page_size": batch_size,
+            }
+            if start_cursor:
+                body["start_cursor"] = start_cursor
+
+            try:
+                resp = await client.post(
+                    f"{_BASE_URL}/search",
+                    headers=_headers(),
+                    json=body,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as exc:
+                logger.error("Notion search API failed: %s", exc)
+                break
+
+            results = data.get("results", [])
+            if not results:
+                break
+
+            for p in results:
+                pages.append(_format_page(p))
+                if len(pages) >= max_pages:
+                    break
+
+            if not data.get("has_more") or not data.get("next_cursor"):
+                break
+            start_cursor = data["next_cursor"]
+
+    return pages
+
+
+# -----------------------------------------------------------------------
 # Main scan
 # -----------------------------------------------------------------------
 
@@ -206,28 +270,31 @@ async def scan_notion(max_pages: int = 50) -> dict:
     Returns:
         Summary of scan results.
     """
-    from integrations.notion import get_page_content, get_recently_edited_pages, is_configured
+    from integrations.notion import get_page_content, is_configured as notion_configured
 
-    if not is_configured():
+    if not notion_configured():
         raise RuntimeError("Notion is not configured. Set NOTION_API_KEY in .env.")
 
     intel = _load_intel()
     now = datetime.now(timezone.utc)
 
-    # Get all recent pages (sorted by last edited)
-    result = await get_recently_edited_pages(since=None, max_results=max_pages)
-    pages = result.get("pages", [])
+    # Paginate through all accessible pages via Notion search API
+    pages = await _fetch_all_pages(max_pages)
+    logger.info("Intel scan: fetched %d pages from Notion", len(pages))
 
     topic_counter: Counter = Counter()
     people_counter: Counter = Counter()
     new_tasks: list[dict] = []
     existing_task_descs = {t["description"].lower() for t in intel.get("smart_tasks", [])}
+    pages_with_content = 0
+    errors = 0
 
     for page in pages:
         try:
             content_data = await get_page_content(page["id"])
         except Exception as exc:
-            logger.warning("Failed to read page %s: %s", page["id"], exc)
+            logger.warning("Failed to read page %s (%s): %s", page.get("title", "?"), page["id"], exc)
+            errors += 1
             continue
 
         title = content_data.get("title", "")
@@ -235,7 +302,9 @@ async def scan_notion(max_pages: int = 50) -> dict:
         page_date = page.get("last_edited_time", "")
 
         if not content.strip():
+            logger.debug("Intel scan: skipping empty page '%s'", title)
             continue
+        pages_with_content += 1
 
         # Detect topics
         topics = _detect_topics(content, title)
@@ -325,6 +394,8 @@ async def scan_notion(max_pages: int = 50) -> dict:
 
     return {
         "pages_scanned": len(pages),
+        "pages_with_content": pages_with_content,
+        "pages_failed": errors,
         "topics_found": len(intel["topics"]),
         "people_found": len(intel["people"]),
         "new_tasks_added": len(new_tasks),
@@ -338,12 +409,30 @@ async def scan_notion(max_pages: int = 50) -> dict:
 def _extract_own_tasks(text: str, title: str) -> list[dict]:
     """Extract tasks assigned to the user (no @mention, or self-referencing)."""
     tasks = []
-    for match in re.finditer(r"\[[ ]\]\s*([^@\n].{5,})", text):
+    seen: set[str] = set()
+
+    # Pattern 1: unchecked checkboxes without @mention or name delegation
+    for match in re.finditer(r"\[[ ]\]\s*(.{6,})", text):
         desc = match.group(1).strip()
-        # Skip if it looks like someone else's task
-        if re.match(r"[A-Z][a-z]+\s+(to|will|should)\s+", desc):
+        if desc.startswith("@"):
             continue
-        tasks.append({"description": desc})
+        if re.match(r"[A-Z][a-z]+\s+(to|will|should|needs? to)\s+", desc):
+            continue
+        key = desc.lower()[:50]
+        if key not in seen:
+            seen.add(key)
+            tasks.append({"description": desc})
+
+    # Pattern 2: TODO/ACTION lines without @mention
+    for match in re.finditer(r"(?:TODO|ACTION)[:\s]+([^@\n]{6,})", text):
+        desc = match.group(1).strip()
+        if re.match(r"[A-Z][a-z]+\s+(to|will|should|needs? to)\s+", desc):
+            continue
+        key = desc.lower()[:50]
+        if key not in seen:
+            seen.add(key)
+            tasks.append({"description": desc})
+
     return tasks
 
 
