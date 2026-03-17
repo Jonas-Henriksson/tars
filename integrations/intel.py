@@ -255,6 +255,39 @@ async def _fetch_all_pages(max_pages: int) -> list[dict]:
 
 
 # -----------------------------------------------------------------------
+# Sync intel tasks to tracked tasks (for Tasks page)
+# -----------------------------------------------------------------------
+
+def _sync_to_tracked_tasks(new_tasks: list[dict]) -> None:
+    """Save intel smart tasks to notion_tracked_tasks.json so the Tasks page shows them."""
+    from integrations.notion_tasks import _load_tasks, _save_tasks
+
+    existing = _load_tasks()
+    existing_descs = {t["description"].lower()[:50] for t in existing}
+
+    for task in new_tasks:
+        if task["description"].lower()[:50] in existing_descs:
+            continue
+        tracked = {
+            "id": task["id"],
+            "description": task["description"],
+            "owner": task.get("owner", "Unassigned"),
+            "topic": task.get("topics", ["General"])[0] if task.get("topics") else "General",
+            "source_title": task.get("source_title", ""),
+            "source_url": task.get("source_url", ""),
+            "source_page_id": task.get("source_page_id", ""),
+            "completed": False,
+            "status": task.get("status", "open"),
+            "followed_up": False,
+            "created_at": task.get("created_at", ""),
+        }
+        existing.append(tracked)
+        existing_descs.add(task["description"].lower()[:50])
+
+    _save_tasks(existing)
+
+
+# -----------------------------------------------------------------------
 # Main scan
 # -----------------------------------------------------------------------
 
@@ -391,6 +424,10 @@ async def scan_notion(max_pages: int = 50) -> dict:
     intel["executive_summary"] = _build_executive_summary(intel)
 
     _save_intel(intel)
+
+    # Also save new tasks to the tracked tasks file so the Tasks page shows them
+    if new_tasks:
+        _sync_to_tracked_tasks(new_tasks)
 
     return {
         "pages_scanned": len(pages),
