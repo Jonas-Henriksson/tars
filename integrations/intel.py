@@ -1450,3 +1450,75 @@ def delete_smart_task(task_id: str) -> dict:
             _save_intel(intel)
             return {"message": "Task deleted."}
     return {"error": f"Task not found: {task_id}"}
+
+
+def search_intel(query: str, max_results: int = 10) -> dict:
+    """Search the intelligence knowledge base.
+
+    Searches across page titles, summaries, topics, people, decisions,
+    and smart tasks to find relevant information.
+
+    Args:
+        query: Search keyword or phrase (case-insensitive).
+        max_results: Maximum number of results to return.
+
+    Returns:
+        Dict with matched pages, tasks, and people.
+    """
+    intel = _load_intel()
+    q = query.lower()
+    results: dict = {"pages": [], "tasks": [], "people": [], "topics": []}
+
+    # Search page index
+    for pid, page in intel.get("page_index", {}).items():
+        title = (page.get("title") or "").lower()
+        summary = (page.get("summary") or "").lower()
+        decisions = " ".join(page.get("decisions") or []).lower()
+        tags = " ".join(page.get("tags") or []).lower()
+        topics = " ".join(page.get("topics") or []).lower()
+        people = " ".join(page.get("people") or []).lower()
+        projects = " ".join(page.get("projects") or []).lower()
+
+        searchable = f"{title} {summary} {decisions} {tags} {topics} {people} {projects}"
+        if q in searchable:
+            results["pages"].append({
+                "page_id": pid,
+                "title": page.get("title", ""),
+                "url": page.get("url", ""),
+                "summary": page.get("summary", ""),
+                "topics": page.get("topics", []),
+                "people": page.get("people", []),
+                "decisions": page.get("decisions", []),
+                "last_edited": page.get("last_edited", ""),
+            })
+            if len(results["pages"]) >= max_results:
+                break
+
+    # Search smart tasks
+    for task in intel.get("smart_tasks", []):
+        desc = (task.get("description") or "").lower()
+        owner = (task.get("owner") or "").lower()
+        ctx = (task.get("source_context") or "").lower()
+        src = (task.get("source_title") or "").lower()
+        topics = " ".join(task.get("topics") or []).lower()
+        steps = (task.get("steps") or "").lower()
+
+        if q in f"{desc} {owner} {ctx} {src} {topics} {steps}":
+            results["tasks"].append(_summarize_task(task))
+            if len(results["tasks"]) >= max_results:
+                break
+
+    # Search people
+    for person, count in intel.get("people", {}).items():
+        if q in person.lower():
+            results["people"].append({"name": person, "mentions": count})
+
+    # Search topics
+    for topic, count in intel.get("topics", {}).items():
+        if q in topic.lower():
+            results["topics"].append({"topic": topic, "count": count})
+
+    total = sum(len(v) for v in results.values())
+    results["total_results"] = total
+    results["query"] = query
+    return results

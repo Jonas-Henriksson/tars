@@ -45,9 +45,27 @@ through Microsoft 365. Keep responses concise and conversational — you're \
 in a voice call, so be natural and don't use markdown or bullet points. \
 Speak like a helpful, slightly witty colleague.
 
+IMPORTANT — You have access to a full intelligence library built from \
+Notion page scans. This includes:
+- An Eisenhower priority matrix with tasks classified as Do First, \
+Schedule, Delegate, or Defer
+- Smart tasks with owners, topics, follow-up dates, delegation tracking, \
+and source context from meeting notes
+- People and topic analysis showing who works on what
+- Tracked meeting tasks with status history
+- An end-of-day briefing compiler with calendar, tasks, email, and \
+proactive recommendations
+
+When the user asks about tasks, priorities, delegation, what needs \
+attention, who owns what, or any question about their work — use the \
+intelligence tools. Start with get_intel for a broad overview or \
+get_smart_tasks for filtered queries. Use daily_briefing for end-of-day \
+summaries. Use search_intel to find specific information across all \
+scanned pages.
+
 When using tools, tell the user what you're doing (e.g. "Let me check \
-your calendar..." or "Creating that task now..."). Always confirm before \
-sending emails or creating events.\
+your priority matrix..." or "Pulling up your intelligence profile..."). \
+Always confirm before sending emails or creating events.\
 """
 
 # Tool definitions for the Realtime API (OpenAI function calling format)
@@ -242,6 +260,7 @@ REALTIME_TOOLS = [
                 "owner": {"type": "string", "description": "Filter by owner name."},
                 "topic": {"type": "string", "description": "Filter by topic."},
                 "status": {"type": "string", "enum": ["open", "done", "followed_up"], "description": "Filter by status."},
+                "include_completed": {"type": "boolean", "description": "Include completed tasks. Default false."},
             },
         },
     },
@@ -326,28 +345,75 @@ REALTIME_TOOLS = [
     {
         "type": "function",
         "name": "get_smart_tasks",
-        "description": "Get smart tasks filtered by owner, topic, or Eisenhower quadrant (1=Do first, 2=Schedule, 3=Delegate, 4=Defer).",
+        "description": "Get smart tasks filtered by owner, topic, or Eisenhower quadrant (1=Do first, 2=Schedule, 3=Delegate, 4=Defer). Returns tasks with descriptions, owners, follow-up dates, source context, and priority classification.",
         "parameters": {
             "type": "object",
             "properties": {
                 "owner": {"type": "string", "description": "Filter by owner name."},
                 "topic": {"type": "string", "description": "Filter by topic."},
                 "quadrant": {"type": "integer", "description": "Eisenhower quadrant 1-4. 0 for all."},
+                "include_done": {"type": "boolean", "description": "Include completed tasks. Default false."},
             },
         },
     },
     {
         "type": "function",
         "name": "update_smart_task",
-        "description": "Update a smart task's status or follow-up date.",
+        "description": "Update a smart task. Can change status, follow-up date, owner (reassign/delegate), quadrant (re-prioritize), description, or action steps.",
         "parameters": {
             "type": "object",
             "properties": {
                 "task_id": {"type": "string", "description": "The task ID."},
-                "status": {"type": "string", "enum": ["open", "done"], "description": "New status."},
+                "status": {"type": "string", "enum": ["open", "done"], "description": "New status. Use 'done' to mark complete."},
                 "follow_up_date": {"type": "string", "description": "New follow-up date YYYY-MM-DD."},
+                "owner": {"type": "string", "description": "Reassign task to this person."},
+                "quadrant": {"type": "integer", "description": "Move to Eisenhower quadrant 1-4."},
+                "description": {"type": "string", "description": "Updated task description."},
+                "steps": {"type": "string", "description": "Action steps, one per line."},
             },
             "required": ["task_id"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "delete_smart_task",
+        "description": "Permanently delete a smart task. Confirm with user before deleting.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "The task ID to delete."},
+            },
+            "required": ["task_id"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "update_tracked_task",
+        "description": "Update a tracked meeting task. Can change owner (reassign), status, topic, description, or follow-up date.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "The task ID."},
+                "status": {"type": "string", "enum": ["open", "done", "followed_up"], "description": "New status."},
+                "owner": {"type": "string", "description": "Reassign to this person."},
+                "topic": {"type": "string", "description": "New topic."},
+                "description": {"type": "string", "description": "Updated description."},
+                "follow_up_date": {"type": "string", "description": "Follow-up date YYYY-MM-DD."},
+            },
+            "required": ["task_id"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "search_intel",
+        "description": "Search the intelligence knowledge base — all scanned Notion page content, topics, people, and tasks. Use this to answer questions about what was discussed in meetings, who said what, project status, etc.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search keyword or phrase."},
+                "max_results": {"type": "integer", "description": "Max results. Default 10."},
+            },
+            "required": ["query"],
         },
     },
 ]
@@ -378,6 +444,9 @@ _TOOL_MAP = {
     "get_intel": ("integrations.intel", "get_intel"),
     "get_smart_tasks": ("integrations.intel", "get_smart_tasks"),
     "update_smart_task": ("integrations.intel", "update_smart_task"),
+    "delete_smart_task": ("integrations.intel", "delete_smart_task"),
+    "search_intel": ("integrations.intel", "search_intel"),
+    "update_tracked_task": ("integrations.notion_tasks", "update_task"),
 }
 
 # Argument name mapping (Realtime tool params -> our function params)
@@ -758,7 +827,11 @@ async def execute_tool(req: ToolCallRequest):
                 remapped[new_key] = v
             args = remapped
 
-        result = await func(**args)
+        import inspect
+        if inspect.iscoroutinefunction(func):
+            result = await func(**args)
+        else:
+            result = func(**args)
         return JSONResponse({"result": result})
 
     except RuntimeError as exc:
