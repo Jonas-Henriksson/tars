@@ -501,7 +501,36 @@
         /* Date sub-line */
         .date-sub { font-size: 10px; color: var(--text-muted); opacity: 0.7; margin-top: 1px; }
 
+        /* Right sidebar (consistent with Graph/Executive) */
+        .page-layout { display: flex; gap: 0; }
+        .page-main { flex: 1; min-width: 0; }
+        .filter-sidebar { width: 280px; flex-shrink: 0; border-left: 1px solid var(--border-subtle); background: var(--surface); padding: 16px; position: sticky; top: 53px; height: calc(100vh - 53px); overflow-y: auto; }
+        .filter-sidebar::-webkit-scrollbar { width: 4px; }
+        .filter-sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .filter-sidebar-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+        .filter-sidebar-title { font-size: 13px; font-weight: 600; }
+        .filter-sidebar-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 4px; font-size: 14px; line-height: 1; }
+        .filter-sidebar-btn:hover { color: var(--text); background: var(--surface-raised); }
+        .filter-section { margin-bottom: 16px; }
+        .filter-section-head { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 8px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+        .filter-section-head:hover { color: var(--text-secondary); }
+        .filter-section-head .chevron { font-size: 10px; transition: transform 0.2s; }
+        .filter-section-head .chevron.open { transform: rotate(90deg); }
+        .filter-active-count { font-size: 10px; color: var(--accent); margin-left: auto; }
+        .filter-bar-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12px; cursor: pointer; border-radius: 4px; }
+        .filter-bar-row:hover { background: var(--surface-raised); margin: 0 -4px; padding: 3px 4px; }
+        .filter-bar-row.active { background: rgba(59,130,246,0.10); margin: 0 -4px; padding: 3px 4px; }
+        .filter-bar-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+        .filter-bar-track { width: 50px; height: 4px; background: var(--surface-raised); border-radius: 2px; flex-shrink: 0; }
+        .filter-bar-fill { height: 100%; border-radius: 2px; min-width: 2px; }
+        .filter-bar-fill.topic { background: var(--purple); }
+        .filter-bar-fill.person { background: var(--accent); }
+        .filter-bar-count { font-size: 10px; color: var(--text-muted); width: 20px; text-align: right; flex-shrink: 0; }
+
         /* Responsive */
+        @media (max-width: 900px) {
+            .filter-sidebar { display: none; }
+        }
         @media (max-width: 768px) {
             .shell { padding: 0 12px; }
             .col-source, .col-date { display: none; }
@@ -533,7 +562,8 @@
         </div>
     </header>
 
-    <main class="shell">
+    <div class="page-layout">
+    <main class="shell page-main">
         <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 0 4px;">
             <div class="scan-info" id="scanInfo" style="font-size:12px; color:var(--text-muted);"></div>
         </div>
@@ -595,6 +625,27 @@
             <div class="loading">Loading tasks...</div>
         </div>
     </main>
+    <aside class="filter-sidebar" id="filterSidebar">
+        <div class="filter-sidebar-head">
+            <span class="filter-sidebar-title">Filters</span>
+            <div style="display:flex;gap:6px;">
+                <button class="filter-sidebar-btn" id="filterClearAll" title="Clear all filters">&#8635;</button>
+            </div>
+        </div>
+        <div class="filter-section">
+            <div class="filter-section-head" data-section="topics">
+                <span class="chevron open">&#9656;</span> Topics <span class="filter-active-count" id="topicActiveCount"></span>
+            </div>
+            <div id="topicFilters"></div>
+        </div>
+        <div class="filter-section">
+            <div class="filter-section-head" data-section="people">
+                <span class="chevron open">&#9656;</span> People <span class="filter-active-count" id="peopleActiveCount"></span>
+            </div>
+            <div id="peopleFilters"></div>
+        </div>
+    </aside>
+    </div>
 
     <!-- Task detail modal -->
     <div class="modal-overlay" id="taskModal">
@@ -652,6 +703,8 @@
         let dateFrom = '';
         let dateTo = '';
         let dateField = 'created_at';
+        let activeTopicFilter = null;
+        let activePeopleFilter = null;
 
         const searchInput = document.getElementById('searchInput');
         const statusFilter = document.getElementById('statusFilter');
@@ -762,6 +815,13 @@
                     if (dateTo && val > dateTo) return false;
                     return true;
                 });
+            }
+            // Topic/People sidebar filter
+            if (activeTopicFilter) {
+                tasks = tasks.filter(t => (t.topic || '').toLowerCase() === activeTopicFilter.toLowerCase());
+            }
+            if (activePeopleFilter) {
+                tasks = tasks.filter(t => (t.owner || '').toLowerCase() === activePeopleFilter.toLowerCase());
             }
             tasks = [...tasks].sort((a, b) => {
                 let va = a[sortCol] || '';
@@ -1179,8 +1239,82 @@
             return tasks;
         }
 
+        // ---- Sidebar filters ----
+        function renderSidebarFilters() {
+            const topicCounts = {};
+            const ownerCounts = {};
+            for (const t of allTasks) {
+                if (t.status === 'done') continue;
+                const topic = t.topic || 'General';
+                const owner = t.owner || 'Unassigned';
+                topicCounts[topic] = (topicCounts[topic] || 0) + 1;
+                ownerCounts[owner] = (ownerCounts[owner] || 0) + 1;
+            }
+
+            const topicContainer = document.getElementById('topicFilters');
+            const peopleContainer = document.getElementById('peopleFilters');
+            const maxT = Math.max(...Object.values(topicCounts), 1);
+            const maxP = Math.max(...Object.values(ownerCounts), 1);
+
+            let th = '';
+            for (const [name, count] of Object.entries(topicCounts).sort((a,b) => b[1] - a[1])) {
+                const pct = Math.round((count / maxT) * 100);
+                const isActive = activeTopicFilter && activeTopicFilter.toLowerCase() === name.toLowerCase();
+                th += '<div class="filter-bar-row' + (isActive ? ' active' : '') + '" data-topic="' + esc(name) + '">';
+                th += '<span class="filter-bar-label">' + esc(name) + '</span>';
+                th += '<div class="filter-bar-track"><div class="filter-bar-fill topic" style="width:' + pct + '%"></div></div>';
+                th += '<span class="filter-bar-count">' + count + '</span></div>';
+            }
+            topicContainer.innerHTML = th || '<div style="font-size:12px;color:var(--text-muted);font-style:italic;">No topics yet</div>';
+
+            let ph = '';
+            for (const [name, count] of Object.entries(ownerCounts).sort((a,b) => b[1] - a[1])) {
+                const pct = Math.round((count / maxP) * 100);
+                const isActive = activePeopleFilter && activePeopleFilter.toLowerCase() === name.toLowerCase();
+                ph += '<div class="filter-bar-row' + (isActive ? ' active' : '') + '" data-person="' + esc(name) + '">';
+                ph += '<span class="filter-bar-label">' + esc(name) + '</span>';
+                ph += '<div class="filter-bar-track"><div class="filter-bar-fill person" style="width:' + pct + '%"></div></div>';
+                ph += '<span class="filter-bar-count">' + count + '</span></div>';
+            }
+            peopleContainer.innerHTML = ph || '<div style="font-size:12px;color:var(--text-muted);font-style:italic;">No people yet</div>';
+
+            document.getElementById('topicActiveCount').textContent = activeTopicFilter ? '1 active' : '';
+            document.getElementById('peopleActiveCount').textContent = activePeopleFilter ? '1 active' : '';
+
+            topicContainer.querySelectorAll('[data-topic]').forEach(el => {
+                el.addEventListener('click', () => {
+                    activeTopicFilter = activeTopicFilter === el.dataset.topic ? null : el.dataset.topic;
+                    render(); renderSidebarFilters();
+                });
+            });
+            peopleContainer.querySelectorAll('[data-person]').forEach(el => {
+                el.addEventListener('click', () => {
+                    activePeopleFilter = activePeopleFilter === el.dataset.person ? null : el.dataset.person;
+                    render(); renderSidebarFilters();
+                });
+            });
+        }
+
+        // Sidebar section collapse toggles
+        document.querySelectorAll('.filter-section-head').forEach(head => {
+            head.addEventListener('click', () => {
+                const body = head.nextElementSibling;
+                const chevron = head.querySelector('.chevron');
+                if (body.style.display === 'none') { body.style.display = 'block'; chevron.classList.add('open'); }
+                else { body.style.display = 'none'; chevron.classList.remove('open'); }
+            });
+        });
+
+        document.getElementById('filterClearAll').addEventListener('click', () => {
+            activeTopicFilter = null; activePeopleFilter = null;
+            render(); renderSidebarFilters();
+        });
+
         // Init
-        loadTasks();
+        (async function init() {
+            await loadTasks();
+            renderSidebarFilters();
+        })();
         loadOwners();
         loadScanInfo();
     })();
