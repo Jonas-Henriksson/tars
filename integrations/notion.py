@@ -113,14 +113,56 @@ async def search_pages(query: str, max_results: int = 10) -> dict:
     return {"pages": pages, "count": len(pages)}
 
 
-async def get_page_content(page_id: str) -> dict:
+async def _fetch_blocks_recursive(
+    client: httpx.AsyncClient, block_id: str, depth: int = 0, max_depth: int = 3,
+) -> list[dict]:
+    """Fetch blocks recursively, including children of blocks that have them.
+
+    Also discovers child_page blocks so callers can recurse into sub-pages.
+    """
+    if depth > max_depth:
+        return []
+
+    all_blocks: list[dict] = []
+    start_cursor: str | None = None
+
+    while True:
+        params: dict = {"page_size": 100}
+        if start_cursor:
+            params["start_cursor"] = start_cursor
+
+        resp = await client.get(
+            f"{_BASE_URL}/blocks/{block_id}/children",
+            headers=_headers(),
+            params=params,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        for block in data.get("results", []):
+            all_blocks.append(block)
+            # Recurse into blocks that have children (toggles, columns, etc.)
+            # but NOT child_page / child_database — those are separate pages
+            if block.get("has_children") and block.get("type") not in ("child_page", "child_database"):
+                children = await _fetch_blocks_recursive(client, block["id"], depth + 1, max_depth)
+                all_blocks.extend(children)
+
+        if not data.get("has_more") or not data.get("next_cursor"):
+            break
+        start_cursor = data["next_cursor"]
+
+    return all_blocks
+
+
+async def get_page_content(page_id: str, recurse: bool = True) -> dict:
     """Read the full content of a Notion page.
 
     Args:
         page_id: The Notion page ID.
+        recurse: If True, recursively fetch nested blocks and child pages.
 
     Returns:
-        Dict with page title, content text, and blocks.
+        Dict with page title, content text, blocks, and child_pages list.
     """
     if not is_configured():
         raise RuntimeError("Notion is not configured. Set NOTION_API_KEY in .env.")
@@ -135,18 +177,26 @@ async def get_page_content(page_id: str) -> dict:
         page_data = page_resp.json()
         page_info = _format_page(page_data)
 
-        # Get page blocks (content)
-        blocks_resp = await client.get(
-            f"{_BASE_URL}/blocks/{page_id}/children",
-            headers=_headers(),
-            params={"page_size": 100},
-        )
-        blocks_resp.raise_for_status()
-        blocks_data = blocks_resp.json()
+        # Get page blocks (content) — recursive
+        if recurse:
+            blocks = await _fetch_blocks_recursive(client, page_id)
+        else:
+            blocks_resp = await client.get(
+                f"{_BASE_URL}/blocks/{page_id}/children",
+                headers=_headers(),
+                params={"page_size": 100},
+            )
+            blocks_resp.raise_for_status()
+            blocks = blocks_resp.json().get("results", [])
 
-    blocks = blocks_data.get("results", [])
     lines = []
+    child_pages = []
     for block in blocks:
+        block_type = block.get("type", "")
+        # Track child pages for callers that want to recurse into them
+        if block_type == "child_page":
+            child_title = block.get("child_page", {}).get("title", "")
+            child_pages.append({"id": block["id"], "title": child_title})
         text = _extract_block_text(block)
         if text:
             lines.append(text)
@@ -157,6 +207,7 @@ async def get_page_content(page_id: str) -> dict:
         "url": page_info["url"],
         "content": "\n".join(lines),
         "block_count": len(blocks),
+        "child_pages": child_pages,
     }
 
 

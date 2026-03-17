@@ -322,21 +322,15 @@ async def scan_notion(max_pages: int = 50) -> dict:
     pages_with_content = 0
     errors = 0
 
-    for page in pages:
-        try:
-            content_data = await get_page_content(page["id"])
-        except Exception as exc:
-            logger.warning("Failed to read page %s (%s): %s", page.get("title", "?"), page["id"], exc)
-            errors += 1
-            continue
-
-        title = content_data.get("title", "")
-        content = content_data.get("content", "")
-        page_date = page.get("last_edited_time", "")
+    async def _process_page_content(
+        title: str, content: str, page_url: str, page_id: str, page_date: str,
+    ) -> None:
+        """Process a single page's content for topics, people, and tasks."""
+        nonlocal pages_with_content
 
         if not content.strip():
             logger.debug("Intel scan: skipping empty page '%s'", title)
-            continue
+            return
         pages_with_content += 1
 
         # Detect topics
@@ -355,12 +349,8 @@ async def scan_notion(max_pages: int = 50) -> dict:
             if d["description"].lower() in existing_task_descs:
                 continue
 
-            follow_up = _estimate_follow_up_date(
-                d["description"], page_date,
-            )
-            priority = _classify_priority(
-                d["description"], is_delegated=True,
-            )
+            follow_up = _estimate_follow_up_date(d["description"], page_date)
+            priority = _classify_priority(d["description"], is_delegated=True)
 
             task = {
                 "id": uuid.uuid4().hex[:8],
@@ -368,8 +358,8 @@ async def scan_notion(max_pages: int = 50) -> dict:
                 "owner": d["owner"],
                 "delegated": True,
                 "source_title": title,
-                "source_url": page.get("url", ""),
-                "source_page_id": page["id"],
+                "source_url": page_url,
+                "source_page_id": page_id,
                 "topics": topics,
                 "follow_up_date": follow_up,
                 "priority": priority,
@@ -386,9 +376,7 @@ async def scan_notion(max_pages: int = 50) -> dict:
                 continue
 
             follow_up = _estimate_follow_up_date(ot["description"], page_date)
-            priority = _classify_priority(
-                ot["description"], is_delegated=False,
-            )
+            priority = _classify_priority(ot["description"], is_delegated=False)
 
             task = {
                 "id": uuid.uuid4().hex[:8],
@@ -396,8 +384,8 @@ async def scan_notion(max_pages: int = 50) -> dict:
                 "owner": "Me",
                 "delegated": False,
                 "source_title": title,
-                "source_url": page.get("url", ""),
-                "source_page_id": page["id"],
+                "source_url": page_url,
+                "source_page_id": page_id,
                 "topics": topics,
                 "follow_up_date": follow_up,
                 "priority": priority,
@@ -406,6 +394,37 @@ async def scan_notion(max_pages: int = 50) -> dict:
             }
             new_tasks.append(task)
             existing_task_descs.add(ot["description"].lower())
+
+    for page in pages:
+        try:
+            content_data = await get_page_content(page["id"])
+        except Exception as exc:
+            logger.warning("Failed to read page %s (%s): %s", page.get("title", "?"), page["id"], exc)
+            errors += 1
+            continue
+
+        title = content_data.get("title", "")
+        content = content_data.get("content", "")
+        page_url = page.get("url", "")
+        page_date = page.get("last_edited_time", "")
+
+        # Process the main page content (Summary)
+        await _process_page_content(title, content, page_url, page["id"], page_date)
+
+        # Process child pages (e.g. Summary, Transcript tabs from meeting tools)
+        for child in content_data.get("child_pages", []):
+            try:
+                child_data = await get_page_content(child["id"])
+                child_title = child.get("title", "") or child_data.get("title", "")
+                child_content = child_data.get("content", "")
+                logger.info("Intel scan: reading child page '%s' of '%s'", child_title, title)
+                # Use parent title as source for better context
+                source_title = f"{title} > {child_title}" if child_title else title
+                await _process_page_content(
+                    source_title, child_content, page_url, child["id"], page_date,
+                )
+            except Exception as exc:
+                logger.warning("Failed to read child page %s: %s", child.get("title", "?"), exc)
 
     # Merge into intel
     intel["topics"] = dict(topic_counter.most_common())
