@@ -11,7 +11,25 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: #0a0a0a;
             color: #e0e0e0;
-            height: 100vh;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .shell { max-width: 1120px; margin: 0 auto; padding: 0 24px; width: 100%; }
+
+        header { border-bottom: 1px solid #1e1e21; padding: 16px 0; position: sticky; top: 0; background: #0a0a0a; z-index: 50; }
+        .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #fafafa; }
+        .brand span { font-size: 12px; color: #71717a; font-weight: 400; }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-links a { color: #71717a; text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+        .nav-links a:hover { color: #a1a1aa; background: #111113; }
+        .nav-links a.active { color: #fafafa; background: #18181b; }
+
+        .call-content {
+            flex: 1;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -133,6 +151,28 @@
     </style>
 </head>
 <body>
+    <header>
+        <div class="shell">
+            <div class="header-row">
+                <div class="brand">
+                    <h1>TARS</h1>
+                    <span>Voice</span>
+                </div>
+                <nav class="nav-links">
+                    <a href="/" class="active">Voice</a>
+                    <a href="/tasks">Tasks</a>
+                    <a href="/briefing">Briefing</a>
+                    <a href="/executive">Executive</a>
+                    <a href="/people">People</a>
+                    <a href="/review">Review</a>
+                    <a href="/graph">Graph</a>
+                    <a href="/settings">Settings</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <div class="call-content">
     <div class="container">
         <div class="logo">TARS</div>
         <div class="subtitle">Executive Assistant &middot; Voice Call</div>
@@ -148,6 +188,7 @@
         <div class="status" id="status">Click to call TARS</div>
 
         <div class="hint">Humor setting: 75%</div>
+    </div>
     </div>
 
     <script>
