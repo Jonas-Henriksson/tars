@@ -21,6 +21,7 @@ from integrations.ms_auth import (
     is_configured,
     start_device_flow,
 )
+from integrations.voice import is_configured as voice_configured, transcribe
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "/briefing — Today's calendar, tasks & unread emails\n"
         "/clear — Reset our conversation\n"
         "/status — Check connected services\n\n"
+        "You can also send voice messages — I'll transcribe and respond.\n\n"
         "Humor setting: 75%"
     )
 
@@ -81,12 +83,15 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     else:
         m365_status = "🔑 Microsoft 365: Configured but not signed in (use /login)"
 
+    voice_status = "✅ Voice: Ready" if voice_configured() else "⬜ Voice: Not configured (set OPENAI_API_KEY)"
+
     await update.message.reply_text(
         "TARS Status\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "✅ Telegram: Connected\n"
         "✅ Claude AI: Ready\n"
         f"{m365_status}\n"
+        f"{voice_status}\n"
         "━━━━━━━━━━━━━━━━━━━━"
     )
 
@@ -180,6 +185,59 @@ async def _check_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
             logger.exception("Failed to send reminder %s", reminder["id"])
 
 
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle voice messages — transcribe and route to TARS agent."""
+    if not update.message or not update.message.voice:
+        return
+
+    if not voice_configured():
+        await update.message.reply_text(
+            "Voice messages aren't configured yet.\n"
+            "Set OPENAI_API_KEY in the .env file to enable voice."
+        )
+        return
+
+    chat_id = update.effective_chat.id
+    await update.effective_chat.send_action(ChatAction.TYPING)
+
+    try:
+        # Download the voice file from Telegram
+        voice = update.message.voice
+        voice_file = await voice.get_file()
+
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
+            tmp_path = tmp.name
+            await voice_file.download_to_drive(tmp_path)
+
+        # Transcribe with Whisper
+        result = await transcribe(tmp_path)
+        user_text = result["text"]
+
+        # Clean up temp file
+        Path(tmp_path).unlink(missing_ok=True)
+
+        if not user_text.strip():
+            await update.message.reply_text("I couldn't make out what you said. Try again?")
+            return
+
+        # Show what was heard, then process
+        await update.message.reply_text(f"🎙️ \"{user_text}\"")
+        await update.effective_chat.send_action(ChatAction.TYPING)
+
+        # Route through TARS agent
+        response = await run(chat_id, user_text)
+        await _send_long_message(update, response)
+
+    except Exception:
+        logger.exception("Error processing voice message")
+        await update.message.reply_text(
+            "Couldn't process your voice message. Try again or type it out."
+        )
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle all regular text messages — route to TARS agent."""
     if not update.message or not update.message.text:
@@ -208,6 +266,8 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("login", login_command))
     app.add_handler(CommandHandler("briefing", briefing_command))
+    # Voice handler
+    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     # Message handler — must be added last (catches all text)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 

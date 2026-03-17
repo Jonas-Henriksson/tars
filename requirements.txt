@@ -1,5 +1,6 @@
 python-telegram-bot[ext]
 anthropic
+openai
 msal
 httpx
 python-dotenv
