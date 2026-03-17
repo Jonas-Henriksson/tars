@@ -430,7 +430,7 @@ async def graph_page():
 
 
 @app.get("/api/intel/graph")
-async def get_intel_graph(max_nodes: int = 500):
+async def get_intel_graph(max_nodes: int = 0):
     """Build graph nodes and edges for relationship visualization."""
     from integrations.intel import build_graph_data
 

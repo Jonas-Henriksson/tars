@@ -1086,7 +1086,7 @@ def get_intel() -> dict:
     return intel
 
 
-def build_graph_data(max_nodes: int = 500) -> dict:
+def build_graph_data(max_nodes: int = 0) -> dict:
     """Build graph nodes and edges for the relationship visualization.
 
     Derives relationships from three sources (in priority order):

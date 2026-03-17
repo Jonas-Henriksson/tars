@@ -341,12 +341,12 @@
         });
 
         // --- Load data ---
-        let currentMaxNodes = 500;
+        let currentMaxNodes = 0;
 
         async function loadGraph(maxNodes) {
-            maxNodes = maxNodes || currentMaxNodes;
+            if (maxNodes === undefined) maxNodes = currentMaxNodes;
             try {
-                const resp = await fetch('/api/intel/graph?max_nodes=' + maxNodes);
+                const resp = await fetch('/api/intel/graph' + (maxNodes ? '?max_nodes=' + maxNodes : ''));
                 if (!resp.ok) return;
                 graphData = await resp.json();
                 tasks = graphData.tasks || [];
@@ -565,13 +565,15 @@
                     })
 
                     .d3AlphaDecay(0.02)
-                    .d3VelocityDecay(0.3);
+                    .d3VelocityDecay(0.3)
+                    .onEngineStop(() => {});
 
-                // Force config
-                applyForces();
-
-                // Bloom
-                addBloomEffect();
+                // Defer force config until layout is initialized
+                // (graphData init is async — calling d3ReheatSimulation
+                //  before layout exists causes a crash)
+                setTimeout(() => {
+                    applyForces();
+                }, 0);
             } catch(err) {
                 console.error('ForceGraph3D crashed:', err);
                 Graph = null;
