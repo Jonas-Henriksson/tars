@@ -75,6 +75,32 @@
 
         .loading-text { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
 
+        /* Memory section */
+        .memory-section { margin-top: 40px; }
+        .memory-section-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+        .memory-section-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+        .memory-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 768px) { .memory-grid { grid-template-columns: 1fr; } }
+        .memory-card { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 20px; }
+        .memory-card-title { font-size: 13px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+        .memory-card-title .count { font-size: 11px; color: var(--text-muted); font-weight: 400; }
+        .memory-empty { font-size: 12px; color: var(--text-muted); font-style: italic; }
+        .memory-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+        .memory-item { display: flex; align-items: center; justify-content: space-between; font-size: 13px; gap: 8px; }
+        .memory-item-key { color: var(--text-secondary); font-weight: 500; min-width: 80px; }
+        .memory-item-val { color: var(--text); flex: 1; word-break: break-word; }
+        .memory-item-del { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
+        .memory-item-del:hover { color: var(--red); background: var(--red-dim); }
+        .note-time { font-size: 11px; color: var(--text-muted); }
+        .notes-card { grid-column: 1 / -1; }
+        .memory-add-row { display: flex; gap: 8px; margin-top: 12px; }
+        .memory-add-row input { flex: 1; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--text); outline: none; }
+        .memory-add-row input:focus { border-color: var(--accent); }
+        .memory-add-row button { background: var(--accent-dim); color: var(--accent); border: 1px solid transparent; border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+        .memory-add-row button:hover { background: var(--accent); color: white; }
+        .memory-clear-btn { background: none; border: 1px solid var(--border); color: var(--text-muted); font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer; }
+        .memory-clear-btn:hover { color: var(--red); border-color: var(--red); background: var(--red-dim); }
+
         .setup-section { margin-top: 40px; }
         .setup-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
         .setup-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
@@ -113,6 +139,8 @@
             <div id="content">
                 <p class="loading-text">Loading...</p>
             </div>
+
+            <div id="memory-content"></div>
         </div>
     </div>
 
@@ -200,6 +228,122 @@
                 document.getElementById('content').innerHTML =
                     '<p class="loading-text">Failed to load settings.</p>';
             });
+
+        /* ── Memory Section ── */
+        function renderMemory(mem) {
+            var facts = mem.facts || {};
+            var prefs = mem.preferences || {};
+            var notes = mem.notes || [];
+            var fKeys = Object.keys(facts);
+            var pKeys = Object.keys(prefs);
+
+            var html = '<div class="memory-section">' +
+                '<div style="display:flex;align-items:center;justify-content:space-between">' +
+                    '<div><div class="memory-section-title">TARS Memory</div>' +
+                    '<div class="memory-section-sub">Persistent facts, preferences, and notes remembered across sessions</div></div>' +
+                    '<button class="memory-clear-btn" id="mem-clear">Clear all</button>' +
+                '</div>' +
+                '<div class="memory-grid">';
+
+            /* Facts card */
+            html += '<div class="memory-card"><div class="memory-card-title">Facts <span class="count">' + fKeys.length + '</span></div>';
+            if (fKeys.length === 0) {
+                html += '<div class="memory-empty">No facts stored yet. Tell TARS your name, role, or timezone.</div>';
+            } else {
+                html += '<ul class="memory-list">';
+                fKeys.forEach(function(k) {
+                    html += '<li class="memory-item"><span class="memory-item-key">' + esc(k) + '</span>' +
+                        '<span class="memory-item-val">' + esc(facts[k]) + '</span>' +
+                        '<button class="memory-item-del" data-type="fact" data-key="' + esc(k) + '" title="Remove">✕</button></li>';
+                });
+                html += '</ul>';
+            }
+            html += '<div class="memory-add-row"><input placeholder="Key" id="fact-key"><input placeholder="Value" id="fact-val"><button id="fact-add">Add</button></div>';
+            html += '</div>';
+
+            /* Preferences card */
+            html += '<div class="memory-card"><div class="memory-card-title">Preferences <span class="count">' + pKeys.length + '</span></div>';
+            if (pKeys.length === 0) {
+                html += '<div class="memory-empty">No preferences stored yet. Tell TARS how you like responses.</div>';
+            } else {
+                html += '<ul class="memory-list">';
+                pKeys.forEach(function(k) {
+                    html += '<li class="memory-item"><span class="memory-item-key">' + esc(k) + '</span>' +
+                        '<span class="memory-item-val">' + esc(prefs[k]) + '</span>' +
+                        '<button class="memory-item-del" data-type="pref" data-key="' + esc(k) + '" title="Remove">✕</button></li>';
+                });
+                html += '</ul>';
+            }
+            html += '<div class="memory-add-row"><input placeholder="Key" id="pref-key"><input placeholder="Value" id="pref-val"><button id="pref-add">Add</button></div>';
+            html += '</div>';
+
+            /* Notes card (full width) */
+            html += '<div class="memory-card notes-card"><div class="memory-card-title">Notes <span class="count">' + notes.length + '</span></div>';
+            if (notes.length === 0) {
+                html += '<div class="memory-empty">No notes stored yet. TARS saves important things to remember here.</div>';
+            } else {
+                html += '<ul class="memory-list">';
+                notes.forEach(function(n, i) {
+                    var date = n.added_at ? new Date(n.added_at).toLocaleDateString() : '';
+                    html += '<li class="memory-item"><span class="memory-item-val">' + esc(n.text) + '</span>' +
+                        '<span class="note-time">' + esc(date) + '</span>' +
+                        '<button class="memory-item-del" data-type="note" data-idx="' + i + '" title="Remove">✕</button></li>';
+                });
+                html += '</ul>';
+            }
+            html += '<div class="memory-add-row"><input placeholder="Add a note..." id="note-text" style="flex:3"><button id="note-add">Add</button></div>';
+            html += '</div>';
+
+            html += '</div></div>';
+            document.getElementById('memory-content').innerHTML = html;
+
+            /* Bind events */
+            document.getElementById('fact-add').onclick = function() {
+                var k = document.getElementById('fact-key').value.trim();
+                var v = document.getElementById('fact-val').value.trim();
+                if (!k || !v) return;
+                fetch('/api/memory/fact', { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({key: k, value: v}) })
+                    .then(function() { loadMemory(); });
+            };
+            document.getElementById('pref-add').onclick = function() {
+                var k = document.getElementById('pref-key').value.trim();
+                var v = document.getElementById('pref-val').value.trim();
+                if (!k || !v) return;
+                fetch('/api/memory/preference', { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({key: k, value: v}) })
+                    .then(function() { loadMemory(); });
+            };
+            document.getElementById('note-add').onclick = function() {
+                var t = document.getElementById('note-text').value.trim();
+                if (!t) return;
+                fetch('/api/memory/note', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text: t}) })
+                    .then(function() { loadMemory(); });
+            };
+            document.getElementById('mem-clear').onclick = function() {
+                if (!confirm('Clear all TARS memory? This cannot be undone.')) return;
+                fetch('/api/memory', { method: 'DELETE' }).then(function() { loadMemory(); });
+            };
+            document.querySelectorAll('.memory-item-del').forEach(function(btn) {
+                btn.onclick = function() {
+                    var type = btn.dataset.type;
+                    if (type === 'note') {
+                        fetch('/api/memory/note/' + btn.dataset.idx, { method: 'DELETE' }).then(function() { loadMemory(); });
+                    } else if (type === 'fact') {
+                        fetch('/api/memory/fact/' + encodeURIComponent(btn.dataset.key), { method: 'DELETE' }).then(function() { loadMemory(); });
+                    } else if (type === 'pref') {
+                        fetch('/api/memory/preference/' + encodeURIComponent(btn.dataset.key), { method: 'DELETE' }).then(function() { loadMemory(); });
+                    }
+                };
+            });
+        }
+
+        function loadMemory() {
+            fetch('/api/memory').then(function(r) { return r.json(); }).then(renderMemory)
+                .catch(function() {
+                    document.getElementById('memory-content').innerHTML =
+                        '<div class="memory-section"><div class="memory-section-title">TARS Memory</div><p class="loading-text">Could not load memory.</p></div>';
+                });
+        }
+        loadMemory();
     </script>
 </body>
 </html>

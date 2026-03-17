@@ -1542,6 +1542,75 @@ async def delete_person(name: str):
     return JSONResponse(result)
 
 
+@app.get("/api/memory")
+async def get_memory_api():
+    """Return all stored user memory (facts, preferences, notes)."""
+    from integrations.memory import get_memory
+    return JSONResponse(get_memory())
+
+
+class MemoryFactBody(BaseModel):
+    key: str
+    value: str
+
+
+class MemoryNoteBody(BaseModel):
+    text: str
+
+
+@app.put("/api/memory/fact")
+async def set_memory_fact(body: MemoryFactBody):
+    from integrations.memory import set_fact
+    return JSONResponse(set_fact(body.key, body.value))
+
+
+@app.put("/api/memory/preference")
+async def set_memory_pref(body: MemoryFactBody):
+    from integrations.memory import set_preference
+    return JSONResponse(set_preference(body.key, body.value))
+
+
+@app.post("/api/memory/note")
+async def add_memory_note_api(body: MemoryNoteBody):
+    from integrations.memory import add_note
+    return JSONResponse(add_note(body.text))
+
+
+@app.delete("/api/memory/note/{index}")
+async def delete_memory_note_api(index: int):
+    from integrations.memory import delete_note
+    result = delete_note(index)
+    if not result.get("ok"):
+        return JSONResponse(result, status_code=400)
+    return JSONResponse(result)
+
+
+@app.delete("/api/memory/fact/{key}")
+async def delete_memory_fact(key: str):
+    from integrations.memory import _load, _save
+    data = _load()
+    if key in data.get("facts", {}):
+        del data["facts"][key]
+        _save(data)
+    return JSONResponse({"ok": True})
+
+
+@app.delete("/api/memory/preference/{key}")
+async def delete_memory_pref(key: str):
+    from integrations.memory import _load, _save
+    data = _load()
+    if key in data.get("preferences", {}):
+        del data["preferences"][key]
+        _save(data)
+    return JSONResponse({"ok": True})
+
+
+@app.delete("/api/memory")
+async def clear_memory_api():
+    from integrations.memory import clear_memory
+    return JSONResponse(clear_memory())
+
+
 @app.get("/api/review/weekly")
 async def get_weekly_review():
     """Get weekly review data — task trends, delegation patterns, stale items."""
