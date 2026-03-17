@@ -202,8 +202,15 @@ def _classify_priority(text: str, is_delegated: bool, age_days: int = 0) -> dict
 # Notion page fetcher with pagination
 # -----------------------------------------------------------------------
 
-async def _fetch_all_pages(max_pages: int) -> list[dict]:
-    """Fetch pages from Notion with pagination support."""
+async def _fetch_all_pages(max_pages: int, since: str | None = None) -> list[dict]:
+    """Fetch pages from Notion with pagination support.
+
+    Args:
+        max_pages: Max pages to return.
+        since: ISO 8601 timestamp — only return pages edited after this.
+               Results are sorted by last_edited_time desc, so we stop
+               paginating once we hit a page older than ``since``.
+    """
     import httpx
 
     from integrations.notion import _format_page, _headers, is_configured
@@ -215,9 +222,10 @@ async def _fetch_all_pages(max_pages: int) -> list[dict]:
     pages: list[dict] = []
     start_cursor: str | None = None
     batch_size = min(max_pages, 100)
+    hit_old_page = False
 
     async with httpx.AsyncClient(timeout=30) as client:
-        while len(pages) < max_pages:
+        while len(pages) < max_pages and not hit_old_page:
             body: dict[str, Any] = {
                 "filter": {"value": "page", "property": "object"},
                 "sort": {"direction": "descending", "timestamp": "last_edited_time"},
@@ -243,7 +251,12 @@ async def _fetch_all_pages(max_pages: int) -> list[dict]:
                 break
 
             for p in results:
-                pages.append(_format_page(p))
+                page = _format_page(p)
+                # Stop once we reach pages not edited since last scan
+                if since and page.get("last_edited_time", "") <= since:
+                    hit_old_page = True
+                    break
+                pages.append(page)
                 if len(pages) >= max_pages:
                     break
 
@@ -291,14 +304,16 @@ def _sync_to_tracked_tasks(new_tasks: list[dict]) -> None:
 # Main scan
 # -----------------------------------------------------------------------
 
-async def scan_notion(max_pages: int = 50) -> dict:
-    """Scan all accessible Notion pages to build intelligence.
+async def scan_notion(max_pages: int = 50, full_scan: bool = False) -> dict:
+    """Scan Notion pages to build intelligence.
 
-    Reads page content, extracts topics, people, delegations, and builds
-    a smart task list with priority classification and follow-up dates.
+    By default performs an incremental scan — only pages edited since the
+    last scan are fetched and processed.  Pass ``full_scan=True`` to
+    re-scan everything.
 
     Args:
         max_pages: Max pages to scan.
+        full_scan: If True, ignore last scan timestamp and scan all pages.
 
     Returns:
         Summary of scan results.
@@ -311,9 +326,11 @@ async def scan_notion(max_pages: int = 50) -> dict:
     intel = _load_intel()
     now = datetime.now(timezone.utc)
 
-    # Paginate through all accessible pages via Notion search API
-    pages = await _fetch_all_pages(max_pages)
-    logger.info("Intel scan: fetched %d pages from Notion", len(pages))
+    # Incremental: only fetch pages edited since last scan
+    since = None if full_scan else intel.get("last_scan_at")
+    pages = await _fetch_all_pages(max_pages, since=since)
+    scan_type = "full" if full_scan or not since else "incremental"
+    logger.info("Intel scan (%s): fetched %d pages from Notion", scan_type, len(pages))
 
     topic_counter: Counter = Counter()
     people_counter: Counter = Counter()
@@ -436,6 +453,7 @@ async def scan_notion(max_pages: int = 50) -> dict:
         "at": now.isoformat(),
         "pages": len(pages),
         "new_tasks": len(new_tasks),
+        "type": scan_type,
     })
     intel["scan_history"] = intel["scan_history"][-20:]
 

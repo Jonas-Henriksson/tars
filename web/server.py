@@ -467,12 +467,12 @@ async def get_intel():
 
 
 @app.post("/api/intel/scan")
-async def scan_intel(max_pages: int = 50):
-    """Trigger a Notion intelligence scan."""
+async def scan_intel(max_pages: int = 50, full_scan: bool = False):
+    """Trigger a Notion intelligence scan (incremental by default)."""
     from integrations.intel import scan_notion
 
     try:
-        result = await scan_notion(max_pages=max_pages)
+        result = await scan_notion(max_pages=max_pages, full_scan=full_scan)
         return JSONResponse(result)
     except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)

@@ -125,7 +125,10 @@
                 <div class="page-title">Executive Summary</div>
                 <div class="scan-info" id="scanInfo">Not yet scanned.</div>
             </div>
-            <button class="scan-btn" id="scanBtn" onclick="runScan()">Scan Notion</button>
+            <div style="display:flex;gap:6px;">
+                <button class="scan-btn" id="scanBtn" onclick="runScan()">Scan New</button>
+                <button class="scan-btn" id="fullScanBtn" onclick="runScan(true)" style="color:var(--text-muted);font-size:12px;padding:7px 12px;">Full Scan</button>
+            </div>
         </div>
         <div class="scan-toast" id="scanToast"><div class="scan-spinner" id="scanSpinner"></div><span id="scanToastMsg">Scanning...</span></div>
         <div id="content"><div class="empty">Click "Scan Notion" to analyze your pages and build your intelligence profile.</div></div>
@@ -159,22 +162,28 @@
             } catch(e) {}
         }
 
-        window.runScan = async function() {
+        const fullScanBtn = document.getElementById('fullScanBtn');
+
+        window.runScan = async function(full) {
             scanBtn.disabled = true;
+            fullScanBtn.disabled = true;
             scanBtn.textContent = 'Scanning...';
-            showToast('Scanning and analyzing your Notion pages...');
+            const label = full ? 'Full scan' : 'Incremental scan';
+            showToast(label + ': scanning Notion pages...');
             try {
-                const resp = await fetch('/api/intel/scan', { method: 'POST' });
+                const url = '/api/intel/scan' + (full ? '?full_scan=true' : '');
+                const resp = await fetch(url, { method: 'POST' });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error || 'Scan failed: ' + resp.status);
                 scanInfo.textContent = 'Last scan: ' + new Date().toLocaleString() + ' — ' + data.pages_scanned + ' pages';
-                showToast('Scan complete — ' + data.pages_scanned + ' pages, ' + data.new_tasks_added + ' new tasks', 'success');
+                showToast(label + ' complete — ' + data.pages_scanned + ' pages, ' + data.new_tasks_added + ' new tasks', 'success');
                 await loadIntel();
             } catch(err) {
                 showToast('Scan failed: ' + err.message, 'error');
             }
             scanBtn.disabled = false;
-            scanBtn.textContent = 'Scan Notion';
+            fullScanBtn.disabled = false;
+            scanBtn.textContent = 'Scan New';
         };
 
         function renderIntel(data) {
