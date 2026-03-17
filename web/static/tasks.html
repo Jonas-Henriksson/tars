@@ -206,6 +206,20 @@
         .group-select:focus { border-color: var(--accent); }
         .group-select option { background: var(--surface); }
 
+        .date-filter { display: flex; align-items: center; gap: 4px; }
+        .date-filter label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+        .date-input {
+            background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary);
+            font-size: 12px; padding: 6px 8px; border-radius: 6px; outline: none; font-family: inherit;
+        }
+        .date-input:focus { border-color: var(--accent); }
+        .date-clear {
+            background: none; border: 1px solid var(--border); color: var(--text-muted);
+            font-size: 11px; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-family: inherit;
+            transition: all 0.15s; white-space: nowrap;
+        }
+        .date-clear:hover { color: var(--text); border-color: var(--text-muted); }
+
         /* Task table */
         .task-table {
             width: 100%;
@@ -514,6 +528,19 @@
                 <option value="status">Group by status</option>
             </select>
         </div>
+        <div class="toolbar">
+            <div class="date-filter">
+                <label>From</label>
+                <input type="date" class="date-input" id="dateFrom">
+                <label>To</label>
+                <input type="date" class="date-input" id="dateTo">
+                <select class="group-select" id="dateField" style="min-width:auto;">
+                    <option value="created_at">Created date</option>
+                    <option value="follow_up_date">Follow-up date</option>
+                </select>
+                <button class="date-clear" id="dateClear">Clear</button>
+            </div>
+        </div>
 
         <div id="tableContainer">
             <div class="loading">Loading tasks...</div>
@@ -573,11 +600,18 @@
         let sortCol = 'created_at';
         let sortAsc = false;
         let editingTask = null;
+        let dateFrom = '';
+        let dateTo = '';
+        let dateField = 'created_at';
 
         const searchInput = document.getElementById('searchInput');
         const statusFilter = document.getElementById('statusFilter');
         const groupBy = document.getElementById('groupBy');
         const container = document.getElementById('tableContainer');
+        const dateFromInput = document.getElementById('dateFrom');
+        const dateToInput = document.getElementById('dateTo');
+        const dateFieldSelect = document.getElementById('dateField');
+        const dateClearBtn = document.getElementById('dateClear');
         const modalOverlay = document.getElementById('taskModal');
         const modalDesc = document.getElementById('modalDesc');
         const modalOwner = document.getElementById('modalOwner');
@@ -635,6 +669,16 @@
                     (t.topic || '').toLowerCase().includes(q) ||
                     (t.source_title || '').toLowerCase().includes(q)
                 );
+            }
+            // Date range filter
+            if (dateFrom || dateTo) {
+                tasks = tasks.filter(t => {
+                    const val = (t[dateField] || '').slice(0, 10);
+                    if (!val) return false;
+                    if (dateFrom && val < dateFrom) return false;
+                    if (dateTo && val > dateTo) return false;
+                    return true;
+                });
             }
             tasks = [...tasks].sort((a, b) => {
                 let va = a[sortCol] || '';
@@ -953,6 +997,18 @@
 
         groupBy.addEventListener('change', () => {
             currentGroup = groupBy.value;
+            render();
+        });
+
+        dateFromInput.addEventListener('change', () => { dateFrom = dateFromInput.value; render(); });
+        dateToInput.addEventListener('change', () => { dateTo = dateToInput.value; render(); });
+        dateFieldSelect.addEventListener('change', () => {
+            dateField = dateFieldSelect.value;
+            if (dateFrom || dateTo) render();
+        });
+        dateClearBtn.addEventListener('click', () => {
+            dateFrom = ''; dateTo = '';
+            dateFromInput.value = ''; dateToInput.value = '';
             render();
         });
 

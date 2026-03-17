@@ -156,6 +156,22 @@
         .modal-source a { color: var(--accent); text-decoration: none; }
         .modal-source a:hover { text-decoration: underline; }
 
+        /* Date filter */
+        .date-filter-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+        .date-filter-bar label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+        .date-input {
+            background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary);
+            font-size: 12px; padding: 6px 8px; border-radius: 6px; outline: none; font-family: inherit;
+        }
+        .date-input:focus { border-color: var(--accent); }
+        .date-clear {
+            background: none; border: 1px solid var(--border); color: var(--text-muted);
+            font-size: 11px; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-family: inherit;
+            transition: all 0.15s; white-space: nowrap;
+        }
+        .date-clear:hover { color: var(--text); border-color: var(--text-muted); }
+        .date-filter-bar .filter-count { font-size: 11px; color: var(--text-muted); }
+
         @media (max-width: 700px) {
             .matrix { grid-template-columns: 1fr; }
             .two-col { grid-template-columns: 1fr; }
@@ -206,6 +222,14 @@
                 <span id="scanProgressPage">0 / 0 pages</span>
                 <span id="scanProgressTasks">0 new tasks</span>
             </div>
+        </div>
+        <div class="date-filter-bar" id="dateFilterBar" style="display:none;">
+            <label>From</label>
+            <input type="date" class="date-input" id="dateFrom">
+            <label>To</label>
+            <input type="date" class="date-input" id="dateTo">
+            <button class="date-clear" id="dateClear">Clear</button>
+            <span class="filter-count" id="dateFilterCount"></span>
         </div>
         <div id="content"><div class="empty">Click "Scan New" to analyze your pages and build your intelligence profile.</div></div>
     </main>
@@ -277,6 +301,34 @@
         const collapseState = JSON.parse(sessionStorage.getItem('execCollapse') || '{}');
         // Expand state per quadrant (show all vs first 6)
         const expandState = {};
+
+        // Date filter state
+        let dateFrom = '';
+        let dateTo = '';
+        const dateFromInput = document.getElementById('dateFrom');
+        const dateToInput = document.getElementById('dateTo');
+        const dateClearBtn = document.getElementById('dateClear');
+        const dateFilterBar = document.getElementById('dateFilterBar');
+        const dateFilterCount = document.getElementById('dateFilterCount');
+
+        function filterByDate(items) {
+            if (!dateFrom && !dateTo) return items;
+            return items.filter(t => {
+                const d = t.follow_up_date || '';
+                if (!d) return false;
+                if (dateFrom && d < dateFrom) return false;
+                if (dateTo && d > dateTo) return false;
+                return true;
+            });
+        }
+
+        dateFromInput.addEventListener('change', () => { dateFrom = dateFromInput.value; if (currentIntel) renderIntel(currentIntel); });
+        dateToInput.addEventListener('change', () => { dateTo = dateToInput.value; if (currentIntel) renderIntel(currentIntel); });
+        dateClearBtn.addEventListener('click', () => {
+            dateFrom = ''; dateTo = '';
+            dateFromInput.value = ''; dateToInput.value = '';
+            if (currentIntel) renderIntel(currentIntel);
+        });
 
         function showToast(msg, type) {
             scanToast.className = 'scan-toast visible' + (type ? ' scan-' + type : '');
@@ -437,9 +489,28 @@
             currentIntel = data;
             const es = data.executive_summary || {};
             const mx = es.matrix || {};
+
+            // Show date filter bar once data is loaded
+            dateFilterBar.style.display = 'flex';
+
+            // Apply date filter to matrix items
+            const q1 = filterByDate(mx.q1_do_first || []);
+            const q2 = filterByDate(mx.q2_schedule || []);
+            const q3 = filterByDate(mx.q3_delegate || []);
+            const q4 = filterByDate(mx.q4_defer || []);
+
+            const hasDateFilter = dateFrom || dateTo;
+            if (hasDateFilter) {
+                const totalFiltered = q1.length + q2.length + q3.length + q4.length;
+                const totalAll = (mx.q1_do_first||[]).length + (mx.q2_schedule||[]).length + (mx.q3_delegate||[]).length + (mx.q4_defer||[]).length;
+                dateFilterCount.textContent = 'Showing ' + totalFiltered + ' of ' + totalAll + ' tasks';
+            } else {
+                dateFilterCount.textContent = '';
+            }
+
             let html = '';
 
-            // Stats
+            // Stats (always show unfiltered counts)
             html += '<div class="stats">';
             html += stat(es.total_open || 0, 'Open tasks', '--text');
             html += stat(mx.q1_count || 0, 'Do first', '--red-text');
@@ -451,14 +522,14 @@
 
             // Eisenhower Matrix
             html += '<div class="matrix">';
-            html += matrixCell('q1', 'Do First', mx.q1_do_first || [], 1);
-            html += matrixCell('q2', 'Schedule', mx.q2_schedule || [], 2);
-            html += matrixCell('q3', 'Delegate', mx.q3_delegate || [], 3);
-            html += matrixCell('q4', 'Defer', mx.q4_defer || [], 4);
+            html += matrixCell('q1', 'Do First', q1, 1);
+            html += matrixCell('q2', 'Schedule', q2, 2);
+            html += matrixCell('q3', 'Delegate', q3, 3);
+            html += matrixCell('q4', 'Defer', q4, 4);
             html += '</div>';
 
             // Overdue follow-ups
-            const overdue = es.overdue_follow_ups || [];
+            const overdue = filterByDate(es.overdue_follow_ups || []);
             if (overdue.length > 0) {
                 html += '<div class="section">';
                 html += secHead('Overdue Follow-ups', overdue.length);
@@ -467,7 +538,7 @@
             }
 
             // Upcoming follow-ups
-            const upcoming = es.upcoming_follow_ups || [];
+            const upcoming = filterByDate(es.upcoming_follow_ups || []);
             if (upcoming.length > 0) {
                 html += '<div class="section">';
                 html += secHead('Upcoming Follow-ups (7 days)', upcoming.length);

@@ -151,6 +151,41 @@
         .sidebar-task-detail a { color: var(--accent); text-decoration: none; }
         .sidebar-task-detail a:hover { text-decoration: underline; }
         .sidebar-task-steps { white-space: pre-wrap; color: var(--text-muted); margin-top: 4px; }
+        .sidebar-task-header { display: flex; align-items: flex-start; gap: 6px; }
+        .sidebar-task-header .sidebar-task-desc { flex: 1; }
+        .sidebar-task-actions { display: flex; gap: 2px; flex-shrink: 0; }
+        .sidebar-task-actions button {
+            background: none; border: 1px solid var(--border); color: var(--text-muted);
+            font-size: 10px; padding: 2px 6px; border-radius: 4px; cursor: pointer;
+            font-family: inherit; transition: all 0.15s; white-space: nowrap;
+        }
+        .sidebar-task-actions .task-done-btn:hover { color: var(--green-text); border-color: var(--green); }
+        .sidebar-task-actions .task-edit-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+        /* Graph task modal */
+        .graph-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 200; display: none; align-items: center; justify-content: center; }
+        .graph-modal-overlay.visible { display: flex; }
+        .graph-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; padding: 24px; }
+        .graph-modal h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+        .graph-modal .gm-field { margin-bottom: 14px; }
+        .graph-modal .gm-field label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 4px; }
+        .graph-modal .gm-field input, .graph-modal .gm-field textarea, .graph-modal .gm-field select {
+            width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+            font-family: inherit; font-size: 13px; padding: 7px 10px; border-radius: 6px; outline: none;
+        }
+        .graph-modal .gm-field input:focus, .graph-modal .gm-field textarea:focus, .graph-modal .gm-field select:focus { border-color: var(--accent); }
+        .graph-modal .gm-field textarea { resize: vertical; min-height: 60px; }
+        .graph-modal .gm-row { display: flex; gap: 12px; }
+        .graph-modal .gm-row .gm-field { flex: 1; }
+        .graph-modal .gm-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+        .graph-modal .gm-foot button { font-family: inherit; font-size: 13px; padding: 7px 18px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border); }
+        .graph-modal .gm-cancel { background: var(--surface-raised); color: var(--text-secondary); }
+        .graph-modal .gm-cancel:hover { background: var(--border); }
+        .graph-modal .gm-save { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .graph-modal .gm-save:hover { opacity: 0.9; }
+        .graph-modal .gm-source { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+        .graph-modal .gm-source a { color: var(--accent); text-decoration: none; }
+        .graph-modal .gm-source a:hover { text-decoration: underline; }
 
         /* Node label overlay */
         .node-label { color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 3px; background: rgba(0,0,0,0.6); white-space: nowrap; pointer-events: none; }
@@ -283,6 +318,55 @@
 
         <div class="sidebar" id="sidebar">
             <div class="sidebar-inner" id="sidebarContent"></div>
+        </div>
+    </div>
+
+    <!-- Graph task modal -->
+    <div class="graph-modal-overlay" id="graphModalOverlay">
+        <div class="graph-modal">
+            <h2>Edit Task</h2>
+            <input type="hidden" id="gmTaskId">
+            <div class="gm-field">
+                <label>Description</label>
+                <input type="text" id="gmDesc">
+            </div>
+            <div class="gm-row">
+                <div class="gm-field">
+                    <label>Owner</label>
+                    <input type="text" id="gmOwner">
+                </div>
+                <div class="gm-field">
+                    <label>Quadrant</label>
+                    <select id="gmQuadrant">
+                        <option value="1">Do First</option>
+                        <option value="2">Schedule</option>
+                        <option value="3">Delegate</option>
+                        <option value="4">Defer</option>
+                    </select>
+                </div>
+            </div>
+            <div class="gm-row">
+                <div class="gm-field">
+                    <label>Follow-up Date</label>
+                    <input type="date" id="gmDate">
+                </div>
+                <div class="gm-field">
+                    <label>Status</label>
+                    <select id="gmStatus">
+                        <option value="open">Open</option>
+                        <option value="done">Done</option>
+                    </select>
+                </div>
+            </div>
+            <div class="gm-field">
+                <label>Steps</label>
+                <textarea id="gmSteps" rows="3"></textarea>
+            </div>
+            <div class="gm-source" id="gmSource"></div>
+            <div class="gm-foot">
+                <button class="gm-cancel" id="gmCancel">Cancel</button>
+                <button class="gm-save" id="gmSave">Save</button>
+            </div>
         </div>
     </div>
 
@@ -893,6 +977,20 @@
                     selectNode(barRow.dataset.nodeId);
                     return;
                 }
+                // Task done button
+                const doneBtn = evt.target.closest('.task-done-btn');
+                if (doneBtn) {
+                    evt.stopPropagation();
+                    markTaskDone(doneBtn.dataset.taskId);
+                    return;
+                }
+                // Task edit button
+                const editBtn = evt.target.closest('.task-edit-btn');
+                if (editBtn) {
+                    evt.stopPropagation();
+                    openGraphModal(editBtn.dataset.taskId);
+                    return;
+                }
                 // Task card click → expand details
                 const task = evt.target.closest('.sidebar-task');
                 if (task) {
@@ -1212,8 +1310,14 @@
 
         function renderTaskCard(t) {
             const qClass = 'q' + (t.quadrant || 4);
-            let html = '<div class="sidebar-task">';
+            let html = '<div class="sidebar-task" data-task-id="' + t.id + '">';
+            html += '<div class="sidebar-task-header">';
             html += '<div class="sidebar-task-desc">' + esc(t.description) + '</div>';
+            html += '<div class="sidebar-task-actions">';
+            html += '<button class="task-edit-btn" data-task-id="' + t.id + '" title="Edit">Edit</button>';
+            html += '<button class="task-done-btn" data-task-id="' + t.id + '" title="Mark done">Done</button>';
+            html += '</div>';
+            html += '</div>';
             html += '<div class="sidebar-task-meta">';
             html += '<span class="sidebar-badge ' + qClass + '">' + esc(t.quadrant_label || 'Defer') + '</span>';
             if (t.follow_up_date) html += '<span>' + t.follow_up_date + '</span>';
@@ -1260,6 +1364,69 @@
             resizeGraph();
         }
         window.closeSidebarGlobal = closeSidebar;
+
+        // --- Graph task modal ---
+        const graphModalOverlay = document.getElementById('graphModalOverlay');
+
+        function findTaskById(id) {
+            return tasks.find(t => t.id === id) || null;
+        }
+
+        function openGraphModal(taskId) {
+            const t = findTaskById(taskId);
+            if (!t) return;
+            document.getElementById('gmTaskId').value = taskId;
+            document.getElementById('gmDesc').value = t.description || '';
+            document.getElementById('gmOwner').value = t.owner || '';
+            document.getElementById('gmQuadrant').value = t.quadrant || 4;
+            document.getElementById('gmDate').value = t.follow_up_date || '';
+            document.getElementById('gmStatus').value = t.status || 'open';
+            document.getElementById('gmSteps').value = t.steps || '';
+            const src = document.getElementById('gmSource');
+            if (t.source_title) {
+                src.innerHTML = 'Source: ' + (t.source_url ? '<a href="' + esc(t.source_url) + '" target="_blank">' + esc(t.source_title) + '</a>' : esc(t.source_title));
+            } else { src.innerHTML = ''; }
+            graphModalOverlay.classList.add('visible');
+        }
+
+        function closeGraphModal() {
+            graphModalOverlay.classList.remove('visible');
+        }
+
+        async function saveGraphModal() {
+            const taskId = document.getElementById('gmTaskId').value;
+            const payload = {
+                description: document.getElementById('gmDesc').value,
+                owner: document.getElementById('gmOwner').value,
+                quadrant: parseInt(document.getElementById('gmQuadrant').value),
+                follow_up_date: document.getElementById('gmDate').value,
+                status: document.getElementById('gmStatus').value,
+                steps: document.getElementById('gmSteps').value,
+            };
+            await fetch('/api/intel/tasks/' + taskId, {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload),
+            });
+            closeGraphModal();
+            // Refresh graph data to reflect changes
+            await loadGraph();
+        }
+
+        async function markTaskDone(taskId) {
+            await fetch('/api/intel/tasks/' + taskId, {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({status: 'done'}),
+            });
+            // Refresh graph data
+            await loadGraph();
+        }
+
+        document.getElementById('gmCancel').addEventListener('click', closeGraphModal);
+        document.getElementById('gmSave').addEventListener('click', saveGraphModal);
+        graphModalOverlay.addEventListener('click', (e) => { if (e.target === graphModalOverlay) closeGraphModal(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && graphModalOverlay.classList.contains('visible')) closeGraphModal(); });
 
         function resizeGraph() {
             if (!Graph) return;
