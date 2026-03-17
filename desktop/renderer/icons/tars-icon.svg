@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <rect width="48" height="48" rx="24" fill="#111113"/>
+  <rect x="4" y="4" width="40" height="40" rx="20" fill="none" stroke="#27272a" stroke-width="2"/>
+  <text x="24" y="30" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="16" font-weight="700" fill="#fafafa" letter-spacing="2">T</text>
+</svg>

@@ -159,7 +159,7 @@ def clear_history(chat_id: int) -> None:
     _save_histories()
 
 
-async def run(chat_id: int, user_message: str) -> str:
+async def run(chat_id: int, user_message: str, model: str = None) -> str:
     """Run the TARS agent loop for a user message.
 
     Sends the message to Claude, handles any tool calls in a loop,
@@ -177,7 +177,7 @@ async def run(chat_id: int, user_message: str) -> str:
     # Agent loop: keep going while Claude wants to use tools
     while True:
         kwargs: dict[str, Any] = {
-            "model": "claude-sonnet-4-20250514",
+            "model": model or "claude-sonnet-4-20250514",
             "max_tokens": 4096,
             "system": _build_system_prompt(),
             "messages": messages,

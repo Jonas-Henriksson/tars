@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TARS</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Bubble View -->
+    <div id="bubble">
+        <span class="tars-label">T</span>
+        <span class="status-dot" id="statusDot"></span>
+    </div>
+
+    <!-- Chat View -->
+    <div id="chat" class="hidden">
+        <div class="chat-header">
+            <span class="title">TARS</span>
+            <div class="header-controls">
+                <select class="model-select" id="modelSelect">
+                    <option value="claude-sonnet-4-20250514">Sonnet</option>
+                    <option value="claude-opus-4-20250514">Opus</option>
+                    <option value="claude-haiku-4-5-20251001">Haiku</option>
+                </select>
+                <label class="search-toggle" title="Enable web search">
+                    <input type="checkbox" id="searchToggle">
+                    <span>Web</span>
+                </label>
+                <button class="header-btn" id="collapseBtn" title="Minimize">&#x2013;</button>
+            </div>
+        </div>
+
+        <div class="messages" id="messages"></div>
+
+        <!-- Note modal (shown on demand) -->
+        <div class="note-modal hidden" id="noteModal">
+            <textarea id="noteText" placeholder="Quick note for TARS to remember..."></textarea>
+            <div class="note-actions">
+                <button class="note-cancel" id="noteCancelBtn">Cancel</button>
+                <button class="note-save" id="noteSaveBtn">Save Note</button>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <div class="input-row">
+                <button class="input-btn" id="attachBtn" title="Attach file">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 7.5l-5.5 5.5a3.5 3.5 0 01-5-5l5.5-5.5a2 2 0 013 3L6 11a.5.5 0 01-1-1l4.5-4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+                <input type="text" id="msgInput" placeholder="Message TARS..." autocomplete="off" spellcheck="false">
+                <button class="input-btn" id="voiceBtn" title="Voice (or say 'Hey TARS')">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1a2 2 0 012 2v4a2 2 0 11-4 0V3a2 2 0 012-2z" fill="currentColor"/><path d="M4 7a4 4 0 008 0M8 13v2M6 15h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+                <button class="input-btn send" id="sendBtn" title="Send">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M14 2L7 9M14 2l-4 12-3-5-5-3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>
+                </button>
+            </div>
+            <div class="quick-actions">
+                <button class="quick-btn" id="noteBtn">&#128221; Quick Note</button>
+            </div>
+        </div>
+
+        <input type="file" id="fileInput" multiple>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

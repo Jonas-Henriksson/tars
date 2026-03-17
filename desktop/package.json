@@ -1,0 +1,27 @@
+{
+  "name": "tars-desktop",
+  "version": "1.0.0",
+  "description": "TARS Desktop Overlay Widget",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.tars.desktop",
+    "productName": "TARS",
+    "win": {
+      "target": "nsis",
+      "icon": "renderer/icons/tars-icon.png"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ]
+  }
+}

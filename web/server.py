@@ -16,7 +16,8 @@ from pathlib import Path
 import httpx
 import asyncio
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -28,6 +29,14 @@ logger = logging.getLogger(__name__)
 _STATIC_DIR = Path(__file__).parent / "static"
 
 app = FastAPI(title="TARS Voice Call")
+
+# CORS — allow Electron desktop app (file:// origin) and localhost
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Serve static assets (JS libraries, etc.) at /static/js/
 _JS_DIR = _STATIC_DIR / "js"
@@ -1624,6 +1633,47 @@ async def delete_memory_pref(key: str):
 async def clear_memory_api():
     from integrations.memory import clear_memory
     return JSONResponse(clear_memory())
+
+
+# ── Desktop Chat API ─────────────────────────────────────────────────
+
+class ChatRequest(BaseModel):
+    message: str
+    chat_id: int = 0
+    model: str = None
+
+
+@app.post("/api/chat")
+async def chat_api(body: ChatRequest):
+    """Send a message to TARS and get a response."""
+    from agent.core import run
+
+    try:
+        reply = await run(body.chat_id, body.message, model=body.model)
+        return JSONResponse({"reply": reply})
+    except Exception as exc:
+        logger.exception("Chat API error")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+_UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
+
+
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """Upload a file for TARS to reference."""
+    _UPLOAD_DIR.mkdir(exist_ok=True)
+    # Sanitize filename
+    safe_name = file.filename.replace("/", "_").replace("\\", "_")
+    dest = _UPLOAD_DIR / safe_name
+    content = await file.read()
+    dest.write_bytes(content)
+    return JSONResponse({
+        "ok": True,
+        "filename": safe_name,
+        "size": len(content),
+        "path": str(dest),
+    })
 
 
 # ── Knowledge Repository ─────────────────────────────────────────────
