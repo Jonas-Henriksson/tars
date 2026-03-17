@@ -86,23 +86,39 @@ def _infer_role_from_context(name: str, intel: dict) -> dict[str, Any]:
     hints["tasks_owned_count"] = len(tasks_assigned_to)
     hints["tasks_mentioned_count"] = len(tasks_assigned_by)
 
-    # Infer role from topic patterns
-    role_hints = []
-    topic_set = hints["topics"]
-    if "engineering" in topic_set or "security" in topic_set:
-        role_hints.append("Technical")
-    if "hiring" in topic_set:
-        role_hints.append("HR / People")
-    if "budget" in topic_set or "finance" in topic_set:
-        role_hints.append("Finance")
-    if "strategy" in topic_set or "management" in topic_set:
-        role_hints.append("Leadership")
-    if "sales" in topic_set or "marketing" in topic_set:
-        role_hints.append("Commercial")
-    if "operations" in topic_set or "product" in topic_set:
-        role_hints.append("Operations / Product")
+    # Infer role from topic patterns — pick dominant function only
+    # Count topic occurrences from pages to weight the inference
+    topic_counts: dict[str, int] = {}
+    for _pid, page in page_index.items():
+        page_people = [p.lower() for p in page.get("people", [])]
+        if any(name_lower in p for p in page_people):
+            for t in page.get("topics", []):
+                topic_counts[t] = topic_counts.get(t, 0) + 1
 
-    hints["inferred_function"] = ", ".join(role_hints) if role_hints else ""
+    # Map topics to functional areas with weights
+    function_scores: dict[str, int] = {}
+    topic_to_function = {
+        "engineering": "Engineering",
+        "security": "Security",
+        "hiring": "HR / People",
+        "budget": "Finance",
+        "finance": "Finance",
+        "strategy": "Leadership",
+        "management": "Leadership",
+        "sales": "Commercial",
+        "marketing": "Commercial",
+        "operations": "Operations",
+        "product": "Product",
+    }
+    for topic, count in topic_counts.items():
+        fn = topic_to_function.get(topic)
+        if fn:
+            function_scores[fn] = function_scores.get(fn, 0) + count
+
+    # Pick top 1-2 functions (the dominant areas)
+    sorted_fns = sorted(function_scores.items(), key=lambda x: -x[1])
+    top_functions = [fn for fn, _score in sorted_fns[:2]] if sorted_fns else []
+    hints["inferred_function"] = ", ".join(top_functions) if top_functions else ""
     hints["topics"] = sorted(hints["topics"])
 
     # Determine relationship type

@@ -419,6 +419,15 @@ REALTIME_TOOLS = [
     },
     {
         "type": "function",
+        "name": "weekly_review",
+        "description": "Get a weekly review summary — task status breakdown, overdue items, delegation patterns, stale tasks, and topic activity. Use when the user asks for a weekly review, status overview, or wants to know how things are going.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "type": "function",
         "name": "get_people",
         "description": "Get all people from the knowledge library with their roles, relationships, topics, and task ownership. Use when the user asks 'who works on X' or 'tell me about my team'.",
         "parameters": {
@@ -500,6 +509,7 @@ _TOOL_MAP = {
     "delete_smart_task": ("integrations.intel", "delete_smart_task"),
     "search_intel": ("integrations.intel", "search_intel"),
     "update_tracked_task": ("integrations.notion_tasks", "update_task"),
+    "weekly_review": ("integrations.review", "get_weekly_review_voice"),
     "get_people": ("integrations.people", "get_all_people"),
     "get_person": ("integrations.people", "get_person"),
     "update_person": ("integrations.people", "update_person"),
