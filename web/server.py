@@ -122,6 +122,48 @@ your priority matrix..." or "Pulling up your intelligence profile..."). \
 Always confirm before sending emails or creating events.\
 """
 
+
+def _build_voice_prompt() -> str:
+    """Build the voice session system prompt, injecting user memory and work context."""
+    parts = [TARS_INSTRUCTIONS]
+
+    # Inject user memory if any exists
+    try:
+        from integrations.memory import get_memory
+        mem = get_memory()
+        if mem.get("facts") or mem.get("preferences") or mem.get("notes"):
+            lines = ["About the user (remembered from past sessions):"]
+            if mem.get("facts"):
+                lines.append("Facts: " + ", ".join(f"{k}: {v}" for k, v in mem["facts"].items()))
+            if mem.get("preferences"):
+                lines.append("Preferences: " + "; ".join(f"{k} → {v}" for k, v in mem["preferences"].items()))
+            if mem.get("notes"):
+                recent = [n["text"] for n in mem["notes"][-5:]]
+                lines.append("Notes: " + " | ".join(recent))
+            parts.append("\n" + "\n".join(lines))
+    except Exception:
+        pass
+
+    # Inject brief current work context
+    try:
+        from integrations.intel import get_intel_summary
+        summary = get_intel_summary()
+        if summary:
+            parts.append(f"\nCurrent work context: {summary}")
+    except Exception:
+        pass
+
+    # Memory behavior instructions (voice-adapted)
+    parts.append(
+        "\nMemory: When the user tells you their name, role, timezone, or personal facts — "
+        "call remember_fact. When they state a preference — call remember_preference. "
+        "When they mention something to remember across sessions — call add_memory_note. "
+        "Do this silently without announcing it."
+    )
+
+    return "\n".join(parts)
+
+
 # Tool definitions for the Realtime API (OpenAI function calling format)
 REALTIME_TOOLS = [
     {
@@ -848,6 +890,44 @@ REALTIME_TOOLS = [
             "required": ["name"],
         },
     },
+    {
+        "type": "function",
+        "name": "remember_preference",
+        "description": "Store a user preference (e.g. response style, language). Call whenever the user states how they want TARS to behave.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "Preference name (e.g. 'response_style')."},
+                "value": {"type": "string", "description": "Preference value."},
+            },
+            "required": ["key", "value"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "remember_fact",
+        "description": "Store a key fact about the user (name, role, timezone, team members, etc). Call when the user shares personal or work context.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "Fact name (e.g. 'name', 'timezone')."},
+                "value": {"type": "string", "description": "Fact value."},
+            },
+            "required": ["key", "value"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "add_memory_note",
+        "description": "Store an important freeform note to remember across sessions.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "The note to remember."},
+            },
+            "required": ["text"],
+        },
+    },
 ]
 
 # Map tool names to their handler functions (lazy-loaded)
@@ -911,6 +991,10 @@ _TOOL_MAP = {
     # Team portfolio
     "get_team_portfolio": ("integrations.team_portfolio", "get_team_portfolio"),
     "get_member_portfolio": ("integrations.team_portfolio", "get_member_portfolio"),
+    # User memory
+    "remember_preference": ("integrations.memory", "set_preference"),
+    "remember_fact": ("integrations.memory", "set_fact"),
+    "add_memory_note": ("integrations.memory", "add_note"),
 }
 
 # Argument name mapping (Realtime tool params -> our function params)
@@ -1250,7 +1334,7 @@ async def get_ephemeral_token():
                 json={
                     "model": "gpt-4o-mini-realtime-preview",
                     "voice": "ash",
-                    "instructions": TARS_INSTRUCTIONS,
+                    "instructions": _build_voice_prompt(),
                     "tools": REALTIME_TOOLS,
                     "turn_detection": {
                         "type": "server_vad",
