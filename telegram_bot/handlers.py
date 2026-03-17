@@ -24,6 +24,31 @@ from integrations.ms_auth import (
 
 logger = logging.getLogger(__name__)
 
+# Telegram message length limit
+_MAX_MSG_LEN = 4096
+
+
+async def _send_long_message(update: Update, text: str) -> None:
+    """Send a message, splitting into chunks if it exceeds Telegram's limit."""
+    if len(text) <= _MAX_MSG_LEN:
+        await update.message.reply_text(text)
+        return
+
+    # Split on paragraph boundaries where possible
+    chunks: list[str] = []
+    current = ""
+    for line in text.split("\n"):
+        if len(current) + len(line) + 1 > _MAX_MSG_LEN - 20:
+            chunks.append(current)
+            current = line
+        else:
+            current = f"{current}\n{line}" if current else line
+    if current:
+        chunks.append(current)
+
+    for chunk in chunks:
+        await update.message.reply_text(chunk.strip())
+
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start — welcome message."""
@@ -34,6 +59,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "Commands:\n"
         "/start — This message\n"
         "/login — Connect your Microsoft 365 account\n"
+        "/briefing — Today's calendar, tasks & unread emails\n"
         "/clear — Reset our conversation\n"
         "/status — Check connected services\n\n"
         "Humor setting: 75%"
@@ -105,10 +131,38 @@ async def login_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "Successfully connected to Microsoft 365! ✅\n\n"
             "You can now ask me about your calendar, e.g.:\n"
             '• "What\'s on my calendar this week?"\n'
-            '• "Schedule a meeting with Alex tomorrow at 2pm"'
+            '• "Schedule a meeting with Alex tomorrow at 2pm"\n\n'
+            "Or try /briefing for a daily summary."
         )
     except RuntimeError as exc:
         await update.message.reply_text(f"Sign-in failed: {exc}")
+
+
+async def briefing_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /briefing — daily summary of calendar, tasks, and email."""
+    if not is_configured() or not get_token_silent():
+        await update.message.reply_text(
+            "You need to be signed in to Microsoft 365 first.\n"
+            "Use /login to connect your account."
+        )
+        return
+
+    await update.effective_chat.send_action(ChatAction.TYPING)
+
+    # Route through the agent so Claude formats it nicely
+    chat_id = update.effective_chat.id
+    try:
+        response = await run(
+            chat_id,
+            "Give me my daily briefing: today's calendar events, my pending tasks, "
+            "and any unread emails. Be concise but thorough.",
+        )
+        await _send_long_message(update, response)
+    except Exception:
+        logger.exception("Error generating briefing")
+        await update.message.reply_text(
+            "Couldn't generate your briefing. Try again in a moment."
+        )
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -124,7 +178,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     try:
         response = await run(chat_id, user_text)
-        await update.message.reply_text(response)
+        await _send_long_message(update, response)
     except Exception:
         logger.exception("Error processing message")
         await update.message.reply_text(
@@ -138,5 +192,6 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("clear", clear_command))
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("login", login_command))
+    app.add_handler(CommandHandler("briefing", briefing_command))
     # Message handler — must be added last (catches all text)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))

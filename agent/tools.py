@@ -57,7 +57,7 @@ async def execute_tool(name: str, tool_input: dict) -> dict:
 
 def _register_calendar_tools() -> None:
     """Register Microsoft 365 calendar tools."""
-    from integrations.calendar import create_event, get_events
+    from integrations.calendar import create_event, get_events, search_events
     from integrations.ms_auth import is_configured
 
     if not is_configured():
@@ -144,6 +144,40 @@ def _register_calendar_tools() -> None:
             "required": ["subject", "start_time", "end_time"],
         },
         handler=_handle_create_event,
+    )
+
+    async def _handle_search_events(tool_input: dict) -> dict:
+        return await search_events(
+            query=tool_input["query"],
+            days=tool_input.get("days", 30),
+            max_results=tool_input.get("max_results", 10),
+        )
+
+    register_tool(
+        name="search_calendar",
+        description=(
+            "Search calendar events by keyword in the subject. "
+            "Searches upcoming events within the specified number of days."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search keyword to match in event subjects.",
+                },
+                "days": {
+                    "type": "integer",
+                    "description": "Number of days ahead to search. Default 30.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max events to return. Default 10.",
+                },
+            },
+            "required": ["query"],
+        },
+        handler=_handle_search_events,
     )
 
 
@@ -288,7 +322,7 @@ def _register_task_tools() -> None:
 
 def _register_mail_tools() -> None:
     """Register Microsoft 365 mail tools."""
-    from integrations.mail import get_messages, read_message, send_message
+    from integrations.mail import get_messages, read_message, reply_to_message, search_messages, send_message
     from integrations.ms_auth import is_configured
 
     if not is_configured():
@@ -394,6 +428,69 @@ def _register_mail_tools() -> None:
             "required": ["to", "subject", "body"],
         },
         handler=_handle_send_message,
+    )
+
+    async def _handle_reply_message(tool_input: dict) -> dict:
+        return await reply_to_message(
+            message_id=tool_input["message_id"],
+            body=tool_input["body"],
+            reply_all=tool_input.get("reply_all", False),
+        )
+
+    register_tool(
+        name="reply_email",
+        description=(
+            "Reply to a specific email. Requires the message ID (get it from get_emails first). "
+            "ALWAYS confirm the reply content with the user before sending."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "message_id": {
+                    "type": "string",
+                    "description": "The message ID to reply to.",
+                },
+                "body": {
+                    "type": "string",
+                    "description": "Reply body (plain text).",
+                },
+                "reply_all": {
+                    "type": "boolean",
+                    "description": "Reply to all recipients. Default false.",
+                },
+            },
+            "required": ["message_id", "body"],
+        },
+        handler=_handle_reply_message,
+    )
+
+    async def _handle_search_messages(tool_input: dict) -> dict:
+        return await search_messages(
+            query=tool_input["query"],
+            max_results=tool_input.get("max_results", 10),
+        )
+
+    register_tool(
+        name="search_emails",
+        description=(
+            "Search emails by keyword. Searches subject, body, and sender. "
+            "Returns matching messages sorted by most recent."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search keyword or phrase.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max results to return. Default 10.",
+                },
+            },
+            "required": ["query"],
+        },
+        handler=_handle_search_messages,
     )
 
 

@@ -116,3 +116,38 @@ async def create_event(
 
     data = await graph_post("/me/events", token, event_body)
     return _format_event(data)
+
+
+async def search_events(
+    query: str,
+    days: int = 30,
+    max_results: int = 10,
+) -> dict[str, Any]:
+    """Search calendar events by keyword.
+
+    Args:
+        query: Search query (matches subject).
+        days: Number of days ahead to search.
+        max_results: Max events to return.
+
+    Returns:
+        Dict with "events" list and "count".
+    """
+    token = _require_token()
+
+    now = datetime.now(timezone.utc)
+    end = now + timedelta(days=days)
+
+    params = {
+        "startDateTime": now.isoformat(),
+        "endDateTime": end.isoformat(),
+        "$top": str(max_results),
+        "$orderby": "start/dateTime",
+        "$filter": f"contains(subject, '{query}')",
+        "$select": "subject,start,end,location,isOnlineMeeting,organizer,webLink",
+    }
+
+    data = await graph_get("/me/calendarView", token, params)
+    events = [_format_event(e) for e in data.get("value", [])]
+
+    return {"events": events, "count": len(events), "query": query}

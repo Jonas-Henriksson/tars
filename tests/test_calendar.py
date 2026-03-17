@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from integrations.calendar import _format_event, create_event, get_events
+from integrations.calendar import _format_event, create_event, get_events, search_events
 
 
 class TestFormatEvent:
@@ -134,3 +134,32 @@ class TestCreateEvent:
         body = mock_post.call_args[0][2]
         assert len(body["attendees"]) == 2
         assert body["attendees"][0]["emailAddress"]["address"] == "alice@example.com"
+
+
+class TestSearchEvents:
+    @pytest.mark.asyncio
+    async def test_search_events_success(self):
+        mock_data = {
+            "value": [
+                {
+                    "id": "e1",
+                    "subject": "Budget Review",
+                    "start": {"dateTime": "2025-01-20T14:00:00", "timeZone": "UTC"},
+                    "end": {"dateTime": "2025-01-20T15:00:00", "timeZone": "UTC"},
+                    "location": {},
+                    "isOnlineMeeting": False,
+                    "organizer": {"emailAddress": {"name": "CFO"}},
+                    "webLink": "",
+                },
+            ]
+        }
+
+        with (
+            patch("integrations.calendar.get_token_silent", return_value="fake-token"),
+            patch("integrations.calendar.graph_get", new_callable=AsyncMock, return_value=mock_data),
+        ):
+            result = await search_events("Budget")
+
+        assert result["count"] == 1
+        assert result["query"] == "Budget"
+        assert result["events"][0]["subject"] == "Budget Review"

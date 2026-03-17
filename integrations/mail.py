@@ -1,4 +1,4 @@
-"""Microsoft 365 Mail integration — read inbox and send emails."""
+"""Microsoft 365 Mail integration — read, search, reply, and send emails."""
 from __future__ import annotations
 
 import logging
@@ -140,3 +140,60 @@ async def send_message(
         "to": to,
         "subject": subject,
     }
+
+
+async def reply_to_message(
+    message_id: str,
+    body: str,
+    reply_all: bool = False,
+) -> dict[str, Any]:
+    """Reply to an email.
+
+    Args:
+        message_id: The message ID to reply to.
+        body: Reply body (plain text).
+        reply_all: If True, reply to all recipients.
+
+    Returns:
+        Dict confirming the reply was sent.
+    """
+    token = _require_token()
+
+    endpoint = f"/me/messages/{message_id}/replyAll" if reply_all else f"/me/messages/{message_id}/reply"
+    await graph_post(endpoint, token, {
+        "comment": body,
+    })
+
+    return {
+        "status": "replied",
+        "reply_all": reply_all,
+        "message_id": message_id,
+    }
+
+
+async def search_messages(
+    query: str,
+    max_results: int = 10,
+) -> dict[str, Any]:
+    """Search emails by keyword.
+
+    Args:
+        query: Search query (searches subject, body, and sender).
+        max_results: Max messages to return.
+
+    Returns:
+        Dict with "messages" list and "count".
+    """
+    token = _require_token()
+
+    params: dict[str, str] = {
+        "$top": str(max_results),
+        "$orderby": "receivedDateTime desc",
+        "$search": f'"{query}"',
+        "$select": "subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,importance",
+    }
+
+    data = await graph_get("/me/messages", token, params)
+    messages = [_format_message(m) for m in data.get("value", [])]
+
+    return {"messages": messages, "count": len(messages), "query": query}
