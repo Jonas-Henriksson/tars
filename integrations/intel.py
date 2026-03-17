@@ -685,32 +685,72 @@ async def scan_notion(
     }
 
 
+# Action verbs that signal a task when found at the start of a bullet/line
+_ACTION_VERBS = re.compile(
+    r"^(update|review|prepare|send|share|create|set up|schedule|follow[\s\-]?up|"
+    r"check|finalize|draft|write|submit|complete|plan|organize|coordinate|arrange|"
+    r"confirm|reach out|discuss|present|deliver|implement|fix|resolve|assign|"
+    r"investigate|research|evaluate|assess|approve|escalate|migrate|deploy|"
+    r"configure|test|validate|document|track|monitor|align|prioritize|"
+    r"compile|consolidate|refine|iterate|prototype|design|build|launch|"
+    r"onboard|train|hire|interview|budget|forecast|invoice|audit|"
+    r"analyze|measure|report|communicate|notify|announce|publish|"
+    r"integrate|connect|sync|transfer|upgrade|install|provision|"
+    r"negotiate|close|renew|extend|cancel|archive|clean[\s\-]?up|"
+    r"define|scope|estimate|brainstorm|outline|map|diagram|"
+    r"book|reserve|order|purchase|procure|request|file|register|"
+    r"enable|disable|grant|revoke|add|remove|move|rename|merge|split)\b",
+    re.IGNORECASE,
+)
+
+
 def _extract_own_tasks(text: str, title: str) -> list[dict]:
-    """Extract tasks assigned to the user (no @mention, or self-referencing)."""
+    """Extract tasks assigned to the user (no @mention, or self-referencing).
+
+    Detects:
+    - Unchecked to-do items: ``[ ] task text``
+    - TODO/ACTION keywords: ``TODO: task text``
+    - Bullet points with action verbs: ``• Update the slide...``
+    - Numbered items with action verbs: ``- Review the budget...``
+    """
     tasks = []
     seen: set[str] = set()
 
-    # Pattern 1: unchecked checkboxes without @mention or name delegation
-    for match in re.finditer(r"\[[ ]\]\s*(.{6,})", text):
-        desc = match.group(1).strip()
+    def _add(desc: str) -> None:
+        desc = desc.strip().rstrip(".").strip()
+        if len(desc) < 6:
+            return
         if desc.startswith("@"):
-            continue
+            return
+        # Skip items that look like delegations (Name to/will/should verb)
         if re.match(r"[A-Z][a-z]+\s+(to|will|should|needs? to)\s+", desc):
-            continue
+            return
         key = desc.lower()[:50]
         if key not in seen:
             seen.add(key)
             tasks.append({"description": desc})
 
+    # Pattern 1: unchecked checkboxes without @mention or name delegation
+    for match in re.finditer(r"\[[ ]\]\s*(.{6,})", text):
+        _add(match.group(1))
+
     # Pattern 2: TODO/ACTION lines without @mention
     for match in re.finditer(r"(?:TODO|ACTION)[:\s]+([^@\n]{6,})", text):
+        _add(match.group(1))
+
+    # Pattern 3: Bullet points (•) with action verbs
+    for match in re.finditer(r"[•]\s+(.{6,})", text):
         desc = match.group(1).strip()
-        if re.match(r"[A-Z][a-z]+\s+(to|will|should|needs? to)\s+", desc):
-            continue
-        key = desc.lower()[:50]
-        if key not in seen:
-            seen.add(key)
-            tasks.append({"description": desc})
+        if _ACTION_VERBS.match(desc):
+            _add(desc)
+
+    # Pattern 4: List items (- or *) with action verbs (from numbered_list_item)
+    for match in re.finditer(r"^[\-\*]\s+(.{6,})$", text, re.MULTILINE):
+        desc = match.group(1).strip()
+        if desc.startswith("@"):
+            continue  # handled by _detect_delegations
+        if _ACTION_VERBS.match(desc):
+            _add(desc)
 
     return tasks
 
