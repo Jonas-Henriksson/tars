@@ -296,6 +296,53 @@ REALTIME_TOOLS = [
             "properties": {},
         },
     },
+    {
+        "type": "function",
+        "name": "scan_notion",
+        "description": "Scan all Notion pages to build intelligence: topics, people, delegations, smart tasks with Eisenhower priority matrix.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "max_pages": {"type": "integer", "description": "Max pages to scan. Default 50."},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "name": "get_intel",
+        "description": "Get the intelligence profile with executive summary, priority matrix, follow-ups, and topic coverage.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "type": "function",
+        "name": "get_smart_tasks",
+        "description": "Get smart tasks filtered by owner, topic, or Eisenhower quadrant (1=Do first, 2=Schedule, 3=Delegate, 4=Defer).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "owner": {"type": "string", "description": "Filter by owner name."},
+                "topic": {"type": "string", "description": "Filter by topic."},
+                "quadrant": {"type": "integer", "description": "Eisenhower quadrant 1-4. 0 for all."},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "name": "update_smart_task",
+        "description": "Update a smart task's status or follow-up date.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "The task ID."},
+                "status": {"type": "string", "enum": ["open", "done"], "description": "New status."},
+                "follow_up_date": {"type": "string", "description": "New follow-up date YYYY-MM-DD."},
+            },
+            "required": ["task_id"],
+        },
+    },
 ]
 
 # Map tool names to their handler functions (lazy-loaded)
@@ -320,6 +367,10 @@ _TOOL_MAP = {
     "review_notion_page": ("integrations.notion_review", "review_page"),
     "add_known_names": ("integrations.notion_review", "add_known_names"),
     "daily_briefing": ("integrations.briefing_daily", "compile_daily_briefing"),
+    "scan_notion": ("integrations.intel", "scan_notion"),
+    "get_intel": ("integrations.intel", "get_intel"),
+    "get_smart_tasks": ("integrations.intel", "get_smart_tasks"),
+    "update_smart_task": ("integrations.intel", "update_smart_task"),
 }
 
 # Argument name mapping (Realtime tool params -> our function params)
@@ -359,6 +410,12 @@ async def briefing_page():
     return FileResponse(_STATIC_DIR / "briefing.html")
 
 
+@app.get("/executive")
+async def executive_page():
+    """Serve the executive summary dashboard."""
+    return FileResponse(_STATIC_DIR / "executive.html")
+
+
 @app.get("/api/tasks")
 async def get_tasks(
     owner: str = "",
@@ -389,6 +446,54 @@ async def get_briefing():
     except Exception as exc:
         logger.exception("Failed to compile briefing")
         return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+class SmartTaskUpdate(BaseModel):
+    status: str = ""
+    follow_up_date: str = ""
+
+
+@app.get("/api/intel")
+async def get_intel():
+    """Get the intelligence profile and executive summary."""
+    from integrations.intel import get_intel as _get_intel
+
+    try:
+        data = _get_intel()
+        return JSONResponse(data)
+    except Exception as exc:
+        logger.exception("Failed to get intel")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.post("/api/intel/scan")
+async def scan_intel(max_pages: int = 50):
+    """Trigger a Notion intelligence scan."""
+    from integrations.intel import scan_notion
+
+    try:
+        result = await scan_notion(max_pages=max_pages)
+        return JSONResponse(result)
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except Exception as exc:
+        logger.exception("Intel scan failed")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.patch("/api/intel/tasks/{task_id}")
+async def update_smart_task(task_id: str, body: SmartTaskUpdate):
+    """Update a smart task's status or follow-up date."""
+    from integrations.intel import update_smart_task as _update
+
+    result = _update(
+        task_id=task_id,
+        status=body.status,
+        follow_up_date=body.follow_up_date,
+    )
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
 
 
 @app.patch("/api/tasks/{task_id}/status")

@@ -1048,6 +1048,133 @@ def _register_briefing_tools() -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Register intelligence tools
+# ---------------------------------------------------------------------------
+
+def _register_intel_tools() -> None:
+    """Register intelligence scanner and executive summary tools."""
+    from config import NOTION_API_KEY
+
+    if not NOTION_API_KEY:
+        return
+
+    from integrations.intel import get_intel, get_smart_tasks, scan_notion, update_smart_task
+
+    async def _handle_scan_notion(tool_input: dict) -> dict:
+        return await scan_notion(
+            max_pages=tool_input.get("max_pages", 50),
+        )
+
+    register_tool(
+        name="scan_notion",
+        description=(
+            "Scan all accessible Notion pages to build intelligence about topics, "
+            "people, delegations, and tasks. Creates a smart task list with "
+            "Eisenhower priority matrix and estimated follow-up dates. "
+            "Use this to build or refresh the executive summary."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "max_pages": {
+                    "type": "integer",
+                    "description": "Max pages to scan. Default 50.",
+                },
+            },
+        },
+        handler=_handle_scan_notion,
+    )
+
+    async def _handle_get_intel(tool_input: dict) -> dict:
+        return get_intel()
+
+    register_tool(
+        name="get_intel",
+        description=(
+            "Get the full intelligence profile: topics, people, smart tasks, "
+            "and executive summary with Eisenhower matrix. "
+            "Run scan_notion first if data is stale."
+        ),
+        input_schema={"type": "object", "properties": {}},
+        handler=_handle_get_intel,
+    )
+
+    async def _handle_get_smart_tasks(tool_input: dict) -> dict:
+        return get_smart_tasks(
+            owner=tool_input.get("owner", ""),
+            topic=tool_input.get("topic", ""),
+            quadrant=tool_input.get("quadrant", 0),
+            include_done=tool_input.get("include_done", False),
+        )
+
+    register_tool(
+        name="get_smart_tasks",
+        description=(
+            "Get smart tasks with optional filters by owner, topic, or "
+            "Eisenhower quadrant (1=Do first, 2=Schedule, 3=Delegate, 4=Defer). "
+            "Tasks include priority classification and follow-up dates."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "owner": {
+                    "type": "string",
+                    "description": "Filter by task owner name.",
+                },
+                "topic": {
+                    "type": "string",
+                    "description": "Filter by topic category.",
+                },
+                "quadrant": {
+                    "type": "integer",
+                    "description": "Filter by Eisenhower quadrant (1-4). 0 for all.",
+                },
+                "include_done": {
+                    "type": "boolean",
+                    "description": "Include completed tasks. Default false.",
+                },
+            },
+        },
+        handler=_handle_get_smart_tasks,
+    )
+
+    async def _handle_update_smart_task(tool_input: dict) -> dict:
+        return update_smart_task(
+            task_id=tool_input["task_id"],
+            status=tool_input.get("status", ""),
+            follow_up_date=tool_input.get("follow_up_date", ""),
+        )
+
+    register_tool(
+        name="update_smart_task",
+        description=(
+            "Update a smart task's status or follow-up date. "
+            "Use status 'done' to mark complete, 'open' to reopen."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "description": "The smart task ID.",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["open", "done"],
+                    "description": "New status.",
+                },
+                "follow_up_date": {
+                    "type": "string",
+                    "description": "New follow-up date (YYYY-MM-DD).",
+                },
+            },
+            "required": ["task_id"],
+        },
+        handler=_handle_update_smart_task,
+    )
+
+
 # Auto-register tools on import
 _register_calendar_tools()
 _register_task_tools()
@@ -1056,3 +1183,4 @@ _register_reminder_tools()
 _register_notion_tools()
 _register_notion_review_tools()
 _register_briefing_tools()
+_register_intel_tools()

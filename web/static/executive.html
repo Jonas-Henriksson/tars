@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TARS Executive Summary</title>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0a0a0a; --surface: #111113; --surface-raised: #18181b;
+            --border: #27272a; --border-subtle: #1e1e21;
+            --text: #fafafa; --text-secondary: #a1a1aa; --text-muted: #71717a;
+            --accent: #3b82f6; --green: #22c55e; --green-dim: rgba(34,197,94,0.12); --green-text: #4ade80;
+            --amber: #f59e0b; --amber-dim: rgba(245,158,11,0.10); --amber-text: #fbbf24;
+            --red: #ef4444; --red-dim: rgba(239,68,68,0.10); --red-text: #f87171;
+            --blue-dim: rgba(59,130,246,0.10); --purple: #a855f7; --purple-dim: rgba(168,85,247,0.10); --purple-text: #c084fc;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+        .shell { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+        header { border-bottom: 1px solid var(--border-subtle); padding: 16px 0; position: sticky; top: 0; background: var(--bg); z-index: 50; }
+        .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+        .brand span { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+        .nav-links a:hover { color: var(--text-secondary); background: var(--surface); }
+        .nav-links a.active { color: var(--text); background: var(--surface-raised); }
+
+        .page-header { padding: 24px 0 16px; display: flex; align-items: center; justify-content: space-between; }
+        .page-title { font-size: 20px; font-weight: 600; }
+        .scan-info { font-size: 12px; color: var(--text-muted); }
+        .scan-btn { background: var(--surface-raised); border: 1px solid var(--border); color: var(--text); font-size: 13px; padding: 7px 18px; border-radius: 6px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+        .scan-btn:hover { background: var(--border); border-color: var(--text-muted); }
+        .scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Stats */
+        .stats { display: flex; gap: 1px; background: var(--border-subtle); border-radius: 8px; overflow: hidden; margin: 16px 0 24px; }
+        .stat { flex: 1; background: var(--surface); padding: 12px 16px; text-align: center; }
+        .stat-val { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+        .stat-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-top: 2px; }
+
+        /* Matrix */
+        .matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px; }
+        .matrix-cell { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; min-height: 120px; }
+        .matrix-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); }
+        .matrix-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+        .matrix-count { font-size: 11px; color: var(--text-muted); }
+
+        .q1 .matrix-label { color: var(--red-text); }
+        .q1 { border-left: 3px solid var(--red); }
+        .q2 .matrix-label { color: var(--accent); }
+        .q2 { border-left: 3px solid var(--accent); }
+        .q3 .matrix-label { color: var(--amber-text); }
+        .q3 { border-left: 3px solid var(--amber); }
+        .q4 .matrix-label { color: var(--text-muted); }
+        .q4 { border-left: 3px solid var(--border); }
+
+        .matrix-item { padding: 5px 0; font-size: 13px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+        .matrix-item:last-child { border-bottom: none; }
+        .matrix-desc { flex: 1; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .matrix-owner { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+        .matrix-date { font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .date-overdue { color: var(--red-text); }
+        .date-soon { color: var(--amber-text); }
+        .date-ok { color: var(--text-muted); }
+        .matrix-empty { font-size: 12px; color: var(--text-muted); font-style: italic; padding: 8px 0; }
+
+        /* Sections */
+        .section { margin-bottom: 28px; }
+        .section-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); }
+        .section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+        .section-count { font-size: 11px; color: var(--text-muted); }
+
+        /* Follow-up list */
+        .fu-row { display: flex; align-items: baseline; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; }
+        .fu-row:last-child { border-bottom: none; }
+        .fu-date { min-width: 80px; font-size: 12px; font-variant-numeric: tabular-nums; }
+        .fu-desc { flex: 1; color: var(--text); }
+        .fu-owner { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+        .fu-action { background: none; border: 1px solid var(--border); color: var(--text-muted); font-size: 11px; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+        .fu-action:hover { color: var(--text); border-color: var(--text-muted); }
+
+        /* Topics & People */
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+        .tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+        .tag { background: var(--surface-raised); border: 1px solid var(--border); border-radius: 4px; padding: 4px 10px; font-size: 12px; color: var(--text-secondary); display: flex; align-items: baseline; gap: 6px; }
+        .tag-count { color: var(--text-muted); font-size: 11px; }
+
+        .empty { text-align: center; padding: 48px; color: var(--text-muted); font-size: 13px; }
+        .loading { text-align: center; padding: 48px; color: var(--text-muted); font-size: 13px; }
+
+        @media (max-width: 700px) {
+            .matrix { grid-template-columns: 1fr; }
+            .two-col { grid-template-columns: 1fr; }
+            .stats .stat { padding: 10px 6px; }
+            .stat-val { font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="shell">
+            <div class="header-row">
+                <div class="brand"><h1>TARS</h1><span>Executive Summary</span></div>
+                <nav class="nav-links">
+                    <a href="/">Voice</a>
+                    <a href="/tasks">Tasks</a>
+                    <a href="/briefing">Briefing</a>
+                    <a href="/executive" class="active">Executive</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+    <main class="shell">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Executive Summary</div>
+                <div class="scan-info" id="scanInfo">Not yet scanned.</div>
+            </div>
+            <button class="scan-btn" id="scanBtn" onclick="runScan()">Scan Notion</button>
+        </div>
+        <div id="content"><div class="empty">Click "Scan Notion" to analyze your pages and build your intelligence profile.</div></div>
+    </main>
+    <script>
+    (function(){
+        'use strict';
+        const content = document.getElementById('content');
+        const scanInfo = document.getElementById('scanInfo');
+        const scanBtn = document.getElementById('scanBtn');
+
+        async function loadIntel() {
+            try {
+                const resp = await fetch('/api/intel');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (data.last_scan_at) {
+                    renderIntel(data);
+                    scanInfo.textContent = 'Last scan: ' + new Date(data.last_scan_at).toLocaleString() + ' — ' + data.pages_scanned + ' pages';
+                }
+            } catch(e) {}
+        }
+
+        window.runScan = async function() {
+            scanBtn.disabled = true;
+            scanBtn.textContent = 'Scanning...';
+            scanInfo.textContent = 'Scanning all Notion pages...';
+            content.innerHTML = '<div class="loading">Scanning and analyzing your Notion pages...</div>';
+            try {
+                const resp = await fetch('/api/intel/scan', { method: 'POST' });
+                if (!resp.ok) throw new Error('Scan failed: ' + resp.status);
+                const data = await resp.json();
+                scanInfo.textContent = 'Scanned ' + data.pages_scanned + ' pages — ' + data.new_tasks_added + ' new tasks found';
+                await loadIntel();
+            } catch(err) {
+                content.innerHTML = '<div class="empty">Scan failed: ' + esc(err.message) + '</div>';
+                scanInfo.textContent = 'Scan failed.';
+            }
+            scanBtn.disabled = false;
+            scanBtn.textContent = 'Scan Notion';
+        };
+
+        function renderIntel(data) {
+            const es = data.executive_summary || {};
+            const mx = es.matrix || {};
+            let html = '';
+
+            // Stats
+            html += '<div class="stats">';
+            html += stat(es.total_open || 0, 'Open tasks', '--text');
+            html += stat(mx.q1_count || 0, 'Do first', '--red-text');
+            html += stat(mx.q2_count || 0, 'Schedule', '--accent');
+            html += stat(es.total_delegated || 0, 'Delegated', '--amber-text');
+            html += stat(es.total_overdue || 0, 'Overdue', '--red-text');
+            html += stat(Object.keys(data.people || {}).length, 'People', '--text-secondary');
+            html += '</div>';
+
+            // Eisenhower Matrix
+            html += '<div class="matrix">';
+            html += matrixCell('q1', 'Q1: Do First', 'Urgent + Important', mx.q1_do_first || []);
+            html += matrixCell('q2', 'Q2: Schedule', 'Important, Not Urgent', mx.q2_schedule || []);
+            html += matrixCell('q3', 'Q3: Delegate', 'Urgent, Not Important', mx.q3_delegate || []);
+            html += matrixCell('q4', 'Q4: Defer', 'Neither', mx.q4_defer || []);
+            html += '</div>';
+
+            // Overdue follow-ups
+            const overdue = es.overdue_follow_ups || [];
+            if (overdue.length > 0) {
+                html += '<div class="section">';
+                html += secHead('Overdue Follow-ups', overdue.length);
+                html += fuList(overdue, 'date-overdue');
+                html += '</div>';
+            }
+
+            // Upcoming follow-ups
+            const upcoming = es.upcoming_follow_ups || [];
+            if (upcoming.length > 0) {
+                html += '<div class="section">';
+                html += secHead('Upcoming Follow-ups (7 days)', upcoming.length);
+                html += fuList(upcoming, 'date-soon');
+                html += '</div>';
+            }
+
+            // Topics & People
+            const topics = es.top_topics || data.topics || {};
+            const people = data.people || {};
+            if (Object.keys(topics).length > 0 || Object.keys(people).length > 0) {
+                html += '<div class="two-col">';
+                html += '<div class="section">';
+                html += secHead('Your Topics', Object.keys(topics).length);
+                html += '<div class="tag-list">';
+                for (const [t, c] of Object.entries(topics)) {
+                    html += '<span class="tag">' + esc(t) + '<span class="tag-count">' + c + '</span></span>';
+                }
+                html += '</div></div>';
+                html += '<div class="section">';
+                html += secHead('People You Work With', Object.keys(people).length);
+                html += '<div class="tag-list">';
+                for (const [p, c] of Object.entries(people)) {
+                    html += '<span class="tag">' + esc(p) + '<span class="tag-count">' + c + '</span></span>';
+                }
+                html += '</div></div>';
+                html += '</div>';
+            }
+
+            // Delegation summary
+            const deleg = es.delegation_summary || {};
+            if (Object.keys(deleg).length > 0) {
+                html += '<div class="section">';
+                html += secHead('Delegation Load', Object.keys(deleg).length + ' people');
+                html += '<div class="tag-list">';
+                for (const [p, c] of Object.entries(deleg).sort((a,b) => b[1] - a[1])) {
+                    html += '<span class="tag">' + esc(p) + '<span class="tag-count">' + c + ' tasks</span></span>';
+                }
+                html += '</div></div>';
+            }
+
+            content.innerHTML = html || '<div class="empty">No intelligence data yet.</div>';
+
+            // Bind done buttons
+            content.querySelectorAll('.fu-action').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const id = btn.dataset.id;
+                    await fetch('/api/intel/tasks/' + id, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({status: 'done'}),
+                    });
+                    await loadIntel();
+                });
+            });
+        }
+
+        function stat(val, label, color) {
+            return '<div class="stat"><div class="stat-val" style="color:var(' + color + ')">' + val + '</div><div class="stat-lbl">' + label + '</div></div>';
+        }
+
+        function matrixCell(cls, title, sub, items) {
+            let h = '<div class="matrix-cell ' + cls + '">';
+            h += '<div class="matrix-head"><span class="matrix-label">' + title + '</span><span class="matrix-count">' + items.length + '</span></div>';
+            if (items.length === 0) {
+                h += '<div class="matrix-empty">No items</div>';
+            } else {
+                for (const t of items.slice(0, 6)) {
+                    const dc = dateClass(t.follow_up_date);
+                    h += '<div class="matrix-item">';
+                    h += '<span class="matrix-desc">' + esc(t.description) + '</span>';
+                    h += '<span class="matrix-owner">' + esc(t.owner || '') + '</span>';
+                    if (t.follow_up_date) h += '<span class="matrix-date ' + dc + '">' + t.follow_up_date + '</span>';
+                    h += '</div>';
+                }
+                if (items.length > 6) h += '<div class="matrix-empty">+ ' + (items.length - 6) + ' more</div>';
+            }
+            h += '</div>';
+            return h;
+        }
+
+        function secHead(t, c) { return '<div class="section-head"><span class="section-title">' + t + '</span><span class="section-count">' + c + '</span></div>'; }
+
+        function fuList(items, cls) {
+            let h = '';
+            for (const t of items) {
+                h += '<div class="fu-row">';
+                h += '<span class="fu-date ' + cls + '">' + (t.follow_up_date || '--') + '</span>';
+                h += '<span class="fu-desc">' + esc(t.description) + '</span>';
+                h += '<span class="fu-owner">' + esc(t.owner || '') + '</span>';
+                h += '<button class="fu-action" data-id="' + t.id + '">Done</button>';
+                h += '</div>';
+            }
+            return h;
+        }
+
+        function dateClass(d) {
+            if (!d) return 'date-ok';
+            const today = new Date().toISOString().slice(0, 10);
+            if (d < today) return 'date-overdue';
+            const week = new Date(Date.now() + 7*86400000).toISOString().slice(0, 10);
+            if (d <= week) return 'date-soon';
+            return 'date-ok';
+        }
+
+        function esc(s) { if (!s) return ''; const el = document.createElement('span'); el.textContent = s; return el.innerHTML; }
+
+        loadIntel();
+    })();
+    </script>
+</body>
+</html>
