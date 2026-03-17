@@ -203,6 +203,20 @@ REALTIME_TOOLS = [
     },
     {
         "type": "function",
+        "name": "reply_email",
+        "description": "Reply to an email. ALWAYS confirm the reply text with the user first.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "message_id": {"type": "string", "description": "The message ID to reply to (from get_emails or read_email)."},
+                "body": {"type": "string", "description": "Reply body text."},
+                "reply_all": {"type": "boolean", "description": "Reply to all recipients. Default false."},
+            },
+            "required": ["message_id", "body"],
+        },
+    },
+    {
+        "type": "function",
         "name": "search_notion",
         "description": "Search Notion pages by keyword.",
         "parameters": {
@@ -405,6 +419,44 @@ REALTIME_TOOLS = [
     },
     {
         "type": "function",
+        "name": "get_people",
+        "description": "Get all people from the knowledge library with their roles, relationships, topics, and task ownership. Use when the user asks 'who works on X' or 'tell me about my team'.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "type": "function",
+        "name": "get_person",
+        "description": "Get a specific person's full profile — role, relationship, org, topics, tasks, and meeting context.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "The person's name."},
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "update_person",
+        "description": "Update a person's profile — their role, relationship to user, organization, email, or notes.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "The person's name."},
+                "role": {"type": "string", "description": "Their role/title (e.g. 'Engineering Lead')."},
+                "relationship": {"type": "string", "description": "How they relate to the user (e.g. 'Direct report', 'Skip-level', 'External partner')."},
+                "organization": {"type": "string", "description": "Their team/dept/org (e.g. 'Platform Engineering')."},
+                "notes": {"type": "string", "description": "Free-form notes about this person."},
+                "email": {"type": "string", "description": "Their email address."},
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "type": "function",
         "name": "search_intel",
         "description": "Search the intelligence knowledge base — all scanned Notion page content, topics, people, and tasks. Use this to answer questions about what was discussed in meetings, who said what, project status, etc.",
         "parameters": {
@@ -430,6 +482,7 @@ _TOOL_MAP = {
     "read_email": ("integrations.mail", "read_message"),
     "send_email": ("integrations.mail", "send_message"),
     "search_emails": ("integrations.mail", "search_messages"),
+    "reply_email": ("integrations.mail", "reply_to_message"),
     "search_notion": ("integrations.notion", "search_pages"),
     "read_notion_page": ("integrations.notion", "get_page_content"),
     "extract_meeting_tasks": ("integrations.notion_tasks", "extract_meeting_tasks"),
@@ -447,6 +500,9 @@ _TOOL_MAP = {
     "delete_smart_task": ("integrations.intel", "delete_smart_task"),
     "search_intel": ("integrations.intel", "search_intel"),
     "update_tracked_task": ("integrations.notion_tasks", "update_task"),
+    "get_people": ("integrations.people", "get_all_people"),
+    "get_person": ("integrations.people", "get_person"),
+    "update_person": ("integrations.people", "update_person"),
 }
 
 # Argument name mapping (Realtime tool params -> our function params)
@@ -496,6 +552,24 @@ async def executive_page():
 async def graph_page():
     """Serve the graph visualization page."""
     return FileResponse(_STATIC_DIR / "graph.html")
+
+
+@app.get("/settings")
+async def settings_page():
+    """Serve the settings / configuration page."""
+    return FileResponse(_STATIC_DIR / "settings.html")
+
+
+@app.get("/people")
+async def people_page():
+    """Serve the people / contacts page."""
+    return FileResponse(_STATIC_DIR / "people.html")
+
+
+@app.get("/review")
+async def review_page():
+    """Serve the weekly review page."""
+    return FileResponse(_STATIC_DIR / "review.html")
 
 
 @app.get("/api/intel/graph")
@@ -839,6 +913,268 @@ async def execute_tool(req: ToolCallRequest):
     except Exception as exc:
         logger.exception("Tool execution failed: %s", req.name)
         return JSONResponse({"error": f"Tool failed: {exc}"})
+
+
+@app.get("/api/settings/status")
+async def get_integration_status():
+    """Get connection status for all integrations."""
+    from config import (
+        OPENAI_API_KEY as _oai,
+        ANTHROPIC_API_KEY as _ant,
+        NOTION_API_KEY as _notion,
+        MS_CLIENT_ID as _ms_id,
+        MS_TENANT_ID as _ms_tid,
+        TELEGRAM_BOT_TOKEN as _tg,
+    )
+
+    statuses = {}
+
+    # Microsoft 365
+    ms_configured = bool(_ms_id and _ms_tid)
+    ms_signed_in = False
+    ms_user = None
+    if ms_configured:
+        try:
+            from integrations.ms_auth import get_token_silent
+            token = get_token_silent()
+            ms_signed_in = token is not None
+        except Exception:
+            pass
+    statuses["microsoft365"] = {
+        "configured": ms_configured,
+        "signed_in": ms_signed_in,
+        "user": ms_user,
+        "services": ["Calendar", "Email", "To Do"],
+    }
+
+    # Notion
+    notion_configured = bool(_notion)
+    statuses["notion"] = {
+        "configured": notion_configured,
+        "services": ["Pages", "Meeting Notes", "Intelligence Scan"],
+    }
+
+    # OpenAI
+    statuses["openai"] = {
+        "configured": bool(_oai),
+        "services": ["Voice (Realtime)", "Whisper", "TTS"],
+    }
+
+    # Anthropic
+    statuses["anthropic"] = {
+        "configured": bool(_ant),
+        "services": ["Intelligence Extraction (Haiku)"],
+    }
+
+    # Telegram
+    statuses["telegram"] = {
+        "configured": bool(_tg),
+        "services": ["Bot", "Reminders"],
+    }
+
+    return JSONResponse(statuses)
+
+
+@app.get("/api/people")
+async def get_people():
+    """Get all people with merged intel + saved profile data."""
+    from integrations.people import get_all_people
+
+    try:
+        return JSONResponse(get_all_people())
+    except Exception as exc:
+        logger.exception("Failed to get people data")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.get("/api/people/{name}")
+async def get_person(name: str):
+    """Get a single person's full profile."""
+    from integrations.people import get_person as _get
+
+    result = _get(name)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+class PersonUpdate(BaseModel):
+    role: str = None
+    relationship: str = None
+    organization: str = None
+    notes: str = None
+    email: str = None
+
+
+@app.patch("/api/people/{name}")
+async def update_person(name: str, body: PersonUpdate):
+    """Update a person's editable profile fields."""
+    from integrations.people import update_person as _update
+
+    fields = {k: v for k, v in body.dict().items() if v is not None}
+    if not fields:
+        return JSONResponse({"error": "No fields to update"}, status_code=400)
+    result = _update(name, **fields)
+    return JSONResponse(result)
+
+
+class PersonCreate(BaseModel):
+    name: str
+    role: str = ""
+    relationship: str = ""
+    organization: str = ""
+    notes: str = ""
+    email: str = ""
+
+
+@app.post("/api/people")
+async def add_person(body: PersonCreate):
+    """Manually add a person."""
+    from integrations.people import add_person as _add
+
+    fields = {k: v for k, v in body.dict().items() if k != "name" and v}
+    result = _add(body.name, **fields)
+    if "error" in result:
+        return JSONResponse(result, status_code=409)
+    return JSONResponse(result, status_code=201)
+
+
+@app.delete("/api/people/{name}")
+async def delete_person(name: str):
+    """Remove a person's saved profile."""
+    from integrations.people import delete_person as _delete
+
+    result = _delete(name)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@app.get("/api/review/weekly")
+async def get_weekly_review():
+    """Get weekly review data — task trends, delegation patterns, stale items."""
+    from integrations.intel import get_intel as _get_intel
+    from integrations.notion_tasks import get_tracked_tasks as _get_tracked
+    from datetime import datetime, timezone, timedelta
+
+    try:
+        intel = _get_intel()
+        smart_tasks = intel.get("smart_tasks", [])
+        scan_history = intel.get("scan_history", [])
+        topics = intel.get("topics", {})
+        people = intel.get("people", {})
+
+        now = datetime.now(timezone.utc)
+        week_ago = now - timedelta(days=7)
+
+        # Task status breakdown
+        open_tasks = [t for t in smart_tasks if t.get("status") != "done"]
+        done_tasks = [t for t in smart_tasks if t.get("status") == "done"]
+
+        # Quadrant distribution
+        quadrant_counts = {1: 0, 2: 0, 3: 0, 4: 0}
+        for t in open_tasks:
+            q = t.get("priority", {}).get("quadrant", 4)
+            quadrant_counts[q] = quadrant_counts.get(q, 0) + 1
+
+        # Overdue tasks
+        overdue = []
+        for t in open_tasks:
+            fud = t.get("follow_up_date", "")
+            if fud:
+                try:
+                    due = datetime.fromisoformat(fud)
+                    if due.tzinfo is None:
+                        due = due.replace(tzinfo=timezone.utc)
+                    if due < now:
+                        days_overdue = (now - due).days
+                        overdue.append({
+                            "id": t.get("id"),
+                            "description": t.get("description", ""),
+                            "owner": t.get("owner", ""),
+                            "follow_up_date": fud,
+                            "days_overdue": days_overdue,
+                        })
+                except (ValueError, TypeError):
+                    pass
+        overdue.sort(key=lambda x: x["days_overdue"], reverse=True)
+
+        # Delegation breakdown
+        delegation = {}
+        for t in open_tasks:
+            owner = t.get("owner", "Unassigned")
+            delegation.setdefault(owner, {"count": 0, "overdue": 0, "tasks": []})
+            delegation[owner]["count"] += 1
+            delegation[owner]["tasks"].append({
+                "description": t.get("description", "")[:80],
+                "status": t.get("status"),
+                "quadrant": t.get("priority", {}).get("quadrant"),
+            })
+            fud = t.get("follow_up_date", "")
+            if fud:
+                try:
+                    due = datetime.fromisoformat(fud)
+                    if due.tzinfo is None:
+                        due = due.replace(tzinfo=timezone.utc)
+                    if due < now:
+                        delegation[owner]["overdue"] += 1
+                except (ValueError, TypeError):
+                    pass
+
+        # Tracked tasks stats
+        tracked_all = _get_tracked(include_completed=True)
+        tracked_open = _get_tracked()
+        tracked_tasks_list = tracked_all.get("tasks", [])
+
+        # Stale tracked tasks (open > 7 days)
+        stale_tracked = []
+        for t in tracked_open.get("tasks", []):
+            created = t.get("created_at", "")
+            if created:
+                try:
+                    cdt = datetime.fromisoformat(created)
+                    if cdt.tzinfo is None:
+                        cdt = cdt.replace(tzinfo=timezone.utc)
+                    age = (now - cdt).days
+                    if age >= 7:
+                        stale_tracked.append({
+                            "id": t.get("id"),
+                            "description": t.get("description", ""),
+                            "owner": t.get("owner", ""),
+                            "age_days": age,
+                        })
+                except (ValueError, TypeError):
+                    pass
+        stale_tracked.sort(key=lambda x: x["age_days"], reverse=True)
+
+        return JSONResponse({
+            "period": {
+                "start": week_ago.isoformat(),
+                "end": now.isoformat(),
+            },
+            "smart_tasks": {
+                "total": len(smart_tasks),
+                "open": len(open_tasks),
+                "done": len(done_tasks),
+                "quadrants": quadrant_counts,
+                "overdue": overdue,
+                "overdue_count": len(overdue),
+            },
+            "tracked_tasks": {
+                "total": len(tracked_tasks_list),
+                "open": tracked_open.get("count", 0),
+                "stale": stale_tracked,
+                "stale_count": len(stale_tracked),
+            },
+            "delegation": delegation,
+            "topics": topics,
+            "people": people,
+            "scan_history": scan_history[-7:],  # Last 7 scans
+        })
+
+    except Exception as exc:
+        logger.exception("Failed to get weekly review")
+        return JSONResponse({"error": str(exc)}, status_code=500)
 
 
 if __name__ == "__main__":

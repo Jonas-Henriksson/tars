@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TARS - Weekly Review</title>
+<style>
+:root {
+    --bg: #0a0a0a;
+    --surface: #111113;
+    --surface-raised: #18181b;
+    --border: #27272a;
+    --border-subtle: #1e1e21;
+    --text: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --accent: #3b82f6;
+    --accent-dim: rgba(59, 130, 246, 0.12);
+    --green: #22c55e;
+    --green-dim: rgba(34, 197, 94, 0.12);
+    --green-text: #4ade80;
+    --amber: #f59e0b;
+    --amber-dim: rgba(245, 158, 11, 0.10);
+    --amber-text: #fbbf24;
+    --red: #ef4444;
+    --red-dim: rgba(239, 68, 68, 0.10);
+    --purple: #a855f7;
+    --purple-dim: rgba(168, 85, 247, 0.10);
+    --purple-text: #c084fc;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+}
+
+.shell { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+header { border-bottom: 1px solid var(--border-subtle); padding: 16px 0; position: sticky; top: 0; background: var(--bg); z-index: 50; }
+.header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.brand span { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+.nav-links { display: flex; gap: 4px; }
+.nav-links a { color: var(--text-muted); text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+.nav-links a:hover { color: var(--text-secondary); background: var(--surface); }
+.nav-links a.active { color: var(--text); background: var(--surface-raised); }
+
+.summary-strip { display: flex; gap: 1px; background: var(--border-subtle); border-radius: 8px; overflow: hidden; margin: 20px 0; }
+.summary-cell { flex: 1; background: var(--surface); padding: 14px 20px; text-align: center; }
+.summary-value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.summary-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-top: 2px; }
+
+.columns { display: flex; gap: 24px; margin-top: 24px; padding-bottom: 48px; }
+.col-left { flex: 0 0 55%; min-width: 0; }
+.col-right { flex: 0 0 calc(45% - 24px); min-width: 0; }
+
+.section { margin-bottom: 28px; }
+.section-header { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.section-header-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+.quad-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border-subtle); border-radius: 8px; overflow: hidden; }
+.quad-card { background: var(--surface); padding: 16px; }
+.quad-card-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; font-weight: 500; }
+.quad-card-count { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.quad-card-pct { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.task-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface); border-radius: 6px; margin-bottom: 4px; }
+.task-row-desc { flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.task-row-owner { font-size: 12px; color: var(--text-secondary); flex-shrink: 0; }
+.badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.badge-red { background: var(--red-dim); color: var(--red); }
+.badge-amber { background: var(--amber-dim); color: var(--amber-text); }
+.badge-quad { font-size: 10px; font-weight: 500; padding: 2px 6px; border-radius: 4px; }
+
+.empty-good { font-size: 13px; color: var(--green-text); padding: 10px 14px; background: var(--green-dim); border-radius: 6px; }
+
+.person-block { margin-bottom: 16px; }
+.person-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.person-name { font-size: 14px; font-weight: 600; }
+.person-meta { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.person-meta .overdue-flag { color: var(--red); font-weight: 600; }
+.person-bar-track { height: 6px; background: var(--border-subtle); border-radius: 3px; margin-bottom: 8px; }
+.person-bar-fill { height: 6px; background: var(--accent); border-radius: 3px; transition: width 0.3s ease; }
+.person-task { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12px; color: var(--text-secondary); }
+.person-task-desc { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+.topic-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.topic-name { font-size: 13px; width: 100px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topic-count { font-size: 12px; color: var(--text-secondary); width: 24px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.topic-bar-track { flex: 1; height: 6px; background: var(--border-subtle); border-radius: 3px; }
+.topic-bar-fill { height: 6px; background: var(--purple); border-radius: 3px; transition: width 0.3s ease; }
+
+.scan-info { font-size: 12px; color: var(--text-muted); margin-top: 20px; }
+
+.empty-state { text-align: center; padding: 80px 24px; color: var(--text-muted); font-size: 14px; line-height: 1.7; }
+
+.loading-state { text-align: center; padding: 80px 24px; color: var(--text-muted); font-size: 14px; }
+
+@media (max-width: 768px) {
+    .nav-links { flex-wrap: wrap; }
+    .columns { flex-direction: column; }
+    .col-left, .col-right { flex: 1 1 100%; }
+    .summary-strip { flex-wrap: wrap; }
+    .summary-cell { flex: 1 1 calc(50% - 1px); }
+}
+</style>
+</head>
+<body>
+
+<header>
+    <div class="shell">
+        <div class="header-row">
+            <div class="brand">
+                <h1>TARS</h1>
+                <span>Weekly Review</span>
+            </div>
+            <nav class="nav-links">
+                <a href="/">Voice</a>
+                <a href="/tasks">Tasks</a>
+                <a href="/briefing">Briefing</a>
+                <a href="/executive">Executive</a>
+                <a href="/people">People</a>
+                <a href="/review" class="active">Review</a>
+                <a href="/graph">Graph</a>
+                <a href="/settings">Settings</a>
+            </nav>
+        </div>
+    </div>
+</header>
+
+<main class="shell" id="main-content">
+    <div class="loading-state" id="loading">Loading review data...</div>
+</main>
+
+<script>
+function esc(s) { if (!s) return ''; const el = document.createElement('span'); el.textContent = s; return el.innerHTML; }
+
+const QUAD_LABELS = { 1: 'Do First', 2: 'Schedule', 3: 'Delegate', 4: 'Defer' };
+const QUAD_COLORS = { 1: 'red', 2: 'accent', 3: 'amber', 4: 'muted' };
+
+function colorVar(q) {
+    const map = { 1: 'var(--red)', 2: 'var(--accent)', 3: 'var(--amber-text)', 4: 'var(--text-muted)' };
+    return map[q] || 'var(--text-muted)';
+}
+
+function colorDim(q) {
+    const map = { 1: 'var(--red-dim)', 2: 'var(--accent-dim)', 3: 'var(--amber-dim)', 4: 'var(--surface-raised)' };
+    return map[q] || 'var(--surface-raised)';
+}
+
+function pct(n, total) {
+    if (!total) return '0%';
+    return Math.round((n / total) * 100) + '%';
+}
+
+function formatDate(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function render(data) {
+    const main = document.getElementById('main-content');
+
+    if (!data || (!data.smart_tasks && !data.tracked_tasks)) {
+        main.innerHTML = '<div class="empty-state">No review data available. Run a Notion scan from the Executive page to build your intelligence profile.</div>';
+        return;
+    }
+
+    const st = data.smart_tasks || {};
+    const tt = data.tracked_tasks || {};
+    const delegation = data.delegation || {};
+    const topics = data.topics || {};
+    const people = data.people || {};
+    const scans = data.scan_history || [];
+    const quadrants = st.quadrants || {};
+    const openCount = st.open || 0;
+    const doneCount = st.done || 0;
+    const overdueCount = st.overdue_count || 0;
+    const staleCount = tt.stale_count || 0;
+    const overdueList = st.overdue || [];
+    const staleList = tt.stale || [];
+
+    // Summary strip
+    let html = `
+    <div class="summary-strip">
+        <div class="summary-cell">
+            <div class="summary-value">${esc(String(openCount))}</div>
+            <div class="summary-label">Open</div>
+        </div>
+        <div class="summary-cell">
+            <div class="summary-value">${esc(String(doneCount))}</div>
+            <div class="summary-label">Done</div>
+        </div>
+        <div class="summary-cell">
+            <div class="summary-value" style="color: var(--red)">${esc(String(overdueCount))}</div>
+            <div class="summary-label">Overdue</div>
+        </div>
+        <div class="summary-cell">
+            <div class="summary-value" style="color: var(--amber-text)">${esc(String(staleCount))}</div>
+            <div class="summary-label">Stale</div>
+        </div>
+    </div>
+
+    <div class="columns">
+        <div class="col-left">`;
+
+    // Eisenhower Matrix
+    html += `
+            <div class="section">
+                <div class="section-header">Eisenhower Matrix Overview</div>
+                <div class="quad-grid">`;
+
+    for (let q = 1; q <= 4; q++) {
+        const count = quadrants[q] || quadrants[String(q)] || 0;
+        html += `
+                    <div class="quad-card">
+                        <div class="quad-card-label" style="color: ${colorVar(q)}">${esc(QUAD_LABELS[q])}</div>
+                        <div class="quad-card-count" style="color: ${colorVar(q)}">${esc(String(count))}</div>
+                        <div class="quad-card-pct">${pct(count, openCount)} of open</div>
+                    </div>`;
+    }
+
+    html += `
+                </div>
+            </div>`;
+
+    // Overdue Tasks
+    html += `
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-header-dot" style="background: var(--red)"></span>
+                    Overdue Tasks
+                </div>`;
+
+    if (overdueList.length === 0) {
+        html += '<div class="empty-good">No overdue tasks</div>';
+    } else {
+        overdueList.forEach(function(t) {
+            html += `
+                <div class="task-row">
+                    <div class="task-row-desc">${esc(t.description)}</div>
+                    <div class="task-row-owner">${esc(t.owner)}</div>
+                    <span class="badge badge-red">${esc(String(t.days_overdue))}d overdue</span>
+                </div>`;
+        });
+    }
+
+    html += '</div>';
+
+    // Stale Tasks
+    html += `
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-header-dot" style="background: var(--amber)"></span>
+                    Stale Tracked Tasks (7+ days)
+                </div>`;
+
+    if (staleList.length === 0) {
+        html += '<div class="empty-good">No stale tasks</div>';
+    } else {
+        staleList.forEach(function(t) {
+            html += `
+                <div class="task-row">
+                    <div class="task-row-desc">${esc(t.description)}</div>
+                    <div class="task-row-owner">${esc(t.owner)}</div>
+                    <span class="badge badge-amber">${esc(String(t.age_days))}d old</span>
+                </div>`;
+        });
+    }
+
+    html += `
+            </div>
+        </div>
+        <div class="col-right">`;
+
+    // Delegation Breakdown
+    html += `
+            <div class="section">
+                <div class="section-header">Who Owns What</div>`;
+
+    const delegationEntries = Object.entries(delegation).sort(function(a, b) { return b[1].count - a[1].count; });
+    const maxDelegation = delegationEntries.length > 0 ? delegationEntries[0][1].count : 1;
+
+    delegationEntries.forEach(function(entry) {
+        const name = entry[0];
+        const info = entry[1];
+        const barWidth = Math.round((info.count / maxDelegation) * 100);
+        const tasks = info.tasks || [];
+
+        let overdueMeta = '';
+        if (info.overdue > 0) {
+            overdueMeta = ' <span class="overdue-flag">' + esc(String(info.overdue)) + ' overdue</span>';
+        }
+
+        html += `
+                <div class="person-block">
+                    <div class="person-header">
+                        <span class="person-name">${esc(name)}</span>
+                        <span class="person-meta">${esc(String(info.count))} tasks${overdueMeta}</span>
+                    </div>
+                    <div class="person-bar-track">
+                        <div class="person-bar-fill" style="width: ${barWidth}%"></div>
+                    </div>`;
+
+        tasks.forEach(function(t) {
+            const qLabel = QUAD_LABELS[t.quadrant] || '';
+            const qColor = t.quadrant ? colorVar(t.quadrant) : 'var(--text-muted)';
+            const qDim = t.quadrant ? colorDim(t.quadrant) : 'var(--surface-raised)';
+            html += `
+                    <div class="person-task">
+                        <span class="person-task-desc">${esc(t.description)}</span>
+                        ${qLabel ? '<span class="badge badge-quad" style="background:' + qDim + ';color:' + qColor + '">' + esc(qLabel) + '</span>' : ''}
+                    </div>`;
+        });
+
+        html += '</div>';
+    });
+
+    html += '</div>';
+
+    // Topic Activity
+    html += `
+            <div class="section">
+                <div class="section-header">Topic Coverage</div>`;
+
+    const topicEntries = Object.entries(topics).sort(function(a, b) { return b[1] - a[1]; });
+    const maxTopic = topicEntries.length > 0 ? topicEntries[0][1] : 1;
+
+    topicEntries.forEach(function(entry) {
+        const name = entry[0];
+        const count = entry[1];
+        const barWidth = Math.round((count / maxTopic) * 100);
+
+        html += `
+                <div class="topic-row">
+                    <span class="topic-name">${esc(name)}</span>
+                    <span class="topic-count">${esc(String(count))}</span>
+                    <div class="topic-bar-track">
+                        <div class="topic-bar-fill" style="width: ${barWidth}%"></div>
+                    </div>
+                </div>`;
+    });
+
+    html += '</div>';
+
+    // Scan History
+    if (scans.length > 0) {
+        const last = scans[scans.length - 1];
+        html += '<div class="scan-info">Last scan: ' + esc(formatDate(last.timestamp)) + '</div>';
+    }
+
+    html += `
+        </div>
+    </div>`;
+
+    main.innerHTML = html;
+}
+
+async function loadReview() {
+    try {
+        const resp = await fetch('/api/review/weekly');
+        if (!resp.ok) throw new Error('API returned ' + resp.status);
+        const data = await resp.json();
+        render(data);
+    } catch (err) {
+        console.error('Failed to load review data:', err);
+        const main = document.getElementById('main-content');
+        main.innerHTML = '<div class="empty-state">No review data available. Run a Notion scan from the Executive page to build your intelligence profile.</div>';
+    }
+}
+
+loadReview();
+</script>
+</body>
+</html>
