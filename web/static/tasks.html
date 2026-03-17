@@ -444,6 +444,9 @@
     </header>
 
     <main class="shell">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 0 4px;">
+            <div class="scan-info" id="scanInfo" style="font-size:12px; color:var(--text-muted);"></div>
+        </div>
         <div class="summary-strip" id="summary">
             <div class="summary-cell">
                 <div class="summary-value val-open" id="countOpen">--</div>
@@ -751,8 +754,23 @@
             render();
         });
 
+        // Load last scan info
+        async function loadScanInfo() {
+            try {
+                const resp = await fetch('/api/intel');
+                const data = await resp.json();
+                const el = document.getElementById('scanInfo');
+                if (data.last_scan_at) {
+                    el.textContent = 'Last Notion scan: ' + new Date(data.last_scan_at).toLocaleString() + ' — ' + data.pages_scanned + ' pages';
+                } else {
+                    el.textContent = 'No Notion scan yet. Go to Executive to scan.';
+                }
+            } catch(e) {}
+        }
+
         // Init
         loadTasks();
+        loadScanInfo();
     })();
     </script>
 </body>
