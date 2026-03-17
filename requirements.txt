@@ -3,6 +3,8 @@ anthropic
 openai
 msal
 httpx
+fastapi
+uvicorn[standard]
 python-dotenv
 pytest
 pytest-asyncio

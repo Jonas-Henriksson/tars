@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TARS Voice Call</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 400px;
+            padding: 2rem;
+        }
+
+        .logo {
+            font-size: 3rem;
+            font-weight: 700;
+            letter-spacing: 0.3em;
+            margin-bottom: 0.5rem;
+            color: #fff;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 3rem;
+        }
+
+        .call-btn {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            font-size: 2.5rem;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 2rem;
+        }
+
+        .call-btn.idle {
+            background: #1a7f37;
+            color: white;
+            box-shadow: 0 0 40px rgba(26, 127, 55, 0.3);
+        }
+
+        .call-btn.idle:hover {
+            background: #22963f;
+            box-shadow: 0 0 60px rgba(26, 127, 55, 0.5);
+            transform: scale(1.05);
+        }
+
+        .call-btn.connecting {
+            background: #d29922;
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+
+        .call-btn.active {
+            background: #cf222e;
+            color: white;
+            box-shadow: 0 0 40px rgba(207, 34, 46, 0.3);
+        }
+
+        .call-btn.active:hover {
+            background: #e5484d;
+            box-shadow: 0 0 60px rgba(207, 34, 46, 0.5);
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+        }
+
+        .status {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            min-height: 1.5em;
+        }
+
+        .status.connected { color: #3fb950; }
+        .status.connecting { color: #d29922; }
+        .status.error { color: #f85149; }
+
+        .timer {
+            font-size: 2rem;
+            font-variant-numeric: tabular-nums;
+            color: #666;
+            margin-bottom: 2rem;
+            min-height: 2.5rem;
+        }
+
+        .timer.active { color: #e0e0e0; }
+
+        .visualizer {
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            margin-bottom: 2rem;
+        }
+
+        .bar {
+            width: 4px;
+            background: #333;
+            border-radius: 2px;
+            transition: height 0.1s ease;
+            height: 4px;
+        }
+
+        .bar.active {
+            background: #3fb950;
+        }
+
+        .hint {
+            color: #444;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">TARS</div>
+        <div class="subtitle">Executive Assistant &middot; Voice Call</div>
+
+        <div class="visualizer" id="visualizer"></div>
+
+        <div class="timer" id="timer"></div>
+
+        <button class="call-btn idle" id="callBtn" onclick="toggleCall()">
+            &#128222;
+        </button>
+
+        <div class="status" id="status">Click to call TARS</div>
+
+        <div class="hint">Humor setting: 75%</div>
+    </div>
+
+    <script>
+        const callBtn = document.getElementById('callBtn');
+        const statusEl = document.getElementById('status');
+        const timerEl = document.getElementById('timer');
+        const visualizerEl = document.getElementById('visualizer');
+
+        let pc = null; // RTCPeerConnection
+        let dc = null; // DataChannel
+        let audioEl = null;
+        let timerInterval = null;
+        let startTime = null;
+        let audioContext = null;
+        let analyser = null;
+        let state = 'idle'; // idle, connecting, active
+
+        // Create visualizer bars
+        const NUM_BARS = 24;
+        for (let i = 0; i < NUM_BARS; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'bar';
+            visualizerEl.appendChild(bar);
+        }
+        const bars = visualizerEl.querySelectorAll('.bar');
+
+        function setState(newState, message) {
+            state = newState;
+            callBtn.className = `call-btn ${newState}`;
+            statusEl.className = `status ${newState}`;
+            statusEl.textContent = message;
+
+            if (newState === 'idle') {
+                callBtn.innerHTML = '&#128222;';
+                timerEl.className = 'timer';
+                stopTimer();
+                stopVisualizer();
+            } else if (newState === 'connecting') {
+                callBtn.innerHTML = '&#8987;';
+            } else if (newState === 'active') {
+                callBtn.innerHTML = '&#128225;';
+                timerEl.className = 'timer active';
+                startTimer();
+            }
+        }
+
+        function startTimer() {
+            startTime = Date.now();
+            timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                const min = String(Math.floor(elapsed / 60)).padStart(2, '0');
+                const sec = String(elapsed % 60).padStart(2, '0');
+                timerEl.textContent = `${min}:${sec}`;
+            }, 1000);
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+            timerEl.textContent = '';
+            startTime = null;
+        }
+
+        function startVisualizer(stream) {
+            audioContext = new AudioContext();
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 64;
+
+            const source = audioContext.createMediaStreamSource(stream);
+            source.connect(analyser);
+
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            function draw() {
+                if (state !== 'active') return;
+                requestAnimationFrame(draw);
+                analyser.getByteFrequencyData(dataArray);
+
+                bars.forEach((bar, i) => {
+                    const val = dataArray[i] || 0;
+                    const height = Math.max(4, (val / 255) * 60);
+                    bar.style.height = `${height}px`;
+                    bar.className = val > 20 ? 'bar active' : 'bar';
+                });
+            }
+            draw();
+        }
+
+        function stopVisualizer() {
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            bars.forEach(bar => {
+                bar.style.height = '4px';
+                bar.className = 'bar';
+            });
+        }
+
+        async function toggleCall() {
+            if (state === 'active' || state === 'connecting') {
+                hangup();
+            } else {
+                await startCall();
+            }
+        }
+
+        async function startCall() {
+            setState('connecting', 'Connecting to TARS...');
+
+            try {
+                // Get ephemeral token from our server
+                const tokenResp = await fetch('/api/token');
+                const tokenData = await tokenResp.json();
+
+                if (tokenData.error) {
+                    setState('idle', `Error: ${tokenData.error}`);
+                    statusEl.className = 'status error';
+                    return;
+                }
+
+                // Create peer connection
+                pc = new RTCPeerConnection();
+
+                // Set up remote audio playback
+                audioEl = document.createElement('audio');
+                audioEl.autoplay = true;
+                pc.ontrack = (e) => {
+                    audioEl.srcObject = e.streams[0];
+                    // Start visualizer with remote audio
+                    startVisualizer(e.streams[0]);
+                };
+
+                // Get microphone and add track
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+                // Create data channel for events
+                dc = pc.createDataChannel('oai-events');
+                dc.onmessage = (e) => {
+                    const event = JSON.parse(e.data);
+                    handleRealtimeEvent(event);
+                };
+
+                // Create and set local SDP offer
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // Send offer to OpenAI Realtime API
+                const sdpResp = await fetch(
+                    'https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview',
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${tokenData.token}`,
+                            'Content-Type': 'application/sdp',
+                        },
+                        body: offer.sdp,
+                    }
+                );
+
+                if (!sdpResp.ok) {
+                    throw new Error(`OpenAI returned ${sdpResp.status}`);
+                }
+
+                // Set remote SDP answer
+                const answer = { type: 'answer', sdp: await sdpResp.text() };
+                await pc.setRemoteDescription(answer);
+
+                setState('active', 'Connected to TARS');
+
+                // Handle connection state changes
+                pc.onconnectionstatechange = () => {
+                    if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+                        hangup();
+                        setState('idle', 'Call ended');
+                    }
+                };
+
+            } catch (err) {
+                console.error('Call failed:', err);
+                hangup();
+                setState('idle', `Failed: ${err.message}`);
+                statusEl.className = 'status error';
+            }
+        }
+
+        function handleRealtimeEvent(event) {
+            // Log events for debugging
+            if (event.type === 'session.created') {
+                console.log('Session created:', event.session?.id);
+            } else if (event.type === 'error') {
+                console.error('Realtime error:', event.error);
+            }
+        }
+
+        function hangup() {
+            if (dc) { dc.close(); dc = null; }
+            if (pc) {
+                pc.getSenders().forEach(sender => {
+                    if (sender.track) sender.track.stop();
+                });
+                pc.close();
+                pc = null;
+            }
+            if (audioEl) {
+                audioEl.srcObject = null;
+                audioEl = null;
+            }
+            if (state !== 'idle') {
+                setState('idle', 'Click to call TARS');
+            }
+        }
+
+        // Clean up on page close
+        window.addEventListener('beforeunload', hangup);
+    </script>
+</body>
+</html>
