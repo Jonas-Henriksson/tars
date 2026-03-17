@@ -17,9 +17,12 @@ from config import MS_CLIENT_ID, MS_TENANT_ID
 
 logger = logging.getLogger(__name__)
 
-# Scopes needed for calendar read/write
+# Scopes needed for M365 integrations
 SCOPES = [
     "Calendars.ReadWrite",
+    "Tasks.ReadWrite",
+    "Mail.ReadWrite",
+    "Mail.Send",
     "User.Read",
 ]
 

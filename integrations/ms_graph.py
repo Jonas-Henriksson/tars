@@ -37,4 +37,23 @@ async def graph_post(endpoint: str, token: str, body: dict) -> dict[str, Any]:
             timeout=30,
         )
         resp.raise_for_status()
+        # Some endpoints (e.g. sendMail) return 202 with no body
+        if resp.status_code == 202 or not resp.content:
+            return {}
+        return resp.json()
+
+
+async def graph_patch(endpoint: str, token: str, body: dict) -> dict[str, Any]:
+    """PATCH request to Microsoft Graph API."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.patch(
+            f"{GRAPH_BASE}{endpoint}",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            json=body,
+            timeout=30,
+        )
+        resp.raise_for_status()
         return resp.json()
