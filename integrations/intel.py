@@ -248,16 +248,20 @@ def _detect_delegations(text: str) -> list[dict]:
     delegations = []
     seen: set[str] = set()
 
-    # Patterns: "[ ] @Name: do something", "ACTION: @Name do something",
-    #           "- @Name: task", "• @Name task", "Name to/will/should do X"
+    # Patterns for @-mention delegations.
+    # Use (\w+) for name to avoid non-greedy backtracking issues.
+    # Accept optional colon or just space after the name.
     patterns = [
-        re.compile(r"\[[ ]\]\s*@(\w[\w\s]*?)[\s:]+(.+)"),
-        re.compile(r"(?:ACTION|TODO|TASK)[:\s]+@(\w[\w\s]*?)[\s:]+(.+)", re.IGNORECASE),
-        re.compile(r"[•\-\*]\s*@(\w[\w\s]*?)[\s:]+(.+)"),
-        # "[ ] Name to/will/should verb ..."
-        re.compile(r"\[[ ]\]\s*([A-Z][a-z]+)\s+(?:to|will|should|needs? to)\s+(.{5,})"),
+        # "[ ] @Name: task" or "[ ] @Name task"
+        re.compile(r"\[[ ]\]\s*@(\w+)[:\s]+(.+)"),
+        # "ACTION: @Name task" / "TODO: @Name task"
+        re.compile(r"(?:ACTION|TODO|TASK)[:\s]+@(\w+)[:\s]+(.+)", re.IGNORECASE),
+        # "• @Name: task" / "- @Name task" / "* @Name task"
+        re.compile(r"[•\-\*]\s*@(\w+)[:\s]+(.+)"),
+        # "[ ] Name to/will/should verb ..." (non @-mention delegation)
+        re.compile(r"\[[ ]\]\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+(?:to|will|should|needs? to)\s+(.{5,})"),
         # "@Name verb ..." on its own line
-        re.compile(r"^[•\-\*\s]*@(\w+)\s+(.{8,})$", re.MULTILINE),
+        re.compile(r"^[•\-\*\s]*@(\w+)\s+(.{6,})$", re.MULTILINE),
     ]
 
     for pattern in patterns:
