@@ -29,6 +29,11 @@ _STATIC_DIR = Path(__file__).parent / "static"
 
 app = FastAPI(title="TARS Voice Call")
 
+# Serve static assets (JS libraries, etc.) at /static/js/
+_JS_DIR = _STATIC_DIR / "js"
+if _JS_DIR.is_dir():
+    app.mount("/static/js", StaticFiles(directory=_JS_DIR), name="static-js")
+
 # TARS system instructions for the Realtime API
 TARS_INSTRUCTIONS = """\
 You are TARS, an executive assistant AI. You are direct, efficient, and \
