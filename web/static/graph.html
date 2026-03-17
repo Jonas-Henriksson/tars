@@ -167,6 +167,7 @@
             <div class="ctrl-header">
                 <span style="font-size:13px;font-weight:600;">Graph Controls</span>
                 <div class="ctrl-header-actions">
+                    <button class="ctrl-btn" id="ctrlSave" title="Save preferences">&#128190;</button>
                     <button class="ctrl-btn" id="ctrlReset" title="Reset defaults">&#8635;</button>
                     <button class="ctrl-btn" id="ctrlClose" title="Close panel">&#215;</button>
                 </div>
@@ -293,6 +294,68 @@
 
         // Group visibility
         let groupVisible = { person: true, topic: true, page: false, project: true, organization: true, decision: true, tag: true };
+
+        // --- Preferences persistence ---
+        const PREFS_KEY = 'tars-graph-prefs';
+        function gatherPrefs() {
+            return {
+                density: currentMaxNodes,
+                showLabels, showArrows, nodeSizeMul, linkThicknessMul, baseLinkOpacity,
+                forceCenter, forceRepel, forceLink, forceLinkDist,
+                groupVisible: { ...groupVisible },
+                orphans: document.getElementById('toggleOrphans').checked,
+            };
+        }
+        function applyPrefs(p) {
+            if (!p) return false;
+            // Density
+            if (p.density !== undefined) {
+                currentMaxNodes = p.density;
+                const ds = document.getElementById('densitySlider');
+                const dv = document.getElementById('densityVal');
+                if (ds) { ds.value = p.density; }
+                if (dv) { dv.textContent = p.density; }
+            }
+            // Display
+            if (p.showLabels !== undefined) { showLabels = p.showLabels; document.getElementById('toggleLabels').checked = showLabels; }
+            if (p.showArrows !== undefined) { showArrows = p.showArrows; document.getElementById('toggleArrows').checked = showArrows; }
+            if (p.orphans !== undefined) { document.getElementById('toggleOrphans').checked = p.orphans; }
+            // Sliders
+            const sliderMap = {
+                nodeSizeMul: ['nodeSize', 'nodeSizeVal'],
+                linkThicknessMul: ['linkThickness', 'linkThicknessVal'],
+                baseLinkOpacity: ['linkOpacity', 'linkOpacityVal'],
+                forceCenter: ['centerForce', 'centerForceVal'],
+                forceRepel: ['repelForce', 'repelForceVal'],
+                forceLink: ['linkForce', 'linkForceVal'],
+                forceLinkDist: ['linkDistance', 'linkDistanceVal'],
+            };
+            for (const [key, [sliderId, valId]] of Object.entries(sliderMap)) {
+                if (p[key] !== undefined) {
+                    const el = document.getElementById(sliderId);
+                    const valEl = document.getElementById(valId);
+                    if (el) el.value = p[key];
+                    if (valEl) { const v = p[key]; valEl.textContent = v < 1 ? v.toFixed(2) : (v < 10 ? v.toFixed(1) : v.toFixed(0)); }
+                    // Update the JS variable
+                    if (key === 'nodeSizeMul') nodeSizeMul = p[key];
+                    if (key === 'linkThicknessMul') linkThicknessMul = p[key];
+                    if (key === 'baseLinkOpacity') baseLinkOpacity = p[key];
+                    if (key === 'forceCenter') forceCenter = p[key];
+                    if (key === 'forceRepel') forceRepel = p[key];
+                    if (key === 'forceLink') forceLink = p[key];
+                    if (key === 'forceLinkDist') forceLinkDist = p[key];
+                }
+            }
+            // Groups
+            if (p.groupVisible) groupVisible = { ...p.groupVisible };
+            return true;
+        }
+        function loadPrefs() {
+            try { return JSON.parse(localStorage.getItem(PREFS_KEY)); } catch { return null; }
+        }
+        function savePrefs() {
+            localStorage.setItem(PREFS_KEY, JSON.stringify(gatherPrefs()));
+        }
 
         const sidebar = document.getElementById('sidebar');
         const sidebarContent = document.getElementById('sidebarContent');
@@ -695,9 +758,25 @@
             groupVisible = { person: true, topic: true, page: false, project: true, organization: true, decision: true, tag: true };
             applyGroupVisibility();
             buildGroups();
+            // Reset density slider
+            currentMaxNodes = 500;
+            document.getElementById('densitySlider').value = 500;
+            document.getElementById('densityVal').textContent = '500';
             if (Graph) {
                 Graph.linkDirectionalArrowLength(0);
             }
+            // Clear saved preferences
+            localStorage.removeItem(PREFS_KEY);
+        });
+
+        // Save button
+        document.getElementById('ctrlSave').addEventListener('click', () => {
+            savePrefs();
+            const btn = document.getElementById('ctrlSave');
+            const orig = btn.innerHTML;
+            btn.innerHTML = '&#10003;';
+            btn.style.color = 'var(--green)';
+            setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; }, 1500);
         });
 
         // --- Selection ---
@@ -1028,6 +1107,7 @@
         }
 
         // --- Init ---
+        applyPrefs(loadPrefs());
         loadGraph();
     })();
     </script>
