@@ -71,11 +71,37 @@ calendar conflicts, relationship health issues, initiative risks, and stale \
 decisions. Use when the user asks "anything I should worry about", "what needs \
 my attention", or at the start of the day.
 
-IMPORTANT — When the user references a decision or initiative by name \
-(e.g. "update the EMEA initiative" or "change the migration decision"), \
-first call get_decisions or get_initiatives to find the matching ID, \
-then use update_decision, update_initiative, complete_milestone, etc. \
-with the resolved ID. Never ask the user for an ID directly.
+AGILE WORK BREAKDOWN — You use standard Scrum methodology to structure all work:
+  Initiative (strategic goal, e.g. "Launch EMEA expansion")
+    → Epic (large deliverable, e.g. "Partner channel program")
+      → User Story (specific value slice, e.g. "As a partner, I want \
+an onboarding guide so I can get started independently")
+        → Task (atomic work item from smart tasks or tracked tasks)
+
+- Epics: Use create_epic to define major deliverables. Every significant \
+body of work should be an epic. Link epics to initiatives via initiative_id. \
+When delegating work, first ensure an epic exists for that workstream.
+- User Stories: Use create_story to break epics into user-facing value slices. \
+Best practice: write as "As a [role], I want [goal], so that [benefit]". \
+Stories have t-shirt size estimates (XS, S, M, L, XL) and acceptance criteria.
+- Linking tasks: When delegating a task, use link_task_to_story to connect \
+it to the relevant story. This ensures every task maps to the bigger picture.
+- When the user delegates something, proactively suggest which epic and story \
+it belongs to. If no matching epic exists, suggest creating one.
+
+TEAM PORTFOLIO — You can show a full per-member portfolio view:
+- get_team_portfolio: Shows every team member's epics, stories, tasks, and \
+workload. Highlights overloaded members, blocked stories, and unlinked tasks \
+(tasks not connected to any epic — these need to be organized).
+- get_member_portfolio: Detailed view for one person. Use when asking about \
+someone's deliverables, capacity, or "what is Sarah working on".
+Use when the user says "show me the team overview", "who is working on what", \
+"what's everyone's workload", or wants to steer priorities.
+
+IMPORTANT — When the user references a decision, initiative, epic, or story by name \
+(e.g. "update the EMEA initiative" or "mark the onboarding epic as in progress"), \
+first call the relevant get_ tool to find the matching ID, \
+then use the update tool with the resolved ID. Never ask the user for an ID directly.
 
 When the user asks about tasks, priorities, delegation, what needs \
 attention, who owns what, or any question about their work — use the \
@@ -672,6 +698,149 @@ REALTIME_TOOLS = [
             "properties": {},
         },
     },
+    # Epics & user stories (Agile work breakdown)
+    {
+        "type": "function",
+        "name": "create_epic",
+        "description": "Create an epic — a large body of work that delivers significant value. Epics bridge initiatives and tasks. Use when defining a major deliverable, feature, or workstream. Say 'create an epic for...' or 'we need an epic to track...'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Epic name (e.g. 'User onboarding revamp')."},
+                "description": {"type": "string", "description": "What this epic delivers and why it matters."},
+                "owner": {"type": "string", "description": "Who is accountable for delivery."},
+                "initiative_id": {"type": "string", "description": "Parent initiative ID (optional)."},
+                "quarter": {"type": "string", "description": "Target quarter (e.g. 'Q2 2026')."},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"], "description": "Default 'high'."},
+                "acceptance_criteria": {"type": "array", "items": {"type": "string"}, "description": "Definition of done for the epic."},
+            },
+            "required": ["title"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "get_epics",
+        "description": "Get epics with optional filters. Shows story progress per epic. Use when user asks about deliverables, epics, 'what are we working on', or 'show me the epics'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "enum": ["backlog", "in_progress", "done", "cancelled"], "description": "Filter by status."},
+                "owner": {"type": "string", "description": "Filter by owner."},
+                "initiative_id": {"type": "string", "description": "Filter by parent initiative."},
+                "quarter": {"type": "string", "description": "Filter by quarter."},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"], "description": "Filter by priority."},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "name": "update_epic",
+        "description": "Update an epic — change status, owner, priority, or description. When user references an epic by name, first look it up with get_epics.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "epic_id": {"type": "string", "description": "The epic ID."},
+                "title": {"type": "string", "description": "New title."},
+                "description": {"type": "string", "description": "New description."},
+                "owner": {"type": "string", "description": "New owner."},
+                "status": {"type": "string", "enum": ["backlog", "in_progress", "done", "cancelled"], "description": "New status."},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"], "description": "New priority."},
+                "quarter": {"type": "string", "description": "New quarter."},
+                "initiative_id": {"type": "string", "description": "Link to initiative."},
+            },
+            "required": ["epic_id"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "create_story",
+        "description": "Create a user story within an epic. Best practice: 'As a [role], I want [goal], so that [benefit]'. Use when breaking an epic into deliverable slices.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "epic_id": {"type": "string", "description": "Parent epic ID."},
+                "title": {"type": "string", "description": "Story title (ideally in user story format)."},
+                "description": {"type": "string", "description": "Additional context."},
+                "owner": {"type": "string", "description": "Who will deliver."},
+                "size": {"type": "string", "enum": ["XS", "S", "M", "L", "XL"], "description": "T-shirt size. Default 'M'."},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"], "description": "Default 'medium'."},
+                "acceptance_criteria": {"type": "array", "items": {"type": "string"}, "description": "Done conditions."},
+            },
+            "required": ["epic_id", "title"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "get_stories",
+        "description": "Get user stories with optional filters. Use to check what's in progress, blocked, or assigned to someone.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "epic_id": {"type": "string", "description": "Filter by parent epic."},
+                "owner": {"type": "string", "description": "Filter by owner."},
+                "status": {"type": "string", "enum": ["backlog", "ready", "in_progress", "in_review", "done", "blocked"], "description": "Filter by status."},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"], "description": "Filter by priority."},
+                "size": {"type": "string", "enum": ["XS", "S", "M", "L", "XL"], "description": "Filter by size."},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "name": "update_story",
+        "description": "Update a user story — change status, owner, size, or priority. First look up with get_stories if referenced by name.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "story_id": {"type": "string", "description": "The story ID."},
+                "title": {"type": "string", "description": "New title."},
+                "owner": {"type": "string", "description": "Reassign to this person."},
+                "status": {"type": "string", "enum": ["backlog", "ready", "in_progress", "in_review", "done", "blocked"], "description": "New status."},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"], "description": "New priority."},
+                "size": {"type": "string", "enum": ["XS", "S", "M", "L", "XL"], "description": "New size."},
+            },
+            "required": ["story_id"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "link_task_to_story",
+        "description": "Link an existing task (smart task or tracked task) to a user story, connecting it into the epic hierarchy.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "story_id": {"type": "string", "description": "The story ID."},
+                "task_id": {"type": "string", "description": "The task ID to link."},
+            },
+            "required": ["story_id", "task_id"],
+        },
+    },
+    # Team portfolio
+    {
+        "type": "function",
+        "name": "get_team_portfolio",
+        "description": "Full team portfolio view — every member's epics, stories, tasks, and workload. Shows overload, blocked items, and unlinked tasks. Use when user asks 'show me the team', 'who is working on what', 'what is everyone's workload', or wants to steer priorities.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "owner": {"type": "string", "description": "Filter to a specific team member."},
+                "quarter": {"type": "string", "description": "Filter epics by quarter."},
+                "include_done": {"type": "boolean", "description": "Include completed items. Default false."},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "name": "get_member_portfolio",
+        "description": "Detailed portfolio for one team member — their epics, stories, tasks, and workload. Use when asking about a specific person's deliverables, capacity, or 'what is Sarah working on'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Team member name."},
+                "include_done": {"type": "boolean", "description": "Include completed items. Default false."},
+            },
+            "required": ["name"],
+        },
+    },
 ]
 
 # Map tool names to their handler functions (lazy-loaded)
@@ -724,6 +893,17 @@ _TOOL_MAP = {
     "update_key_result": ("integrations.initiatives", "update_key_result"),
     # Proactive alerts
     "get_alerts": ("integrations.alerts", "get_alerts"),
+    # Epics & user stories
+    "create_epic": ("integrations.epics", "create_epic"),
+    "get_epics": ("integrations.epics", "get_epics"),
+    "update_epic": ("integrations.epics", "update_epic"),
+    "create_story": ("integrations.epics", "create_story"),
+    "get_stories": ("integrations.epics", "get_stories"),
+    "update_story": ("integrations.epics", "update_story"),
+    "link_task_to_story": ("integrations.epics", "link_task_to_story"),
+    # Team portfolio
+    "get_team_portfolio": ("integrations.team_portfolio", "get_team_portfolio"),
+    "get_member_portfolio": ("integrations.team_portfolio", "get_member_portfolio"),
 }
 
 # Argument name mapping (Realtime tool params -> our function params)
@@ -1676,6 +1856,220 @@ async def api_strategic_summary():
         logger.debug("Alerts not available: %s", exc)
         result["alerts"] = {"available": False}
 
+    return JSONResponse(result)
+
+
+# ---------------------------------------------------------------------------
+# Epics & user stories API
+# ---------------------------------------------------------------------------
+
+class EpicCreate(BaseModel):
+    title: str
+    description: str = ""
+    owner: str = ""
+    initiative_id: str = ""
+    quarter: str = ""
+    priority: str = "high"
+    acceptance_criteria: list[str] = []
+
+
+class EpicUpdate(BaseModel):
+    title: str = None
+    description: str = None
+    owner: str = None
+    status: str = None
+    priority: str = None
+    quarter: str = None
+    initiative_id: str = None
+    acceptance_criteria: list[str] = None
+
+
+class StoryCreate(BaseModel):
+    epic_id: str
+    title: str
+    description: str = ""
+    owner: str = ""
+    size: str = "M"
+    priority: str = "medium"
+    acceptance_criteria: list[str] = []
+
+
+class StoryUpdate(BaseModel):
+    title: str = None
+    description: str = None
+    owner: str = None
+    status: str = None
+    priority: str = None
+    size: str = None
+    acceptance_criteria: list[str] = None
+
+
+class LinkTask(BaseModel):
+    task_id: str
+
+
+@app.get("/api/epics")
+async def api_get_epics(
+    status: str = "",
+    owner: str = "",
+    initiative_id: str = "",
+    quarter: str = "",
+    priority: str = "",
+):
+    """Get epics with optional filters."""
+    from integrations.epics import get_epics
+
+    return JSONResponse(get_epics(
+        status=status, owner=owner, initiative_id=initiative_id,
+        quarter=quarter, priority=priority,
+    ))
+
+
+@app.post("/api/epics")
+async def api_create_epic(body: EpicCreate):
+    """Create a new epic."""
+    from integrations.epics import create_epic
+
+    result = create_epic(
+        title=body.title,
+        description=body.description,
+        owner=body.owner,
+        initiative_id=body.initiative_id,
+        quarter=body.quarter,
+        priority=body.priority,
+        acceptance_criteria=body.acceptance_criteria,
+    )
+    return JSONResponse(result, status_code=201)
+
+
+@app.patch("/api/epics/{epic_id}")
+async def api_update_epic(epic_id: str, body: EpicUpdate):
+    """Update an epic."""
+    from integrations.epics import update_epic
+
+    fields = {k: v for k, v in body.dict().items() if v is not None}
+    if not fields:
+        return JSONResponse({"error": "No fields to update"}, status_code=400)
+    result = update_epic(epic_id, **fields)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@app.delete("/api/epics/{epic_id}")
+async def api_delete_epic(epic_id: str):
+    """Delete an epic and its stories."""
+    from integrations.epics import delete_epic
+
+    result = delete_epic(epic_id)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@app.get("/api/stories")
+async def api_get_stories(
+    epic_id: str = "",
+    owner: str = "",
+    status: str = "",
+    priority: str = "",
+    size: str = "",
+):
+    """Get user stories with optional filters."""
+    from integrations.epics import get_stories
+
+    return JSONResponse(get_stories(
+        epic_id=epic_id, owner=owner, status=status,
+        priority=priority, size=size,
+    ))
+
+
+@app.post("/api/stories")
+async def api_create_story(body: StoryCreate):
+    """Create a new user story."""
+    from integrations.epics import create_story
+
+    result = create_story(
+        epic_id=body.epic_id,
+        title=body.title,
+        description=body.description,
+        owner=body.owner,
+        size=body.size,
+        priority=body.priority,
+        acceptance_criteria=body.acceptance_criteria,
+    )
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result, status_code=201)
+
+
+@app.patch("/api/stories/{story_id}")
+async def api_update_story(story_id: str, body: StoryUpdate):
+    """Update a user story."""
+    from integrations.epics import update_story
+
+    fields = {k: v for k, v in body.dict().items() if v is not None}
+    if not fields:
+        return JSONResponse({"error": "No fields to update"}, status_code=400)
+    result = update_story(story_id, **fields)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@app.delete("/api/stories/{story_id}")
+async def api_delete_story(story_id: str):
+    """Delete a user story."""
+    from integrations.epics import delete_story
+
+    result = delete_story(story_id)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@app.post("/api/stories/{story_id}/link-task")
+async def api_link_task(story_id: str, body: LinkTask):
+    """Link a task to a user story."""
+    from integrations.epics import link_task_to_story
+
+    result = link_task_to_story(story_id, body.task_id)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+# ---------------------------------------------------------------------------
+# Team portfolio API
+# ---------------------------------------------------------------------------
+
+@app.get("/api/portfolio")
+async def api_team_portfolio(
+    owner: str = "",
+    quarter: str = "",
+    include_done: bool = False,
+):
+    """Get team portfolio view — per-member workload breakdown."""
+    from integrations.team_portfolio import get_team_portfolio
+
+    try:
+        result = get_team_portfolio(
+            owner=owner, quarter=quarter, include_done=include_done,
+        )
+        return JSONResponse(result)
+    except Exception as exc:
+        logger.exception("Failed to get team portfolio")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.get("/api/portfolio/{name}")
+async def api_member_portfolio(name: str, include_done: bool = False):
+    """Get a single member's portfolio view."""
+    from integrations.team_portfolio import get_member_portfolio
+
+    result = get_member_portfolio(name=name, include_done=include_done)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
     return JSONResponse(result)
 
 

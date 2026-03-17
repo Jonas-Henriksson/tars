@@ -1175,6 +1175,421 @@ def _register_intel_tools() -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Register epic & user story tools
+# ---------------------------------------------------------------------------
+
+def _register_epic_tools() -> None:
+    """Register Agile epics, user stories, and team portfolio tools."""
+    from integrations.epics import (
+        create_epic,
+        create_story,
+        delete_epic,
+        delete_story,
+        get_epics,
+        get_stories,
+        link_task_to_story,
+        update_epic,
+        update_story,
+    )
+    from integrations.team_portfolio import get_member_portfolio, get_team_portfolio
+
+    async def _handle_create_epic(tool_input: dict) -> dict:
+        return create_epic(
+            title=tool_input["title"],
+            description=tool_input.get("description", ""),
+            owner=tool_input.get("owner", ""),
+            initiative_id=tool_input.get("initiative_id", ""),
+            quarter=tool_input.get("quarter", ""),
+            priority=tool_input.get("priority", "high"),
+            acceptance_criteria=tool_input.get("acceptance_criteria"),
+        )
+
+    register_tool(
+        name="create_epic",
+        description=(
+            "Create an epic — a large body of work that delivers significant value. "
+            "Epics sit between strategic initiatives and individual tasks. "
+            "Use when defining a major deliverable, feature, or workstream. "
+            "Optionally link to a parent initiative."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Epic name (e.g. 'User onboarding revamp').",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "What this epic delivers and why it matters.",
+                },
+                "owner": {
+                    "type": "string",
+                    "description": "Who is accountable for delivery.",
+                },
+                "initiative_id": {
+                    "type": "string",
+                    "description": "Parent strategic initiative ID (optional).",
+                },
+                "quarter": {
+                    "type": "string",
+                    "description": "Target quarter (e.g. 'Q2 2026').",
+                },
+                "priority": {
+                    "type": "string",
+                    "enum": ["high", "medium", "low"],
+                    "description": "Default 'high'.",
+                },
+                "acceptance_criteria": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Definition of done for the whole epic.",
+                },
+            },
+            "required": ["title"],
+        },
+        handler=_handle_create_epic,
+    )
+
+    async def _handle_get_epics(tool_input: dict) -> dict:
+        return get_epics(
+            status=tool_input.get("status", ""),
+            owner=tool_input.get("owner", ""),
+            initiative_id=tool_input.get("initiative_id", ""),
+            quarter=tool_input.get("quarter", ""),
+            priority=tool_input.get("priority", ""),
+        )
+
+    register_tool(
+        name="get_epics",
+        description=(
+            "Get epics with optional filters. Shows story progress for each epic. "
+            "Use when user asks about deliverables, epics, or 'what are we working on'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": ["backlog", "in_progress", "done", "cancelled"],
+                    "description": "Filter by status.",
+                },
+                "owner": {
+                    "type": "string",
+                    "description": "Filter by owner.",
+                },
+                "initiative_id": {
+                    "type": "string",
+                    "description": "Filter by parent initiative.",
+                },
+                "quarter": {
+                    "type": "string",
+                    "description": "Filter by quarter.",
+                },
+                "priority": {
+                    "type": "string",
+                    "enum": ["high", "medium", "low"],
+                    "description": "Filter by priority.",
+                },
+            },
+        },
+        handler=_handle_get_epics,
+    )
+
+    async def _handle_update_epic(tool_input: dict) -> dict:
+        return update_epic(
+            epic_id=tool_input["epic_id"],
+            title=tool_input.get("title", ""),
+            description=tool_input.get("description", ""),
+            owner=tool_input.get("owner", ""),
+            status=tool_input.get("status", ""),
+            priority=tool_input.get("priority", ""),
+            quarter=tool_input.get("quarter", ""),
+            initiative_id=tool_input.get("initiative_id", ""),
+            acceptance_criteria=tool_input.get("acceptance_criteria"),
+        )
+
+    register_tool(
+        name="update_epic",
+        description=(
+            "Update an epic — change status, owner, priority, or description. "
+            "When the user references an epic by name, first look it up with "
+            "get_epics to find the ID."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "epic_id": {
+                    "type": "string",
+                    "description": "The epic ID.",
+                },
+                "title": {"type": "string", "description": "New title."},
+                "description": {"type": "string", "description": "New description."},
+                "owner": {"type": "string", "description": "New owner."},
+                "status": {
+                    "type": "string",
+                    "enum": ["backlog", "in_progress", "done", "cancelled"],
+                    "description": "New status.",
+                },
+                "priority": {
+                    "type": "string",
+                    "enum": ["high", "medium", "low"],
+                    "description": "New priority.",
+                },
+                "quarter": {"type": "string", "description": "New quarter."},
+                "initiative_id": {"type": "string", "description": "Link to initiative."},
+                "acceptance_criteria": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Updated acceptance criteria.",
+                },
+            },
+            "required": ["epic_id"],
+        },
+        handler=_handle_update_epic,
+    )
+
+    async def _handle_create_story(tool_input: dict) -> dict:
+        return create_story(
+            epic_id=tool_input["epic_id"],
+            title=tool_input["title"],
+            description=tool_input.get("description", ""),
+            owner=tool_input.get("owner", ""),
+            size=tool_input.get("size", "M"),
+            priority=tool_input.get("priority", "medium"),
+            acceptance_criteria=tool_input.get("acceptance_criteria"),
+        )
+
+    register_tool(
+        name="create_story",
+        description=(
+            "Create a user story within an epic. Best practice: write as "
+            "'As a [role], I want [goal], so that [benefit]'. "
+            "Use when breaking an epic into deliverable slices of user value."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "epic_id": {
+                    "type": "string",
+                    "description": "Parent epic ID.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Story title (ideally in user story format).",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Additional context or technical notes.",
+                },
+                "owner": {
+                    "type": "string",
+                    "description": "Who will deliver this story.",
+                },
+                "size": {
+                    "type": "string",
+                    "enum": ["XS", "S", "M", "L", "XL"],
+                    "description": "T-shirt size estimate. Default 'M'.",
+                },
+                "priority": {
+                    "type": "string",
+                    "enum": ["high", "medium", "low"],
+                    "description": "Default 'medium'.",
+                },
+                "acceptance_criteria": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Conditions that must be met for completion.",
+                },
+            },
+            "required": ["epic_id", "title"],
+        },
+        handler=_handle_create_story,
+    )
+
+    async def _handle_get_stories(tool_input: dict) -> dict:
+        return get_stories(
+            epic_id=tool_input.get("epic_id", ""),
+            owner=tool_input.get("owner", ""),
+            status=tool_input.get("status", ""),
+            priority=tool_input.get("priority", ""),
+            size=tool_input.get("size", ""),
+        )
+
+    register_tool(
+        name="get_stories",
+        description=(
+            "Get user stories with optional filters. "
+            "Use when checking what stories are in progress, blocked, or assigned."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "epic_id": {"type": "string", "description": "Filter by parent epic."},
+                "owner": {"type": "string", "description": "Filter by owner."},
+                "status": {
+                    "type": "string",
+                    "enum": ["backlog", "ready", "in_progress", "in_review", "done", "blocked"],
+                    "description": "Filter by status.",
+                },
+                "priority": {
+                    "type": "string",
+                    "enum": ["high", "medium", "low"],
+                    "description": "Filter by priority.",
+                },
+                "size": {
+                    "type": "string",
+                    "enum": ["XS", "S", "M", "L", "XL"],
+                    "description": "Filter by size.",
+                },
+            },
+        },
+        handler=_handle_get_stories,
+    )
+
+    async def _handle_update_story(tool_input: dict) -> dict:
+        return update_story(
+            story_id=tool_input["story_id"],
+            title=tool_input.get("title", ""),
+            description=tool_input.get("description", ""),
+            owner=tool_input.get("owner", ""),
+            status=tool_input.get("status", ""),
+            priority=tool_input.get("priority", ""),
+            size=tool_input.get("size", ""),
+            acceptance_criteria=tool_input.get("acceptance_criteria"),
+        )
+
+    register_tool(
+        name="update_story",
+        description=(
+            "Update a user story — change status, owner, size, or priority. "
+            "When the user references a story by name, first look it up with "
+            "get_stories to find the ID."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "story_id": {"type": "string", "description": "The story ID."},
+                "title": {"type": "string", "description": "New title."},
+                "description": {"type": "string", "description": "New description."},
+                "owner": {"type": "string", "description": "Reassign to this person."},
+                "status": {
+                    "type": "string",
+                    "enum": ["backlog", "ready", "in_progress", "in_review", "done", "blocked"],
+                    "description": "New status.",
+                },
+                "priority": {
+                    "type": "string",
+                    "enum": ["high", "medium", "low"],
+                    "description": "New priority.",
+                },
+                "size": {
+                    "type": "string",
+                    "enum": ["XS", "S", "M", "L", "XL"],
+                    "description": "New size estimate.",
+                },
+                "acceptance_criteria": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Updated acceptance criteria.",
+                },
+            },
+            "required": ["story_id"],
+        },
+        handler=_handle_update_story,
+    )
+
+    async def _handle_link_task(tool_input: dict) -> dict:
+        return link_task_to_story(
+            story_id=tool_input["story_id"],
+            task_id=tool_input["task_id"],
+        )
+
+    register_tool(
+        name="link_task_to_story",
+        description=(
+            "Link an existing task (smart task or tracked task) to a user story. "
+            "Use this to connect delegated tasks into the epic/story hierarchy."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "story_id": {"type": "string", "description": "The story ID."},
+                "task_id": {"type": "string", "description": "The task ID to link."},
+            },
+            "required": ["story_id", "task_id"],
+        },
+        handler=_handle_link_task,
+    )
+
+    async def _handle_team_portfolio(tool_input: dict) -> dict:
+        return get_team_portfolio(
+            owner=tool_input.get("owner", ""),
+            quarter=tool_input.get("quarter", ""),
+            include_done=tool_input.get("include_done", False),
+        )
+
+    register_tool(
+        name="get_team_portfolio",
+        description=(
+            "Get a full team portfolio view — every team member's epics, stories, "
+            "tasks, and workload in one view. Shows who is overloaded, what's blocked, "
+            "and which tasks are not linked to any epic. "
+            "Use when the user asks 'show me the team overview', 'who is working on what', "
+            "'what is everyone's workload', or wants to steer team priorities."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "owner": {
+                    "type": "string",
+                    "description": "Filter to a specific team member.",
+                },
+                "quarter": {
+                    "type": "string",
+                    "description": "Filter epics by quarter.",
+                },
+                "include_done": {
+                    "type": "boolean",
+                    "description": "Include completed items. Default false.",
+                },
+            },
+        },
+        handler=_handle_team_portfolio,
+    )
+
+    async def _handle_member_portfolio(tool_input: dict) -> dict:
+        return get_member_portfolio(
+            name=tool_input["name"],
+            include_done=tool_input.get("include_done", False),
+        )
+
+    register_tool(
+        name="get_member_portfolio",
+        description=(
+            "Get a detailed portfolio view for one team member — their epics, stories, "
+            "tasks, workload, and items not yet linked to an epic. "
+            "Use when asking about a specific person's deliverables or capacity."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Team member name.",
+                },
+                "include_done": {
+                    "type": "boolean",
+                    "description": "Include completed items. Default false.",
+                },
+            },
+            "required": ["name"],
+        },
+        handler=_handle_member_portfolio,
+    )
+
+
 # Auto-register tools on import
 _register_calendar_tools()
 _register_task_tools()
@@ -1184,3 +1599,4 @@ _register_notion_tools()
 _register_notion_review_tools()
 _register_briefing_tools()
 _register_intel_tools()
+_register_epic_tools()
