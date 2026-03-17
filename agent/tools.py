@@ -1021,6 +1021,33 @@ def _register_notion_review_tools() -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Register daily briefing tool
+# ---------------------------------------------------------------------------
+
+def _register_briefing_tools() -> None:
+    """Register the end-of-day briefing tool (always available)."""
+    from integrations.briefing_daily import compile_daily_briefing, format_briefing_text
+
+    async def _handle_daily_briefing(tool_input: dict) -> dict:
+        briefing = await compile_daily_briefing()
+        briefing["formatted"] = format_briefing_text(briefing)
+        return briefing
+
+    register_tool(
+        name="daily_briefing",
+        description=(
+            "Compile a comprehensive end-of-day briefing. Summarizes the day's meetings, "
+            "Notion activity, tracked tasks (including stale items), email, and generates "
+            "proactive recommendations: follow-ups, status checks, proposed next steps, "
+            "and items that need attention. Use this when the user asks for a daily summary, "
+            "end-of-day review, or wants to know what needs attention."
+        ),
+        input_schema={"type": "object", "properties": {}},
+        handler=_handle_daily_briefing,
+    )
+
+
 # Auto-register tools on import
 _register_calendar_tools()
 _register_task_tools()
@@ -1028,3 +1055,4 @@ _register_mail_tools()
 _register_reminder_tools()
 _register_notion_tools()
 _register_notion_review_tools()
+_register_briefing_tools()

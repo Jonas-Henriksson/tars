@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TARS Daily Briefing</title>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #0a0a0a;
+            --surface: #111113;
+            --surface-raised: #18181b;
+            --border: #27272a;
+            --border-subtle: #1e1e21;
+            --text: #fafafa;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent: #3b82f6;
+            --green: #22c55e;
+            --green-dim: rgba(34, 197, 94, 0.12);
+            --green-text: #4ade80;
+            --amber: #f59e0b;
+            --amber-dim: rgba(245, 158, 11, 0.10);
+            --amber-text: #fbbf24;
+            --red: #ef4444;
+            --red-dim: rgba(239, 68, 68, 0.10);
+            --red-text: #f87171;
+            --blue-dim: rgba(59, 130, 246, 0.10);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .shell { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+        header {
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 16px 0;
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            z-index: 50;
+        }
+
+        .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+        .brand span { font-size: 12px; color: var(--text-muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+        .nav-links a:hover { color: var(--text-secondary); background: var(--surface); }
+        .nav-links a.active { color: var(--text); background: var(--surface-raised); }
+
+        /* Briefing content */
+        .briefing-header {
+            padding: 28px 0 20px;
+            border-bottom: 1px solid var(--border-subtle);
+            margin-bottom: 24px;
+        }
+
+        .briefing-date { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+        .briefing-title { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+        .briefing-sub { font-size: 13px; color: var(--text-muted); }
+
+        .generate-btn {
+            background: var(--surface-raised);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-size: 13px;
+            padding: 8px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.15s, border-color 0.15s;
+            margin-top: 16px;
+        }
+
+        .generate-btn:hover { background: var(--border); border-color: var(--text-muted); }
+        .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Section */
+        .section { margin-bottom: 28px; }
+        .section-head {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+        .section-count { font-size: 11px; color: var(--text-muted); }
+
+        /* Cards */
+        .card-list { display: flex; flex-direction: column; gap: 6px; }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            transition: border-color 0.15s;
+        }
+
+        .card:hover { border-color: var(--border); }
+
+        .card-time {
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+            color: var(--text-muted);
+            white-space: nowrap;
+            min-width: 90px;
+            padding-top: 1px;
+        }
+
+        .card-body { flex: 1; min-width: 0; }
+        .card-title { font-size: 13px; font-weight: 500; color: var(--text); }
+        .card-detail { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .card-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+        /* Recommendation cards */
+        .rec-card {
+            background: var(--surface);
+            border-left: 3px solid var(--border);
+            border-radius: 0 6px 6px 0;
+            padding: 10px 14px;
+            margin-bottom: 6px;
+        }
+
+        .rec-card.priority-high { border-left-color: var(--red); background: var(--red-dim); }
+        .rec-card.priority-medium { border-left-color: var(--amber); background: var(--amber-dim); }
+        .rec-card.priority-low { border-left-color: var(--accent); background: var(--blue-dim); }
+
+        .rec-priority {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 3px;
+        }
+
+        .rec-priority.high { color: var(--red-text); }
+        .rec-priority.medium { color: var(--amber-text); }
+        .rec-priority.low { color: var(--accent); }
+
+        .rec-title { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 2px; }
+        .rec-detail { font-size: 12px; color: var(--text-secondary); line-height: 1.45; }
+
+        /* Stats row */
+        .stats-row {
+            display: flex;
+            gap: 1px;
+            background: var(--border-subtle);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+
+        .stat-cell {
+            flex: 1;
+            background: var(--surface);
+            padding: 12px 16px;
+            text-align: center;
+        }
+
+        .stat-value { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+        .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-top: 2px; }
+
+        /* Stale task row */
+        .stale-row {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            padding: 6px 0;
+        }
+
+        .stale-age {
+            font-size: 11px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            color: var(--amber-text);
+            min-width: 32px;
+            text-align: right;
+        }
+
+        .stale-age.critical { color: var(--red-text); }
+        .stale-desc { font-size: 13px; color: var(--text); flex: 1; }
+        .stale-owner { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+        /* Empty / loading */
+        .empty { padding: 48px 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
+        .loading { text-align: center; padding: 48px; color: var(--text-muted); font-size: 13px; }
+
+        /* Source link */
+        .notion-link { color: var(--text-muted); text-decoration: none; font-size: 12px; }
+        .notion-link:hover { color: var(--accent); }
+
+        @media (max-width: 640px) {
+            .shell { padding: 0 12px; }
+            .stat-cell { padding: 10px 8px; }
+            .stat-value { font-size: 18px; }
+            .card-time { min-width: 70px; font-size: 11px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="shell">
+            <div class="header-row">
+                <div class="brand">
+                    <h1>TARS</h1>
+                    <span>Daily Briefing</span>
+                </div>
+                <nav class="nav-links">
+                    <a href="/">Voice</a>
+                    <a href="/tasks">Tasks</a>
+                    <a href="/briefing" class="active">Briefing</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="shell">
+        <div class="briefing-header">
+            <div class="briefing-date" id="dateLabel"></div>
+            <div class="briefing-title">End-of-Day Review</div>
+            <div class="briefing-sub" id="statusLabel">Click below to generate today's briefing.</div>
+            <button class="generate-btn" id="generateBtn" onclick="generateBriefing()">Generate Briefing</button>
+        </div>
+
+        <div id="content"></div>
+    </main>
+
+    <script>
+    (function() {
+        'use strict';
+
+        const dateLabel = document.getElementById('dateLabel');
+        const statusLabel = document.getElementById('statusLabel');
+        const generateBtn = document.getElementById('generateBtn');
+        const content = document.getElementById('content');
+
+        const now = new Date();
+        dateLabel.textContent = now.toLocaleDateString('en-US', {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        });
+
+        window.generateBriefing = async function() {
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Compiling...';
+            statusLabel.textContent = 'Gathering data from calendar, Notion, tasks, and email...';
+            content.innerHTML = '<div class="loading">Compiling briefing...</div>';
+
+            try {
+                const resp = await fetch('/api/briefing');
+                if (!resp.ok) throw new Error('Server returned ' + resp.status);
+                const data = await resp.json();
+                renderBriefing(data);
+                statusLabel.textContent = 'Generated at ' + new Date().toLocaleTimeString();
+                generateBtn.textContent = 'Refresh';
+            } catch (err) {
+                content.innerHTML = '<div class="empty">Failed to generate briefing: ' + esc(err.message) + '</div>';
+                statusLabel.textContent = 'Generation failed.';
+                generateBtn.textContent = 'Retry';
+            }
+            generateBtn.disabled = false;
+        };
+
+        function renderBriefing(data) {
+            let html = '';
+
+            // Stats row
+            const cal = data.calendar || {};
+            const email = data.email || {};
+            const tasks = data.task_analysis || {};
+            const notion = data.notion_activity || {};
+            const recs = data.recommendations || [];
+
+            html += '<div class="stats-row">';
+            html += statCell(cal.count || 0, 'Meetings', '--text-secondary');
+            html += statCell(notion.count || 0, 'Pages updated', '--text-secondary');
+            html += statCell(tasks.open_count || 0, 'Open tasks', '--text');
+            html += statCell(tasks.stale_count || 0, 'Stale', '--amber-text');
+            html += statCell(email.unread_count || 0, 'Unread', '--text-secondary');
+            html += statCell(recs.length, 'Actions', recs.length > 0 ? '--red-text' : '--text-muted');
+            html += '</div>';
+
+            // Recommendations (top — most important)
+            if (recs.length > 0) {
+                html += '<div class="section">';
+                html += sectionHead('Recommendations', recs.length);
+                for (const r of recs) {
+                    html += '<div class="rec-card priority-' + r.priority + '">';
+                    html += '<div class="rec-priority ' + r.priority + '">' + r.priority + '</div>';
+                    html += '<div class="rec-title">' + esc(r.title) + '</div>';
+                    html += '<div class="rec-detail">' + esc(r.detail) + '</div>';
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+
+            // Stale tasks
+            const stale = tasks.stale_tasks || [];
+            if (stale.length > 0) {
+                html += '<div class="section">';
+                html += sectionHead('Stale Tasks', stale.length);
+                html += '<div class="card-list">';
+                for (const t of stale) {
+                    const ageCls = t.age_days >= 7 ? 'stale-age critical' : 'stale-age';
+                    html += '<div class="stale-row">';
+                    html += '<span class="' + ageCls + '">' + t.age_days + 'd</span>';
+                    html += '<span class="stale-desc">' + esc(t.description) + '</span>';
+                    html += '<span class="stale-owner">' + esc(t.owner || 'Unassigned') + '</span>';
+                    html += '</div>';
+                }
+                html += '</div></div>';
+            }
+
+            // Calendar
+            const events = cal.events || [];
+            if (events.length > 0) {
+                html += '<div class="section">';
+                html += sectionHead('Meetings', events.length);
+                html += '<div class="card-list">';
+                for (const e of events) {
+                    const start = formatTime(e.start);
+                    const end = formatTime(e.end);
+                    html += '<div class="card">';
+                    html += '<div class="card-time">' + start + ' - ' + end + '</div>';
+                    html += '<div class="card-body"><div class="card-title">' + esc(e.subject || 'Untitled') + '</div>';
+                    if (e.location) html += '<div class="card-detail">' + esc(e.location) + '</div>';
+                    html += '</div></div>';
+                }
+                html += '</div></div>';
+            }
+
+            // Notion pages
+            const pages = notion.pages || [];
+            if (pages.length > 0) {
+                html += '<div class="section">';
+                html += sectionHead('Notion Activity', pages.length);
+                html += '<div class="card-list">';
+                for (const p of pages) {
+                    html += '<div class="card">';
+                    html += '<div class="card-body">';
+                    html += '<div class="card-title">' + esc(p.title || 'Untitled') + '</div>';
+                    if (p.content_preview) {
+                        const preview = p.content_preview.length > 200 ? p.content_preview.slice(0, 200) + '...' : p.content_preview;
+                        html += '<div class="card-detail">' + esc(preview) + '</div>';
+                    }
+                    if (p.url) html += '<div class="card-meta"><a class="notion-link" href="' + esc(p.url) + '" target="_blank" rel="noopener">Open in Notion</a></div>';
+                    html += '</div></div>';
+                }
+                html += '</div></div>';
+            }
+
+            // Email
+            const unread = email.unread || [];
+            if (unread.length > 0) {
+                html += '<div class="section">';
+                html += sectionHead('Unread Email', email.unread_count || unread.length);
+                html += '<div class="card-list">';
+                for (const m of unread.slice(0, 8)) {
+                    html += '<div class="card">';
+                    html += '<div class="card-body">';
+                    html += '<div class="card-title">' + esc(m.subject || 'No subject') + '</div>';
+                    html += '<div class="card-detail">' + esc(m.from || 'Unknown sender') + '</div>';
+                    html += '</div></div>';
+                }
+                if (unread.length > 8) {
+                    html += '<div class="card-detail" style="padding:6px 0;color:var(--text-muted)">+ ' + (unread.length - 8) + ' more</div>';
+                }
+                html += '</div></div>';
+            }
+
+            // Empty state
+            if (!html) {
+                html = '<div class="empty">No data available for today\'s briefing. Connect your calendar, Notion, or email to see content here.</div>';
+            }
+
+            content.innerHTML = html;
+        }
+
+        function statCell(value, label, colorVar) {
+            return '<div class="stat-cell"><div class="stat-value" style="color:var(' + colorVar + ')">' + value + '</div><div class="stat-label">' + label + '</div></div>';
+        }
+
+        function sectionHead(title, count) {
+            return '<div class="section-head"><span class="section-title">' + title + '</span><span class="section-count">' + count + '</span></div>';
+        }
+
+        function formatTime(isoStr) {
+            if (!isoStr) return '--:--';
+            if (isoStr.includes('T')) {
+                return isoStr.split('T')[1].slice(0, 5);
+            }
+            return isoStr.slice(0, 5);
+        }
+
+        function esc(s) {
+            if (!s) return '';
+            const el = document.createElement('span');
+            el.textContent = s;
+            return el.innerHTML;
+        }
+    })();
+    </script>
+</body>
+</html>

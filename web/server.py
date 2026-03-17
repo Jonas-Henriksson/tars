@@ -287,6 +287,15 @@ REALTIME_TOOLS = [
             "required": ["names"],
         },
     },
+    {
+        "type": "function",
+        "name": "daily_briefing",
+        "description": "Compile a comprehensive end-of-day briefing with meetings, tasks, recommendations, and proactive follow-up suggestions.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
 ]
 
 # Map tool names to their handler functions (lazy-loaded)
@@ -310,6 +319,7 @@ _TOOL_MAP = {
     "review_notion_pages": ("integrations.notion_review", "review_recent_pages"),
     "review_notion_page": ("integrations.notion_review", "review_page"),
     "add_known_names": ("integrations.notion_review", "add_known_names"),
+    "daily_briefing": ("integrations.briefing_daily", "compile_daily_briefing"),
 }
 
 # Argument name mapping (Realtime tool params -> our function params)
@@ -343,6 +353,12 @@ async def tasks_page():
     return FileResponse(_STATIC_DIR / "tasks.html")
 
 
+@app.get("/briefing")
+async def briefing_page():
+    """Serve the daily briefing dashboard."""
+    return FileResponse(_STATIC_DIR / "briefing.html")
+
+
 @app.get("/api/tasks")
 async def get_tasks(
     owner: str = "",
@@ -360,6 +376,19 @@ async def get_tasks(
         include_completed=include_completed,
     )
     return JSONResponse(result)
+
+
+@app.get("/api/briefing")
+async def get_briefing():
+    """Generate and return the daily briefing."""
+    from integrations.briefing_daily import compile_daily_briefing
+
+    try:
+        briefing = await compile_daily_briefing()
+        return JSONResponse(briefing)
+    except Exception as exc:
+        logger.exception("Failed to compile briefing")
+        return JSONResponse({"error": str(exc)}, status_code=500)
 
 
 @app.patch("/api/tasks/{task_id}/status")
