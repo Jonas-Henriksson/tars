@@ -1269,6 +1269,9 @@ def build_graph_data(max_nodes: int = 500, min_edge_weight: int = 1) -> dict:
             "follow_up_date": t.get("follow_up_date"),
             "source_title": t.get("source_title", ""),
             "source_page_id": t.get("source_page_id", ""),
+            "source_url": t.get("source_url", ""),
+            "source_context": t.get("source_context", ""),
+            "steps": t.get("steps", ""),
         }
         for t in tasks
     ]
@@ -1365,6 +1368,75 @@ def update_smart_task(
             _save_intel(intel)
             return {"message": "Task updated.", "task": _summarize_task(task)}
     return {"error": f"Task not found: {task_id}"}
+
+
+async def rewrite_task_titles() -> dict:
+    """Use LLM to rewrite task descriptions into clear, actionable titles.
+
+    Processes all open tasks in a single batch call for efficiency.
+    Returns {"updated": count, "tasks": [...]}.
+    """
+    client = _get_llm_client()
+    if client is None:
+        return {"error": "No Anthropic API key configured"}
+
+    intel = _load_intel()
+    open_tasks = [t for t in intel.get("smart_tasks", []) if t.get("status") != "done"]
+    if not open_tasks:
+        return {"updated": 0, "tasks": []}
+
+    # Build batch prompt with context
+    task_lines = []
+    for t in open_tasks:
+        ctx = t.get("source_context", "")[:100]
+        task_lines.append(json.dumps({
+            "id": t["id"],
+            "current": t.get("description", ""),
+            "owner": t.get("owner", ""),
+            "context": ctx,
+        }))
+
+    prompt = (
+        "Rewrite each task description into a clear, professional, actionable title. "
+        "Rules:\n"
+        "- Start with a verb (Review, Prepare, Follow up, Coordinate, etc.)\n"
+        "- Be specific but concise (5-12 words)\n"
+        "- Include the key subject/topic\n"
+        "- Remove filler words like 'tomorrow', 'this afternoon', relative dates\n"
+        "- Keep proper nouns and names\n\n"
+        "Input tasks (JSON lines):\n" + "\n".join(task_lines) + "\n\n"
+        "Return a JSON array of {\"id\": \"...\", \"title\": \"...\"} objects. "
+        "Only return the JSON array, no other text."
+    )
+
+    try:
+        response = await asyncio.to_thread(
+            client.messages.create,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = response.content[0].text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+        rewrites = json.loads(text)
+        rewrite_map = {r["id"]: r["title"] for r in rewrites if "id" in r and "title" in r}
+
+        updated = 0
+        for task in intel.get("smart_tasks", []):
+            if task["id"] in rewrite_map:
+                task["description"] = rewrite_map[task["id"]]
+                updated += 1
+
+        if updated:
+            intel["executive_summary"] = _build_executive_summary(intel)
+            _save_intel(intel)
+
+        return {"updated": updated, "tasks": [_summarize_task(t) for t in open_tasks]}
+    except Exception as e:
+        logger.exception("Failed to rewrite task titles")
+        return {"error": str(e)}
 
 
 def delete_smart_task(task_id: str) -> dict:

@@ -108,15 +108,15 @@
         .sidebar-item:last-child { border-bottom: none; }
         .sidebar-item a { color: var(--accent); text-decoration: none; }
         .sidebar-item a:hover { text-decoration: underline; }
-        .sidebar-task { padding: 8px 10px; background: var(--surface-raised); border-radius: 6px; margin-bottom: 6px; font-size: 12px; }
         .sidebar-task-desc { color: var(--text); margin-bottom: 4px; }
-        .sidebar-task-meta { color: var(--text-muted); font-size: 11px; display: flex; gap: 8px; }
+        .sidebar-task-meta { color: var(--text-muted); font-size: 11px; display: flex; gap: 8px; flex-wrap: wrap; }
         .sidebar-badge { font-size: 10px; padding: 1px 6px; border-radius: 3px; }
         .sidebar-badge.q1 { background: var(--red-dim); color: var(--red-text); }
         .sidebar-badge.q2 { background: var(--blue-dim); color: var(--accent); }
         .sidebar-badge.q3 { background: var(--amber-dim); color: var(--amber-text); }
         .sidebar-badge.q4 { background: rgba(113,113,122,0.15); color: var(--text-muted); }
-        .sidebar-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin: 2px 2px; }
+        .sidebar-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin: 2px 2px; cursor: pointer; }
+        .sidebar-tag:hover { filter: brightness(1.3); }
         .sidebar-tag.person { background: rgba(59,130,246,0.12); color: var(--node-person); }
         .sidebar-tag.topic { background: var(--purple-dim); color: var(--purple-text); }
         .sidebar-tag.page { background: var(--amber-dim); color: var(--amber-text); }
@@ -129,6 +129,28 @@
         .sidebar-page-link:last-child { border-bottom: none; }
         .sidebar-page-link a { color: var(--accent); text-decoration: none; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .sidebar-page-link a:hover { text-decoration: underline; }
+
+        /* Weight bar rows */
+        .sidebar-bar-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12px; cursor: pointer; }
+        .sidebar-bar-row:hover { background: var(--surface-raised); margin: 0 -4px; padding: 3px 4px; border-radius: 4px; }
+        .sidebar-bar-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+        .sidebar-bar-track { width: 60px; height: 4px; background: var(--surface-raised); border-radius: 2px; flex-shrink: 0; }
+        .sidebar-bar-fill { height: 100%; border-radius: 2px; min-width: 2px; }
+        .sidebar-bar-count { font-size: 10px; color: var(--text-muted); width: 20px; text-align: right; flex-shrink: 0; }
+        .sidebar-group-head { font-size: 11px; font-weight: 600; color: var(--text-muted); padding: 6px 0 2px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+        .sidebar-group-head:hover { color: var(--text-secondary); }
+        .sidebar-group-body { padding-left: 8px; }
+        .sidebar-show-more { font-size: 11px; color: var(--text-muted); cursor: pointer; padding: 4px 0; }
+        .sidebar-show-more:hover { color: var(--accent); }
+
+        /* Clickable task cards */
+        .sidebar-task { padding: 8px 10px; background: var(--surface-raised); border-radius: 6px; margin-bottom: 6px; font-size: 12px; cursor: pointer; transition: background 0.15s; }
+        .sidebar-task:hover { background: var(--border); }
+        .sidebar-task-detail { padding: 8px 0 0; border-top: 1px solid var(--border-subtle); margin-top: 6px; font-size: 11px; color: var(--text-secondary); display: none; }
+        .sidebar-task-detail.open { display: block; }
+        .sidebar-task-detail a { color: var(--accent); text-decoration: none; }
+        .sidebar-task-detail a:hover { text-decoration: underline; }
+        .sidebar-task-steps { white-space: pre-wrap; color: var(--text-muted); margin-top: 4px; }
 
         /* Node label overlay */
         .node-label { color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 3px; background: rgba(0,0,0,0.6); white-space: nowrap; pointer-events: none; }
@@ -847,6 +869,38 @@
             }
 
             sidebarContent.innerHTML = html;
+
+            // Event delegation for sidebar interactions
+            sidebarContent.onclick = (evt) => {
+                // "Show more" toggles
+                const more = evt.target.closest('[data-more]');
+                if (more) {
+                    const target = document.getElementById(more.dataset.more);
+                    if (target) {
+                        const isOpen = target.style.display !== 'none';
+                        target.style.display = isOpen ? 'none' : '';
+                        if (more.classList.contains('sidebar-show-more')) {
+                            more.style.display = isOpen ? '' : 'none';
+                        } else if (more.classList.contains('sidebar-group-head')) {
+                            more.innerHTML = (isOpen ? '&#9656; ' : '&#9662; ') + more.innerHTML.replace(/^[▸▾]\s*/, '');
+                        }
+                    }
+                    return;
+                }
+                // Bar row / tag click → navigate to that node
+                const barRow = evt.target.closest('[data-node-id]');
+                if (barRow) {
+                    selectNode(barRow.dataset.nodeId);
+                    return;
+                }
+                // Task card click → expand details
+                const task = evt.target.closest('.sidebar-task');
+                if (task) {
+                    const detail = task.querySelector('.sidebar-task-detail');
+                    if (detail) detail.classList.toggle('open');
+                    return;
+                }
+            };
         }
 
         function renderPersonSidebar(nodeId, node) {
@@ -860,15 +914,24 @@
             const connDecisions = byType('decision');
             const personTasks = tasks.filter(t => t.owner && t.owner.toLowerCase() === node.label.toLowerCase());
 
-            html += renderTagSection('Organizations', connOrgs, 'organization');
-            html += renderTagSection('Projects', connProjects, 'project');
-            html += renderTagSection('Topics', connTopics, 'topic');
+            html += renderTagSection('Organizations', connOrgs, 'organization', { topN: 10, showBars: true });
+            html += renderTagSection('Projects', connProjects, 'project', { topN: 10, showBars: true });
+            html += renderTagSection('Topics', connTopics, 'topic', { topN: 10, showBars: true, grouped: true });
 
             if (connDecisions.length) {
                 html += '<div class="sidebar-section">';
                 html += '<div class="sidebar-label">Decisions (' + connDecisions.length + ')</div>';
-                for (const d of connDecisions) {
+                const topDec = connDecisions.slice(0, 5);
+                for (const d of topDec) {
                     html += '<div class="sidebar-item" style="font-size:12px;color:var(--rose-text)">' + esc(d.label) + '</div>';
+                }
+                if (connDecisions.length > 5) {
+                    html += '<div class="sidebar-show-more" data-more="dec-more">+ ' + (connDecisions.length - 5) + ' more</div>';
+                    html += '<div id="dec-more" style="display:none">';
+                    for (const d of connDecisions.slice(5)) {
+                        html += '<div class="sidebar-item" style="font-size:12px;color:var(--rose-text)">' + esc(d.label) + '</div>';
+                    }
+                    html += '</div>';
                 }
                 html += '</div>';
             }
@@ -907,8 +970,8 @@
             const connProjects = byType('project');
             const topicTasks = tasks.filter(t => t.topics && t.topics.includes(node.label));
 
-            html += renderTagSection('People', connPeople, 'person');
-            if (connProjects.length) html += renderTagSection('Projects', connProjects, 'project');
+            html += renderTagSection('People', connPeople, 'person', { topN: 10, showBars: true });
+            if (connProjects.length) html += renderTagSection('Projects', connProjects, 'project', { topN: 10, showBars: true });
 
             html += '<div class="sidebar-section">';
             html += '<div class="sidebar-label">Open Tasks (' + topicTasks.length + ')</div>';
@@ -952,10 +1015,10 @@
                 html += '</div>';
             }
 
-            html += renderTagSection('People', connPeople, 'person');
-            html += renderTagSection('Projects', connProjects, 'project');
-            html += renderTagSection('Organizations', connOrgs, 'organization');
-            html += renderTagSection('Topics', connTopics, 'topic');
+            html += renderTagSection('People', connPeople, 'person', { showBars: true });
+            html += renderTagSection('Projects', connProjects, 'project', { showBars: true });
+            html += renderTagSection('Organizations', connOrgs, 'organization', { showBars: true });
+            html += renderTagSection('Topics', connTopics, 'topic', { showBars: true, grouped: true });
             html += renderTagSection('Tags', connTags, 'tag');
 
             if (connDecisions.length) {
@@ -983,15 +1046,136 @@
             return html;
         }
 
-        function renderTagSection(label, items, cssClass) {
+        function renderTagSection(label, items, cssClass, opts) {
+            opts = opts || {};
+            const topN = opts.topN || 10;
+            const showBars = opts.showBars || false;
+            const grouped = opts.grouped || false;
+
+            if (!items.length) {
+                let html = '<div class="sidebar-section">';
+                html += '<div class="sidebar-label">' + label + ' (0)</div>';
+                html += '<div class="sidebar-empty">None</div></div>';
+                return html;
+            }
+
+            const sorted = items.slice().sort((a, b) => b.weight - a.weight);
+
+            // Group by prefix (e.g., "supply-chain/optimization" → group "Supply Chain")
+            if (grouped && cssClass === 'topic') {
+                return renderGroupedTopics(label, sorted, topN);
+            }
+
             let html = '<div class="sidebar-section">';
             html += '<div class="sidebar-label">' + label + ' (' + items.length + ')</div>';
-            if (items.length) {
-                for (const item of items.sort((a, b) => b.weight - a.weight)) {
-                    html += '<span class="sidebar-tag ' + cssClass + '">' + esc(item.label) + '</span>';
+
+            if (showBars) {
+                const maxW = sorted[0].weight || 1;
+                const visible = sorted.slice(0, topN);
+                const rest = sorted.length - topN;
+                for (const item of visible) {
+                    const pct = Math.max(5, (item.weight / maxW) * 100);
+                    const color = NODE_COLORS[cssClass] || '#71717a';
+                    html += '<div class="sidebar-bar-row" data-node-id="' + esc(item.id) + '">';
+                    html += '<span class="sidebar-bar-label">' + esc(item.label) + '</span>';
+                    html += '<span class="sidebar-bar-track"><span class="sidebar-bar-fill" style="width:' + pct + '%;background:' + color + '"></span></span>';
+                    html += '<span class="sidebar-bar-count">' + item.weight + '</span>';
+                    html += '</div>';
+                }
+                if (rest > 0) {
+                    const moreId = 'more-' + cssClass + '-' + Date.now();
+                    html += '<div class="sidebar-show-more" data-more="' + moreId + '">+ ' + rest + ' more</div>';
+                    html += '<div id="' + moreId + '" style="display:none">';
+                    for (const item of sorted.slice(topN)) {
+                        const pct = Math.max(5, (item.weight / maxW) * 100);
+                        const color = NODE_COLORS[cssClass] || '#71717a';
+                        html += '<div class="sidebar-bar-row" data-node-id="' + esc(item.id) + '">';
+                        html += '<span class="sidebar-bar-label">' + esc(item.label) + '</span>';
+                        html += '<span class="sidebar-bar-track"><span class="sidebar-bar-fill" style="width:' + pct + '%;background:' + color + '"></span></span>';
+                        html += '<span class="sidebar-bar-count">' + item.weight + '</span>';
+                        html += '</div>';
+                    }
+                    html += '</div>';
                 }
             } else {
-                html += '<div class="sidebar-empty">None</div>';
+                const visible = sorted.slice(0, topN);
+                const rest = sorted.length - topN;
+                for (const item of visible) {
+                    html += '<span class="sidebar-tag ' + cssClass + '" data-node-id="' + esc(item.id) + '">' + esc(item.label) + '</span>';
+                }
+                if (rest > 0) {
+                    const moreId = 'more-' + cssClass + '-' + Date.now();
+                    html += '<div class="sidebar-show-more" data-more="' + moreId + '">+ ' + rest + ' more</div>';
+                    html += '<div id="' + moreId + '" style="display:none">';
+                    for (const item of sorted.slice(topN)) {
+                        html += '<span class="sidebar-tag ' + cssClass + '" data-node-id="' + esc(item.id) + '">' + esc(item.label) + '</span>';
+                    }
+                    html += '</div>';
+                }
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function renderGroupedTopics(label, sorted, topN) {
+            // Group topics by prefix before "/"
+            const groups = {};
+            const ungrouped = [];
+            for (const item of sorted) {
+                const slash = item.label.indexOf('/');
+                if (slash > 0) {
+                    const prefix = item.label.substring(0, slash);
+                    if (!groups[prefix]) groups[prefix] = [];
+                    groups[prefix].push(item);
+                } else {
+                    ungrouped.push(item);
+                }
+            }
+
+            // Sort groups by total weight
+            const groupEntries = Object.entries(groups).sort((a, b) => {
+                const wa = a[1].reduce((s, i) => s + i.weight, 0);
+                const wb = b[1].reduce((s, i) => s + i.weight, 0);
+                return wb - wa;
+            });
+
+            let html = '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">' + label + ' (' + sorted.length + ')</div>';
+
+            const maxW = sorted[0].weight || 1;
+            let shown = 0;
+
+            // Render grouped topics
+            for (const [prefix, items] of groupEntries) {
+                if (shown >= topN && items.length < 3) continue;
+                const totalW = items.reduce((s, i) => s + i.weight, 0);
+                const prettyName = prefix.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                const gid = 'tg-' + prefix.replace(/[^a-z0-9]/gi, '') + '-' + Date.now();
+                html += '<div class="sidebar-group-head" data-more="' + gid + '">&#9656; ' + esc(prettyName) + ' <span style="font-weight:400;font-size:10px">(' + items.length + ')</span></div>';
+                html += '<div class="sidebar-group-body" id="' + gid + '" style="display:none">';
+                for (const item of items) {
+                    const subLabel = item.label.substring(prefix.length + 1);
+                    const pct = Math.max(5, (item.weight / maxW) * 100);
+                    html += '<div class="sidebar-bar-row" data-node-id="' + esc(item.id) + '">';
+                    html += '<span class="sidebar-bar-label">' + esc(subLabel) + '</span>';
+                    html += '<span class="sidebar-bar-track"><span class="sidebar-bar-fill" style="width:' + pct + '%;background:var(--purple)"></span></span>';
+                    html += '<span class="sidebar-bar-count">' + item.weight + '</span>';
+                    html += '</div>';
+                }
+                html += '</div>';
+                shown += items.length;
+            }
+
+            // Ungrouped topics
+            if (ungrouped.length) {
+                for (const item of ungrouped.slice(0, Math.max(5, topN - shown))) {
+                    const pct = Math.max(5, (item.weight / maxW) * 100);
+                    html += '<div class="sidebar-bar-row" data-node-id="' + esc(item.id) + '">';
+                    html += '<span class="sidebar-bar-label">' + esc(item.label) + '</span>';
+                    html += '<span class="sidebar-bar-track"><span class="sidebar-bar-fill" style="width:' + pct + '%;background:var(--purple)"></span></span>';
+                    html += '<span class="sidebar-bar-count">' + item.weight + '</span>';
+                    html += '</div>';
+                }
             }
             html += '</div>';
             return html;
@@ -1007,10 +1191,10 @@
             const connProjects = byType('project');
             const connOrgs = byType('organization');
 
-            html += renderTagSection('People', connPeople, 'person');
-            if (connOrgs.length) html += renderTagSection('Organizations', connOrgs, 'organization');
-            if (connProjects.length) html += renderTagSection('Projects', connProjects, 'project');
-            if (connTopics.length) html += renderTagSection('Topics', connTopics, 'topic');
+            html += renderTagSection('People', connPeople, 'person', { topN: 10, showBars: true });
+            if (connOrgs.length) html += renderTagSection('Organizations', connOrgs, 'organization', { topN: 10, showBars: true });
+            if (connProjects.length) html += renderTagSection('Projects', connProjects, 'project', { topN: 10, showBars: true });
+            if (connTopics.length) html += renderTagSection('Topics', connTopics, 'topic', { topN: 10, showBars: true, grouped: true });
 
             html += '<div class="sidebar-section">';
             html += '<div class="sidebar-label">Source Pages (' + connPages.length + ')</div>';
@@ -1034,7 +1218,29 @@
             html += '<span class="sidebar-badge ' + qClass + '">' + esc(t.quadrant_label || 'Defer') + '</span>';
             if (t.follow_up_date) html += '<span>' + t.follow_up_date + '</span>';
             if (t.owner) html += '<span>' + esc(t.owner) + '</span>';
-            html += '</div></div>';
+            html += '</div>';
+            // Expandable detail panel
+            html += '<div class="sidebar-task-detail">';
+            if (t.source_title) {
+                html += '<div style="margin-bottom:4px">';
+                if (t.source_url) {
+                    html += 'Source: <a href="' + esc(t.source_url) + '" target="_blank">' + esc(t.source_title) + '</a>';
+                } else {
+                    html += 'Source: ' + esc(t.source_title);
+                }
+                html += '</div>';
+            }
+            if (t.topics && t.topics.length) {
+                html += '<div style="margin-bottom:4px">Topics: ' + t.topics.map(tp => esc(tp)).join(', ') + '</div>';
+            }
+            if (t.source_context) {
+                html += '<div style="margin-bottom:4px;color:var(--text-muted);font-style:italic">"' + esc(t.source_context.substring(0, 200)) + (t.source_context.length > 200 ? '...' : '') + '"</div>';
+            }
+            if (t.steps) {
+                html += '<div class="sidebar-task-steps">' + esc(t.steps) + '</div>';
+            }
+            html += '</div>';
+            html += '</div>';
             return html;
         }
 

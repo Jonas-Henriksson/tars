@@ -621,6 +621,17 @@ async def delete_smart_task(task_id: str):
     return JSONResponse(result)
 
 
+@app.post("/api/intel/tasks/rewrite-titles")
+async def rewrite_task_titles():
+    """Use AI to rewrite all open task titles into clear, actionable format."""
+    from integrations.intel import rewrite_task_titles as _rewrite
+
+    result = await _rewrite()
+    if "error" in result:
+        return JSONResponse(result, status_code=500)
+    return JSONResponse(result)
+
+
 @app.patch("/api/tasks/{task_id}/status")
 async def update_task_status(task_id: str, body: TaskStatusUpdate):
     """Update a tracked task's status."""
