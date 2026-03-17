@@ -1,10 +1,10 @@
-/* Webhook status indicator — auto-injects into the header nav. */
+/* Webhook status indicator — injects into the brand area, never shifts nav. */
 (function() {
     var style = document.createElement('style');
     style.textContent = [
-        '.wh-status { display:flex; align-items:center; gap:6px; padding:4px 10px; border-radius:6px; font-size:11px; cursor:pointer; border:1px solid transparent; transition:all .15s; }',
+        '.wh-status { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:5px; font-size:11px; cursor:pointer; text-decoration:none; border:1px solid transparent; transition:all .15s; margin-left:10px; vertical-align:middle; }',
         '.wh-status:hover { background:rgba(255,255,255,.05); }',
-        '.wh-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }',
+        '.wh-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }',
         '.wh-dot.green { background:#22c55e; box-shadow:0 0 6px rgba(34,197,94,.4); }',
         '.wh-dot.amber { background:#f59e0b; box-shadow:0 0 6px rgba(245,158,11,.4); }',
         '.wh-dot.red { background:#ef4444; box-shadow:0 0 6px rgba(239,68,68,.4); }',
@@ -24,8 +24,9 @@
             el.className = 'wh-status';
             el.href = '/settings#webhook';
             el.title = 'Notion sync status — click to configure';
-            var nav = document.querySelector('.nav-links');
-            if (nav) nav.parentNode.insertBefore(el, nav);
+            // Append inside the brand div so it never displaces the nav
+            var brand = document.querySelector('.brand');
+            if (brand) brand.appendChild(el);
         }
         var h = data.health || 'disabled';
         var dotCls = h === 'green' ? 'green' : h === 'amber' ? 'amber' : h === 'red' ? 'red' : 'grey';
@@ -41,7 +42,6 @@
             .catch(function() {});
     }
 
-    // Initial load + poll every 30s
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', poll);
     } else {
