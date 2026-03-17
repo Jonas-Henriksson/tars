@@ -8,3 +8,4 @@ build/
 .mypy_cache/
 token_cache.json
 reminders.json
+notion_tracked_tasks.json

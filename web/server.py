@@ -173,6 +173,81 @@ REALTIME_TOOLS = [
             "required": ["query"],
         },
     },
+    {
+        "type": "function",
+        "name": "search_notion",
+        "description": "Search Notion pages by keyword.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search keyword."},
+                "max_results": {"type": "integer", "description": "Max pages. Default 10."},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "read_notion_page",
+        "description": "Read the full content of a Notion page.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "page_id": {"type": "string", "description": "The Notion page ID."},
+            },
+            "required": ["page_id"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "extract_meeting_tasks",
+        "description": "Extract tasks from a Notion meeting notes page, grouped by owner and topic.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "page_id": {"type": "string", "description": "The Notion page ID with meeting notes."},
+            },
+            "required": ["page_id"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "track_meeting_tasks",
+        "description": "Extract and save tasks from a meeting page for ongoing tracking and follow-up.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "page_id": {"type": "string", "description": "The Notion page ID with meeting notes."},
+            },
+            "required": ["page_id"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "get_tracked_tasks",
+        "description": "Get tracked meeting tasks. Filter by owner, topic, or status.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "owner": {"type": "string", "description": "Filter by owner name."},
+                "topic": {"type": "string", "description": "Filter by topic."},
+                "status": {"type": "string", "enum": ["open", "done", "followed_up"], "description": "Filter by status."},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "name": "search_meeting_notes",
+        "description": "Search Notion for meeting notes and return content previews.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search keyword."},
+                "max_results": {"type": "integer", "description": "Max pages. Default 5."},
+            },
+            "required": ["query"],
+        },
+    },
 ]
 
 # Map tool names to their handler functions (lazy-loaded)
@@ -187,6 +262,12 @@ _TOOL_MAP = {
     "read_email": ("integrations.mail", "read_message"),
     "send_email": ("integrations.mail", "send_message"),
     "search_emails": ("integrations.mail", "search_messages"),
+    "search_notion": ("integrations.notion", "search_pages"),
+    "read_notion_page": ("integrations.notion", "get_page_content"),
+    "extract_meeting_tasks": ("integrations.notion_tasks", "extract_meeting_tasks"),
+    "track_meeting_tasks": ("integrations.notion_tasks", "track_meeting_tasks"),
+    "get_tracked_tasks": ("integrations.notion_tasks", "get_tracked_tasks"),
+    "search_meeting_notes": ("integrations.notion_tasks", "search_meeting_notes"),
 }
 
 # Argument name mapping (Realtime tool params -> our function params)

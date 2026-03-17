@@ -593,8 +593,290 @@ def _register_reminder_tools() -> None:
     _CHAT_ID_TOOLS.add("delete_reminder")
 
 
+# ---------------------------------------------------------------------------
+# Register Notion tools
+# ---------------------------------------------------------------------------
+
+def _register_notion_tools() -> None:
+    """Register Notion integration tools."""
+    from config import NOTION_API_KEY
+
+    if not NOTION_API_KEY:
+        return
+
+    from integrations.notion import (
+        get_page_content,
+        list_databases,
+        query_database,
+        search_pages,
+    )
+    from integrations.notion_tasks import (
+        extract_meeting_tasks,
+        get_tracked_tasks,
+        search_meeting_notes,
+        track_meeting_tasks,
+        update_task_status,
+    )
+
+    async def _handle_search_notion(tool_input: dict) -> dict:
+        return await search_pages(
+            query=tool_input["query"],
+            max_results=tool_input.get("max_results", 10),
+        )
+
+    register_tool(
+        name="search_notion",
+        description=(
+            "Search Notion pages by keyword. "
+            "Returns page titles, IDs, and URLs."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search keyword or phrase.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max pages to return. Default 10.",
+                },
+            },
+            "required": ["query"],
+        },
+        handler=_handle_search_notion,
+    )
+
+    async def _handle_read_notion_page(tool_input: dict) -> dict:
+        return await get_page_content(page_id=tool_input["page_id"])
+
+    register_tool(
+        name="read_notion_page",
+        description=(
+            "Read the full content of a Notion page. "
+            "Requires the page ID (get it from search_notion first)."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "page_id": {
+                    "type": "string",
+                    "description": "The Notion page ID.",
+                },
+            },
+            "required": ["page_id"],
+        },
+        handler=_handle_read_notion_page,
+    )
+
+    async def _handle_list_notion_databases(tool_input: dict) -> dict:
+        return await list_databases(
+            max_results=tool_input.get("max_results", 20),
+        )
+
+    register_tool(
+        name="list_notion_databases",
+        description=(
+            "List all Notion databases shared with the integration. "
+            "Returns database names and IDs."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max databases to return. Default 20.",
+                },
+            },
+        },
+        handler=_handle_list_notion_databases,
+    )
+
+    async def _handle_query_notion_database(tool_input: dict) -> dict:
+        return await query_database(
+            database_id=tool_input["database_id"],
+            filter_obj=tool_input.get("filter"),
+            max_results=tool_input.get("max_results", 50),
+        )
+
+    register_tool(
+        name="query_notion_database",
+        description=(
+            "Query a Notion database to get entries/rows. "
+            "Requires the database ID (get it from list_notion_databases). "
+            "Optionally provide a Notion filter object."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "database_id": {
+                    "type": "string",
+                    "description": "The Notion database ID.",
+                },
+                "filter": {
+                    "type": "object",
+                    "description": "Optional Notion filter object.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max entries to return. Default 50.",
+                },
+            },
+            "required": ["database_id"],
+        },
+        handler=_handle_query_notion_database,
+    )
+
+    async def _handle_extract_meeting_tasks(tool_input: dict) -> dict:
+        return await extract_meeting_tasks(page_id=tool_input["page_id"])
+
+    register_tool(
+        name="extract_meeting_tasks",
+        description=(
+            "Extract tasks from a Notion meeting notes page. "
+            "Finds action items, TODOs, and checkbox tasks, "
+            "identifies owners via @mentions, and groups by owner and topic."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "page_id": {
+                    "type": "string",
+                    "description": "The Notion page ID containing meeting notes.",
+                },
+            },
+            "required": ["page_id"],
+        },
+        handler=_handle_extract_meeting_tasks,
+    )
+
+    async def _handle_track_meeting_tasks(tool_input: dict) -> dict:
+        return await track_meeting_tasks(page_id=tool_input["page_id"])
+
+    register_tool(
+        name="track_meeting_tasks",
+        description=(
+            "Extract tasks from a meeting page and save them for ongoing tracking. "
+            "Tasks are persisted and can be queried later with get_tracked_tasks. "
+            "Use this when the user wants to track and follow up on meeting action items."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "page_id": {
+                    "type": "string",
+                    "description": "The Notion page ID containing meeting notes.",
+                },
+            },
+            "required": ["page_id"],
+        },
+        handler=_handle_track_meeting_tasks,
+    )
+
+    async def _handle_get_tracked_tasks(tool_input: dict) -> dict:
+        return get_tracked_tasks(
+            owner=tool_input.get("owner", ""),
+            topic=tool_input.get("topic", ""),
+            status=tool_input.get("status", ""),
+            include_completed=tool_input.get("include_completed", False),
+        )
+
+    register_tool(
+        name="get_tracked_tasks",
+        description=(
+            "Get tracked meeting tasks with optional filters by owner, topic, or status. "
+            "Tasks are grouped by owner and by topic. "
+            "Use this to check on action items from past meetings."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "owner": {
+                    "type": "string",
+                    "description": "Filter by task owner name (partial match).",
+                },
+                "topic": {
+                    "type": "string",
+                    "description": "Filter by topic/heading (partial match).",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["open", "done", "followed_up"],
+                    "description": "Filter by status.",
+                },
+                "include_completed": {
+                    "type": "boolean",
+                    "description": "Include completed tasks. Default false.",
+                },
+            },
+        },
+        handler=_handle_get_tracked_tasks,
+    )
+
+    async def _handle_update_task_status(tool_input: dict) -> dict:
+        return update_task_status(
+            task_id=tool_input["task_id"],
+            status=tool_input["status"],
+        )
+
+    register_tool(
+        name="update_tracked_task",
+        description=(
+            "Update the status of a tracked meeting task. "
+            "Use 'done' to mark complete, 'followed_up' after sending a follow-up, "
+            "or 'open' to reopen."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "description": "The tracked task ID.",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["open", "done", "followed_up"],
+                    "description": "New status for the task.",
+                },
+            },
+            "required": ["task_id", "status"],
+        },
+        handler=_handle_update_task_status,
+    )
+
+    async def _handle_search_meeting_notes(tool_input: dict) -> dict:
+        return await search_meeting_notes(
+            query=tool_input["query"],
+            max_results=tool_input.get("max_results", 5),
+        )
+
+    register_tool(
+        name="search_meeting_notes",
+        description=(
+            "Search Notion for meeting notes by keyword and return content previews. "
+            "Good for finding specific meetings or discussions."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search keyword (e.g. 'weekly standup', 'Q1 planning').",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max pages to return. Default 5.",
+                },
+            },
+            "required": ["query"],
+        },
+        handler=_handle_search_meeting_notes,
+    )
+
+
 # Auto-register tools on import
 _register_calendar_tools()
 _register_task_tools()
 _register_mail_tools()
 _register_reminder_tools()
+_register_notion_tools()

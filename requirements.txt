@@ -6,5 +6,6 @@ httpx
 fastapi
 uvicorn[standard]
 python-dotenv
+notion-client
 pytest
 pytest-asyncio
