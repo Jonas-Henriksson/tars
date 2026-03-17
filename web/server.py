@@ -56,12 +56,27 @@ and source context from meeting notes
 - An end-of-day briefing compiler with calendar, tasks, email, and \
 proactive recommendations
 
+STRATEGIC LAYER — You also have executive-grade strategic tools:
+- Meeting prep: Before any meeting, use meeting_prep or next_meeting_brief \
+to get attendee profiles, past interactions, open tasks, pending decisions, \
+and talking points. Use when the user says "prep me" or has an upcoming meeting.
+- Decision register: Use log_decision to record important decisions with \
+rationale and stakeholders. Use get_decisions to review pending or past decisions. \
+When the user says "we decided to..." or "let's decide", use these tools.
+- Strategic initiatives & OKRs: Use create_initiative, get_initiatives to \
+track quarterly goals, milestones, and key results. Use when discussing \
+strategy, goals, OKRs, or quarterly planning.
+- Proactive alerts: Use get_alerts to surface bottlenecks, overdue escalations, \
+calendar conflicts, relationship health issues, initiative risks, and stale \
+decisions. Use when the user asks "anything I should worry about", "what needs \
+my attention", or at the start of the day.
+
 When the user asks about tasks, priorities, delegation, what needs \
 attention, who owns what, or any question about their work — use the \
 intelligence tools. Start with get_intel for a broad overview or \
 get_smart_tasks for filtered queries. Use daily_briefing for end-of-day \
 summaries. Use search_intel to find specific information across all \
-scanned pages.
+scanned pages. Use get_alerts for proactive risk scanning.
 
 When using tools, tell the user what you're doing (e.g. "Let me check \
 your priority matrix..." or "Pulling up your intelligence profile..."). \
@@ -477,6 +492,180 @@ REALTIME_TOOLS = [
             "required": ["query"],
         },
     },
+    # Meeting prep tools
+    {
+        "type": "function",
+        "name": "meeting_prep",
+        "description": "Prepare a context-rich briefing for an upcoming meeting. Shows attendee profiles, past interactions, open tasks, pending decisions, and suggested talking points. If no event_id given, preps for the next meeting.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "event_id": {"type": "string", "description": "Optional specific calendar event ID. If omitted, preps for next meeting."},
+                "minutes_ahead": {"type": "integer", "description": "How far ahead to look for next meeting. Default 30."},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "name": "next_meeting_brief",
+        "description": "Quick meeting prep for the very next upcoming meeting. Use when the user says 'prep me for my next meeting' or 'what's my next meeting about'.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    # Decision tracking tools
+    {
+        "type": "function",
+        "name": "log_decision",
+        "description": "Log a decision to the decision register. Records what was decided, why, by whom, and who needs to know. Use when the user says 'we decided to...' or 'log this decision'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "What was decided."},
+                "rationale": {"type": "string", "description": "Why this decision was made."},
+                "decided_by": {"type": "string", "description": "Who made the decision."},
+                "stakeholders": {"type": "array", "items": {"type": "string"}, "description": "Who is affected or needs to know."},
+                "context": {"type": "string", "description": "Background, alternatives considered."},
+                "initiative": {"type": "string", "description": "Linked strategic initiative name."},
+                "status": {"type": "string", "enum": ["decided", "pending", "revisit"], "description": "Default 'decided'."},
+            },
+            "required": ["title"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "get_decisions",
+        "description": "Get decisions from the register. Filter by status (pending, decided, revisit), initiative, or stakeholder. Use when user asks 'what decisions are pending' or 'what did we decide about X'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "enum": ["pending", "decided", "revisit"], "description": "Filter by status."},
+                "initiative": {"type": "string", "description": "Filter by linked initiative."},
+                "stakeholder": {"type": "string", "description": "Filter by stakeholder name."},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "name": "update_decision",
+        "description": "Update a decision — change status, add outcome notes, update stakeholders.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "decision_id": {"type": "string", "description": "The decision ID."},
+                "status": {"type": "string", "enum": ["pending", "decided", "revisit"], "description": "New status."},
+                "rationale": {"type": "string", "description": "Updated rationale."},
+                "outcome_notes": {"type": "string", "description": "How the decision played out."},
+                "title": {"type": "string", "description": "Updated title."},
+            },
+            "required": ["decision_id"],
+        },
+    },
+    # Strategic initiative tools
+    {
+        "type": "function",
+        "name": "create_initiative",
+        "description": "Create a strategic initiative or OKR. Use when the user defines a new goal, objective, or strategic priority for the quarter.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Initiative name (e.g. 'Launch EMEA expansion')."},
+                "description": {"type": "string", "description": "What this initiative aims to achieve."},
+                "owner": {"type": "string", "description": "Who is accountable."},
+                "quarter": {"type": "string", "description": "Target quarter (e.g. 'Q1 2026')."},
+                "status": {"type": "string", "enum": ["on_track", "at_risk", "off_track", "completed", "paused"], "description": "Default 'on_track'."},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"], "description": "Default 'high'."},
+                "milestones": {"type": "array", "items": {"type": "string"}, "description": "Key milestones."},
+            },
+            "required": ["title"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "get_initiatives",
+        "description": "Get strategic initiatives. Filter by status, owner, quarter, or priority. Use when user asks about goals, OKRs, strategic priorities, or 'how are our initiatives doing'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "enum": ["on_track", "at_risk", "off_track", "completed", "paused"], "description": "Filter by status."},
+                "owner": {"type": "string", "description": "Filter by owner."},
+                "quarter": {"type": "string", "description": "Filter by quarter."},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"], "description": "Filter by priority."},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "name": "update_initiative",
+        "description": "Update a strategic initiative — change status, owner, priority, or description.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "initiative_id": {"type": "string", "description": "The initiative ID."},
+                "status": {"type": "string", "enum": ["on_track", "at_risk", "off_track", "completed", "paused"], "description": "New status."},
+                "owner": {"type": "string", "description": "New owner."},
+                "quarter": {"type": "string", "description": "New target quarter."},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"], "description": "New priority."},
+                "title": {"type": "string", "description": "Updated title."},
+                "description": {"type": "string", "description": "Updated description."},
+            },
+            "required": ["initiative_id"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "complete_milestone",
+        "description": "Mark a milestone as completed on an initiative. Use when user says 'milestone X is done'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "initiative_id": {"type": "string", "description": "The initiative ID."},
+                "milestone_index": {"type": "integer", "description": "Zero-based index of the milestone."},
+            },
+            "required": ["initiative_id", "milestone_index"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "add_key_result",
+        "description": "Add a key result (KR) to an initiative. Use when defining measurable outcomes for a strategic goal.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "initiative_id": {"type": "string", "description": "The parent initiative ID."},
+                "description": {"type": "string", "description": "What the KR measures (e.g. 'Revenue reaches $10M ARR')."},
+                "target": {"type": "string", "description": "Target value or metric."},
+                "current": {"type": "string", "description": "Current value or progress."},
+                "owner": {"type": "string", "description": "Who owns this KR."},
+            },
+            "required": ["initiative_id", "description"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "update_key_result",
+        "description": "Update a key result's progress or status.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "kr_id": {"type": "string", "description": "The key result ID."},
+                "current": {"type": "string", "description": "Updated current value."},
+                "status": {"type": "string", "enum": ["in_progress", "achieved", "missed"], "description": "New status."},
+            },
+            "required": ["kr_id"],
+        },
+    },
+    # Proactive alerts
+    {
+        "type": "function",
+        "name": "get_alerts",
+        "description": "Get proactive alerts — bottleneck detection, overdue escalations, calendar conflicts, relationship health, initiative risks, and stale decisions. Use when user asks 'anything I should worry about', 'what needs my attention', or 'any red flags'.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
 ]
 
 # Map tool names to their handler functions (lazy-loaded)
@@ -513,6 +702,22 @@ _TOOL_MAP = {
     "get_people": ("integrations.people", "get_all_people"),
     "get_person": ("integrations.people", "get_person"),
     "update_person": ("integrations.people", "update_person"),
+    # Meeting prep
+    "meeting_prep": ("integrations.meeting_prep", "get_meeting_prep"),
+    "next_meeting_brief": ("integrations.meeting_prep", "get_next_meeting_brief"),
+    # Decision tracking
+    "log_decision": ("integrations.decisions", "log_decision"),
+    "get_decisions": ("integrations.decisions", "get_decisions"),
+    "update_decision": ("integrations.decisions", "update_decision"),
+    # Strategic initiatives
+    "create_initiative": ("integrations.initiatives", "create_initiative"),
+    "get_initiatives": ("integrations.initiatives", "get_initiatives"),
+    "update_initiative": ("integrations.initiatives", "update_initiative"),
+    "complete_milestone": ("integrations.initiatives", "complete_milestone"),
+    "add_key_result": ("integrations.initiatives", "add_key_result"),
+    "update_key_result": ("integrations.initiatives", "update_key_result"),
+    # Proactive alerts
+    "get_alerts": ("integrations.alerts", "get_alerts"),
 }
 
 # Argument name mapping (Realtime tool params -> our function params)
@@ -1185,6 +1390,287 @@ async def get_weekly_review():
     except Exception as exc:
         logger.exception("Failed to get weekly review")
         return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# Meeting prep API
+# ---------------------------------------------------------------------------
+
+@app.get("/api/meeting-prep")
+async def api_meeting_prep(event_id: str = "", minutes_ahead: int = 480):
+    """Get meeting prep for a specific event or the next upcoming meeting."""
+    from integrations.meeting_prep import get_meeting_prep
+
+    try:
+        result = await get_meeting_prep(
+            event_id=event_id, minutes_ahead=minutes_ahead,
+        )
+        return JSONResponse(result)
+    except Exception as exc:
+        logger.exception("Failed to get meeting prep")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# Decision register API
+# ---------------------------------------------------------------------------
+
+class DecisionCreate(BaseModel):
+    title: str
+    rationale: str = ""
+    decided_by: str = ""
+    stakeholders: list[str] = []
+    context: str = ""
+    initiative: str = ""
+    status: str = "decided"
+
+
+class DecisionUpdate(BaseModel):
+    status: str = None
+    rationale: str = None
+    outcome_notes: str = None
+    stakeholders: list[str] = None
+    initiative: str = None
+    title: str = None
+
+
+@app.get("/api/decisions")
+async def api_get_decisions(
+    status: str = "",
+    initiative: str = "",
+    stakeholder: str = "",
+):
+    """Get decisions with optional filters."""
+    from integrations.decisions import get_decisions as _get
+
+    return JSONResponse(_get(status=status, initiative=initiative, stakeholder=stakeholder))
+
+
+@app.post("/api/decisions")
+async def api_create_decision(body: DecisionCreate):
+    """Log a new decision."""
+    from integrations.decisions import log_decision
+
+    result = log_decision(
+        title=body.title,
+        rationale=body.rationale,
+        decided_by=body.decided_by,
+        stakeholders=body.stakeholders,
+        context=body.context,
+        initiative=body.initiative,
+        status=body.status,
+    )
+    return JSONResponse(result, status_code=201)
+
+
+@app.patch("/api/decisions/{decision_id}")
+async def api_update_decision(decision_id: str, body: DecisionUpdate):
+    """Update a decision."""
+    from integrations.decisions import update_decision
+
+    fields = {k: v for k, v in body.dict().items() if v is not None}
+    if not fields:
+        return JSONResponse({"error": "No fields to update"}, status_code=400)
+    result = update_decision(decision_id, **fields)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@app.delete("/api/decisions/{decision_id}")
+async def api_delete_decision(decision_id: str):
+    """Delete a decision."""
+    from integrations.decisions import delete_decision
+
+    result = delete_decision(decision_id)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+# ---------------------------------------------------------------------------
+# Strategic initiatives API
+# ---------------------------------------------------------------------------
+
+class InitiativeCreate(BaseModel):
+    title: str
+    description: str = ""
+    owner: str = ""
+    quarter: str = ""
+    status: str = "on_track"
+    priority: str = "high"
+    milestones: list[str] = []
+
+
+class InitiativeUpdate(BaseModel):
+    title: str = None
+    description: str = None
+    owner: str = None
+    quarter: str = None
+    status: str = None
+    priority: str = None
+
+
+class KeyResultCreate(BaseModel):
+    initiative_id: str
+    description: str
+    target: str = ""
+    current: str = ""
+    owner: str = ""
+
+
+class KeyResultUpdate(BaseModel):
+    current: str = None
+    status: str = None
+    description: str = None
+
+
+@app.get("/api/initiatives")
+async def api_get_initiatives(
+    status: str = "",
+    owner: str = "",
+    quarter: str = "",
+    priority: str = "",
+):
+    """Get strategic initiatives with optional filters."""
+    from integrations.initiatives import get_initiatives as _get
+
+    return JSONResponse(_get(status=status, owner=owner, quarter=quarter, priority=priority))
+
+
+@app.post("/api/initiatives")
+async def api_create_initiative(body: InitiativeCreate):
+    """Create a new strategic initiative."""
+    from integrations.initiatives import create_initiative
+
+    result = create_initiative(
+        title=body.title,
+        description=body.description,
+        owner=body.owner,
+        quarter=body.quarter,
+        status=body.status,
+        priority=body.priority,
+        milestones=body.milestones,
+    )
+    return JSONResponse(result, status_code=201)
+
+
+@app.patch("/api/initiatives/{initiative_id}")
+async def api_update_initiative(initiative_id: str, body: InitiativeUpdate):
+    """Update a strategic initiative."""
+    from integrations.initiatives import update_initiative
+
+    fields = {k: v for k, v in body.dict().items() if v is not None}
+    if not fields:
+        return JSONResponse({"error": "No fields to update"}, status_code=400)
+    result = update_initiative(initiative_id, **fields)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@app.delete("/api/initiatives/{initiative_id}")
+async def api_delete_initiative(initiative_id: str):
+    """Delete an initiative."""
+    from integrations.initiatives import delete_initiative
+
+    result = delete_initiative(initiative_id)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@app.post("/api/initiatives/{initiative_id}/milestones/{idx}/complete")
+async def api_complete_milestone(initiative_id: str, idx: int):
+    """Complete a milestone."""
+    from integrations.initiatives import complete_milestone
+
+    result = complete_milestone(initiative_id, idx)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@app.post("/api/initiatives/key-results")
+async def api_add_key_result(body: KeyResultCreate):
+    """Add a key result to an initiative."""
+    from integrations.initiatives import add_key_result
+
+    result = add_key_result(
+        initiative_id=body.initiative_id,
+        description=body.description,
+        target=body.target,
+        current=body.current,
+        owner=body.owner,
+    )
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result, status_code=201)
+
+
+@app.patch("/api/initiatives/key-results/{kr_id}")
+async def api_update_key_result(kr_id: str, body: KeyResultUpdate):
+    """Update a key result."""
+    from integrations.initiatives import update_key_result
+
+    fields = {k: v for k, v in body.dict().items() if v is not None}
+    if not fields:
+        return JSONResponse({"error": "No fields to update"}, status_code=400)
+    result = update_key_result(kr_id, **fields)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+# ---------------------------------------------------------------------------
+# Proactive alerts API
+# ---------------------------------------------------------------------------
+
+@app.get("/api/alerts")
+async def api_get_alerts():
+    """Get proactive alerts — bottlenecks, escalations, conflicts, risks."""
+    from integrations.alerts import get_alerts as _get
+
+    try:
+        result = await _get()
+        return JSONResponse(result)
+    except Exception as exc:
+        logger.exception("Failed to get alerts")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# Strategic summary API (combines initiatives + decisions + alerts)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/strategic-summary")
+async def api_strategic_summary():
+    """Get a combined strategic overview for the executive dashboard."""
+    result = {}
+
+    try:
+        from integrations.initiatives import get_strategic_summary
+        result["initiatives"] = get_strategic_summary()
+    except Exception as exc:
+        logger.debug("Initiatives not available: %s", exc)
+        result["initiatives"] = {"available": False}
+
+    try:
+        from integrations.decisions import get_decision_summary
+        result["decisions"] = get_decision_summary()
+    except Exception as exc:
+        logger.debug("Decisions not available: %s", exc)
+        result["decisions"] = {"available": False}
+
+    try:
+        from integrations.alerts import get_alerts as _alerts
+        alerts_data = await _alerts()
+        result["alerts"] = alerts_data
+    except Exception as exc:
+        logger.debug("Alerts not available: %s", exc)
+        result["alerts"] = {"available": False}
+
+    return JSONResponse(result)
 
 
 if __name__ == "__main__":

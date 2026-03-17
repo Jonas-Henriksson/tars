@@ -43,13 +43,16 @@ async def compile_daily_briefing() -> dict[str, Any]:
     # 4. Email summary
     sections["email"] = await _get_email_section()
 
-    # 5. Proactive recommendations
+    # 5. Strategic context (initiatives, decisions, alerts)
+    sections["strategic"] = _get_strategic_context()
+
+    # 6. Proactive recommendations
     sections["recommendations"] = _generate_recommendations(sections)
 
-    # 6. Meta
+    # 7. Meta
     sections["generated_at"] = datetime.now(timezone.utc).isoformat()
 
-    # 7. Voice-friendly summary
+    # 8. Voice-friendly summary
     sections["voice_summary"] = _build_voice_summary(sections)
 
     return sections
@@ -88,6 +91,25 @@ def _build_voice_summary(sections: dict) -> str:
         parts.append(f"{email['unread_count']} unread email{'s' if email['unread_count'] != 1 else ''}")
     elif not email.get("available"):
         parts.append("Email is not connected")
+
+    # Strategic context
+    strategic = sections.get("strategic", {})
+    if strategic.get("available"):
+        initiatives = strategic.get("initiatives", {})
+        at_risk = initiatives.get("at_risk", 0)
+        off_track = initiatives.get("off_track", 0)
+        if at_risk or off_track:
+            risk_parts = []
+            if at_risk:
+                risk_parts.append(f"{at_risk} at risk")
+            if off_track:
+                risk_parts.append(f"{off_track} off track")
+            parts.append(f"Strategic initiatives: {', '.join(risk_parts)}")
+
+        decisions = strategic.get("decisions", {})
+        pending = decisions.get("pending_count", 0)
+        if pending:
+            parts.append(f"{pending} decision{'s' if pending != 1 else ''} pending")
 
     # Recommendations
     recs = sections.get("recommendations", [])
@@ -173,6 +195,41 @@ async def _get_notion_section() -> dict:
     except Exception as exc:
         logger.debug("Notion not available: %s", exc)
         return {"pages": [], "count": 0, "available": False, "reason": str(exc)}
+
+
+def _get_strategic_context() -> dict:
+    """Get strategic layer data for the briefing."""
+    result: dict[str, Any] = {"available": False}
+
+    # Initiatives summary
+    try:
+        from integrations.initiatives import get_strategic_summary
+        summary = get_strategic_summary()
+        result["initiatives"] = {
+            "total": summary.get("total", 0),
+            "at_risk": summary.get("at_risk_count", 0),
+            "off_track": summary.get("off_track_count", 0),
+            "at_risk_names": [i.get("title", "") for i in summary.get("at_risk", [])],
+            "off_track_names": [i.get("title", "") for i in summary.get("off_track", [])],
+        }
+        result["available"] = True
+    except Exception:
+        result["initiatives"] = {}
+
+    # Pending decisions
+    try:
+        from integrations.decisions import get_decision_summary
+        dec_summary = get_decision_summary()
+        result["decisions"] = {
+            "pending_count": dec_summary.get("pending_count", 0),
+            "revisit_count": dec_summary.get("revisit_count", 0),
+            "pending_titles": [d.get("title", "") for d in dec_summary.get("pending", [])[:3]],
+        }
+        result["available"] = True
+    except Exception:
+        result["decisions"] = {}
+
+    return result
 
 
 def _get_task_analysis() -> dict:
