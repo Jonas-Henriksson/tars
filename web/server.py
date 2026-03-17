@@ -1626,6 +1626,57 @@ async def clear_memory_api():
     return JSONResponse(clear_memory())
 
 
+# ── Knowledge Repository ─────────────────────────────────────────────
+
+@app.get("/api/knowledge")
+async def get_knowledge_api():
+    """Return the full knowledge base."""
+    from integrations.knowledge import get_knowledge
+    return JSONResponse(get_knowledge())
+
+
+@app.get("/api/knowledge/{company}")
+async def get_company_knowledge(company: str):
+    """Get all knowledge for a specific company."""
+    from integrations.knowledge import get_company
+    data = get_company(company)
+    if not data:
+        return JSONResponse({"error": f"No knowledge for: {company}"}, status_code=404)
+    return JSONResponse(data)
+
+
+class KnowledgeArticle(BaseModel):
+    company: str
+    category: str
+    title: str
+    date: str
+    content: str
+    summary: str = ""
+    source_url: str = ""
+
+
+@app.post("/api/knowledge/article")
+async def add_knowledge_article(body: KnowledgeArticle):
+    """Add a news/report entry to the knowledge base."""
+    from integrations.knowledge import add_article
+    article = {
+        "title": body.title, "date": body.date,
+        "content": body.content, "summary": body.summary,
+        "source_url": body.source_url,
+    }
+    result = add_article(body.company, body.category, article)
+    status = 201 if result["status"] == "added" else 200
+    return JSONResponse(result, status_code=status)
+
+
+@app.get("/api/knowledge/search")
+async def search_knowledge_api(q: str, company: str = ""):
+    """Search the knowledge base by keyword."""
+    from integrations.knowledge import search_knowledge
+    results = search_knowledge(q, company)
+    return JSONResponse({"results": results, "count": len(results)})
+
+
 # ── Notion Webhook Push ──────────────────────────────────────────────
 
 @app.get("/api/webhook/status")

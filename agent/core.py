@@ -83,6 +83,17 @@ def _build_system_prompt() -> str:
     except Exception:
         pass
 
+    # Inject business context from knowledge repository
+    try:
+        from integrations.knowledge import get_knowledge, get_company_summary
+        kb = get_knowledge()
+        for company_key in kb.get("companies", {}):
+            summary = get_company_summary(company_key)
+            if summary:
+                parts.append(f"\n{summary}")
+    except Exception:
+        pass
+
     parts.append(_MEMORY_INSTRUCTIONS)
     return "\n".join(parts)
 

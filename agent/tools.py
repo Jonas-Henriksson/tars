@@ -1705,3 +1705,72 @@ _register_briefing_tools()
 _register_intel_tools()
 _register_epic_tools()
 _register_memory_tools()
+
+
+# ── Knowledge repository tools ───────────────────────────────────────
+
+def _register_knowledge_tools() -> None:
+    from integrations.knowledge import search_knowledge, add_article
+
+    async def _handle_search_knowledge(tool_input: dict) -> dict:
+        results = search_knowledge(tool_input["query"], tool_input.get("company", ""))
+        return {"results": results, "count": len(results)}
+
+    register_tool(
+        name="search_knowledge",
+        description=(
+            "Search the business knowledge repository for company news, "
+            "quarterly/annual reports, strategy updates, and Capital Markets Day info. "
+            "Use when the user asks about company financials, strategy, recent news, "
+            "or business context."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"},
+                "company": {"type": "string", "description": "Company name filter (optional)"},
+            },
+            "required": ["query"],
+        },
+        handler=_handle_search_knowledge,
+    )
+
+    async def _handle_add_knowledge(tool_input: dict) -> dict:
+        article = {
+            "title": tool_input["title"],
+            "date": tool_input["date"],
+            "content": tool_input["content"],
+            "summary": tool_input.get("summary", ""),
+            "source_url": tool_input.get("source_url", ""),
+        }
+        return add_article(tool_input["company"], tool_input["category"], article)
+
+    register_tool(
+        name="add_knowledge_article",
+        description=(
+            "Add a new article, report, or news item to the knowledge repository. "
+            "Use when the user shares company news or reports to remember. "
+            "Categories: news, quarterly_reports, annual_reports, cmd, strategy."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "company": {"type": "string", "description": "Company name (e.g. SKF)"},
+                "category": {
+                    "type": "string",
+                    "enum": ["news", "quarterly_reports", "annual_reports", "cmd", "strategy"],
+                    "description": "Article category",
+                },
+                "title": {"type": "string", "description": "Article/report title"},
+                "date": {"type": "string", "description": "Date (YYYY-MM-DD)"},
+                "content": {"type": "string", "description": "Full content or key details"},
+                "summary": {"type": "string", "description": "Brief one-line summary"},
+                "source_url": {"type": "string", "description": "Source URL (optional)"},
+            },
+            "required": ["company", "category", "title", "date", "content"],
+        },
+        handler=_handle_add_knowledge,
+    )
+
+
+_register_knowledge_tools()

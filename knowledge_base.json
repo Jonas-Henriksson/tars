@@ -1,0 +1,156 @@
+{
+  "companies": {
+    "SKF": {
+      "name": "SKF",
+      "categories": {
+        "company_overview": [
+          {
+            "title": "SKF Group Overview",
+            "date": "2026-03-17",
+            "content": "AB SKF is a global supplier of bearings, seals, lubrication systems, and services. Headquartered in Gothenburg, Sweden. Present in approximately 130 countries with around 17,000 distributor locations worldwide. Annual sales in 2024 were SEK 98,722 million with 38,743 employees. Listed on Nasdaq Stockholm. CEO: Rickard Gustafson. Chair of the Board: Hans Stråberg. Investor Relations: Sophie Arnius (+46 31-337 8072, sophie.arnius@skf.com). Press Relations: Carl Bjernstam.",
+            "summary": "Global bearing and industrial solutions company, ~130 countries, ~39k employees, SEK 99B revenue (2024).",
+            "source_url": "https://www.skf.com/group/investors"
+          }
+        ],
+        "quarterly_reports": [
+          {
+            "title": "SKF Q4 2025: Laying the foundation for long-term value creation",
+            "date": "2026-01-30",
+            "content": "Q4 2025 Results: Net sales MSEK 21,969 (down 11% YoY, organic growth flat). Adjusted operating margin 11.8% (vs 11.1% Q4 2024). Industrial segment: 15.6% margin (vs 14.6%), 73% of group net sales, 96% of adjusted operating profit, organic growth +2.3%. Automotive segment: 1.7% margin (vs 2.6%). Gross margin 25.7% reported, 28.7% excluding one-offs. Net cash flow from operations MSEK 2,758 (vs 3,283). Significant FX headwind of -2,617 MSEK on sales. Cost management contributed +383 MSEK in savings. Rightsizing activities contributed ~MSEK 190. One-off costs ~SEK 1B (50% automotive separation, 50% footprint optimization including Argentina plant closure). Proposed dividend: SEK 7.75/share (~45% of adjusted net profits). Full Year 2025: Net sales SEK 91.6B, adjusted operating margin 12.7%.",
+            "summary": "Q4 net sales MSEK 21,969; adj. operating margin 11.8%. Industrial 15.6%, Automotive 1.7%. FY2025 net sales SEK 91.6B, margin 12.7%. Dividend SEK 7.75/share.",
+            "source_url": "https://news.cision.com/skf/r/skf-q4-2025--laying-the-foundation-for-long-term-value-creation,c4300090"
+          },
+          {
+            "title": "SKF Q3 2025: Improved margin in challenging market conditions",
+            "date": "2025-10-29",
+            "content": "Q3 2025 Results: Net sales MSEK 22,482. Adjusted operating margin 12.3%. Industrial segment: 15.5% margin. Automotive segment: 4.3% margin. Improved margins despite challenging market environment.",
+            "summary": "Q3 net sales MSEK 22,482; adj. operating margin 12.3%. Industrial 15.5%, Automotive 4.3%.",
+            "source_url": "https://news.cision.com/skf/r/skf-q3-2025-improved-margin-in-challenging-market-conditions"
+          }
+        ],
+        "annual_reports": [
+          {
+            "title": "SKF Annual and Sustainability Report 2025",
+            "date": "2026-03-06",
+            "content": "Published March 6, 2026. Covers value creation activities, resilient financial performance, strategy execution, and progress toward long-term targets. Streamlined front-end section with extended President's letter. CEO Rickard Gustafson: 'In 2025 we continued to unlock long-term value.' Full year 2025 net sales SEK 91.6B, adjusted operating margin 12.7%. Report available at skf.com/group/investors/financials/annual-reports.",
+            "summary": "Annual report published March 6, 2026. FY2025: SEK 91.6B revenue, 12.7% adj. margin. Focus on resilient performance and strategy execution.",
+            "source_url": "https://news.cision.com/skf/r/skf-publishes-annual-and-sustainability-report-2025,c4317545"
+          }
+        ],
+        "cmd": [
+          {
+            "title": "SKF Capital Markets Day 2025 — Updated Strategy and Financial Targets",
+            "date": "2025-11-11",
+            "content": "Capital Markets Day held November 11, 2025 at At Six Hotel, Stockholm. SKF announced plans to separate Automotive from Industrial, creating two focused standalone companies.\n\nINDUSTRIAL BUSINESS FINANCIAL TARGETS (Post-Separation):\n- Organic growth: 4% (1pp above market over business cycle)\n- Adjusted operating margin: >17% mid-term; >19% long-term\n- Cash conversion: 60%\n- Adjusted ROCE: 20%\n- Net leverage: <2.0x\n- Dividend payout: 50% of average net profit\n\nINDUSTRIAL GROWTH STRATEGY:\n- Reignite growth through high-growth industries and geographies\n- Scale services and intelligent solutions\n- Accelerate Specialized Industrial Solutions\n- Pursue small bolt-on M&A\n- Drive customer-centric innovation and differentiation\n- Complete regionalization and footprint optimization\n\nAUTOMOTIVE BUSINESS FINANCIAL OBJECTIVES (Post-Separation):\n- Organic growth: Above market over business cycle\n- Adjusted operating margin: High single digit\n- Net leverage: <1.0x\n\nAUTOMOTIVE STRATEGY:\n- Win in leading automotive segments\n- Maintain and strengthen innovation leadership\n- Expand addressable market\n- Establish leaner, cost-efficient setup aligned with automotive best practices\n\nCAPITAL EFFICIENCY & TRANSFORMATION:\n- CAPEX: ~5% of net sales until mid-term; ~3.5% long-term\n- Net working capital target: 29% mid-term, <27% long-term\n- Restructuring charges (IAC): ~BSEK 5.0 from Q4 2025 through 2028 (BSEK 1.5 non-cash)\n- Automotive separation charges: ~BSEK 1.5 additional\n- Post-2028: Limited IAC expected\n\nSUSTAINABILITY:\n- Decarbonize own operations by 2030\n- Net-zero supply chain by 2050\n\nSEPARATION TIMELINE:\n- >70% of new Automotive positions filled\n- >70% of planned pre-spin manufacturing channel transfers completed\n- Operationally ready to list by mid-2026\n- Listing subject to Board proposal and shareholder approval\n\nCEO Rickard Gustafson: 'We are creating two even sharper businesses with a clearer focus on distinct opportunities to enhance customer value, accelerate growth, as well as improve efficiency and competitiveness.'",
+            "summary": "CMD 2025: Separation of Industrial/Automotive. Industrial targets: >19% long-term margin, 4% organic growth, 20% ROCE. Automotive: high single-digit margin. Listing Automotive on Nasdaq Stockholm Q4 2026. Restructuring ~BSEK 5.0 through 2028.",
+            "source_url": "https://news.cision.com/skf/r/skf-hosts-capital-markets-day--announces-updated-strategy-and-new-financial-targets,c4265019"
+          }
+        ],
+        "strategy": [
+          {
+            "title": "SKF New Business Segments — Effective Q1 2026",
+            "date": "2026-03-16",
+            "content": "SKF introduced new segment reporting structure effective Q1 2026. Three business segments:\n\n1. BEARING SOLUTIONS — Core industrial bearing business\n2. SPECIALIZED INDUSTRIAL SOLUTIONS (SIS) — Includes Aerospace, Lubrication Lifetime Solutions, Sealing Solutions, and Magnetic Solutions. Also includes automotive sealing applications (transferred from Automotive segment — reporting change only, operational responsibility always within Seals business. Reduces Automotive reported sales by BSEK 2.4).\n3. AUTOMOTIVE — Standalone automotive business, carries own central costs from 2026.\n\nAdditionally, corporate function costs and internal sales between Industrial segments and Automotive are reported under 'Other'.\n\nNew customer industry breakdown for combined Bearing Solutions + SIS: Aftermarket & service; Industrial mobility and defence; High-speed machinery and electrical; Heavy industries; Sustainable food supply; Advanced technology; Other OEM.\n\nObjective: List Automotive business on Nasdaq Stockholm during Q4 2026, subject to Board and shareholder approval. Restated financial information for new segments published for 2024 and 2025 (unaudited).",
+            "summary": "New segments from Q1 2026: Bearing Solutions, Specialized Industrial Solutions (Aerospace, Lubrication, Seals, Magnetics), and Automotive. Automotive listing target Q4 2026.",
+            "source_url": "https://www.skf.com/group/news-and-events/news/2026/2026-Mar-16-skf-announces-new-business-segments-and-releases-restated-figures"
+          },
+          {
+            "title": "SKF Industrial Business Redesign",
+            "date": "2025-09-24",
+            "content": "SKF announced redesign of parts of the Industrial business to further increase competitiveness and accelerate profitable growth. Part of broader strategic transformation ahead of automotive separation.",
+            "summary": "Industrial business redesign to increase competitiveness and accelerate profitable growth.",
+            "source_url": "https://news.cision.com/skf"
+          },
+          {
+            "title": "SKF Automotive Business Named: SKF Vertevo",
+            "date": "2026-02-26",
+            "content": "The separated automotive business will operate under the name SKF Vertevo. This marks a key milestone in creating two independent, focused companies for accelerated profitable growth.",
+            "summary": "Separated automotive business to be named SKF Vertevo.",
+            "source_url": "https://news.cision.com/skf"
+          }
+        ],
+        "news": [
+          {
+            "title": "SKF acquires G-Tech Instruments to strengthen Condition Monitoring portfolio",
+            "date": "2026-03-09",
+            "content": "SKF acquires G-Tech Instruments Inc., a condition monitoring specialist, to enhance digitally-enabled reliability solutions across marine, railway, heavy industries, energy, and food/beverage sectors.",
+            "summary": "Acquisition of G-Tech Instruments for condition monitoring capabilities.",
+            "source_url": "https://news.cision.com/skf"
+          },
+          {
+            "title": "SKF completes divestment of non-core aerospace operation in Elgin, USA",
+            "date": "2026-01-30",
+            "content": "Precision elastomeric device operation sold to Carco PRP Group for USD 75 million, concluding strategic review of non-core aerospace lines.",
+            "summary": "Elgin aerospace operation sold for USD 75M to Carco PRP Group.",
+            "source_url": "https://news.cision.com/skf"
+          },
+          {
+            "title": "Nomination Committee proposal for Board of Directors — AGM 2026",
+            "date": "2026-01-30",
+            "content": "Karen Florschütz (Airbus executive) and Maximiliane Straub (Bosch leader) proposed as new board members. Nomination Committee: Marcus Wallenberg (FAM), Henning Elmberger (Cevian Capital), Anders Algotsson (AFA Försäkring), Anders Jonsson (Skandia), Hans Stråberg (Chair). AGM: April 21, 2026 in Gothenburg.",
+            "summary": "Two new board members proposed. AGM April 21, 2026.",
+            "source_url": "https://news.cision.com/skf"
+          },
+          {
+            "title": "SKF achieves CDP 'A' Score for Environmental Leadership (3rd consecutive year)",
+            "date": "2025-12-22",
+            "content": "Third consecutive year earning top 'A' score in CDP Climate Change category, placing SKF among global environmental leaders in corporate climate transparency and action.",
+            "summary": "CDP 'A' Score for climate — 3rd consecutive year.",
+            "source_url": "https://news.cision.com/skf"
+          },
+          {
+            "title": "SKF announces six new decarbonized factories",
+            "date": "2025-12-18",
+            "content": "Facilities in Malaysia, Mexico, India, Italy, and USA achieve decarbonized status with 95% reduction in Scope 1 and 2 emissions versus 2019 baseline. Part of goal to decarbonize all operations by 2030.",
+            "summary": "Six new decarbonized factories across 5 countries, 95% emissions reduction vs 2019.",
+            "source_url": "https://news.cision.com/skf"
+          },
+          {
+            "title": "SKF launches SKF Ventures to accelerate innovation",
+            "date": "2025-10-23",
+            "content": "New initiative combines deep industrial expertise with external collaboration to develop future-oriented industrial solutions and emerging technologies.",
+            "summary": "SKF Ventures launched for innovation and emerging tech.",
+            "source_url": "https://news.cision.com/skf"
+          },
+          {
+            "title": "SKF presents novel bearing steel ARCTIC15 for next-gen aeroengines",
+            "date": "2025-11-06",
+            "content": "ARCTIC15 steel alloy engineered for compact bearings handling higher loads, supporting 20-25% fuel consumption reduction in next-generation jet engines.",
+            "summary": "ARCTIC15 bearing steel enables 20-25% fuel savings in next-gen jet engines.",
+            "source_url": "https://news.cision.com/skf"
+          },
+          {
+            "title": "SKF launches The Patent Bay — open sustainability patent platform",
+            "date": "2025-11-04",
+            "content": "New platform makes selected patents freely available to companies advancing sustainability technologies, following tradition of accessible innovation.",
+            "summary": "Open patent sharing platform for sustainability technologies.",
+            "source_url": "https://news.cision.com/skf"
+          },
+          {
+            "title": "SKF tidal energy world record with MeyGen",
+            "date": "2025-10-01",
+            "content": "SKF joined Proteus Marine Renewables for the MeyGen tidal stream array in Scotland. New world record for tidal turbine performance — systems operating continuously for over 6 years at 1.5MW without unplanned maintenance.",
+            "summary": "World record: tidal turbines running 6+ years at 1.5MW without unplanned maintenance.",
+            "source_url": "https://news.cision.com/skf"
+          },
+          {
+            "title": "SKF at COP30 — Friction Fighting Summit",
+            "date": "2025-11-26",
+            "content": "Following COP30 participation in Belém, Brazil, SKF hosted inaugural Friction Fighting Summit December 3-4 in Gothenburg with industry, academic, and finance stakeholders. Won SBCOP Best Cases award for sustainability initiatives including remanufacturing solutions.",
+            "summary": "COP30 participation + Friction Fighting Summit. Won SBCOP Best Cases award.",
+            "source_url": "https://news.cision.com/skf"
+          },
+          {
+            "title": "Q1 2026 Outlook",
+            "date": "2026-01-30",
+            "content": "SKF expects Q1 2026 market demand at similar levels to Q4 2025, somewhat stronger organic sales from favorable comparables. Currency headwind expected ~800 MSEK YoY on operating profit. Negative synergies from Automotive separation begin 2026; Q1 negative synergies expected somewhat larger than rightsizing savings.",
+            "summary": "Q1 2026: flat demand, stronger comparables, -800 MSEK FX impact, separation costs begin.",
+            "source_url": "https://news.cision.com/skf"
+          }
+        ]
+      },
+      "added_at": "2026-03-17T00:00:00+00:00"
+    }
+  },
+  "updated_at": "2026-03-17T00:00:00+00:00"
+}
