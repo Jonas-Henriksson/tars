@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TARS People</title>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #0a0a0a;
+            --surface: #111113;
+            --surface-raised: #18181b;
+            --border: #27272a;
+            --border-subtle: #1e1e21;
+            --text: #fafafa;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent: #3b82f6;
+            --accent-dim: rgba(59, 130, 246, 0.12);
+            --green: #22c55e;
+            --green-dim: rgba(34, 197, 94, 0.12);
+            --green-text: #4ade80;
+            --amber: #f59e0b;
+            --amber-dim: rgba(245, 158, 11, 0.10);
+            --amber-text: #fbbf24;
+            --red: #ef4444;
+            --red-dim: rgba(239, 68, 68, 0.10);
+            --purple: #a855f7;
+            --purple-dim: rgba(168, 85, 247, 0.10);
+            --purple-text: #c084fc;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .shell { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+        /* Header */
+        header { border-bottom: 1px solid var(--border-subtle); padding: 16px 0; position: sticky; top: 0; background: var(--bg); z-index: 50; }
+        .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
+        .brand span { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+        .nav-links a:hover { color: var(--text-secondary); background: var(--surface); }
+        .nav-links a.active { color: var(--text); background: var(--surface-raised); }
+
+        /* Summary strip */
+        .summary-strip {
+            display: flex;
+            gap: 24px;
+            padding: 16px 0;
+            border-bottom: 1px solid var(--border-subtle);
+            margin-bottom: 20px;
+        }
+        .summary-item {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        .summary-item .val {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        /* Search / filter bar */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .search-input {
+            flex: 1;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 13px;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        .search-input::placeholder { color: var(--text-muted); }
+        .search-input:focus { border-color: var(--accent); }
+        .btn-add {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 18px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: opacity 0.15s;
+        }
+        .btn-add:hover { opacity: 0.85; }
+
+        /* Main layout */
+        .main-layout {
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+        }
+
+        /* People list */
+        .people-list {
+            width: 40%;
+            min-width: 280px;
+            max-height: calc(100vh - 220px);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding-right: 4px;
+        }
+        .people-list::-webkit-scrollbar { width: 4px; }
+        .people-list::-webkit-scrollbar-track { background: transparent; }
+        .people-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .person-card {
+            background: var(--surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 14px 16px;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .person-card:hover { background: var(--surface-raised); border-color: var(--border); }
+        .person-card.selected { border-color: var(--accent); background: var(--accent-dim); }
+        .person-card .card-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .person-card .card-name {
+            font-size: 14px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .person-card .card-dots {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .dot-green { background: var(--green); }
+        .dot-blue { background: var(--accent); }
+        .person-card .card-role {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .person-card .card-role.empty {
+            color: var(--border);
+            font-style: italic;
+        }
+        .mention-badge {
+            font-size: 11px;
+            color: var(--text-muted);
+            background: var(--surface-raised);
+            padding: 1px 8px;
+            border-radius: 10px;
+            white-space: nowrap;
+        }
+        .person-card.selected .mention-badge {
+            background: rgba(59, 130, 246, 0.18);
+        }
+
+        /* Detail panel */
+        .detail-panel {
+            width: 60%;
+            position: sticky;
+            top: 80px;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .detail-panel::-webkit-scrollbar { width: 4px; }
+        .detail-panel::-webkit-scrollbar-track { background: transparent; }
+        .detail-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .detail-empty {
+            text-align: center;
+            padding: 80px 20px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .detail-header {
+            margin-bottom: 24px;
+        }
+        .detail-name {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        .detail-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* Editable field */
+        .editable-field {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            font-size: 13px;
+        }
+        .editable-field .field-label {
+            color: var(--text-muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            width: 90px;
+            flex-shrink: 0;
+        }
+        .editable-field .field-value {
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid transparent;
+            transition: border-color 0.15s, background 0.15s;
+            min-width: 120px;
+            flex: 1;
+        }
+        .editable-field .field-value:hover {
+            border-color: var(--border);
+            background: var(--surface);
+        }
+        .editable-field .field-value.placeholder {
+            color: var(--text-muted);
+            font-style: italic;
+            opacity: 0.5;
+        }
+        .editable-field .field-input {
+            flex: 1;
+            background: var(--surface);
+            border: 1px solid var(--accent);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 13px;
+            color: var(--text);
+            outline: none;
+            font-family: inherit;
+        }
+        .saved-indicator {
+            font-size: 11px;
+            color: var(--green-text);
+            opacity: 0;
+            transition: opacity 0.2s;
+            margin-left: 4px;
+        }
+        .saved-indicator.show { opacity: 1; }
+
+        /* Detail sections */
+        .detail-section {
+            margin-bottom: 24px;
+        }
+        .section-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        /* Notes textarea */
+        .notes-area {
+            width: 100%;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 13px;
+            color: var(--text);
+            font-family: inherit;
+            line-height: 1.5;
+            resize: vertical;
+            min-height: 80px;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        .notes-area::placeholder { color: var(--text-muted); }
+        .notes-area:focus { border-color: var(--accent); }
+
+        /* Topic pills */
+        .topic-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .topic-pill {
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 12px;
+            background: var(--purple-dim);
+            color: var(--purple-text);
+            font-weight: 500;
+        }
+
+        /* Context snippets */
+        .context-box {
+            background: var(--surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+        .context-box p {
+            margin-bottom: 8px;
+        }
+        .context-box p:last-child { margin-bottom: 0; }
+
+        /* Task list */
+        .task-item {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 13px;
+        }
+        .task-item:last-child { border-bottom: none; }
+        .task-desc { color: var(--text); flex: 1; }
+        .task-meta {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .quadrant-badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 500;
+        }
+        .q1 { background: var(--red-dim); color: var(--red); }
+        .q2 { background: var(--amber-dim); color: var(--amber-text); }
+        .q3 { background: var(--accent-dim); color: var(--accent); }
+        .q4 { background: var(--surface-raised); color: var(--text-muted); }
+        .task-date {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* Page list */
+        .page-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 13px;
+        }
+        .page-item:last-child { border-bottom: none; }
+        .page-title {
+            color: var(--text);
+            font-weight: 500;
+        }
+        .page-title a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .page-title a:hover { text-decoration: underline; }
+        .page-info {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .page-date {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+        .page-topics {
+            display: flex;
+            gap: 4px;
+        }
+        .page-topic {
+            font-size: 10px;
+            padding: 1px 7px;
+            border-radius: 8px;
+            background: var(--surface-raised);
+            color: var(--text-muted);
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 80px 20px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        .empty-state p {
+            max-width: 420px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        /* Modal overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s, visibility 0.2s;
+        }
+        .modal-overlay.open {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 28px;
+            width: 100%;
+            max-width: 420px;
+            transform: translateY(10px);
+            transition: transform 0.2s;
+        }
+        .modal-overlay.open .modal { transform: translateY(0); }
+        .modal h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        .modal-field {
+            margin-bottom: 14px;
+        }
+        .modal-field label {
+            display: block;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+        .modal-field input {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 13px;
+            color: var(--text);
+            outline: none;
+            font-family: inherit;
+            transition: border-color 0.15s;
+        }
+        .modal-field input:focus { border-color: var(--accent); }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .btn-cancel {
+            background: var(--surface-raised);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 18px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .btn-cancel:hover { background: var(--border); }
+        .btn-save {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 18px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        .btn-save:hover { opacity: 0.85; }
+
+        .no-data {
+            color: var(--text-muted);
+            font-size: 13px;
+            font-style: italic;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .main-layout {
+                flex-direction: column;
+            }
+            .people-list {
+                width: 100%;
+                max-height: 300px;
+            }
+            .detail-panel {
+                width: 100%;
+                position: static;
+                max-height: none;
+            }
+            .summary-strip {
+                flex-wrap: wrap;
+                gap: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="shell">
+            <div class="header-row">
+                <div class="brand">
+                    <h1>TARS</h1>
+                    <span>People</span>
+                </div>
+                <nav class="nav-links">
+                    <a href="/">Voice</a>
+                    <a href="/tasks">Tasks</a>
+                    <a href="/briefing">Briefing</a>
+                    <a href="/executive">Executive</a>
+                    <a href="/people" class="active">People</a>
+                    <a href="/review">Review</a>
+                    <a href="/graph">Graph</a>
+                    <a href="/settings">Settings</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="shell" style="padding-top: 4px; padding-bottom: 40px;">
+        <div class="summary-strip" id="summaryStrip">
+            <div class="summary-item"><span class="val" id="statTotal">--</span> People</div>
+            <div class="summary-item"><span class="val" id="statOneOnOnes">--</span> With 1:1s</div>
+            <div class="summary-item"><span class="val" id="statTasks">--</span> With Open Tasks</div>
+            <div class="summary-item"><span class="val" id="statSaved">--</span> Manually Added</div>
+        </div>
+
+        <div class="toolbar">
+            <input type="text" class="search-input" id="searchInput" placeholder="Search people by name...">
+            <button class="btn-add" id="btnAddPerson">Add Person</button>
+        </div>
+
+        <div id="emptyState" class="empty-state" style="display:none;">
+            <p>No people found. Run a Notion scan from the Executive page to populate your knowledge library.</p>
+        </div>
+
+        <div class="main-layout" id="mainLayout" style="display:none;">
+            <div class="people-list" id="peopleList"></div>
+            <div class="detail-panel" id="detailPanel">
+                <div class="detail-empty">Select a person from the list to view details.</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Add Person Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <h2>Add Person</h2>
+            <div class="modal-field">
+                <label>Name *</label>
+                <input type="text" id="modalName" placeholder="Full name">
+            </div>
+            <div class="modal-field">
+                <label>Role</label>
+                <input type="text" id="modalRole" placeholder="e.g. Engineering Lead">
+            </div>
+            <div class="modal-field">
+                <label>Relationship</label>
+                <input type="text" id="modalRelationship" placeholder="e.g. Direct report">
+            </div>
+            <div class="modal-field">
+                <label>Organization</label>
+                <input type="text" id="modalOrg" placeholder="e.g. Engineering">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="btnModalCancel">Cancel</button>
+                <button class="btn-save" id="btnModalSave">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function esc(s) { if (!s) return ''; const el = document.createElement('span'); el.textContent = s; return el.innerHTML; }
+
+        let peopleData = {};
+        let selectedPerson = null;
+        let searchTerm = '';
+
+        const QUADRANT_LABELS = { 1: 'Q1: Urgent/Important', 2: 'Q2: Not Urgent/Important', 3: 'Q3: Urgent/Not Important', 4: 'Q4: Not Urgent/Not Important' };
+
+        async function loadPeople() {
+            try {
+                const resp = await fetch('/api/people');
+                const data = await resp.json();
+                peopleData = data.people || {};
+                updateSummary(data);
+                renderList();
+                if (selectedPerson && peopleData[selectedPerson]) {
+                    renderDetail(peopleData[selectedPerson]);
+                }
+            } catch (e) {
+                console.error('Failed to load people:', e);
+                peopleData = {};
+                renderList();
+            }
+        }
+
+        function updateSummary(data) {
+            const people = Object.values(data.people || {});
+            document.getElementById('statTotal').textContent = people.length;
+            document.getElementById('statOneOnOnes').textContent = people.filter(p => p.has_one_on_ones).length;
+            document.getElementById('statTasks').textContent = people.filter(p => (p.tasks_owned || []).some(t => t.status === 'open')).length;
+            document.getElementById('statSaved').textContent = people.filter(p => p.is_saved).length;
+        }
+
+        function getSortedPeople() {
+            let list = Object.values(peopleData);
+            if (searchTerm) {
+                const q = searchTerm.toLowerCase();
+                list = list.filter(p => p.name.toLowerCase().includes(q));
+            }
+            list.sort((a, b) => (b.mentions || 0) - (a.mentions || 0));
+            return list;
+        }
+
+        function renderList() {
+            const list = getSortedPeople();
+            const container = document.getElementById('peopleList');
+            const emptyState = document.getElementById('emptyState');
+            const mainLayout = document.getElementById('mainLayout');
+
+            if (Object.keys(peopleData).length === 0) {
+                emptyState.style.display = '';
+                mainLayout.style.display = 'none';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+            mainLayout.style.display = 'flex';
+
+            if (list.length === 0) {
+                container.innerHTML = '<div class="no-data">No matches for "' + esc(searchTerm) + '"</div>';
+                return;
+            }
+
+            container.innerHTML = list.map(p => {
+                const isSelected = selectedPerson === p.name;
+                const hasOpenTasks = (p.tasks_owned || []).some(t => t.status === 'open');
+                const dots = [];
+                if (p.has_one_on_ones) dots.push('<span class="dot dot-green" title="Has 1:1s"></span>');
+                if (hasOpenTasks) dots.push('<span class="dot dot-blue" title="Has open tasks"></span>');
+
+                return '<div class="person-card' + (isSelected ? ' selected' : '') + '" data-name="' + esc(p.name) + '">' +
+                    '<div class="card-top">' +
+                        '<span class="card-name">' + esc(p.name) +
+                            (dots.length ? ' <span class="card-dots">' + dots.join('') + '</span>' : '') +
+                        '</span>' +
+                        '<span class="mention-badge">' + (p.mentions || 0) + ' mention' + ((p.mentions || 0) !== 1 ? 's' : '') + '</span>' +
+                    '</div>' +
+                    '<span class="card-role' + (!p.role ? ' empty' : '') + '">' + (p.role ? esc(p.role) : 'Role not set') + '</span>' +
+                '</div>';
+            }).join('');
+
+            container.querySelectorAll('.person-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    const name = card.dataset.name;
+                    selectedPerson = name;
+                    renderList();
+                    renderDetail(peopleData[name]);
+                });
+            });
+        }
+
+        function renderDetail(person) {
+            const panel = document.getElementById('detailPanel');
+            if (!person) {
+                panel.innerHTML = '<div class="detail-empty">Select a person from the list to view details.</div>';
+                return;
+            }
+
+            const p = person;
+            const openTasks = (p.tasks_owned || []).filter(t => t.status === 'open');
+            const pages = p.pages || [];
+            const topics = p.topics || [];
+            const snippets = p.context_snippets || [];
+
+            let html = '<div class="detail-header">' +
+                '<div class="detail-name">' + esc(p.name) + '</div>' +
+                '<div class="detail-fields">' +
+                    editableField('Role', 'role', p.role, p.name) +
+                    editableField('Relationship', 'relationship', p.relationship, p.name) +
+                    editableField('Organization', 'organization', p.organization, p.name) +
+                    editableField('Email', 'email', p.email, p.name) +
+                '</div>' +
+            '</div>';
+
+            // Notes
+            html += '<div class="detail-section">' +
+                '<div class="section-title">Notes <span class="saved-indicator" id="notesSaved">Saved</span></div>' +
+                '<textarea class="notes-area" id="notesArea" placeholder="Add notes about this person...">' + esc(p.notes || '') + '</textarea>' +
+            '</div>';
+
+            // Topics
+            if (topics.length > 0) {
+                html += '<div class="detail-section">' +
+                    '<div class="section-title">Topics</div>' +
+                    '<div class="topic-pills">' +
+                        topics.map(t => '<span class="topic-pill">' + esc(t) + '</span>').join('') +
+                    '</div>' +
+                '</div>';
+            }
+
+            // Context
+            if (snippets.length > 0) {
+                html += '<div class="detail-section">' +
+                    '<div class="section-title">Context</div>' +
+                    '<div class="context-box">' +
+                        snippets.map(s => '<p>' + esc(s) + '</p>').join('') +
+                    '</div>' +
+                '</div>';
+            }
+
+            // Open Tasks
+            if (openTasks.length > 0) {
+                html += '<div class="detail-section">' +
+                    '<div class="section-title">Open Tasks (' + openTasks.length + ')</div>';
+                openTasks.forEach(t => {
+                    const q = t.quadrant || 4;
+                    html += '<div class="task-item">' +
+                        '<span class="task-desc">' + esc(t.description) + '</span>' +
+                        '<div class="task-meta">' +
+                            '<span class="quadrant-badge q' + q + '">' + esc(QUADRANT_LABELS[q] || 'Q' + q) + '</span>' +
+                            (t.follow_up_date ? '<span class="task-date">' + esc(t.follow_up_date) + '</span>' : '') +
+                        '</div>' +
+                    '</div>';
+                });
+                html += '</div>';
+            }
+
+            // Pages
+            if (pages.length > 0) {
+                html += '<div class="detail-section">' +
+                    '<div class="section-title">Pages (' + pages.length + ')</div>';
+                pages.forEach(pg => {
+                    const titleHtml = pg.url ? '<a href="' + esc(pg.url) + '" target="_blank">' + esc(pg.title) + '</a>' : esc(pg.title);
+                    const pgTopics = (pg.topics || []).map(t => '<span class="page-topic">' + esc(t) + '</span>').join('');
+                    html += '<div class="page-item">' +
+                        '<span class="page-title">' + titleHtml + '</span>' +
+                        '<div class="page-info">' +
+                            (pgTopics ? '<span class="page-topics">' + pgTopics + '</span>' : '') +
+                            (pg.last_edited ? '<span class="page-date">' + esc(pg.last_edited) + '</span>' : '') +
+                        '</div>' +
+                    '</div>';
+                });
+                html += '</div>';
+            }
+
+            panel.innerHTML = html;
+            bindDetailEvents(p.name);
+        }
+
+        function editableField(label, field, value, personName) {
+            const id = 'field-' + field;
+            const hasVal = value && value.trim();
+            return '<div class="editable-field" data-field="' + esc(field) + '" data-person="' + esc(personName) + '">' +
+                '<span class="field-label">' + esc(label) + '</span>' +
+                '<span class="field-value' + (!hasVal ? ' placeholder' : '') + '" id="' + id + '">' +
+                    (hasVal ? esc(value) : 'Click to add...') +
+                '</span>' +
+                '<span class="saved-indicator" id="' + id + '-saved">Saved</span>' +
+            '</div>';
+        }
+
+        function bindDetailEvents(personName) {
+            // Editable fields
+            document.querySelectorAll('.editable-field').forEach(row => {
+                const field = row.dataset.field;
+                const valueEl = row.querySelector('.field-value');
+                const savedEl = row.querySelector('.saved-indicator');
+
+                valueEl.addEventListener('click', () => {
+                    const current = valueEl.classList.contains('placeholder') ? '' : valueEl.textContent;
+                    const input = document.createElement('input');
+                    input.className = 'field-input';
+                    input.value = current;
+                    input.placeholder = 'Click to add...';
+                    valueEl.replaceWith(input);
+                    input.focus();
+
+                    const save = async () => {
+                        const newVal = input.value.trim();
+                        const span = document.createElement('span');
+                        span.className = 'field-value' + (!newVal ? ' placeholder' : '');
+                        span.id = 'field-' + field;
+                        span.textContent = newVal || 'Click to add...';
+                        input.replaceWith(span);
+
+                        // Re-bind click
+                        span.addEventListener('click', () => {
+                            // Re-render to rebind properly
+                            renderDetail(peopleData[personName]);
+                        });
+
+                        try {
+                            const body = {};
+                            body[field] = newVal;
+                            await fetch('/api/people/' + encodeURIComponent(personName), {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(body)
+                            });
+                            if (peopleData[personName]) {
+                                peopleData[personName][field] = newVal;
+                            }
+                            if (field === 'role') renderList();
+                            savedEl.classList.add('show');
+                            setTimeout(() => savedEl.classList.remove('show'), 1500);
+                        } catch (e) {
+                            console.error('Save failed:', e);
+                        }
+                    };
+
+                    input.addEventListener('keydown', e => {
+                        if (e.key === 'Enter') { input.blur(); }
+                        if (e.key === 'Escape') {
+                            const span = document.createElement('span');
+                            span.className = 'field-value' + (!current ? ' placeholder' : '');
+                            span.id = 'field-' + field;
+                            span.textContent = current || 'Click to add...';
+                            input.replaceWith(span);
+                            span.addEventListener('click', () => renderDetail(peopleData[personName]));
+                        }
+                    });
+                    input.addEventListener('blur', save);
+                });
+            });
+
+            // Notes autosave
+            const notesArea = document.getElementById('notesArea');
+            const notesSaved = document.getElementById('notesSaved');
+            if (notesArea) {
+                notesArea.addEventListener('blur', async () => {
+                    const newNotes = notesArea.value;
+                    try {
+                        await fetch('/api/people/' + encodeURIComponent(personName), {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ notes: newNotes })
+                        });
+                        if (peopleData[personName]) {
+                            peopleData[personName].notes = newNotes;
+                        }
+                        notesSaved.classList.add('show');
+                        setTimeout(() => notesSaved.classList.remove('show'), 1500);
+                    } catch (e) {
+                        console.error('Notes save failed:', e);
+                    }
+                });
+            }
+        }
+
+        // Search
+        document.getElementById('searchInput').addEventListener('input', e => {
+            searchTerm = e.target.value;
+            renderList();
+        });
+
+        // Modal
+        const modalOverlay = document.getElementById('modalOverlay');
+        document.getElementById('btnAddPerson').addEventListener('click', () => {
+            document.getElementById('modalName').value = '';
+            document.getElementById('modalRole').value = '';
+            document.getElementById('modalRelationship').value = '';
+            document.getElementById('modalOrg').value = '';
+            modalOverlay.classList.add('open');
+            setTimeout(() => document.getElementById('modalName').focus(), 100);
+        });
+        document.getElementById('btnModalCancel').addEventListener('click', () => {
+            modalOverlay.classList.remove('open');
+        });
+        modalOverlay.addEventListener('click', e => {
+            if (e.target === modalOverlay) modalOverlay.classList.remove('open');
+        });
+        document.getElementById('btnModalSave').addEventListener('click', async () => {
+            const name = document.getElementById('modalName').value.trim();
+            if (!name) {
+                document.getElementById('modalName').focus();
+                return;
+            }
+            const body = {
+                name: name,
+                role: document.getElementById('modalRole').value.trim(),
+                relationship: document.getElementById('modalRelationship').value.trim(),
+                organization: document.getElementById('modalOrg').value.trim()
+            };
+            try {
+                await fetch('/api/people', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                modalOverlay.classList.remove('open');
+                await loadPeople();
+                selectedPerson = name;
+                renderList();
+                if (peopleData[name]) renderDetail(peopleData[name]);
+            } catch (e) {
+                console.error('Add person failed:', e);
+            }
+        });
+
+        // Keyboard shortcut: Escape closes modal
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && modalOverlay.classList.contains('open')) {
+                modalOverlay.classList.remove('open');
+            }
+        });
+
+        // Init
+        loadPeople();
+    </script>
+</body>
+</html>

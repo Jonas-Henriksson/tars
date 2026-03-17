@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TARS Daily Briefing</title>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #0a0a0a;
+            --surface: #111113;
+            --surface-raised: #18181b;
+            --border: #27272a;
+            --border-subtle: #1e1e21;
+            --text: #fafafa;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent: #3b82f6;
+            --green: #22c55e;
+            --green-dim: rgba(34, 197, 94, 0.12);
+            --green-text: #4ade80;
+            --amber: #f59e0b;
+            --amber-dim: rgba(245, 158, 11, 0.10);
+            --amber-text: #fbbf24;
+            --red: #ef4444;
+            --red-dim: rgba(239, 68, 68, 0.10);
+            --red-text: #f87171;
+            --blue-dim: rgba(59, 130, 246, 0.10);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .shell { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+        header {
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 16px 0;
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            z-index: 50;
+        }
+
+        .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+        .brand span { font-size: 12px; color: var(--text-muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+        .nav-links a:hover { color: var(--text-secondary); background: var(--surface); }
+        .nav-links a.active { color: var(--text); background: var(--surface-raised); }
+
+        /* Briefing header */
+        .briefing-header {
+            padding: 28px 0 20px;
+            border-bottom: 1px solid var(--border-subtle);
+            margin-bottom: 24px;
+        }
+
+        .briefing-date { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .briefing-title { font-size: 22px; font-weight: 600; margin-bottom: 2px; }
+        .briefing-sub { font-size: 13px; color: var(--text-muted); }
+
+        .header-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+
+        .generate-btn {
+            background: var(--surface-raised);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-size: 13px;
+            padding: 8px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .generate-btn:hover { background: var(--border); border-color: var(--text-muted); }
+        .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Executive summary banner */
+        .exec-banner {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 10px 10px 0;
+            padding: 18px 22px;
+            margin-bottom: 24px;
+            line-height: 1.7;
+        }
+        .exec-banner-label {
+            font-size: 10px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--accent); margin-bottom: 8px;
+        }
+        .exec-banner-text { font-size: 14px; color: var(--text-secondary); }
+        .exec-banner-text strong { color: var(--text); font-weight: 500; }
+
+        /* Quick stats */
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 28px;
+        }
+        .qs-card {
+            background: var(--surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 14px 16px;
+        }
+        .qs-value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+        .qs-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .qs-change { font-size: 11px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+        .qs-change.positive { color: var(--green-text); }
+        .qs-change.negative { color: var(--red-text); }
+        .qs-change.neutral { color: var(--text-muted); }
+
+        /* Section */
+        .section { margin-bottom: 28px; }
+        .section-head {
+            display: flex; align-items: baseline; gap: 10px;
+            margin-bottom: 12px; padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+        .section-count { font-size: 11px; color: var(--text-muted); }
+
+        /* Attention cards */
+        .attention-card {
+            background: var(--surface);
+            border: 1px solid var(--border-subtle);
+            border-left: 3px solid var(--border);
+            border-radius: 0 8px 8px 0;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+        }
+        .attention-card.critical { border-left-color: var(--red); }
+        .attention-card.warning { border-left-color: var(--amber); }
+        .attention-card.info { border-left-color: var(--accent); }
+
+        .attn-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+        .attn-title { font-size: 13px; font-weight: 500; color: var(--text); }
+        .attn-badge { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 3px; }
+        .attn-badge.critical { background: var(--red-dim); color: var(--red-text); }
+        .attn-badge.warning { background: var(--amber-dim); color: var(--amber-text); }
+        .attn-badge.info { background: var(--blue-dim); color: var(--accent); }
+        .attn-detail { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+        .attn-meta { font-size: 11px; color: var(--text-muted); margin-top: 4px; display: flex; gap: 12px; }
+
+        /* Delegation table */
+        .deleg-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+        .deleg-table th {
+            text-align: left; font-size: 11px; font-weight: 500; text-transform: uppercase;
+            letter-spacing: 0.04em; color: var(--text-muted); padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        .deleg-table td {
+            padding: 8px 12px; font-size: 13px; border-bottom: 1px solid var(--border-subtle);
+            vertical-align: middle;
+        }
+        .deleg-table tbody tr:hover { background: var(--surface); }
+        .deleg-name { font-weight: 500; color: var(--text); }
+        .deleg-count { font-variant-numeric: tabular-nums; }
+        .deleg-bar { height: 4px; border-radius: 2px; background: var(--border); min-width: 4px; }
+
+        /* Meeting row */
+        .meeting-row {
+            display: flex; align-items: flex-start; gap: 12px;
+            padding: 10px 0; border-bottom: 1px solid var(--border-subtle);
+        }
+        .meeting-row:last-child { border-bottom: none; }
+        .meeting-time {
+            font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-muted);
+            white-space: nowrap; min-width: 90px; padding-top: 2px;
+        }
+        .meeting-body { flex: 1; min-width: 0; }
+        .meeting-title { font-size: 13px; font-weight: 500; color: var(--text); }
+        .meeting-detail { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+        /* Notion page row */
+        .page-row {
+            display: flex; align-items: flex-start; gap: 10px;
+            padding: 10px 0; border-bottom: 1px solid var(--border-subtle);
+        }
+        .page-row:last-child { border-bottom: none; }
+        .page-title { font-size: 13px; font-weight: 500; color: var(--text); }
+        .page-preview { font-size: 12px; color: var(--text-muted); margin-top: 3px; line-height: 1.45; }
+        .page-link { color: var(--text-muted); text-decoration: none; font-size: 12px; }
+        .page-link:hover { color: var(--accent); }
+
+        /* Stale task row */
+        .stale-row { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border-subtle); }
+        .stale-row:last-child { border-bottom: none; }
+        .stale-age { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 32px; text-align: right; }
+        .stale-age.warn { color: var(--amber-text); }
+        .stale-age.crit { color: var(--red-text); }
+        .stale-desc { font-size: 13px; color: var(--text); flex: 1; }
+        .stale-owner { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+        /* Recommendation grouped sections */
+        .rec-group { margin-bottom: 16px; }
+        .rec-group-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 8px; }
+        .rec-item {
+            display: flex; align-items: flex-start; gap: 10px;
+            padding: 8px 12px; background: var(--surface);
+            border-radius: 6px; margin-bottom: 4px;
+            font-size: 13px;
+        }
+        .rec-bullet { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; margin-top: 7px; }
+        .rec-bullet.high { background: var(--red); }
+        .rec-bullet.medium { background: var(--amber); }
+        .rec-bullet.low { background: var(--accent); }
+        .rec-content { flex: 1; }
+        .rec-content strong { font-weight: 500; }
+        .rec-content .rec-sub { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+
+        /* Email row */
+        .email-row { padding: 8px 0; border-bottom: 1px solid var(--border-subtle); }
+        .email-row:last-child { border-bottom: none; }
+        .email-subject { font-size: 13px; color: var(--text); font-weight: 500; }
+        .email-from { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+
+        /* Empty / loading */
+        .empty { padding: 48px 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
+        .loading { text-align: center; padding: 48px; color: var(--text-muted); font-size: 13px; }
+
+        /* Two column layout for side-by-side sections */
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+
+        @media (max-width: 640px) {
+            .shell { padding: 0 12px; }
+            .quick-stats { grid-template-columns: repeat(2, 1fr); }
+            .two-col { grid-template-columns: 1fr; }
+            .meeting-time { min-width: 70px; font-size: 11px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="shell">
+            <div class="header-row">
+                <div class="brand">
+                    <h1>TARS</h1>
+                    <span>Daily Briefing</span>
+                </div>
+                <nav class="nav-links">
+                    <a href="/">Voice</a>
+                    <a href="/tasks">Tasks</a>
+                    <a href="/briefing" class="active">Briefing</a>
+                    <a href="/executive">Executive</a>
+                    <a href="/people">People</a>
+                    <a href="/review">Review</a>
+                    <a href="/graph">Graph</a>
+                    <a href="/settings">Settings</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="shell">
+        <div class="briefing-header">
+            <div class="briefing-date" id="dateLabel"></div>
+            <div class="briefing-title">Evening Briefing</div>
+            <div class="briefing-sub" id="statusLabel">Compiling...</div>
+            <div class="header-actions">
+                <button class="generate-btn" id="generateBtn" onclick="generateBriefing()">Refresh</button>
+            </div>
+        </div>
+
+        <div id="content"></div>
+    </main>
+
+    <script>
+    (function() {
+        'use strict';
+
+        const dateLabel = document.getElementById('dateLabel');
+        const statusLabel = document.getElementById('statusLabel');
+        const generateBtn = document.getElementById('generateBtn');
+        const content = document.getElementById('content');
+
+        const now = new Date();
+        dateLabel.textContent = now.toLocaleDateString('en-US', {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        });
+
+        window.generateBriefing = async function() {
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Compiling...';
+            statusLabel.textContent = 'Gathering data from calendar, Notion, tasks, and email...';
+            content.innerHTML = '<div class="loading">Compiling your evening briefing...</div>';
+
+            try {
+                const resp = await fetch('/api/briefing');
+                if (!resp.ok) throw new Error('Server returned ' + resp.status);
+                let data = await resp.json();
+                // Use mock data for preview when ?mock is in URL and sources are empty
+                if (new URLSearchParams(location.search).has('mock') &&
+                    !data.task_analysis?.open_count && !data.calendar?.count && !data.notion_activity?.count) {
+                    data = getMockData();
+                }
+                renderBriefing(data);
+                statusLabel.textContent = 'Generated at ' + new Date().toLocaleTimeString();
+                generateBtn.textContent = 'Refresh';
+            } catch (err) {
+                content.innerHTML = '<div class="empty">Failed to generate briefing: ' + esc(err.message) + '</div>';
+                statusLabel.textContent = 'Generation failed.';
+                generateBtn.textContent = 'Retry';
+            }
+            generateBtn.disabled = false;
+        };
+
+        function renderBriefing(data) {
+            let html = '';
+
+            const cal = data.calendar || {};
+            const email = data.email || {};
+            const tasks = data.task_analysis || {};
+            const notion = data.notion_activity || {};
+            const recs = data.recommendations || [];
+
+            // --- Executive Summary Banner ---
+            html += renderExecBanner(cal, email, tasks, notion, recs);
+
+            // --- Quick Stats ---
+            const delegatedCount = Object.entries(tasks.by_owner || {}).filter(([k]) => k !== 'Unassigned' && k !== 'Me').reduce((s, [, c]) => s + c, 0);
+            html += '<div class="quick-stats">';
+            html += qsCard(cal.count || 0, 'Meetings Today', '', '--text-secondary');
+            html += qsCard(notion.count || 0, 'Pages Updated', '', '--text-secondary');
+            html += qsCard(tasks.stale_count || 0, 'Need Attention', tasks.stale_count > 0 ? 'overdue or stale' : 'all on track', tasks.stale_count > 0 ? '--red-text' : '--green-text');
+            html += qsCard(delegatedCount, 'Delegated Tasks', Object.keys(tasks.by_owner || {}).filter(k => k !== 'Unassigned' && k !== 'Me').length + ' people', '--text-secondary');
+            html += '</div>';
+
+            // --- Requires Your Attention ---
+            const criticalRecs = recs.filter(r => r.priority === 'high');
+            const stale = tasks.stale_tasks || [];
+            if (criticalRecs.length > 0 || stale.length > 0) {
+                html += '<div class="section">';
+                html += sectionHead('Requires Your Attention', criticalRecs.length);
+                for (const r of criticalRecs) {
+                    html += attentionCard(r.title, r.detail, 'critical');
+                }
+                if (stale.length > 0 && criticalRecs.length === 0) {
+                    for (const t of stale.slice(0, 3)) {
+                        const owner = t.owner || 'Unassigned';
+                        const severity = t.age_days >= 7 ? 'critical' : 'warning';
+                        html += attentionCard(
+                            esc(t.description),
+                            'Open for ' + t.age_days + ' days. Owner: ' + esc(owner),
+                            severity
+                        );
+                    }
+                }
+                html += '</div>';
+            }
+
+            // --- Today's Meetings + Notion side by side ---
+            const events = cal.events || [];
+            const pages = notion.pages || [];
+            if (events.length > 0 || pages.length > 0) {
+                html += '<div class="two-col">';
+
+                // Meetings column
+                html += '<div class="section">';
+                html += sectionHead('Meetings', events.length);
+                if (events.length > 0) {
+                    for (const e of events) html += meetingRow(e);
+                } else {
+                    html += '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No meetings today</div>';
+                }
+                html += '</div>';
+
+                // Notion pages column
+                html += '<div class="section">';
+                html += sectionHead('Notes Updated', pages.length);
+                if (pages.length > 0) {
+                    for (const p of pages.slice(0, 5)) {
+                        html += '<div class="page-row"><div class="meeting-body">';
+                        html += '<div class="page-title">' + esc(p.title || 'Untitled') + '</div>';
+                        if (p.content_preview) {
+                            const preview = p.content_preview.length > 120 ? p.content_preview.slice(0, 120) + '...' : p.content_preview;
+                            html += '<div class="page-preview">' + esc(preview) + '</div>';
+                        }
+                        if (p.url) html += '<a class="page-link" href="' + esc(p.url) + '" target="_blank" rel="noopener">Open in Notion</a>';
+                        html += '</div></div>';
+                    }
+                } else {
+                    html += '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No pages updated today</div>';
+                }
+                html += '</div>';
+
+                html += '</div>';
+            }
+
+            // --- Delegation Status (exclude Me/Unassigned) ---
+            const byOwner = tasks.by_owner || {};
+            const delegEntries = Object.entries(byOwner)
+                .filter(([k]) => k !== 'Unassigned' && k !== 'Me')
+                .sort((a, b) => b[1] - a[1]);
+            if (delegEntries.length > 0) {
+                const maxCount = Math.max(...delegEntries.map(([, c]) => c));
+                html += '<div class="section">';
+                html += sectionHead('Delegation Overview', delegEntries.length + ' people');
+                html += '<table class="deleg-table"><thead><tr>';
+                html += '<th>Person</th><th>Open Tasks</th><th style="width:40%">Load</th>';
+                html += '</tr></thead><tbody>';
+                for (const [owner, count] of delegEntries) {
+                    const pct = Math.max(3, Math.round((count / maxCount) * 100));
+                    const color = count >= 40 ? 'var(--red)' : count >= 15 ? 'var(--amber)' : 'var(--accent)';
+                    html += '<tr>';
+                    html += '<td class="deleg-name">' + esc(owner) + '</td>';
+                    html += '<td class="deleg-count">' + count + '</td>';
+                    html += '<td><div class="deleg-bar" style="width:' + pct + '%;background:' + color + '"></div></td>';
+                    html += '</tr>';
+                }
+                html += '</tbody></table>';
+                html += '</div>';
+            }
+
+            // --- Stale Tasks ---
+            if (stale.length > 0) {
+                html += '<div class="section">';
+                html += sectionHead('Aging Tasks', stale.length);
+                for (const t of stale.slice(0, 10)) {
+                    const ageCls = t.age_days >= 7 ? 'crit' : 'warn';
+                    html += '<div class="stale-row">';
+                    html += '<span class="stale-age ' + ageCls + '">' + t.age_days + 'd</span>';
+                    html += '<span class="stale-desc">' + esc(t.description) + '</span>';
+                    html += '<span class="stale-owner">' + esc(t.owner || 'Unassigned') + '</span>';
+                    html += '</div>';
+                }
+                if (stale.length > 10) {
+                    html += '<div style="font-size:12px;color:var(--text-muted);padding:6px 0">+ ' + (stale.length - 10) + ' more</div>';
+                }
+                html += '</div>';
+            }
+
+            // --- Recommended Next Steps ---
+            const mediumRecs = recs.filter(r => r.priority === 'medium');
+            const lowRecs = recs.filter(r => r.priority === 'low');
+            if (mediumRecs.length > 0 || lowRecs.length > 0) {
+                html += '<div class="section">';
+                html += sectionHead('Recommended Next Steps', mediumRecs.length + lowRecs.length);
+
+                const followUps = mediumRecs.filter(r => r.type === 'follow_up' || r.type === 'stale_task');
+                const checkIns = mediumRecs.filter(r => r.type === 'check_in');
+                const other = [...mediumRecs.filter(r => r.type !== 'follow_up' && r.type !== 'stale_task' && r.type !== 'check_in'), ...lowRecs];
+
+                if (followUps.length > 0) {
+                    html += recGroup('Follow-ups Needed', followUps);
+                }
+                if (checkIns.length > 0) {
+                    // Compact check-in list
+                    html += '<div class="rec-group"><div class="rec-group-label">Suggested Check-ins</div>';
+                    html += '<div class="rec-item" style="flex-wrap:wrap;gap:6px">';
+                    html += '<span class="rec-bullet medium"></span>';
+                    html += '<div class="rec-content">';
+                    const names = checkIns.map(r => {
+                        const match = r.title.match(/Check in with (.+)/);
+                        return match ? '<strong>' + esc(match[1]) + '</strong>' : esc(r.title);
+                    });
+                    html += 'Consider syncing with ' + names.join(', ') + ' to review priorities and unblock progress.';
+                    html += '</div></div></div>';
+                }
+                if (other.length > 0) {
+                    html += recGroup('Housekeeping', other);
+                }
+                html += '</div>';
+            }
+
+            // --- Unread Email ---
+            const unread = email.unread || [];
+            if (unread.length > 0) {
+                html += '<div class="section">';
+                html += sectionHead('Unread Email', email.unread_count || unread.length);
+                for (const m of unread.slice(0, 6)) {
+                    html += '<div class="email-row">';
+                    html += '<div class="email-subject">' + esc(m.subject || 'No subject') + '</div>';
+                    html += '<div class="email-from">' + esc(m.from || 'Unknown sender') + '</div>';
+                    html += '</div>';
+                }
+                if (unread.length > 6) {
+                    html += '<div style="font-size:12px;color:var(--text-muted);padding:6px 0">+ ' + (unread.length - 6) + ' more unread</div>';
+                }
+                html += '</div>';
+            }
+
+            if (!html) {
+                html = '<div class="empty">' +
+                    '<div style="font-size:15px;color:var(--text-secondary);margin-bottom:8px">Nothing to report today</div>' +
+                    '<div>Connect your calendar, Notion, or email integrations to populate this briefing.<br>' +
+                    'Task data from the Executive page will also appear here once scanned.</div>' +
+                    '</div>';
+            }
+
+            content.innerHTML = html;
+        }
+
+        function renderExecBanner(cal, email, tasks, notion, recs) {
+            const parts = [];
+            const highCount = recs.filter(r => r.priority === 'high').length;
+            const staleCount = tasks.stale_count || 0;
+            const meetingCount = cal.count || 0;
+            const pageCount = notion.count || 0;
+            const openCount = tasks.open_count || 0;
+
+            // Build a narrative summary
+            if (meetingCount > 0) {
+                parts.push('<strong>' + meetingCount + ' meeting' + (meetingCount !== 1 ? 's' : '') + '</strong> on today\'s calendar');
+            }
+            if (pageCount > 0) {
+                parts.push('<strong>' + pageCount + ' page' + (pageCount !== 1 ? 's' : '') + '</strong> updated in Notion');
+            }
+
+            let summaryLine = '';
+            if (parts.length > 0) {
+                summaryLine = parts.join(' and ') + '. ';
+            }
+
+            // Attention items
+            const attentionParts = [];
+            if (highCount > 0) {
+                attentionParts.push('<strong>' + highCount + ' critical item' + (highCount !== 1 ? 's' : '') + '</strong> require your attention');
+            }
+            if (staleCount > 0) {
+                attentionParts.push('<strong>' + staleCount + ' task' + (staleCount !== 1 ? 's' : '') + '</strong> are going stale');
+            }
+
+            let attentionLine = '';
+            if (attentionParts.length > 0) {
+                attentionLine = attentionParts.join(' and ') + '.';
+            } else if (openCount > 0) {
+                attentionLine = '<strong>' + openCount + ' open tasks</strong> across your team — all progressing normally.';
+            }
+
+            return '<div class="exec-banner">' +
+                '<div class="exec-banner-label">Executive Summary</div>' +
+                '<div class="exec-banner-text">' + summaryLine + attentionLine + '</div>' +
+                '</div>';
+        }
+
+        function qsCard(value, label, sublabel, colorVar) {
+            let html = '<div class="qs-card">';
+            html += '<div class="qs-value" style="color:var(' + colorVar + ')">' + value + '</div>';
+            html += '<div class="qs-label">' + label + '</div>';
+            if (sublabel) {
+                html += '<div class="qs-change neutral">' + sublabel + '</div>';
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function sectionHead(title, count) {
+            return '<div class="section-head"><span class="section-title">' + title + '</span><span class="section-count">' + count + '</span></div>';
+        }
+
+        function attentionCard(title, detail, severity) {
+            return '<div class="attention-card ' + severity + '">' +
+                '<div class="attn-header"><div class="attn-title">' + title + '</div>' +
+                '<span class="attn-badge ' + severity + '">' + severity + '</span></div>' +
+                '<div class="attn-detail">' + detail + '</div>' +
+                '</div>';
+        }
+
+        function meetingRow(evt) {
+            const start = formatTime(evt.start);
+            const end = formatTime(evt.end);
+            let html = '<div class="meeting-row">';
+            html += '<div class="meeting-time">' + start + ' – ' + end + '</div>';
+            html += '<div class="meeting-body"><div class="meeting-title">' + esc(evt.subject || 'Untitled') + '</div>';
+            if (evt.location) html += '<div class="meeting-detail">' + esc(evt.location) + '</div>';
+            html += '</div></div>';
+            return html;
+        }
+
+        function recGroup(label, items) {
+            let html = '<div class="rec-group">';
+            html += '<div class="rec-group-label">' + label + '</div>';
+            for (const r of items) {
+                html += '<div class="rec-item">';
+                html += '<span class="rec-bullet ' + r.priority + '"></span>';
+                html += '<div class="rec-content"><strong>' + esc(r.title) + '</strong>';
+                html += '<div class="rec-sub">' + esc(r.detail) + '</div>';
+                html += '</div></div>';
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function formatTime(isoStr) {
+            if (!isoStr) return '--:--';
+            if (isoStr.includes('T')) return isoStr.split('T')[1].slice(0, 5);
+            return isoStr.slice(0, 5);
+        }
+
+        function esc(s) {
+            if (!s) return '';
+            const el = document.createElement('span');
+            el.textContent = s;
+            return el.innerHTML;
+        }
+
+        // Auto-generate briefing on page load
+        generateBriefing();
+
+        function getMockData() {
+            return {
+                calendar: {
+                    events: [
+                        { subject: 'Architecture Review - Platform Migration', start: '2026-03-17T09:00:00', end: '2026-03-17T10:00:00', location: 'Teams' },
+                        { subject: '1:1 with Stefan', start: '2026-03-17T10:30:00', end: '2026-03-17T11:00:00', location: 'Office' },
+                        { subject: 'Supply Chain Sync', start: '2026-03-17T13:00:00', end: '2026-03-17T14:00:00', location: 'Teams' },
+                        { subject: 'Budget Planning Q2', start: '2026-03-17T15:00:00', end: '2026-03-17T16:00:00', location: 'Conference Room B' },
+                    ],
+                    count: 4, available: true
+                },
+                notion_activity: {
+                    pages: [
+                        { title: 'Architecture Review - Platform Migration', content_preview: 'Discussed migration timeline for Azure services. Key decision: move to containerized deployment by Q2. Jonas to lead infrastructure workstream, Stefan handles CI/CD pipeline changes.', url: 'https://notion.so/page1' },
+                        { title: 'Supply Chain Optimization - Weekly Notes', content_preview: 'Rachel presented new forecasting model. Accuracy improved from 78% to 91%. Next step: pilot with Nordic region before full rollout. Budget approval needed from finance.', url: 'https://notion.so/page2' },
+                        { title: 'Q2 OKR Draft', content_preview: 'Updated objectives based on board feedback. Focus areas: operational efficiency (+15%), customer retention (>92%), new market entry (2 regions).', url: 'https://notion.so/page3' },
+                    ],
+                    count: 3, available: true
+                },
+                task_analysis: {
+                    total: 675, open_count: 482, followed_up_count: 12, available: true,
+                    stale_count: 8,
+                    stale_tasks: [
+                        { id: '1', description: 'Finalize vendor contract for cloud migration', owner: 'Jonas', age_days: 12 },
+                        { id: '2', description: 'Review updated security audit findings', owner: 'Unassigned', age_days: 9 },
+                        { id: '3', description: 'Prepare board presentation on Q1 results', owner: 'Me', age_days: 8 },
+                        { id: '4', description: 'Sign off on new hire compensation packages', owner: 'Karin', age_days: 7 },
+                        { id: '5', description: 'Update disaster recovery runbook', owner: 'Stefan', age_days: 5 },
+                        { id: '6', description: 'Schedule customer success review for Acme Corp', owner: 'Rachel', age_days: 4 },
+                        { id: '7', description: 'Complete compliance training modules', owner: 'Team', age_days: 4 },
+                        { id: '8', description: 'Draft RFP for analytics platform', owner: 'Matthias', age_days: 3 },
+                    ],
+                    others_open: [], others_open_count: 18,
+                    by_owner: {
+                        'Me': 354, 'Stefan': 48, 'Jonas': 35, 'Rachel': 31, 'Team': 64,
+                        'Vakhat': 5, 'Karin': 5, 'Matthias': 5
+                    },
+                    open_tasks: []
+                },
+                email: {
+                    unread: [
+                        { subject: 'RE: Platform Migration Timeline Update', from: 'Jonas Henriksson' },
+                        { subject: 'Q2 Budget - Final Numbers', from: 'Finance Team' },
+                        { subject: 'Customer escalation: Acme Corp SLA breach', from: 'Rachel Moore' },
+                        { subject: 'Security audit follow-up actions', from: 'InfoSec Team' },
+                    ],
+                    unread_count: 4, recent: [], recent_count: 0, available: true
+                },
+                recommendations: [
+                    { type: 'follow_up', priority: 'high', title: 'Vendor contract overdue by 12 days', detail: "Finalize vendor contract for cloud migration has been open for 12 days. Jonas is the owner — follow up to unblock the migration timeline." },
+                    { type: 'stale_task', priority: 'high', title: 'Security audit findings unassigned', detail: "Review updated security audit findings has no owner after 9 days. Assign to InfoSec lead or schedule a triage session." },
+                    { type: 'follow_up', priority: 'high', title: 'Board presentation needs action', detail: "Prepare board presentation on Q1 results is 8 days old. This is time-sensitive — block 2 hours this week." },
+                    { type: 'check_in', priority: 'medium', title: 'Check in with Stefan', detail: 'Stefan has 48 open tasks. Consider a quick sync to review priorities and progress.' },
+                    { type: 'check_in', priority: 'medium', title: 'Check in with Jonas', detail: 'Jonas has 35 open tasks. Consider a quick sync to review priorities and progress.' },
+                    { type: 'check_in', priority: 'medium', title: 'Check in with Rachel', detail: 'Rachel has 31 open tasks. Consider a quick sync to review priorities and progress.' },
+                    { type: 'missing_actions', priority: 'low', title: "No action items in 'Architecture Review'", detail: "Meeting notes for 'Architecture Review - Platform Migration' have no explicit tasks. Review the notes and extract any implicit commitments." },
+                    { type: 'organization', priority: 'low', title: 'Uncategorized tasks', detail: '23 open tasks have no topic. Consider grouping them for better tracking.' },
+                ],
+                generated_at: new Date().toISOString()
+            };
+        }
+    })();
+    </script>
+</body>
+</html>

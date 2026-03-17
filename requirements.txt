@@ -1,7 +1,11 @@
 python-telegram-bot[ext]
 anthropic
+openai
 msal
 httpx
+fastapi
+uvicorn[standard]
 python-dotenv
+notion-client
 pytest
 pytest-asyncio

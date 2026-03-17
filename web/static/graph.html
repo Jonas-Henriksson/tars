@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TARS Graph</title>
+    <script src="/static/js/3d-force-graph.min.js"></script>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0a0a0a; --surface: #111113; --surface-raised: #18181b;
+            --border: #27272a; --border-subtle: #1e1e21;
+            --text: #fafafa; --text-secondary: #a1a1aa; --text-muted: #71717a;
+            --accent: #3b82f6; --green: #22c55e; --green-dim: rgba(34,197,94,0.12); --green-text: #4ade80;
+            --amber: #f59e0b; --amber-dim: rgba(245,158,11,0.10); --amber-text: #fbbf24;
+            --red: #ef4444; --red-dim: rgba(239,68,68,0.10); --red-text: #f87171;
+            --blue-dim: rgba(59,130,246,0.10); --purple: #a855f7; --purple-dim: rgba(168,85,247,0.10); --purple-text: #c084fc;
+            --node-person: #3b82f6; --node-topic: #a855f7; --node-page: #f59e0b;
+            --node-project: #22c55e; --node-organization: #06b6d4; --node-decision: #f43f5e; --node-tag: #8b5cf6;
+            --cyan: #06b6d4; --cyan-dim: rgba(6,182,212,0.12); --cyan-text: #22d3ee;
+            --rose: #f43f5e; --rose-dim: rgba(244,63,94,0.12); --rose-text: #fb7185;
+            --violet: #8b5cf6; --violet-dim: rgba(139,92,246,0.12); --violet-text: #a78bfa;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; -webkit-font-smoothing: antialiased; overflow: hidden; height: 100vh; }
+        header { border-bottom: 1px solid var(--border-subtle); padding: 12px 24px; position: sticky; top: 0; background: var(--bg); z-index: 50; }
+        .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 1400px; margin: 0 auto; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+        .brand span { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+        .nav-links a:hover { color: var(--text-secondary); background: var(--surface); }
+        .nav-links a.active { color: var(--text); background: var(--surface-raised); }
+
+        /* Control Panel */
+        .ctrl-panel { position: absolute; top: 12px; right: 12px; width: 280px; z-index: 40; background: rgba(17,17,19,0.92); border: 1px solid var(--border); border-radius: 10px; backdrop-filter: blur(12px); max-height: calc(100vh - 120px); overflow-y: auto; }
+        .ctrl-panel::-webkit-scrollbar { width: 4px; }
+        .ctrl-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .ctrl-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); }
+        .ctrl-header-actions { display: flex; gap: 6px; }
+        .ctrl-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 4px; font-size: 14px; line-height: 1; }
+        .ctrl-btn:hover { color: var(--text); background: var(--surface-raised); }
+        .ctrl-section { border-bottom: 1px solid var(--border-subtle); }
+        .ctrl-section:last-child { border-bottom: none; }
+        .ctrl-section-head { display: flex; align-items: center; gap: 6px; padding: 10px 14px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 600; }
+        .ctrl-section-head:hover { background: rgba(255,255,255,0.02); }
+        .ctrl-section-head .chevron { font-size: 10px; color: var(--text-muted); transition: transform 0.2s; }
+        .ctrl-section-head .chevron.open { transform: rotate(90deg); }
+        .ctrl-section-body { padding: 0 14px 12px; display: none; }
+        .ctrl-section-body.open { display: block; }
+
+        /* Search within panel */
+        .ctrl-search { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12px; font-family: inherit; outline: none; margin-bottom: 8px; }
+        .ctrl-search:focus { border-color: var(--accent); }
+        .ctrl-search::placeholder { color: var(--text-muted); }
+
+        /* Groups */
+        .ctrl-group-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border-subtle); }
+        .ctrl-group-row:last-child { border-bottom: none; }
+        .ctrl-group-name { flex: 1; font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ctrl-group-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; cursor: pointer; border: 1px solid rgba(255,255,255,0.1); }
+        .ctrl-group-toggle { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 3px; line-height: 1; }
+        .ctrl-group-toggle:hover { color: var(--text); background: var(--surface-raised); }
+        .ctrl-group-toggle.hidden { opacity: 0.4; }
+
+        /* Display toggles */
+        .ctrl-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+        .ctrl-toggle-label { font-size: 12px; color: var(--text-secondary); }
+        .ctrl-switch { position: relative; width: 32px; height: 18px; cursor: pointer; }
+        .ctrl-switch input { opacity: 0; width: 0; height: 0; }
+        .ctrl-switch .slider { position: absolute; inset: 0; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 9px; transition: background 0.2s; }
+        .ctrl-switch .slider::before { content: ''; position: absolute; width: 12px; height: 12px; left: 2px; top: 2px; background: var(--text-muted); border-radius: 50%; transition: transform 0.2s, background 0.2s; }
+        .ctrl-switch input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+        .ctrl-switch input:checked + .slider::before { transform: translateX(14px); background: #fff; }
+
+        /* Force sliders */
+        .ctrl-slider-row { margin-bottom: 10px; }
+        .ctrl-slider-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: flex; justify-content: space-between; }
+        .ctrl-slider-val { color: var(--text-muted); font-size: 11px; }
+        .ctrl-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 2px; background: var(--surface-raised); outline: none; }
+        .ctrl-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; border: 2px solid var(--border); }
+        .ctrl-slider::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; border: 2px solid var(--border); }
+
+        /* Main layout */
+        .graph-wrap { display: flex; height: calc(100vh - 50px); position: relative; overflow: hidden; }
+        #graph3d { flex: 1; width: 100%; height: 100%; position: relative; }
+        #graph3d canvas { display: block; }
+
+        /* Sidebar */
+        .sidebar { width: 0; overflow: hidden; border-left: 1px solid var(--border-subtle); background: var(--surface); transition: width 0.25s ease; flex-shrink: 0; z-index: 30; }
+        .sidebar.open { width: 340px; }
+        .sidebar-inner { width: 340px; padding: 20px; overflow-y: auto; height: 100%; }
+        .sidebar-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .sidebar-title { font-size: 16px; font-weight: 600; }
+        .sidebar-type { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 4px; }
+        .sidebar-type.person { background: rgba(59,130,246,0.15); color: var(--node-person); }
+        .sidebar-type.topic { background: var(--purple-dim); color: var(--purple-text); }
+        .sidebar-type.page { background: var(--amber-dim); color: var(--amber-text); }
+        .sidebar-type.project { background: var(--green-dim); color: var(--green-text); }
+        .sidebar-type.organization { background: var(--cyan-dim); color: var(--cyan-text); }
+        .sidebar-type.decision { background: var(--rose-dim); color: var(--rose-text); }
+        .sidebar-type.tag { background: var(--violet-dim); color: var(--violet-text); }
+        .sidebar-close { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+        .sidebar-close:hover { color: var(--text); background: var(--surface-raised); }
+        .sidebar-section { margin-bottom: 18px; }
+        .sidebar-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 8px; }
+        .sidebar-item { padding: 6px 0; font-size: 13px; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); display: flex; align-items: flex-start; gap: 8px; }
+        .sidebar-item:last-child { border-bottom: none; }
+        .sidebar-item a { color: var(--accent); text-decoration: none; }
+        .sidebar-item a:hover { text-decoration: underline; }
+        .sidebar-task-desc { color: var(--text); margin-bottom: 4px; }
+        .sidebar-task-meta { color: var(--text-muted); font-size: 11px; display: flex; gap: 8px; flex-wrap: wrap; }
+        .sidebar-badge { font-size: 10px; padding: 1px 6px; border-radius: 3px; }
+        .sidebar-badge.q1 { background: var(--red-dim); color: var(--red-text); }
+        .sidebar-badge.q2 { background: var(--blue-dim); color: var(--accent); }
+        .sidebar-badge.q3 { background: var(--amber-dim); color: var(--amber-text); }
+        .sidebar-badge.q4 { background: rgba(113,113,122,0.15); color: var(--text-muted); }
+        .sidebar-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin: 2px 2px; cursor: pointer; }
+        .sidebar-tag:hover { filter: brightness(1.3); }
+        .sidebar-tag.person { background: rgba(59,130,246,0.12); color: var(--node-person); }
+        .sidebar-tag.topic { background: var(--purple-dim); color: var(--purple-text); }
+        .sidebar-tag.page { background: var(--amber-dim); color: var(--amber-text); }
+        .sidebar-tag.project { background: var(--green-dim); color: var(--green-text); }
+        .sidebar-tag.organization { background: var(--cyan-dim); color: var(--cyan-text); }
+        .sidebar-tag.decision { background: var(--rose-dim); color: var(--rose-text); }
+        .sidebar-tag.tag { background: var(--violet-dim); color: var(--violet-text); }
+        .sidebar-empty { color: var(--text-muted); font-size: 12px; font-style: italic; padding: 4px 0; }
+        .sidebar-page-link { display: flex; align-items: center; gap: 6px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border-subtle); }
+        .sidebar-page-link:last-child { border-bottom: none; }
+        .sidebar-page-link a { color: var(--accent); text-decoration: none; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sidebar-page-link a:hover { text-decoration: underline; }
+
+        /* Weight bar rows */
+        .sidebar-bar-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12px; cursor: pointer; }
+        .sidebar-bar-row:hover { background: var(--surface-raised); margin: 0 -4px; padding: 3px 4px; border-radius: 4px; }
+        .sidebar-bar-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+        .sidebar-bar-track { width: 60px; height: 4px; background: var(--surface-raised); border-radius: 2px; flex-shrink: 0; }
+        .sidebar-bar-fill { height: 100%; border-radius: 2px; min-width: 2px; }
+        .sidebar-bar-count { font-size: 10px; color: var(--text-muted); width: 20px; text-align: right; flex-shrink: 0; }
+        .sidebar-group-head { font-size: 11px; font-weight: 600; color: var(--text-muted); padding: 6px 0 2px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+        .sidebar-group-head:hover { color: var(--text-secondary); }
+        .sidebar-group-body { padding-left: 8px; }
+        .sidebar-show-more { font-size: 11px; color: var(--text-muted); cursor: pointer; padding: 4px 0; }
+        .sidebar-show-more:hover { color: var(--accent); }
+
+        /* Clickable task cards */
+        .sidebar-task { padding: 8px 10px; background: var(--surface-raised); border-radius: 6px; margin-bottom: 6px; font-size: 12px; cursor: pointer; transition: background 0.15s; }
+        .sidebar-task:hover { background: var(--border); }
+        .sidebar-task-detail { padding: 8px 0 0; border-top: 1px solid var(--border-subtle); margin-top: 6px; font-size: 11px; color: var(--text-secondary); display: none; }
+        .sidebar-task-detail.open { display: block; }
+        .sidebar-task-detail a { color: var(--accent); text-decoration: none; }
+        .sidebar-task-detail a:hover { text-decoration: underline; }
+        .sidebar-task-steps { white-space: pre-wrap; color: var(--text-muted); margin-top: 4px; }
+        .sidebar-task-header { display: flex; align-items: flex-start; gap: 6px; }
+        .sidebar-task-header .sidebar-task-desc { flex: 1; }
+        .sidebar-task-actions { display: flex; gap: 2px; flex-shrink: 0; }
+        .sidebar-task-actions button {
+            background: none; border: 1px solid var(--border); color: var(--text-muted);
+            font-size: 10px; padding: 2px 6px; border-radius: 4px; cursor: pointer;
+            font-family: inherit; transition: all 0.15s; white-space: nowrap;
+        }
+        .sidebar-task-actions .task-done-btn:hover { color: var(--green-text); border-color: var(--green); }
+        .sidebar-task-actions .task-edit-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+        /* Graph task modal */
+        .graph-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 200; display: none; align-items: center; justify-content: center; }
+        .graph-modal-overlay.visible { display: flex; }
+        .graph-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; padding: 24px; }
+        .graph-modal h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+        .graph-modal .gm-field { margin-bottom: 14px; }
+        .graph-modal .gm-field label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 4px; }
+        .graph-modal .gm-field input, .graph-modal .gm-field textarea, .graph-modal .gm-field select {
+            width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+            font-family: inherit; font-size: 13px; padding: 7px 10px; border-radius: 6px; outline: none;
+        }
+        .graph-modal .gm-field input:focus, .graph-modal .gm-field textarea:focus, .graph-modal .gm-field select:focus { border-color: var(--accent); }
+        .graph-modal .gm-field textarea { resize: vertical; min-height: 60px; }
+        .graph-modal .gm-row { display: flex; gap: 12px; }
+        .graph-modal .gm-row .gm-field { flex: 1; }
+        .graph-modal .gm-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+        .graph-modal .gm-foot button { font-family: inherit; font-size: 13px; padding: 7px 18px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border); }
+        .graph-modal .gm-cancel { background: var(--surface-raised); color: var(--text-secondary); }
+        .graph-modal .gm-cancel:hover { background: var(--border); }
+        .graph-modal .gm-save { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .graph-modal .gm-save:hover { opacity: 0.9; }
+        .graph-modal .gm-source { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+        .graph-modal .gm-source a { color: var(--accent); text-decoration: none; }
+        .graph-modal .gm-source a:hover { text-decoration: underline; }
+
+        /* Node label overlay */
+        .node-label { color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 3px; background: rgba(0,0,0,0.6); white-space: nowrap; pointer-events: none; }
+
+        /* Legend */
+        .legend { position: absolute; bottom: 16px; left: 16px; display: flex; gap: 14px; z-index: 20; background: rgba(10,10,10,0.7); padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border-subtle); backdrop-filter: blur(8px); }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+        .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+        @media (max-width: 768px) {
+            .sidebar.open { width: 280px; }
+            .sidebar-inner { width: 280px; }
+            .search-box { width: 120px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-row">
+            <div class="brand"><h1>TARS</h1><span>Graph</span></div>
+            <nav class="nav-links">
+                <a href="/">Voice</a>
+                <a href="/tasks">Tasks</a>
+                <a href="/briefing">Briefing</a>
+                <a href="/executive">Executive</a>
+                <a href="/people">People</a>
+                <a href="/review">Review</a>
+                <a href="/graph" class="active">Graph</a>
+                <a href="/settings">Settings</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="graph-wrap">
+        <div id="graph3d"></div>
+
+        <!-- Control Panel -->
+        <div class="ctrl-panel" id="ctrlPanel">
+            <div class="ctrl-header">
+                <span style="font-size:13px;font-weight:600;">Graph Controls</span>
+                <div class="ctrl-header-actions">
+                    <button class="ctrl-btn" id="ctrlSave" title="Save preferences">&#8615;</button>
+                    <button class="ctrl-btn" id="ctrlReset" title="Reset defaults">&#8635;</button>
+                    <button class="ctrl-btn" id="ctrlClose" title="Close panel">&#215;</button>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="ctrl-section">
+                <div class="ctrl-section-head" data-section="filters">
+                    <span class="chevron open">&#9656;</span> Filters
+                </div>
+                <div class="ctrl-section-body open" id="filtersBody">
+                    <input type="text" class="ctrl-search" id="searchBox" placeholder="Search nodes...">
+                    <div class="ctrl-slider-row">
+                        <div class="ctrl-slider-label">Density <span class="ctrl-slider-val" id="densityVal">500</span> <span style="color:var(--text-muted);font-size:10px" id="densityInfo"></span></div>
+                        <input type="range" class="ctrl-slider" id="densitySlider" min="50" max="2500" step="50" value="500">
+                    </div>
+                    <div class="ctrl-toggle-row">
+                        <span class="ctrl-toggle-label">Orphan nodes</span>
+                        <label class="ctrl-switch"><input type="checkbox" id="toggleOrphans" checked><span class="slider"></span></label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Groups -->
+            <div class="ctrl-section">
+                <div class="ctrl-section-head" data-section="groups">
+                    <span class="chevron open">&#9656;</span> Groups
+                </div>
+                <div class="ctrl-section-body open" id="groupsBody">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Display -->
+            <div class="ctrl-section">
+                <div class="ctrl-section-head" data-section="display">
+                    <span class="chevron">&#9656;</span> Display
+                </div>
+                <div class="ctrl-section-body" id="displayBody">
+                    <div class="ctrl-toggle-row">
+                        <span class="ctrl-toggle-label">Labels</span>
+                        <label class="ctrl-switch"><input type="checkbox" id="toggleLabels" checked><span class="slider"></span></label>
+                    </div>
+                    <div class="ctrl-toggle-row">
+                        <span class="ctrl-toggle-label">Arrows</span>
+                        <label class="ctrl-switch"><input type="checkbox" id="toggleArrows"><span class="slider"></span></label>
+                    </div>
+                    <div class="ctrl-slider-row" style="margin-top:8px">
+                        <div class="ctrl-slider-label">Node size <span class="ctrl-slider-val" id="nodeSizeVal">1.0</span></div>
+                        <input type="range" class="ctrl-slider" id="nodeSize" min="0.2" max="3" step="0.1" value="1">
+                    </div>
+                    <div class="ctrl-slider-row">
+                        <div class="ctrl-slider-label">Link thickness <span class="ctrl-slider-val" id="linkThicknessVal">1.0</span></div>
+                        <input type="range" class="ctrl-slider" id="linkThickness" min="0.1" max="3" step="0.1" value="1">
+                    </div>
+                    <div class="ctrl-slider-row">
+                        <div class="ctrl-slider-label">Link opacity <span class="ctrl-slider-val" id="linkOpacityVal">0.08</span></div>
+                        <input type="range" class="ctrl-slider" id="linkOpacity" min="0.01" max="0.6" step="0.01" value="0.08">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Forces -->
+            <div class="ctrl-section">
+                <div class="ctrl-section-head" data-section="forces">
+                    <span class="chevron open">&#9656;</span> Forces
+                </div>
+                <div class="ctrl-section-body open" id="forcesBody">
+                    <div class="ctrl-slider-row">
+                        <div class="ctrl-slider-label">Center force <span class="ctrl-slider-val" id="centerForceVal">0.05</span></div>
+                        <input type="range" class="ctrl-slider" id="centerForce" min="0" max="0.3" step="0.005" value="0.05">
+                    </div>
+                    <div class="ctrl-slider-row">
+                        <div class="ctrl-slider-label">Repel force <span class="ctrl-slider-val" id="repelForceVal">80</span></div>
+                        <input type="range" class="ctrl-slider" id="repelForce" min="0" max="300" step="5" value="80">
+                    </div>
+                    <div class="ctrl-slider-row">
+                        <div class="ctrl-slider-label">Link force <span class="ctrl-slider-val" id="linkForceVal">1.0</span></div>
+                        <input type="range" class="ctrl-slider" id="linkForce" min="0" max="2" step="0.05" value="1">
+                    </div>
+                    <div class="ctrl-slider-row">
+                        <div class="ctrl-slider-label">Link distance <span class="ctrl-slider-val" id="linkDistanceVal">60</span></div>
+                        <input type="range" class="ctrl-slider" id="linkDistance" min="10" max="200" step="5" value="60">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toggle button when panel is closed -->
+        <button class="ctrl-btn" id="ctrlOpen" title="Open controls" style="position:absolute;top:12px;right:12px;z-index:39;background:rgba(17,17,19,0.85);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:16px;display:none;">&#9881;</button>
+
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-inner" id="sidebarContent"></div>
+        </div>
+    </div>
+
+    <!-- Graph task modal -->
+    <div class="graph-modal-overlay" id="graphModalOverlay">
+        <div class="graph-modal">
+            <h2>Edit Task</h2>
+            <input type="hidden" id="gmTaskId">
+            <div class="gm-field">
+                <label>Description</label>
+                <input type="text" id="gmDesc">
+            </div>
+            <div class="gm-row">
+                <div class="gm-field">
+                    <label>Owner</label>
+                    <input type="text" id="gmOwner">
+                </div>
+                <div class="gm-field">
+                    <label>Quadrant</label>
+                    <select id="gmQuadrant">
+                        <option value="1">Do First</option>
+                        <option value="2">Schedule</option>
+                        <option value="3">Delegate</option>
+                        <option value="4">Defer</option>
+                    </select>
+                </div>
+            </div>
+            <div class="gm-row">
+                <div class="gm-field">
+                    <label>Follow-up Date</label>
+                    <input type="date" id="gmDate">
+                </div>
+                <div class="gm-field">
+                    <label>Status</label>
+                    <select id="gmStatus">
+                        <option value="open">Open</option>
+                        <option value="done">Done</option>
+                    </select>
+                </div>
+            </div>
+            <div class="gm-field">
+                <label>Steps</label>
+                <textarea id="gmSteps" rows="3"></textarea>
+            </div>
+            <div class="gm-source" id="gmSource"></div>
+            <div class="gm-foot">
+                <button class="gm-cancel" id="gmCancel">Cancel</button>
+                <button class="gm-save" id="gmSave">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        'use strict';
+
+        // --- State ---
+        let graphData = null;
+        let graphNodes = [];
+        let graphEdges = [];
+        let tasks = [];
+        let nodeMap = {};
+        let adjacency = {};
+        let selectedNodeId = null;
+        let hoveredNodeId = null;
+        let Graph = null;
+
+        // Display settings
+        let showLabels = true;
+        let showArrows = false;
+        let nodeSizeMul = 1;
+        let linkThicknessMul = 1;
+        let baseLinkOpacity = 0.08;
+
+        // Force settings
+        let forceCenter = 0.05;
+        let forceRepel = 80;
+        let forceLink = 1;
+        let forceLinkDist = 60;
+
+        // Group visibility
+        let groupVisible = { person: true, topic: true, page: false, project: true, organization: true, decision: true, tag: true };
+
+        // --- Preferences persistence ---
+        const PREFS_KEY = 'tars-graph-prefs';
+        function gatherPrefs() {
+            return {
+                density: currentMaxNodes,
+                showLabels, showArrows, nodeSizeMul, linkThicknessMul, baseLinkOpacity,
+                forceCenter, forceRepel, forceLink, forceLinkDist,
+                groupVisible: { ...groupVisible },
+                orphans: document.getElementById('toggleOrphans').checked,
+            };
+        }
+        function applyPrefs(p) {
+            if (!p) return false;
+            // Density
+            if (p.density !== undefined) {
+                currentMaxNodes = p.density;
+                const ds = document.getElementById('densitySlider');
+                const dv = document.getElementById('densityVal');
+                if (ds) { ds.value = p.density; }
+                if (dv) { dv.textContent = p.density; }
+            }
+            // Display
+            if (p.showLabels !== undefined) { showLabels = p.showLabels; document.getElementById('toggleLabels').checked = showLabels; }
+            if (p.showArrows !== undefined) { showArrows = p.showArrows; document.getElementById('toggleArrows').checked = showArrows; }
+            if (p.orphans !== undefined) { document.getElementById('toggleOrphans').checked = p.orphans; }
+            // Sliders
+            const sliderMap = {
+                nodeSizeMul: ['nodeSize', 'nodeSizeVal'],
+                linkThicknessMul: ['linkThickness', 'linkThicknessVal'],
+                baseLinkOpacity: ['linkOpacity', 'linkOpacityVal'],
+                forceCenter: ['centerForce', 'centerForceVal'],
+                forceRepel: ['repelForce', 'repelForceVal'],
+                forceLink: ['linkForce', 'linkForceVal'],
+                forceLinkDist: ['linkDistance', 'linkDistanceVal'],
+            };
+            for (const [key, [sliderId, valId]] of Object.entries(sliderMap)) {
+                if (p[key] !== undefined) {
+                    const el = document.getElementById(sliderId);
+                    const valEl = document.getElementById(valId);
+                    if (el) el.value = p[key];
+                    if (valEl) { const v = p[key]; valEl.textContent = v < 1 ? v.toFixed(2) : (v < 10 ? v.toFixed(1) : v.toFixed(0)); }
+                    // Update the JS variable
+                    if (key === 'nodeSizeMul') nodeSizeMul = p[key];
+                    if (key === 'linkThicknessMul') linkThicknessMul = p[key];
+                    if (key === 'baseLinkOpacity') baseLinkOpacity = p[key];
+                    if (key === 'forceCenter') forceCenter = p[key];
+                    if (key === 'forceRepel') forceRepel = p[key];
+                    if (key === 'forceLink') forceLink = p[key];
+                    if (key === 'forceLinkDist') forceLinkDist = p[key];
+                }
+            }
+            // Groups
+            if (p.groupVisible) groupVisible = { ...p.groupVisible };
+            return true;
+        }
+        function loadPrefs() {
+            try { return JSON.parse(localStorage.getItem(PREFS_KEY)); } catch { return null; }
+        }
+        function savePrefs() {
+            localStorage.setItem(PREFS_KEY, JSON.stringify(gatherPrefs()));
+        }
+
+        const sidebar = document.getElementById('sidebar');
+        const sidebarContent = document.getElementById('sidebarContent');
+        const searchBox = document.getElementById('searchBox');
+        const graphEl = document.getElementById('graph3d');
+        const ctrlPanel = document.getElementById('ctrlPanel');
+        const groupsBody = document.getElementById('groupsBody');
+
+        // Catch async errors from ForceGraph3D animation loop
+        let graphCrashed = false;
+        window.addEventListener('error', (evt) => {
+            if (graphCrashed) return;
+            if (evt.filename && evt.filename.includes('3d-force-graph')) {
+                graphCrashed = true;
+                console.error('3D graph engine crashed, stopping animation');
+                if (Graph) { try { Graph.pauseAnimation(); } catch(e) {} }
+                graphEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">'
+                    + '<div style="text-align:center"><h3 style="margin-bottom:8px">3D rendering error</h3>'
+                    + '<p style="font-size:13px;margin-bottom:12px">The graph has too many nodes for 3D rendering.</p>'
+                    + '<button onclick="location.reload()" style="padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer">Reload</button>'
+                    + '</div></div>';
+                evt.preventDefault();
+            }
+        });
+
+        const NODE_COLORS = { person: '#3b82f6', topic: '#a855f7', page: '#f59e0b', project: '#22c55e', organization: '#06b6d4', decision: '#f43f5e', tag: '#8b5cf6' };
+        const NODE_COLORS_HIGHLIGHT = { person: '#60a5fa', topic: '#c084fc', page: '#fbbf24', project: '#4ade80', organization: '#22d3ee', decision: '#fb7185', tag: '#a78bfa' };
+        const GROUP_LABELS = { person: 'People', topic: 'Topics', page: 'Pages', project: 'Projects', organization: 'Organizations', decision: 'Decisions', tag: 'Tags' };
+        const GROUP_ORDER = ['person', 'topic', 'project', 'organization', 'decision', 'tag', 'page'];
+
+        // --- Control Panel: collapsible sections ---
+        document.querySelectorAll('.ctrl-section-head').forEach(head => {
+            head.addEventListener('click', () => {
+                const chevron = head.querySelector('.chevron');
+                const body = head.nextElementSibling;
+                const isOpen = body.classList.contains('open');
+                body.classList.toggle('open', !isOpen);
+                chevron.classList.toggle('open', !isOpen);
+            });
+        });
+
+        // Panel open/close
+        document.getElementById('ctrlClose').addEventListener('click', () => {
+            ctrlPanel.style.display = 'none';
+            document.getElementById('ctrlOpen').style.display = 'block';
+        });
+        document.getElementById('ctrlOpen').addEventListener('click', () => {
+            ctrlPanel.style.display = '';
+            document.getElementById('ctrlOpen').style.display = 'none';
+        });
+
+        // --- Load data ---
+        let currentMaxNodes = 500;
+
+        async function loadGraph(maxNodes) {
+            if (maxNodes === undefined) maxNodes = currentMaxNodes;
+            currentMaxNodes = maxNodes;
+            try {
+                const resp = await fetch('/api/intel/graph?max_nodes=' + maxNodes);
+                if (!resp.ok) return;
+                graphData = await resp.json();
+                tasks = graphData.tasks || [];
+                // Destroy existing graph before rebuilding
+                if (Graph) {
+                    Graph._destructor && Graph._destructor();
+                    Graph = null;
+                    graphEl.innerHTML = '';
+                }
+                initGraph(graphData);
+                // Update density info
+                const info = document.getElementById('densityInfo');
+                if (info) info.textContent = graphNodes.length + ' nodes, ' + graphEdges.length + ' edges';
+            } catch(e) {
+                console.error('Failed to load graph', e);
+            }
+        }
+
+        // Density slider
+        let densityTimer = null;
+        const densitySlider = document.getElementById('densitySlider');
+        const densityVal = document.getElementById('densityVal');
+        densitySlider.addEventListener('input', () => {
+            const v = parseInt(densitySlider.value);
+            densityVal.textContent = v;
+            clearTimeout(densityTimer);
+            densityTimer = setTimeout(() => loadGraph(v), 400);
+        });
+
+        function initGraph(data) {
+            graphNodes = [];
+            graphEdges = [];
+            nodeMap = {};
+            adjacency = {};
+
+            const weightsByType = { person: [], topic: [], page: [] };
+            for (const n of data.nodes) {
+                if (weightsByType[n.type]) weightsByType[n.type].push(n.weight || 1);
+            }
+            const maxWeight = {};
+            for (const t of ['person', 'topic', 'page']) {
+                maxWeight[t] = Math.max(1, ...weightsByType[t]);
+            }
+            const sizeRange = { person: [3, 10], topic: [4, 14], page: [2, 6], project: [4, 12], organization: [4, 12], decision: [3, 8], tag: [3, 8] };
+
+            for (const n of data.nodes) {
+                const weight = n.weight || 1;
+                const type = n.type;
+                const [sMin, sMax] = sizeRange[type] || [3, 8];
+                const norm = Math.log(1 + weight) / Math.log(1 + maxWeight[type]);
+                const size = sMin + norm * (sMax - sMin);
+
+                const node = {
+                    id: n.id,
+                    label: n.label,
+                    type: type,
+                    weight: weight,
+                    url: n.url || '',
+                    baseVal: size,
+                    val: size * nodeSizeMul,
+                    color: NODE_COLORS[type] || '#71717a',
+                    visible: groupVisible[type] !== false,
+                };
+                graphNodes.push(node);
+                nodeMap[n.id] = node;
+                adjacency[n.id] = new Set();
+            }
+
+            for (const e of data.edges) {
+                if (nodeMap[e.source] && nodeMap[e.target]) {
+                    graphEdges.push({
+                        source: e.source,
+                        target: e.target,
+                        type: e.type,
+                        weight: e.weight || 1,
+                    });
+                    adjacency[e.source].add(e.target);
+                    adjacency[e.target].add(e.source);
+                }
+            }
+
+            buildGroups();
+            createGraph();
+        }
+
+        // --- Groups panel ---
+        function buildGroups() {
+            // Dynamically discover all node types present in the data
+            const typeCounts = {};
+            for (const n of graphNodes) {
+                typeCounts[n.type] = (typeCounts[n.type] || 0) + 1;
+            }
+            const groups = GROUP_ORDER
+                .filter(key => typeCounts[key] > 0)
+                .map(key => ({ key, label: GROUP_LABELS[key] || key, color: NODE_COLORS[key] || '#71717a', count: typeCounts[key] }));
+            // Add any types not in GROUP_ORDER
+            for (const [key, count] of Object.entries(typeCounts)) {
+                if (!GROUP_ORDER.includes(key)) {
+                    groups.push({ key, label: GROUP_LABELS[key] || key, color: NODE_COLORS[key] || '#71717a', count });
+                }
+            }
+
+            let html = '';
+            for (const g of groups) {
+                const vis = groupVisible[g.key] !== false;
+                html += '<div class="ctrl-group-row">';
+                html += '<span class="ctrl-group-name">' + esc(g.label) + ' <span style="color:var(--text-muted);font-size:11px">(' + g.count + ')</span></span>';
+                html += '<div class="ctrl-group-dot" style="background:' + g.color + (vis ? '' : ';opacity:0.2') + '"></div>';
+                html += '<button class="ctrl-group-toggle' + (vis ? '' : ' hidden') + '" data-group="' + g.key + '" title="Toggle visibility">' + (vis ? '&#10003;' : '&#10005;') + '</button>';
+                html += '</div>';
+            }
+            groupsBody.innerHTML = html;
+
+            groupsBody.querySelectorAll('.ctrl-group-toggle').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const key = btn.dataset.group;
+                    groupVisible[key] = !groupVisible[key];
+                    applyGroupVisibility();
+                    buildGroups();
+                });
+            });
+        }
+
+        function applyGroupVisibility() {
+            let showOrphans = document.getElementById('toggleOrphans').checked;
+            for (const n of graphNodes) {
+                n.visible = groupVisible[n.type] !== false;
+                if (n.visible && !showOrphans && (adjacency[n.id] || new Set()).size === 0) {
+                    n.visible = false;
+                }
+            }
+            updateGraphData();
+        }
+
+        function getVisibleData() {
+            const visibleNodes = graphNodes.filter(n => n.visible);
+            const visibleIds = new Set(visibleNodes.map(n => n.id));
+            const visibleEdges = graphEdges.filter(e => {
+                const sid = typeof e.source === 'object' ? e.source.id : e.source;
+                const tid = typeof e.target === 'object' ? e.target.id : e.target;
+                return visibleIds.has(sid) && visibleIds.has(tid);
+            });
+            return { nodes: visibleNodes, links: visibleEdges };
+        }
+
+        function updateGraphData() {
+            if (!Graph) return;
+            const data = getVisibleData();
+            Graph.graphData(data);
+        }
+
+        function createGraph() {
+            const data = getVisibleData();
+
+            const graphWrap = document.querySelector('.graph-wrap');
+            const sidebarW = sidebar.classList.contains('open') ? 340 : 0;
+            const width = (graphWrap.clientWidth - sidebarW) || window.innerWidth;
+            const height = graphWrap.clientHeight || (window.innerHeight - 50);
+
+            if (Graph) {
+                Graph.graphData(data).width(width).height(height);
+                return;
+            }
+
+            if (typeof ForceGraph3D === 'undefined') {
+                console.error('ForceGraph3D not loaded. Check /static/js/3d-force-graph.min.js');
+                graphEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)"><div style="text-align:center"><h3 style="margin-bottom:8px">Graph library failed to load</h3><p style="font-size:13px">Check browser console for errors</p></div></div>';
+                return;
+            }
+
+            const nodeRes = data.nodes.length > 300 ? 6 : 16;
+            console.log('Creating graph with', data.nodes.length, 'nodes and', data.links.length, 'links', 'in', width, 'x', height, '(resolution:', nodeRes + ')');
+
+            try {
+                Graph = ForceGraph3D()(graphEl)
+                    .width(width)
+                    .height(height)
+                    .backgroundColor('#0a0a0a')
+                    .graphData(data)
+
+                    .nodeVal(n => n.baseVal * nodeSizeMul)
+                    .nodeColor(n => {
+                        if (selectedNodeId && n.id !== selectedNodeId && !adjacency[selectedNodeId].has(n.id)) {
+                            return 'rgba(60,60,70,0.3)';
+                        }
+                        if (n.id === hoveredNodeId || n.id === selectedNodeId) {
+                            return NODE_COLORS_HIGHLIGHT[n.type] || '#aaa';
+                        }
+                        return n.color;
+                    })
+                    .nodeOpacity(0.9)
+                    .nodeResolution(nodeRes)
+
+                    .nodeLabel(n => '<div class="node-label">' + esc(n.label) + ' <span style="opacity:0.5;font-size:10px">' + n.type + '</span></div>')
+
+                    .linkWidth(e => Math.min(2, 0.2 + e.weight * 0.15) * linkThicknessMul)
+                    .linkOpacity(baseLinkOpacity)
+                    .linkColor(e => {
+                        const sid = typeof e.source === 'object' ? e.source.id : e.source;
+                        const tid = typeof e.target === 'object' ? e.target.id : e.target;
+                        if (selectedNodeId) {
+                            if (sid === selectedNodeId || tid === selectedNodeId) {
+                                return NODE_COLORS[nodeMap[sid] ? nodeMap[sid].type : 'person'];
+                            }
+                            return 'rgba(40,40,50,0.1)';
+                        }
+                        return nodeMap[sid] ? nodeMap[sid].color : '#555';
+                    })
+                    .linkDirectionalArrowLength(showArrows ? 4 : 0)
+                    .linkDirectionalArrowRelPos(1)
+
+                    .onNodeClick(n => selectNode(n.id))
+                    .onNodeHover(n => {
+                        hoveredNodeId = n ? n.id : null;
+                        graphEl.style.cursor = n ? 'pointer' : 'default';
+                    })
+                    .onBackgroundClick(() => {
+                        selectedNodeId = null;
+                        closeSidebar();
+                        resetPageVisibility();
+                        refreshGraph();
+                    })
+
+                    // Pre-compute layout then limit simulation
+                    .warmupTicks(100)
+                    .cooldownTicks(300)
+                    .d3AlphaDecay(0.02)
+                    .d3VelocityDecay(0.3)
+                    .onEngineStop(() => { console.log('Force simulation settled'); });
+
+                // Defer force config until layout is initialized
+                // (graphData init is async — calling d3ReheatSimulation
+                //  before layout exists causes a crash)
+                setTimeout(() => {
+                    applyForces();
+                }, 0);
+            } catch(err) {
+                console.error('ForceGraph3D crashed:', err);
+                Graph = null;
+                graphEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)"><div style="text-align:center"><h3 style="margin-bottom:8px">3D graph failed to render</h3><p style="font-size:13px">' + esc(err.message) + '</p></div></div>';
+            }
+        }
+
+        function applyForces() {
+            if (!Graph) return;
+            try {
+                const charge = Graph.d3Force('charge');
+                if (charge) charge.strength(n => -forceRepel * (n.baseVal || 4));
+                const link = Graph.d3Force('link');
+                if (link) {
+                    link.distance(e => forceLinkDist + (e.weight || 1) * 5);
+                    link.strength(forceLink > 0 ? forceLink * 0.05 : 0);
+                }
+                const center = Graph.d3Force('center');
+                if (center) center.strength(forceCenter);
+                Graph.d3ReheatSimulation();
+            } catch(e) {
+                console.warn('Force config error:', e);
+            }
+        }
+
+        function addBloomEffect() {
+            // Bloom requires three.js ES module postprocessing imports
+            // which don't work with script-tag loading. The 3D graph
+            // still looks good with the built-in lighting/materials.
+        }
+
+        function refreshGraph() {
+            if (!Graph) return;
+            Graph.nodeColor(Graph.nodeColor());
+            Graph.linkColor(Graph.linkColor());
+            Graph.linkOpacity(e => {
+                const sid = typeof e.source === 'object' ? e.source.id : e.source;
+                const tid = typeof e.target === 'object' ? e.target.id : e.target;
+                if (selectedNodeId) {
+                    return (sid === selectedNodeId || tid === selectedNodeId) ? 0.6 : 0.04;
+                }
+                return baseLinkOpacity;
+            });
+        }
+
+        // --- Control Panel: Force sliders ---
+        function bindSlider(id, valId, setter) {
+            const slider = document.getElementById(id);
+            const valEl = document.getElementById(valId);
+            slider.addEventListener('input', () => {
+                const v = parseFloat(slider.value);
+                valEl.textContent = v.toFixed(v < 1 ? 2 : (v < 10 ? 1 : 0));
+                setter(v);
+            });
+        }
+
+        bindSlider('centerForce', 'centerForceVal', v => { forceCenter = v; applyForces(); });
+        bindSlider('repelForce', 'repelForceVal', v => { forceRepel = v; applyForces(); });
+        bindSlider('linkForce', 'linkForceVal', v => { forceLink = v; applyForces(); });
+        bindSlider('linkDistance', 'linkDistanceVal', v => { forceLinkDist = v; applyForces(); });
+
+        // Display sliders
+        bindSlider('nodeSize', 'nodeSizeVal', v => {
+            nodeSizeMul = v;
+            if (Graph) Graph.nodeVal(n => n.baseVal * nodeSizeMul);
+        });
+        bindSlider('linkThickness', 'linkThicknessVal', v => {
+            linkThicknessMul = v;
+            if (Graph) Graph.linkWidth(e => Math.min(2, 0.2 + e.weight * 0.15) * linkThicknessMul);
+        });
+        bindSlider('linkOpacity', 'linkOpacityVal', v => {
+            baseLinkOpacity = v;
+            if (Graph) Graph.linkOpacity(v);
+        });
+
+        // Display toggles
+        document.getElementById('toggleLabels').addEventListener('change', (e) => {
+            showLabels = e.target.checked;
+            // Labels are shown via HTML tooltip on hover — toggle doesn't need graph refresh
+        });
+        document.getElementById('toggleArrows').addEventListener('change', (e) => {
+            showArrows = e.target.checked;
+            if (Graph) Graph.linkDirectionalArrowLength(showArrows ? 4 : 0);
+        });
+        document.getElementById('toggleOrphans').addEventListener('change', () => {
+            applyGroupVisibility();
+        });
+
+        // Reset button
+        document.getElementById('ctrlReset').addEventListener('click', () => {
+            // Reset all sliders
+            const defaults = {
+                centerForce: 0.05, repelForce: 80, linkForce: 1, linkDistance: 60,
+                nodeSize: 1, linkThickness: 1, linkOpacity: 0.08
+            };
+            for (const [id, val] of Object.entries(defaults)) {
+                const el = document.getElementById(id);
+                if (el) { el.value = val; el.dispatchEvent(new Event('input')); }
+            }
+            // Reset toggles
+            document.getElementById('toggleLabels').checked = true; showLabels = true;
+            document.getElementById('toggleArrows').checked = false; showArrows = false;
+            document.getElementById('toggleOrphans').checked = true;
+            // Reset groups
+            groupVisible = { person: true, topic: true, page: false, project: true, organization: true, decision: true, tag: true };
+            applyGroupVisibility();
+            buildGroups();
+            // Reset density slider
+            currentMaxNodes = 500;
+            document.getElementById('densitySlider').value = 500;
+            document.getElementById('densityVal').textContent = '500';
+            if (Graph) {
+                Graph.linkDirectionalArrowLength(0);
+            }
+            // Clear saved preferences
+            localStorage.removeItem(PREFS_KEY);
+        });
+
+        // Save button
+        document.getElementById('ctrlSave').addEventListener('click', () => {
+            savePrefs();
+            const btn = document.getElementById('ctrlSave');
+            const orig = btn.innerHTML;
+            btn.innerHTML = '&#10003;';
+            btn.style.color = 'var(--green)';
+            setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; }, 1500);
+        });
+
+        // --- Selection ---
+        function selectNode(nodeId) {
+            if (selectedNodeId === nodeId) {
+                selectedNodeId = null;
+                closeSidebar();
+                resetPageVisibility();
+            } else {
+                selectedNodeId = nodeId;
+                showConnectedPages(nodeId);
+                openSidebar(nodeId);
+
+                const node = nodeMap[nodeId];
+                if (node && Graph) {
+                    const distance = 200;
+                    const distRatio = 1 + distance / Math.hypot(node.x || 0, node.y || 0, node.z || 0);
+                    Graph.cameraPosition(
+                        { x: (node.x || 0) * distRatio, y: (node.y || 0) * distRatio, z: (node.z || 0) * distRatio },
+                        node,
+                        1500
+                    );
+                }
+            }
+            refreshGraph();
+        }
+
+        function showConnectedPages(nodeId) {
+            for (const n of graphNodes) {
+                if (n.type === 'page') n.visible = false;
+            }
+            for (const neighborId of adjacency[nodeId] || []) {
+                const neighbor = nodeMap[neighborId];
+                if (neighbor && neighbor.type === 'page') {
+                    neighbor.visible = true;
+                }
+            }
+            updateGraphData();
+        }
+
+        function resetPageVisibility() {
+            for (const n of graphNodes) {
+                if (n.type === 'page') n.visible = groupVisible.page;
+            }
+            updateGraphData();
+        }
+
+        // --- Sidebar ---
+        function openSidebar(nodeId) {
+            const node = nodeMap[nodeId];
+            if (!node) return;
+            sidebar.classList.add('open');
+            resizeGraph();
+
+            let html = '<div class="sidebar-head">';
+            html += '<div><div class="sidebar-title">' + esc(node.label) + '</div>';
+            html += '<span class="sidebar-type ' + node.type + '">' + node.type + '</span></div>';
+            html += '<button class="sidebar-close" onclick="closeSidebarGlobal()">&times;</button></div>';
+
+            if (node.type === 'person') {
+                html += renderPersonSidebar(nodeId, node);
+            } else if (node.type === 'topic') {
+                html += renderTopicSidebar(nodeId, node);
+            } else if (node.type === 'page') {
+                html += renderPageSidebar(nodeId, node);
+            } else {
+                html += renderGenericSidebar(nodeId, node);
+            }
+
+            sidebarContent.innerHTML = html;
+
+            // Event delegation for sidebar interactions
+            sidebarContent.onclick = (evt) => {
+                // "Show more" toggles
+                const more = evt.target.closest('[data-more]');
+                if (more) {
+                    const target = document.getElementById(more.dataset.more);
+                    if (target) {
+                        const isOpen = target.style.display !== 'none';
+                        target.style.display = isOpen ? 'none' : '';
+                        if (more.classList.contains('sidebar-show-more')) {
+                            more.style.display = isOpen ? '' : 'none';
+                        } else if (more.classList.contains('sidebar-group-head')) {
+                            more.innerHTML = (isOpen ? '&#9656; ' : '&#9662; ') + more.innerHTML.replace(/^[▸▾]\s*/, '');
+                        }
+                    }
+                    return;
+                }
+                // Bar row / tag click → navigate to that node
+                const barRow = evt.target.closest('[data-node-id]');
+                if (barRow) {
+                    selectNode(barRow.dataset.nodeId);
+                    return;
+                }
+                // Task done button
+                const doneBtn = evt.target.closest('.task-done-btn');
+                if (doneBtn) {
+                    evt.stopPropagation();
+                    markTaskDone(doneBtn.dataset.taskId);
+                    return;
+                }
+                // Task edit button
+                const editBtn = evt.target.closest('.task-edit-btn');
+                if (editBtn) {
+                    evt.stopPropagation();
+                    openGraphModal(editBtn.dataset.taskId);
+                    return;
+                }
+                // Task card click → expand details
+                const task = evt.target.closest('.sidebar-task');
+                if (task) {
+                    const detail = task.querySelector('.sidebar-task-detail');
+                    if (detail) detail.classList.toggle('open');
+                    return;
+                }
+            };
+        }
+
+        function renderPersonSidebar(nodeId, node) {
+            let html = '';
+            const neighbors = Array.from(adjacency[nodeId] || []);
+            const byType = (type) => neighbors.filter(id => nodeMap[id] && nodeMap[id].type === type).map(id => nodeMap[id]);
+            const connTopics = byType('topic');
+            const connPages = byType('page');
+            const connProjects = byType('project');
+            const connOrgs = byType('organization');
+            const connDecisions = byType('decision');
+            const personTasks = tasks.filter(t => t.owner && t.owner.toLowerCase() === node.label.toLowerCase());
+
+            html += renderTagSection('Organizations', connOrgs, 'organization', { topN: 10, showBars: true });
+            html += renderTagSection('Projects', connProjects, 'project', { topN: 10, showBars: true });
+            html += renderTagSection('Topics', connTopics, 'topic', { topN: 10, showBars: true, grouped: true });
+
+            if (connDecisions.length) {
+                html += '<div class="sidebar-section">';
+                html += '<div class="sidebar-label">Decisions (' + connDecisions.length + ')</div>';
+                const topDec = connDecisions.slice(0, 5);
+                for (const d of topDec) {
+                    html += '<div class="sidebar-item" style="font-size:12px;color:var(--rose-text)">' + esc(d.label) + '</div>';
+                }
+                if (connDecisions.length > 5) {
+                    html += '<div class="sidebar-show-more" data-more="dec-more">+ ' + (connDecisions.length - 5) + ' more</div>';
+                    html += '<div id="dec-more" style="display:none">';
+                    for (const d of connDecisions.slice(5)) {
+                        html += '<div class="sidebar-item" style="font-size:12px;color:var(--rose-text)">' + esc(d.label) + '</div>';
+                    }
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">Open Tasks (' + personTasks.length + ')</div>';
+            if (personTasks.length) {
+                for (const t of personTasks.sort((a, b) => (a.quadrant || 4) - (b.quadrant || 4))) {
+                    html += renderTaskCard(t);
+                }
+            } else {
+                html += '<div class="sidebar-empty">No open tasks</div>';
+            }
+            html += '</div>';
+
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">Source Pages (' + connPages.length + ')</div>';
+            if (connPages.length) {
+                for (const p of connPages) {
+                    html += renderPageLink(p);
+                }
+            } else {
+                html += '<div class="sidebar-empty">No connected pages</div>';
+            }
+            html += '</div>';
+
+            return html;
+        }
+
+        function renderTopicSidebar(nodeId, node) {
+            let html = '';
+            const neighbors = Array.from(adjacency[nodeId] || []);
+            const byType = (type) => neighbors.filter(id => nodeMap[id] && nodeMap[id].type === type).map(id => nodeMap[id]);
+            const connPeople = byType('person');
+            const connPages = byType('page');
+            const connProjects = byType('project');
+            const topicTasks = tasks.filter(t => t.topics && t.topics.includes(node.label));
+
+            html += renderTagSection('People', connPeople, 'person', { topN: 10, showBars: true });
+            if (connProjects.length) html += renderTagSection('Projects', connProjects, 'project', { topN: 10, showBars: true });
+
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">Open Tasks (' + topicTasks.length + ')</div>';
+            if (topicTasks.length) {
+                for (const t of topicTasks.sort((a, b) => (a.quadrant || 4) - (b.quadrant || 4))) {
+                    html += renderTaskCard(t);
+                }
+            } else {
+                html += '<div class="sidebar-empty">No open tasks for this topic</div>';
+            }
+            html += '</div>';
+
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">Source Pages (' + connPages.length + ')</div>';
+            if (connPages.length) {
+                for (const p of connPages) {
+                    html += renderPageLink(p);
+                }
+            } else {
+                html += '<div class="sidebar-empty">No connected pages</div>';
+            }
+            html += '</div>';
+
+            return html;
+        }
+
+        function renderPageSidebar(nodeId, node) {
+            let html = '';
+            const neighbors = Array.from(adjacency[nodeId] || []);
+            const byType = (type) => neighbors.filter(id => nodeMap[id] && nodeMap[id].type === type).map(id => nodeMap[id]);
+            const connPeople = byType('person');
+            const connTopics = byType('topic');
+            const connProjects = byType('project');
+            const connOrgs = byType('organization');
+            const connDecisions = byType('decision');
+            const connTags = byType('tag');
+
+            if (node.url) {
+                html += '<div class="sidebar-section">';
+                html += '<a href="' + esc(node.url) + '" target="_blank" style="color:var(--accent);font-size:13px;">Open in Notion &rarr;</a>';
+                html += '</div>';
+            }
+
+            html += renderTagSection('People', connPeople, 'person', { showBars: true });
+            html += renderTagSection('Projects', connProjects, 'project', { showBars: true });
+            html += renderTagSection('Organizations', connOrgs, 'organization', { showBars: true });
+            html += renderTagSection('Topics', connTopics, 'topic', { showBars: true, grouped: true });
+            html += renderTagSection('Tags', connTags, 'tag');
+
+            if (connDecisions.length) {
+                html += '<div class="sidebar-section">';
+                html += '<div class="sidebar-label">Decisions (' + connDecisions.length + ')</div>';
+                for (const d of connDecisions) {
+                    html += '<div class="sidebar-item" style="font-size:12px;color:var(--rose-text)">' + esc(d.label) + '</div>';
+                }
+                html += '</div>';
+            }
+
+            const pageId = node.id.replace('page:', '');
+            const pageTasks = tasks.filter(t => t.source_page_id === pageId);
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">Tasks from this page (' + pageTasks.length + ')</div>';
+            if (pageTasks.length) {
+                for (const t of pageTasks) {
+                    html += renderTaskCard(t);
+                }
+            } else {
+                html += '<div class="sidebar-empty">No tasks extracted</div>';
+            }
+            html += '</div>';
+
+            return html;
+        }
+
+        function renderTagSection(label, items, cssClass, opts) {
+            opts = opts || {};
+            const topN = opts.topN || 10;
+            const showBars = opts.showBars || false;
+            const grouped = opts.grouped || false;
+
+            if (!items.length) {
+                let html = '<div class="sidebar-section">';
+                html += '<div class="sidebar-label">' + label + ' (0)</div>';
+                html += '<div class="sidebar-empty">None</div></div>';
+                return html;
+            }
+
+            const sorted = items.slice().sort((a, b) => b.weight - a.weight);
+
+            // Group by prefix (e.g., "supply-chain/optimization" → group "Supply Chain")
+            if (grouped && cssClass === 'topic') {
+                return renderGroupedTopics(label, sorted, topN);
+            }
+
+            let html = '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">' + label + ' (' + items.length + ')</div>';
+
+            if (showBars) {
+                const maxW = sorted[0].weight || 1;
+                const visible = sorted.slice(0, topN);
+                const rest = sorted.length - topN;
+                for (const item of visible) {
+                    const pct = Math.max(5, (item.weight / maxW) * 100);
+                    const color = NODE_COLORS[cssClass] || '#71717a';
+                    html += '<div class="sidebar-bar-row" data-node-id="' + esc(item.id) + '">';
+                    html += '<span class="sidebar-bar-label">' + esc(item.label) + '</span>';
+                    html += '<span class="sidebar-bar-track"><span class="sidebar-bar-fill" style="width:' + pct + '%;background:' + color + '"></span></span>';
+                    html += '<span class="sidebar-bar-count">' + item.weight + '</span>';
+                    html += '</div>';
+                }
+                if (rest > 0) {
+                    const moreId = 'more-' + cssClass + '-' + Date.now();
+                    html += '<div class="sidebar-show-more" data-more="' + moreId + '">+ ' + rest + ' more</div>';
+                    html += '<div id="' + moreId + '" style="display:none">';
+                    for (const item of sorted.slice(topN)) {
+                        const pct = Math.max(5, (item.weight / maxW) * 100);
+                        const color = NODE_COLORS[cssClass] || '#71717a';
+                        html += '<div class="sidebar-bar-row" data-node-id="' + esc(item.id) + '">';
+                        html += '<span class="sidebar-bar-label">' + esc(item.label) + '</span>';
+                        html += '<span class="sidebar-bar-track"><span class="sidebar-bar-fill" style="width:' + pct + '%;background:' + color + '"></span></span>';
+                        html += '<span class="sidebar-bar-count">' + item.weight + '</span>';
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                }
+            } else {
+                const visible = sorted.slice(0, topN);
+                const rest = sorted.length - topN;
+                for (const item of visible) {
+                    html += '<span class="sidebar-tag ' + cssClass + '" data-node-id="' + esc(item.id) + '">' + esc(item.label) + '</span>';
+                }
+                if (rest > 0) {
+                    const moreId = 'more-' + cssClass + '-' + Date.now();
+                    html += '<div class="sidebar-show-more" data-more="' + moreId + '">+ ' + rest + ' more</div>';
+                    html += '<div id="' + moreId + '" style="display:none">';
+                    for (const item of sorted.slice(topN)) {
+                        html += '<span class="sidebar-tag ' + cssClass + '" data-node-id="' + esc(item.id) + '">' + esc(item.label) + '</span>';
+                    }
+                    html += '</div>';
+                }
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function renderGroupedTopics(label, sorted, topN) {
+            // Group topics by prefix before "/"
+            const groups = {};
+            const ungrouped = [];
+            for (const item of sorted) {
+                const slash = item.label.indexOf('/');
+                if (slash > 0) {
+                    const prefix = item.label.substring(0, slash);
+                    if (!groups[prefix]) groups[prefix] = [];
+                    groups[prefix].push(item);
+                } else {
+                    ungrouped.push(item);
+                }
+            }
+
+            // Sort groups by total weight
+            const groupEntries = Object.entries(groups).sort((a, b) => {
+                const wa = a[1].reduce((s, i) => s + i.weight, 0);
+                const wb = b[1].reduce((s, i) => s + i.weight, 0);
+                return wb - wa;
+            });
+
+            let html = '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">' + label + ' (' + sorted.length + ')</div>';
+
+            const maxW = sorted[0].weight || 1;
+            let shown = 0;
+
+            // Render grouped topics
+            for (const [prefix, items] of groupEntries) {
+                if (shown >= topN && items.length < 3) continue;
+                const totalW = items.reduce((s, i) => s + i.weight, 0);
+                const prettyName = prefix.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                const gid = 'tg-' + prefix.replace(/[^a-z0-9]/gi, '') + '-' + Date.now();
+                html += '<div class="sidebar-group-head" data-more="' + gid + '">&#9656; ' + esc(prettyName) + ' <span style="font-weight:400;font-size:10px">(' + items.length + ')</span></div>';
+                html += '<div class="sidebar-group-body" id="' + gid + '" style="display:none">';
+                for (const item of items) {
+                    const subLabel = item.label.substring(prefix.length + 1);
+                    const pct = Math.max(5, (item.weight / maxW) * 100);
+                    html += '<div class="sidebar-bar-row" data-node-id="' + esc(item.id) + '">';
+                    html += '<span class="sidebar-bar-label">' + esc(subLabel) + '</span>';
+                    html += '<span class="sidebar-bar-track"><span class="sidebar-bar-fill" style="width:' + pct + '%;background:var(--purple)"></span></span>';
+                    html += '<span class="sidebar-bar-count">' + item.weight + '</span>';
+                    html += '</div>';
+                }
+                html += '</div>';
+                shown += items.length;
+            }
+
+            // Ungrouped topics
+            if (ungrouped.length) {
+                for (const item of ungrouped.slice(0, Math.max(5, topN - shown))) {
+                    const pct = Math.max(5, (item.weight / maxW) * 100);
+                    html += '<div class="sidebar-bar-row" data-node-id="' + esc(item.id) + '">';
+                    html += '<span class="sidebar-bar-label">' + esc(item.label) + '</span>';
+                    html += '<span class="sidebar-bar-track"><span class="sidebar-bar-fill" style="width:' + pct + '%;background:var(--purple)"></span></span>';
+                    html += '<span class="sidebar-bar-count">' + item.weight + '</span>';
+                    html += '</div>';
+                }
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function renderGenericSidebar(nodeId, node) {
+            let html = '';
+            const neighbors = Array.from(adjacency[nodeId] || []);
+            const byType = (type) => neighbors.filter(id => nodeMap[id] && nodeMap[id].type === type).map(id => nodeMap[id]);
+            const connPeople = byType('person');
+            const connPages = byType('page');
+            const connTopics = byType('topic');
+            const connProjects = byType('project');
+            const connOrgs = byType('organization');
+
+            html += renderTagSection('People', connPeople, 'person', { topN: 10, showBars: true });
+            if (connOrgs.length) html += renderTagSection('Organizations', connOrgs, 'organization', { topN: 10, showBars: true });
+            if (connProjects.length) html += renderTagSection('Projects', connProjects, 'project', { topN: 10, showBars: true });
+            if (connTopics.length) html += renderTagSection('Topics', connTopics, 'topic', { topN: 10, showBars: true, grouped: true });
+
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">Source Pages (' + connPages.length + ')</div>';
+            if (connPages.length) {
+                for (const p of connPages) {
+                    html += renderPageLink(p);
+                }
+            } else {
+                html += '<div class="sidebar-empty">No connected pages</div>';
+            }
+            html += '</div>';
+
+            return html;
+        }
+
+        function renderTaskCard(t) {
+            const qClass = 'q' + (t.quadrant || 4);
+            let html = '<div class="sidebar-task" data-task-id="' + t.id + '">';
+            html += '<div class="sidebar-task-header">';
+            html += '<div class="sidebar-task-desc">' + esc(t.description) + '</div>';
+            html += '<div class="sidebar-task-actions">';
+            html += '<button class="task-edit-btn" data-task-id="' + t.id + '" title="Edit">Edit</button>';
+            html += '<button class="task-done-btn" data-task-id="' + t.id + '" title="Mark done">Done</button>';
+            html += '</div>';
+            html += '</div>';
+            html += '<div class="sidebar-task-meta">';
+            html += '<span class="sidebar-badge ' + qClass + '">' + esc(t.quadrant_label || 'Defer') + '</span>';
+            if (t.follow_up_date) html += '<span>' + t.follow_up_date + '</span>';
+            if (t.owner) html += '<span>' + esc(t.owner) + '</span>';
+            html += '</div>';
+            // Expandable detail panel
+            html += '<div class="sidebar-task-detail">';
+            if (t.source_title) {
+                html += '<div style="margin-bottom:4px">';
+                if (t.source_url) {
+                    html += 'Source: <a href="' + esc(t.source_url) + '" target="_blank">' + esc(t.source_title) + '</a>';
+                } else {
+                    html += 'Source: ' + esc(t.source_title);
+                }
+                html += '</div>';
+            }
+            if (t.topics && t.topics.length) {
+                html += '<div style="margin-bottom:4px">Topics: ' + t.topics.map(tp => esc(tp)).join(', ') + '</div>';
+            }
+            if (t.source_context) {
+                html += '<div style="margin-bottom:4px;color:var(--text-muted);font-style:italic">"' + esc(t.source_context.substring(0, 200)) + (t.source_context.length > 200 ? '...' : '') + '"</div>';
+            }
+            if (t.steps) {
+                html += '<div class="sidebar-task-steps">' + esc(t.steps) + '</div>';
+            }
+            html += '</div>';
+            html += '</div>';
+            return html;
+        }
+
+        function renderPageLink(p) {
+            let html = '<div class="sidebar-page-link">';
+            if (p.url) {
+                html += '<a href="' + esc(p.url) + '" target="_blank">' + esc(p.label) + '</a>';
+            } else {
+                html += '<span style="color:var(--text-secondary)">' + esc(p.label) + '</span>';
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function closeSidebar() {
+            sidebar.classList.remove('open');
+            resizeGraph();
+        }
+        window.closeSidebarGlobal = closeSidebar;
+
+        // --- Graph task modal ---
+        const graphModalOverlay = document.getElementById('graphModalOverlay');
+
+        function findTaskById(id) {
+            return tasks.find(t => t.id === id) || null;
+        }
+
+        function openGraphModal(taskId) {
+            const t = findTaskById(taskId);
+            if (!t) return;
+            document.getElementById('gmTaskId').value = taskId;
+            document.getElementById('gmDesc').value = t.description || '';
+            document.getElementById('gmOwner').value = t.owner || '';
+            document.getElementById('gmQuadrant').value = t.quadrant || 4;
+            document.getElementById('gmDate').value = t.follow_up_date || '';
+            document.getElementById('gmStatus').value = t.status || 'open';
+            document.getElementById('gmSteps').value = t.steps || '';
+            const src = document.getElementById('gmSource');
+            if (t.source_title) {
+                src.innerHTML = 'Source: ' + (t.source_url ? '<a href="' + esc(t.source_url) + '" target="_blank">' + esc(t.source_title) + '</a>' : esc(t.source_title));
+            } else { src.innerHTML = ''; }
+            graphModalOverlay.classList.add('visible');
+        }
+
+        function closeGraphModal() {
+            graphModalOverlay.classList.remove('visible');
+        }
+
+        async function saveGraphModal() {
+            const taskId = document.getElementById('gmTaskId').value;
+            const payload = {
+                description: document.getElementById('gmDesc').value,
+                owner: document.getElementById('gmOwner').value,
+                quadrant: parseInt(document.getElementById('gmQuadrant').value),
+                follow_up_date: document.getElementById('gmDate').value,
+                status: document.getElementById('gmStatus').value,
+                steps: document.getElementById('gmSteps').value,
+            };
+            await fetch('/api/intel/tasks/' + taskId, {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload),
+            });
+            closeGraphModal();
+            // Refresh graph data to reflect changes
+            await loadGraph();
+        }
+
+        async function markTaskDone(taskId) {
+            await fetch('/api/intel/tasks/' + taskId, {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({status: 'done'}),
+            });
+            // Refresh graph data
+            await loadGraph();
+        }
+
+        document.getElementById('gmCancel').addEventListener('click', closeGraphModal);
+        document.getElementById('gmSave').addEventListener('click', saveGraphModal);
+        graphModalOverlay.addEventListener('click', (e) => { if (e.target === graphModalOverlay) closeGraphModal(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && graphModalOverlay.classList.contains('visible')) closeGraphModal(); });
+
+        function resizeGraph() {
+            if (!Graph) return;
+            const graphWrap = document.querySelector('.graph-wrap');
+            const sidebarW = sidebar.classList.contains('open') ? 340 : 0;
+            Graph.width(graphWrap.clientWidth - sidebarW);
+            Graph.height(graphWrap.clientHeight);
+        }
+
+        // --- Search ---
+        searchBox.addEventListener('input', () => {
+            const query = searchBox.value.trim().toLowerCase();
+            if (!Graph) return;
+            if (query) {
+                Graph.nodeColor(n => {
+                    if (n.label.toLowerCase().includes(query)) {
+                        return NODE_COLORS_HIGHLIGHT[n.type] || '#fff';
+                    }
+                    return 'rgba(60,60,70,0.2)';
+                });
+                Graph.linkOpacity(() => 0.03);
+            } else {
+                selectedNodeId = null;
+                Graph.nodeColor(n => n.color);
+                Graph.linkOpacity(() => baseLinkOpacity);
+            }
+        });
+
+        // --- Escape to deselect ---
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                selectedNodeId = null;
+                closeSidebar();
+                resetPageVisibility();
+                searchBox.value = '';
+                refreshGraph();
+            }
+        });
+
+        // --- Resize ---
+        const resizeObs = new ResizeObserver(() => resizeGraph());
+        resizeObs.observe(document.querySelector('.graph-wrap'));
+        window.addEventListener('resize', resizeGraph);
+
+        // --- Utilities ---
+        function esc(s) {
+            if (!s) return '';
+            const el = document.createElement('span');
+            el.textContent = s;
+            return el.innerHTML;
+        }
+
+        // --- Init ---
+        applyPrefs(loadPrefs());
+        loadGraph();
+    })();
+    </script>
+
+</body>
+</html>

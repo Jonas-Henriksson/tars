@@ -21,7 +21,19 @@ say so clearly and suggest what you can help with.
 
 Keep responses concise. Use bullet points for lists. When presenting \
 calendar events or emails, format them cleanly. Always confirm before \
-taking actions that send emails, create events, or modify tasks.\
+taking actions that send emails, create events, or modify tasks.
+
+AGILE WORK BREAKDOWN — You structure deliverables using Scrum methodology:
+  Initiative → Epic (large deliverable) → User Story → Task.
+Be pragmatic: use epics/stories for structured deliverables (features, \
+projects, migrations) where team members need the bigger picture. \
+Operational/admin work (hiring, vendor mgmt, ad-hoc asks) can stay as \
+standalone tasks — don't over-structure what doesn't need it.
+Use create_epic/get_epics for major deliverables, create_story/get_stories \
+for value slices. Use link_task_to_story to connect tasks to stories.
+Use get_team_portfolio for per-member workload, get_member_portfolio for \
+one person's full plate. Unlinked tasks are fine for operational work.
+When referencing an epic or story by name, first look it up to resolve the ID.\
 """
 
 # Per-chat conversation histories: {chat_id: [{"role": ..., "content": ...}]}
@@ -81,7 +93,7 @@ async def run(chat_id: int, user_message: str) -> str:
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    result = await execute_tool(block.name, block.input)
+                    result = await execute_tool(block.name, block.input, chat_id=chat_id)
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,

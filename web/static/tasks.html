@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TARS Task Tracker</title>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #0a0a0a;
+            --surface: #111113;
+            --surface-raised: #18181b;
+            --border: #27272a;
+            --border-subtle: #1e1e21;
+            --text: #fafafa;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent: #3b82f6;
+            --accent-dim: rgba(59, 130, 246, 0.12);
+            --green: #22c55e;
+            --green-dim: rgba(34, 197, 94, 0.12);
+            --green-text: #4ade80;
+            --amber: #f59e0b;
+            --amber-dim: rgba(245, 158, 11, 0.10);
+            --amber-text: #fbbf24;
+            --red: #ef4444;
+            --red-dim: rgba(239, 68, 68, 0.10);
+            --purple: #a855f7;
+            --purple-dim: rgba(168, 85, 247, 0.10);
+            --purple-text: #c084fc;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Layout */
+        .shell {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* Header */
+        header {
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 16px 0;
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            z-index: 50;
+        }
+
+        .header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand h1 {
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text);
+        }
+
+        .brand span {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 400;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 4px;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 13px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            transition: color 0.15s, background 0.15s;
+        }
+
+        .nav-links a:hover { color: var(--text-secondary); background: var(--surface); }
+        .nav-links a.active { color: var(--text); background: var(--surface-raised); }
+
+        /* Summary strip */
+        .summary-strip {
+            display: flex;
+            gap: 1px;
+            background: var(--border-subtle);
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .summary-cell {
+            flex: 1;
+            background: var(--surface);
+            padding: 14px 20px;
+            text-align: center;
+            position: relative;
+        }
+
+        .summary-cell:first-child { border-radius: 8px 0 0 8px; }
+        .summary-cell:last-child { border-radius: 0 8px 8px 0; }
+        .summary-cell.has-accent::before {
+            content: ''; position: absolute; left: 0; top: 20%; bottom: 20%; width: 3px;
+            border-radius: 0 2px 2px 0;
+        }
+        .summary-cell.accent-red::before { background: var(--red); }
+        .summary-cell.accent-amber::before { background: var(--amber); }
+        .summary-cell.accent-green::before { background: var(--green); }
+        .summary-cell.accent-blue::before { background: var(--accent); }
+
+        .summary-value {
+            font-size: 24px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            line-height: 1.2;
+        }
+
+        .summary-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .summary-sub {
+            font-size: 10px;
+            color: var(--text-muted);
+            font-weight: 400;
+            margin-top: 1px;
+        }
+
+        .val-open { color: var(--text); }
+        .val-followed { color: var(--amber-text); }
+        .val-done { color: var(--green-text); }
+        .val-total { color: var(--text-secondary); }
+
+        /* Toolbar */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 200px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-size: 13px;
+            padding: 7px 12px;
+            border-radius: 6px;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        .search-input::placeholder { color: var(--text-muted); }
+        .search-input:focus { border-color: var(--accent); }
+
+        .filter-group {
+            display: flex;
+            gap: 1px;
+            background: var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .filter-btn {
+            background: var(--surface);
+            border: none;
+            color: var(--text-muted);
+            font-size: 12px;
+            padding: 7px 14px;
+            cursor: pointer;
+            transition: color 0.15s, background 0.15s;
+            font-family: inherit;
+            white-space: nowrap;
+        }
+
+        .filter-btn:hover { color: var(--text-secondary); background: var(--surface-raised); }
+        .filter-btn.active { color: var(--text); background: var(--surface-raised); }
+
+        .group-select {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 12px;
+            padding: 7px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .group-select:focus { border-color: var(--accent); }
+        .group-select option { background: var(--surface); }
+
+        .date-filter { display: flex; align-items: center; gap: 4px; }
+        .date-filter label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+        .date-input {
+            background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary);
+            font-size: 12px; padding: 6px 8px; border-radius: 6px; outline: none; font-family: inherit;
+        }
+        .date-input:focus { border-color: var(--accent); }
+        .date-clear {
+            background: none; border: 1px solid var(--border); color: var(--text-muted);
+            font-size: 11px; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-family: inherit;
+            transition: all 0.15s; white-space: nowrap;
+        }
+        .date-clear:hover { color: var(--text); border-color: var(--text-muted); }
+
+        /* Task table */
+        .task-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+
+        .task-table thead th {
+            text-align: left;
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 53px;
+            background: var(--bg);
+            z-index: 10;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .task-table thead th:hover { color: var(--text-secondary); }
+
+        .sort-indicator {
+            margin-left: 4px;
+            font-size: 10px;
+            opacity: 0.5;
+        }
+
+        .task-table tbody tr {
+            transition: background 0.1s;
+        }
+
+        .task-table tbody tr:hover {
+            background: var(--surface);
+        }
+
+        .task-table tbody tr.row-overdue {
+            background: rgba(239, 68, 68, 0.04);
+        }
+        .task-table tbody tr.row-overdue:hover {
+            background: rgba(239, 68, 68, 0.08);
+        }
+
+        .task-table td {
+            padding: 10px 12px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border-subtle);
+            vertical-align: top;
+        }
+
+        .col-status { width: 100px; }
+        .col-owner { width: 130px; }
+        .col-topic { width: 150px; }
+        .col-source { width: 160px; }
+        .col-date { width: 115px; }
+        .col-actions { width: 80px; text-align: right; }
+
+        /* Status badges */
+        .badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 500;
+            padding: 2px 8px;
+            border-radius: 4px;
+            letter-spacing: 0.02em;
+        }
+
+        .badge-open { background: var(--accent-dim); color: var(--accent); }
+        .badge-done { background: var(--green-dim); color: var(--green-text); }
+        .badge-followed_up { background: var(--amber-dim); color: var(--amber-text); }
+
+        /* Owner pill */
+        .owner-name {
+            font-weight: 500;
+            color: var(--text);
+        }
+
+        .owner-unassigned {
+            color: var(--text-muted);
+            font-style: italic;
+            font-weight: 400;
+        }
+
+        /* Topic tag */
+        .topic-tag {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .topic-tag.empty {
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* Source link */
+        .source-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 12px;
+            transition: color 0.15s;
+        }
+
+        .source-link:hover { color: var(--accent); }
+
+        /* Date */
+        .date-cell {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+        .date-cell.date-overdue { color: var(--red); font-weight: 600; }
+        .date-cell.date-soon { color: var(--amber-text); }
+        .date-cell.date-ok { color: var(--text-muted); }
+
+        /* Attention bar */
+        .attention-bar {
+            display: flex; gap: 16px; padding: 12px 16px; margin: 0 0 16px;
+            background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 8px;
+            font-size: 13px; color: var(--text-secondary); align-items: center; flex-wrap: wrap;
+        }
+        .attention-bar:empty { display: none; }
+        .attention-item { display: flex; align-items: center; gap: 6px; }
+        .attention-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .attention-dot.red { background: var(--red); }
+        .attention-dot.amber { background: var(--amber); }
+        .attention-dot.blue { background: var(--accent); }
+        .attention-count { font-weight: 600; color: var(--text); }
+
+        /* Description */
+        .task-desc {
+            color: var(--text);
+            line-height: 1.4;
+        }
+
+        .row-done .task-desc {
+            color: var(--text-muted);
+            text-decoration: line-through;
+            text-decoration-color: var(--border);
+        }
+
+        /* Action buttons */
+        .action-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+
+        .action-btn:hover {
+            color: var(--text);
+            border-color: var(--text-muted);
+            background: var(--surface-raised);
+        }
+
+        /* Group header rows */
+        .group-header-row td {
+            padding: 20px 12px 8px;
+            border-bottom: 2px solid var(--border);
+            background: var(--surface);
+        }
+
+        .group-header-row:first-child td {
+            padding-top: 10px;
+        }
+
+        .group-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
+            letter-spacing: 0.02em;
+        }
+
+        .group-count {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 400;
+            margin-left: 8px;
+            letter-spacing: 0;
+        }
+        .group-overdue {
+            font-size: 11px; color: var(--red); font-weight: 500; margin-left: 8px;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 64px 24px;
+            color: var(--text-muted);
+        }
+
+        .empty-state p:first-child {
+            font-size: 15px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .empty-state p:last-child {
+            font-size: 13px;
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 48px;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        /* Status dropdown (inline) */
+        .status-select {
+            background: transparent;
+            border: none;
+            color: inherit;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: inherit;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+
+        .status-select:focus { outline: 1px solid var(--accent); }
+
+        /* Clickable rows */
+        .task-table tbody tr { cursor: pointer; }
+
+        /* Modal */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 100; display: none; align-items: center; justify-content: center; }
+        .modal-overlay.visible { display: flex; }
+        .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; padding: 24px; }
+        .modal h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+        .modal-field { margin-bottom: 14px; }
+        .modal-field label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 4px; }
+        .modal-field input, .modal-field textarea, .modal-field select {
+            width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 13px; padding: 7px 10px; border-radius: 6px; font-family: inherit; outline: none;
+        }
+        .modal-field input:focus, .modal-field textarea:focus, .modal-field select:focus { border-color: var(--accent); }
+        .modal-field textarea { resize: vertical; min-height: 80px; }
+        .modal-row { display: flex; gap: 12px; }
+        .modal-row .modal-field { flex: 1; }
+        .modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+        .modal-foot button { font-family: inherit; font-size: 13px; padding: 7px 18px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border); }
+        .modal-foot .btn-cancel { background: transparent; color: var(--text-secondary); }
+        .modal-foot .btn-cancel:hover { background: var(--surface-raised); color: var(--text); }
+        .modal-foot .btn-save { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .modal-foot .btn-save:hover { opacity: 0.9; }
+        .modal-source-link { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .modal-source-link a { color: var(--accent); text-decoration: none; }
+        .modal-source-link a:hover { text-decoration: underline; }
+        .modal-dates { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+        /* Date sub-line */
+        .date-sub { font-size: 10px; color: var(--text-muted); opacity: 0.7; margin-top: 1px; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .shell { padding: 0 12px; }
+            .col-source, .col-date { display: none; }
+            .toolbar { gap: 6px; }
+            .summary-cell { padding: 10px 8px; }
+            .summary-value { font-size: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="shell">
+            <div class="header-row">
+                <div class="brand">
+                    <h1>TARS</h1>
+                    <span>Task Tracker</span>
+                </div>
+                <nav class="nav-links">
+                    <a href="/">Voice</a>
+                    <a href="/tasks" class="active">Tasks</a>
+                    <a href="/briefing">Briefing</a>
+                    <a href="/executive">Executive</a>
+                    <a href="/people">People</a>
+                    <a href="/review">Review</a>
+                    <a href="/graph">Graph</a>
+                    <a href="/settings">Settings</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="shell">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 0 4px;">
+            <div class="scan-info" id="scanInfo" style="font-size:12px; color:var(--text-muted);"></div>
+        </div>
+        <div class="summary-strip" id="summary">
+            <div class="summary-cell has-accent accent-blue">
+                <div class="summary-value val-open" id="countOpen">--</div>
+                <div class="summary-label">Open</div>
+            </div>
+            <div class="summary-cell has-accent accent-amber">
+                <div class="summary-value val-followed" id="countFollowed">--</div>
+                <div class="summary-label">Followed up</div>
+            </div>
+            <div class="summary-cell has-accent accent-green">
+                <div class="summary-value val-done" id="countDone">--</div>
+                <div class="summary-label">Done</div>
+            </div>
+            <div class="summary-cell">
+                <div class="summary-value val-total" id="countTotal">--</div>
+                <div class="summary-label">Total</div>
+            </div>
+            <div class="summary-cell has-accent accent-red">
+                <div class="summary-value" style="color:var(--red)" id="countOverdue">--</div>
+                <div class="summary-label">Overdue</div>
+            </div>
+        </div>
+        <div class="attention-bar" id="attentionBar"></div>
+
+        <div class="toolbar">
+            <input type="text" class="search-input" id="searchInput" placeholder="Filter by description, owner, or topic...">
+            <div class="filter-group" id="statusFilter">
+                <button class="filter-btn active" data-status="all">All</button>
+                <button class="filter-btn" data-status="open">Open</button>
+                <button class="filter-btn" data-status="followed_up">Followed up</button>
+                <button class="filter-btn" data-status="done">Done</button>
+            </div>
+            <select class="group-select" id="groupBy">
+                <option value="none">No grouping</option>
+                <option value="owner" selected>Group by owner</option>
+                <option value="topic">Group by topic</option>
+                <option value="source">Group by source</option>
+                <option value="status">Group by status</option>
+            </select>
+        </div>
+        <div class="toolbar">
+            <div class="date-filter">
+                <label>From</label>
+                <input type="date" class="date-input" id="dateFrom">
+                <label>To</label>
+                <input type="date" class="date-input" id="dateTo">
+                <select class="group-select" id="dateField" style="min-width:auto;">
+                    <option value="created_at">Created date</option>
+                    <option value="follow_up_date">Follow-up date</option>
+                </select>
+                <button class="date-clear" id="dateClear">Clear</button>
+            </div>
+        </div>
+
+        <div id="tableContainer">
+            <div class="loading">Loading tasks...</div>
+        </div>
+    </main>
+
+    <!-- Task detail modal -->
+    <div class="modal-overlay" id="taskModal">
+        <div class="modal">
+            <h2 id="modalTitle">Task Details</h2>
+            <div class="modal-field">
+                <label>Description</label>
+                <textarea id="modalDesc" rows="3"></textarea>
+            </div>
+            <div class="modal-row">
+                <div class="modal-field">
+                    <label>Owner</label>
+                    <select id="modalOwner"></select>
+                </div>
+                <div class="modal-field">
+                    <label>Status</label>
+                    <select id="modalStatus">
+                        <option value="open">Open</option>
+                        <option value="followed_up">Followed up</option>
+                        <option value="done">Done</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-row">
+                <div class="modal-field">
+                    <label>Topic</label>
+                    <input type="text" id="modalTopic">
+                </div>
+                <div class="modal-field">
+                    <label>Follow-up date</label>
+                    <input type="date" id="modalFollowUp">
+                </div>
+            </div>
+            <div class="modal-source-link" id="modalSource"></div>
+            <div class="modal-dates" id="modalDates"></div>
+            <div class="modal-foot">
+                <button class="btn-cancel" id="modalCancel">Cancel</button>
+                <button class="btn-save" id="modalSave">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        'use strict';
+
+        let allTasks = [];
+        let ownerList = [];
+        let currentFilter = 'all';
+        let currentSearch = '';
+        let currentGroup = 'owner';
+        let sortCol = 'created_at';
+        let sortAsc = false;
+        let editingTask = null;
+        let dateFrom = '';
+        let dateTo = '';
+        let dateField = 'created_at';
+
+        const searchInput = document.getElementById('searchInput');
+        const statusFilter = document.getElementById('statusFilter');
+        const groupBy = document.getElementById('groupBy');
+        const container = document.getElementById('tableContainer');
+        const dateFromInput = document.getElementById('dateFrom');
+        const dateToInput = document.getElementById('dateTo');
+        const dateFieldSelect = document.getElementById('dateField');
+        const dateClearBtn = document.getElementById('dateClear');
+        const modalOverlay = document.getElementById('taskModal');
+        const modalDesc = document.getElementById('modalDesc');
+        const modalOwner = document.getElementById('modalOwner');
+        const modalStatus = document.getElementById('modalStatus');
+        const modalTopic = document.getElementById('modalTopic');
+        const modalFollowUp = document.getElementById('modalFollowUp');
+        const modalSource = document.getElementById('modalSource');
+        const modalDates = document.getElementById('modalDates');
+
+        // Fetch tasks
+        async function loadTasks() {
+            try {
+                const resp = await fetch('/api/tasks?include_completed=true');
+                const data = await resp.json();
+                allTasks = data.tasks || [];
+                if (allTasks.length === 0 && new URLSearchParams(location.search).has('mock')) {
+                    allTasks = getTasksMockData();
+                }
+                updateSummary({ tasks: allTasks });
+                render();
+            } catch (err) {
+                container.innerHTML = '<div class="empty-state"><p>Failed to load tasks</p><p>' + err.message + '</p></div>';
+            }
+        }
+
+        // Fetch owner frequencies for dropdown
+        async function loadOwners() {
+            try {
+                const resp = await fetch('/api/tasks/owners');
+                ownerList = await resp.json();
+            } catch (e) {
+                ownerList = [];
+            }
+        }
+
+        function getDateClass(d) {
+            if (!d) return 'date-ok';
+            const today = new Date().toISOString().slice(0, 10);
+            if (d < today) return 'date-overdue';
+            const week = new Date(Date.now() + 7*86400000).toISOString().slice(0, 10);
+            if (d <= week) return 'date-soon';
+            return 'date-ok';
+        }
+
+        function updateSummary(data) {
+            const tasks = data.tasks || [];
+            const open = tasks.filter(t => t.status === 'open').length;
+            const followed = tasks.filter(t => t.status === 'followed_up').length;
+            const done = tasks.filter(t => t.status === 'done').length;
+            const today = new Date().toISOString().slice(0, 10);
+            const weekOut = new Date(Date.now() + 7*86400000).toISOString().slice(0, 10);
+            const activeTasks = tasks.filter(t => t.status !== 'done');
+            const overdue = activeTasks.filter(t => t.follow_up_date && t.follow_up_date < today);
+            const dueThisWeek = activeTasks.filter(t => t.follow_up_date && t.follow_up_date >= today && t.follow_up_date <= weekOut);
+            const unassigned = activeTasks.filter(t => !t.owner || t.owner === 'Unassigned');
+
+            document.getElementById('countOpen').textContent = open;
+            document.getElementById('countFollowed').textContent = followed;
+            document.getElementById('countDone').textContent = done;
+            document.getElementById('countTotal').textContent = tasks.length;
+            document.getElementById('countOverdue').textContent = overdue.length;
+
+            // Attention bar
+            const bar = document.getElementById('attentionBar');
+            let attn = '';
+            if (overdue.length > 0) {
+                attn += '<span class="attention-item"><span class="attention-dot red"></span><span class="attention-count">' + overdue.length + '</span> overdue follow-up' + (overdue.length > 1 ? 's' : '') + ' need attention</span>';
+            }
+            if (dueThisWeek.length > 0) {
+                attn += '<span class="attention-item"><span class="attention-dot amber"></span><span class="attention-count">' + dueThisWeek.length + '</span> due this week</span>';
+            }
+            if (unassigned.length > 0) {
+                attn += '<span class="attention-item"><span class="attention-dot blue"></span><span class="attention-count">' + unassigned.length + '</span> unassigned</span>';
+            }
+            bar.innerHTML = attn;
+        }
+
+        // Filtering
+        function getFiltered() {
+            let tasks = allTasks;
+            if (currentFilter !== 'all') {
+                tasks = tasks.filter(t => t.status === currentFilter);
+            }
+            if (currentSearch) {
+                const q = currentSearch.toLowerCase();
+                tasks = tasks.filter(t =>
+                    (t.description || '').toLowerCase().includes(q) ||
+                    (t.owner || '').toLowerCase().includes(q) ||
+                    (t.topic || '').toLowerCase().includes(q) ||
+                    (t.source_title || '').toLowerCase().includes(q)
+                );
+            }
+            // Date range filter
+            if (dateFrom || dateTo) {
+                tasks = tasks.filter(t => {
+                    const val = (t[dateField] || '').slice(0, 10);
+                    if (!val) return false;
+                    if (dateFrom && val < dateFrom) return false;
+                    if (dateTo && val > dateTo) return false;
+                    return true;
+                });
+            }
+            tasks = [...tasks].sort((a, b) => {
+                let va = a[sortCol] || '';
+                let vb = b[sortCol] || '';
+                if (typeof va === 'string') va = va.toLowerCase();
+                if (typeof vb === 'string') vb = vb.toLowerCase();
+                if (va < vb) return sortAsc ? -1 : 1;
+                if (va > vb) return sortAsc ? 1 : -1;
+                return 0;
+            });
+            return tasks;
+        }
+
+        // Grouping
+        function groupTasks(tasks) {
+            if (currentGroup === 'none') return null;
+            const map = {};
+            for (const t of tasks) {
+                let key;
+                if (currentGroup === 'owner') key = t.owner || 'Unassigned';
+                else if (currentGroup === 'topic') key = t.topic || 'General';
+                else if (currentGroup === 'source') key = t.source_title || 'Unknown';
+                else if (currentGroup === 'status') key = t.status || 'open';
+                if (!map[key]) map[key] = [];
+                map[key].push(t);
+            }
+            const keys = Object.keys(map).sort((a, b) => {
+                if (currentGroup === 'status') {
+                    const order = { open: 0, followed_up: 1, done: 2 };
+                    return (order[a] ?? 3) - (order[b] ?? 3);
+                }
+                return a.localeCompare(b);
+            });
+            return keys.map(k => ({ key: k, tasks: map[k] }));
+        }
+
+        // Render
+        function render() {
+            const tasks = getFiltered();
+            if (tasks.length === 0) {
+                container.innerHTML = '<div class="empty-state"><p>No tasks found</p><p>Tasks extracted from Notion meeting notes will appear here.</p></div>';
+                return;
+            }
+
+            const groups = groupTasks(tasks);
+            const cols = 7;
+
+            let html = '<table class="task-table"><thead><tr>';
+            html += thCell('Status', 'status', 'col-status');
+            html += thCell('Description', 'description', '');
+            html += thCell('Owner', 'owner', 'col-owner');
+            html += thCell('Topic', 'topic', 'col-topic');
+            html += thCell('Source', 'source_title', 'col-source');
+            html += thCell('Due / Created', 'follow_up_date', 'col-date');
+            html += '<th class="col-actions"></th>';
+            html += '</tr></thead><tbody>';
+
+            if (groups) {
+                const today = new Date().toISOString().slice(0, 10);
+                for (const g of groups) {
+                    const overdueInGroup = g.tasks.filter(t => t.status !== 'done' && t.follow_up_date && t.follow_up_date < today).length;
+                    const overdueHtml = overdueInGroup > 0 ? '<span class="group-overdue">' + overdueInGroup + ' overdue</span>' : '';
+                    html += '<tr class="group-header-row"><td colspan="' + cols + '"><span class="group-label">' + esc(g.key) + '</span><span class="group-count">' + g.tasks.length + '</span>' + overdueHtml + '</td></tr>';
+                    for (const t of g.tasks) html += taskRow(t);
+                }
+            } else {
+                for (const t of tasks) html += taskRow(t);
+            }
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+
+            // Bind sort headers
+            container.querySelectorAll('th[data-col]').forEach(th => {
+                th.addEventListener('click', () => {
+                    const col = th.dataset.col;
+                    if (sortCol === col) sortAsc = !sortAsc;
+                    else { sortCol = col; sortAsc = true; }
+                    render();
+                });
+            });
+
+            // Bind row clicks (open modal)
+            container.querySelectorAll('tr[data-task-id]').forEach(tr => {
+                tr.addEventListener('click', (e) => {
+                    // Don't open modal if clicking action button or link
+                    if (e.target.closest('.action-btn') || e.target.closest('a')) return;
+                    const id = tr.dataset.taskId;
+                    const task = allTasks.find(t => t.id === id);
+                    if (task) openModal(task);
+                });
+            });
+
+            // Bind action buttons
+            container.querySelectorAll('.action-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const id = btn.dataset.id;
+                    const next = btn.dataset.next;
+                    updateStatus(id, next);
+                });
+            });
+        }
+
+        function thCell(label, col, cls) {
+            const arrow = sortCol === col ? (sortAsc ? ' \u25B2' : ' \u25BC') : '';
+            return '<th class="' + cls + '" data-col="' + col + '">' + label + '<span class="sort-indicator">' + arrow + '</span></th>';
+        }
+
+        function taskRow(t) {
+            const isOverdue = t.status !== 'done' && t.follow_up_date && getDateClass(t.follow_up_date) === 'date-overdue';
+            const rowClass = t.status === 'done' ? 'row-done' : (isOverdue ? 'row-overdue' : '');
+            let html = '<tr class="' + rowClass + '" data-task-id="' + t.id + '">';
+
+            // Status
+            html += '<td class="col-status"><span class="badge badge-' + t.status + '">' + statusLabel(t.status) + '</span></td>';
+
+            // Description
+            html += '<td><span class="task-desc">' + esc(t.description) + '</span></td>';
+
+            // Owner
+            const ownerCls = (!t.owner || t.owner === 'Unassigned') ? 'owner-unassigned' : 'owner-name';
+            html += '<td class="col-owner"><span class="' + ownerCls + '">' + esc(t.owner || 'Unassigned') + '</span></td>';
+
+            // Topic
+            const topicCls = t.topic ? 'topic-tag' : 'topic-tag empty';
+            html += '<td class="col-topic"><span class="' + topicCls + '">' + esc(t.topic || 'No topic') + '</span></td>';
+
+            // Source
+            if (t.source_url) {
+                html += '<td class="col-source"><a class="source-link" href="' + esc(t.source_url) + '" target="_blank" rel="noopener">' + esc(truncate(t.source_title || 'Source', 24)) + '</a></td>';
+            } else {
+                html += '<td class="col-source"><span class="source-link">' + esc(truncate(t.source_title || '--', 24)) + '</span></td>';
+            }
+
+            // Date — show follow-up date prominently with urgency color, created as sub-line
+            if (t.follow_up_date && t.status !== 'done') {
+                const dc = getDateClass(t.follow_up_date);
+                html += '<td class="col-date"><span class="date-cell ' + dc + '">' + formatDate(t.follow_up_date) + '</span>';
+                html += '<div class="date-sub">Created: ' + formatDate(t.created_at) + '</div>';
+                html += '</td>';
+            } else {
+                html += '<td class="col-date"><span class="date-cell">' + formatDate(t.created_at) + '</span></td>';
+            }
+
+            // Actions
+            html += '<td class="col-actions">';
+            if (t.status === 'open' || t.status === 'followed_up') {
+                html += '<button class="action-btn" data-id="' + t.id + '" data-next="done">Done</button>';
+            } else {
+                html += '<button class="action-btn" data-id="' + t.id + '" data-next="open">Reopen</button>';
+            }
+            html += '</td>';
+            html += '</tr>';
+            return html;
+        }
+
+        // --- Modal ---
+        function openModal(task) {
+            editingTask = task;
+            modalDesc.value = task.description || '';
+            modalStatus.value = task.status || 'open';
+            modalTopic.value = task.topic || '';
+            modalFollowUp.value = task.follow_up_date || '';
+
+            // Populate owner dropdown sorted by frequency
+            populateOwnerDropdown(task.owner || 'Unassigned');
+
+            // Source info
+            if (task.source_url) {
+                modalSource.innerHTML = 'Source: <a href="' + esc(task.source_url) + '" target="_blank" rel="noopener">' + esc(task.source_title || 'Notion page') + '</a>';
+            } else {
+                modalSource.textContent = task.source_title ? 'Source: ' + task.source_title : '';
+            }
+
+            // Dates
+            let dateInfo = 'Created: ' + formatDate(task.created_at);
+            if (task.scanned_at) dateInfo += ' | Scanned: ' + formatDate(task.scanned_at);
+            if (task.follow_up_date) dateInfo += ' | Follow-up: ' + formatDate(task.follow_up_date);
+            modalDates.textContent = dateInfo;
+
+            modalOverlay.classList.add('visible');
+        }
+
+        function populateOwnerDropdown(currentOwner) {
+            let html = '';
+            const seen = new Set();
+
+            // Add owners sorted by frequency
+            for (const o of ownerList) {
+                const name = o.name || 'Unassigned';
+                const sel = name === currentOwner ? ' selected' : '';
+                html += '<option value="' + esc(name) + '"' + sel + '>' + esc(name) + ' (' + o.count + ')</option>';
+                seen.add(name);
+            }
+
+            // If current owner isn't in the list, add it at the top
+            if (!seen.has(currentOwner)) {
+                html = '<option value="' + esc(currentOwner) + '" selected>' + esc(currentOwner) + '</option>' + html;
+            }
+
+            modalOwner.innerHTML = html;
+        }
+
+        function closeModal() {
+            modalOverlay.classList.remove('visible');
+            editingTask = null;
+        }
+
+        async function saveModal() {
+            if (!editingTask) return;
+            const body = {};
+            if (modalDesc.value !== editingTask.description) body.description = modalDesc.value;
+            if (modalOwner.value !== (editingTask.owner || 'Unassigned')) body.owner = modalOwner.value;
+            if (modalStatus.value !== editingTask.status) body.status = modalStatus.value;
+            if (modalTopic.value !== (editingTask.topic || '')) body.topic = modalTopic.value;
+            if (modalFollowUp.value !== (editingTask.follow_up_date || '')) body.follow_up_date = modalFollowUp.value;
+
+            if (Object.keys(body).length === 0) {
+                closeModal();
+                return;
+            }
+
+            try {
+                const resp = await fetch('/api/tasks/' + editingTask.id, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                if (!resp.ok) throw new Error('Update failed');
+                const data = await resp.json();
+                // Update local task
+                const task = allTasks.find(t => t.id === editingTask.id);
+                if (task && data.task) {
+                    Object.assign(task, data.task);
+                }
+                updateSummary({ tasks: allTasks });
+                render();
+                closeModal();
+                // Refresh owner list
+                loadOwners();
+            } catch (err) {
+                console.error('Failed to save task:', err);
+            }
+        }
+
+        // Modal events
+        document.getElementById('modalCancel').addEventListener('click', closeModal);
+        document.getElementById('modalSave').addEventListener('click', saveModal);
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) closeModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && modalOverlay.classList.contains('visible')) closeModal();
+        });
+
+        function statusLabel(s) {
+            if (s === 'open') return 'Open';
+            if (s === 'done') return 'Done';
+            if (s === 'followed_up') return 'Followed up';
+            return s;
+        }
+
+        function formatDate(iso) {
+            if (!iso) return '--';
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return '--';
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return d.getFullYear() + '-' + month + '-' + day;
+        }
+
+        function truncate(s, n) {
+            return s.length > n ? s.slice(0, n - 1) + '\u2026' : s;
+        }
+
+        function esc(s) {
+            const el = document.createElement('span');
+            el.textContent = s;
+            return el.innerHTML;
+        }
+
+        // Status update (from action buttons)
+        async function updateStatus(taskId, newStatus) {
+            try {
+                const resp = await fetch('/api/tasks/' + taskId + '/status', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus }),
+                });
+                if (!resp.ok) throw new Error('Update failed');
+                const task = allTasks.find(t => t.id === taskId);
+                if (task) {
+                    task.status = newStatus;
+                    if (newStatus === 'done') task.completed = true;
+                    else if (newStatus === 'open') task.completed = false;
+                }
+                updateSummary({ tasks: allTasks });
+                render();
+            } catch (err) {
+                console.error('Failed to update task:', err);
+            }
+        }
+
+        // Events
+        statusFilter.addEventListener('click', (e) => {
+            const btn = e.target.closest('.filter-btn');
+            if (!btn) return;
+            statusFilter.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentFilter = btn.dataset.status;
+            render();
+        });
+
+        let searchTimeout;
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                currentSearch = searchInput.value.trim();
+                render();
+            }, 150);
+        });
+
+        groupBy.addEventListener('change', () => {
+            currentGroup = groupBy.value;
+            render();
+        });
+
+        dateFromInput.addEventListener('change', () => { dateFrom = dateFromInput.value; render(); });
+        dateToInput.addEventListener('change', () => { dateTo = dateToInput.value; render(); });
+        dateFieldSelect.addEventListener('change', () => {
+            dateField = dateFieldSelect.value;
+            if (dateFrom || dateTo) render();
+        });
+        dateClearBtn.addEventListener('click', () => {
+            dateFrom = ''; dateTo = '';
+            dateFromInput.value = ''; dateToInput.value = '';
+            render();
+        });
+
+        // Load last scan info
+        async function loadScanInfo() {
+            try {
+                const resp = await fetch('/api/intel');
+                const data = await resp.json();
+                const el = document.getElementById('scanInfo');
+                if (data.last_scan_at) {
+                    el.textContent = 'Last Notion scan: ' + new Date(data.last_scan_at).toLocaleString() + ' — ' + data.pages_scanned + ' pages';
+                } else {
+                    el.textContent = 'No Notion scan yet. Go to Executive to scan.';
+                }
+            } catch(e) {}
+        }
+
+        function getTasksMockData() {
+            const owners = ['Jonas', 'Stefan', 'Rachel', 'Karin', 'Matthias', 'Vakhat', 'Team', 'Me'];
+            const topics = ['platform-migration', 'supply-chain', 'security', 'budget', 'hiring', 'compliance', 'infrastructure', 'analytics'];
+            const statuses = ['open', 'open', 'open', 'open', 'followed_up', 'done', 'done'];
+            const sources = [
+                { title: 'Architecture Review - Platform Migration', url: 'https://notion.so/p1' },
+                { title: 'Supply Chain Sync', url: 'https://notion.so/p2' },
+                { title: '1:1 with Stefan', url: 'https://notion.so/p3' },
+                { title: 'Budget Planning Q2', url: 'https://notion.so/p4' },
+                { title: 'Security Audit Review', url: 'https://notion.so/p5' },
+                { title: 'Team Standup', url: 'https://notion.so/p6' },
+            ];
+            const descs = [
+                'Finalize vendor contract for cloud migration',
+                'Review updated security audit findings',
+                'Prepare board presentation on Q1 results',
+                'Sign off on new hire compensation packages',
+                'Update disaster recovery runbook',
+                'Schedule customer success review for Acme Corp',
+                'Complete compliance training modules',
+                'Draft RFP for analytics platform',
+                'Set up CI/CD pipeline for new microservices',
+                'Review supply chain forecasting model results',
+                'Approve Q2 marketing budget allocation',
+                'Coordinate office move logistics with facilities',
+                'Evaluate new monitoring tool proposals',
+                'Prepare quarterly investor update slides',
+                'Follow up on Azure cost optimization recommendations',
+                'Schedule architecture review for payment service',
+                'Review and approve updated data retention policy',
+                'Coordinate cross-team dependency mapping session',
+                'Draft job descriptions for senior engineer roles',
+                'Plan team offsite agenda for April',
+                'Review NPS survey results and draft action plan',
+                'Migrate legacy authentication to SSO provider',
+                'Complete annual vendor risk assessments',
+                'Set up automated regression test suite',
+                'Draft proposal for customer feedback portal',
+            ];
+            const tasks = [];
+            for (let i = 0; i < descs.length; i++) {
+                const status = statuses[i % statuses.length];
+                const daysAgo = Math.floor(Math.random() * 30) + 1;
+                const created = new Date(Date.now() - daysAgo * 86400000).toISOString();
+                const src = sources[i % sources.length];
+                const hasFollowUp = Math.random() > 0.4;
+                const followUp = hasFollowUp ? new Date(Date.now() + (Math.random() * 14 - 7) * 86400000).toISOString().slice(0, 10) : '';
+                tasks.push({
+                    id: 'mock-' + i,
+                    description: descs[i],
+                    owner: owners[i % owners.length],
+                    topic: topics[i % topics.length],
+                    status: status,
+                    source_url: src.url,
+                    source_title: src.title,
+                    created_at: created,
+                    follow_up_date: followUp,
+                    completed: status === 'done',
+                });
+            }
+            return tasks;
+        }
+
+        // Init
+        loadTasks();
+        loadOwners();
+        loadScanInfo();
+    })();
+    </script>
+</body>
+</html>
