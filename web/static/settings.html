@@ -75,6 +75,38 @@
 
         .loading-text { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
 
+        /* Webhook section */
+        .webhook-section { margin-top: 40px; }
+        .webhook-card { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 20px; }
+        .webhook-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .webhook-health { display: flex; align-items: center; gap: 8px; }
+        .webhook-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .webhook-dot.green { background: var(--green); box-shadow: 0 0 8px rgba(34,197,94,.4); }
+        .webhook-dot.amber { background: var(--amber); box-shadow: 0 0 8px rgba(245,158,11,.4); }
+        .webhook-dot.red { background: var(--red); box-shadow: 0 0 8px rgba(239,68,68,.4); }
+        .webhook-dot.grey { background: #52525b; }
+        .webhook-health-text { font-size: 13px; font-weight: 500; }
+        .webhook-meta { font-size: 12px; color: var(--text-muted); margin-top: 10px; }
+        .webhook-meta span { margin-right: 16px; }
+        .webhook-actions { display: flex; gap: 8px; margin-top: 14px; }
+        .webhook-btn { padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid var(--border); background: var(--surface-raised); color: var(--text-secondary); transition: all .15s; }
+        .webhook-btn:hover { color: var(--text); border-color: var(--text-muted); }
+        .webhook-btn.primary { background: var(--accent-dim); color: var(--accent); border-color: transparent; }
+        .webhook-btn.primary:hover { background: var(--accent); color: white; }
+        .webhook-btn.danger { color: var(--red); }
+        .webhook-btn.danger:hover { background: var(--red-dim); border-color: var(--red); }
+        .webhook-secret-row { display: flex; gap: 8px; margin-top: 10px; }
+        .webhook-secret-row input { flex: 1; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--text); outline: none; font-family: 'SF Mono', monospace; }
+        .webhook-secret-row input:focus { border-color: var(--accent); }
+        .webhook-url { font-family: 'SF Mono', monospace; font-size: 11px; background: var(--surface-raised); border: 1px solid var(--border-subtle); padding: 6px 10px; border-radius: 6px; color: var(--text-secondary); word-break: break-all; margin-top: 10px; }
+
+        /* Scan fallback section */
+        .scan-section { margin-top: 40px; }
+        .scan-card { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 20px; }
+        .scan-info-text { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+        .scan-actions { display: flex; gap: 8px; align-items: center; }
+        .scan-result { font-size: 12px; color: var(--text-muted); margin-left: 12px; }
+
         /* Memory section */
         .memory-section { margin-top: 40px; }
         .memory-section-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
@@ -139,6 +171,10 @@
             <div id="content">
                 <p class="loading-text">Loading...</p>
             </div>
+
+            <div id="webhook-content"></div>
+
+            <div id="scan-content"></div>
 
             <div id="memory-content"></div>
         </div>
@@ -344,6 +380,105 @@
                 });
         }
         loadMemory();
+
+        /* ── Webhook Section ── */
+        function renderWebhook(data) {
+            var h = data.health || 'disabled';
+            var dotCls = h === 'green' ? 'green' : h === 'amber' ? 'amber' : h === 'red' ? 'red' : 'grey';
+            var labels = { green: 'Connected — receiving push events', amber: 'Stale — no events in 15+ minutes', red: 'Disconnected — no events in 60+ minutes', waiting: 'Enabled — waiting for first event', disabled: 'Push disabled — using manual pull' };
+            var label = labels[h] || h;
+            var enabled = data.enabled;
+
+            var webhookUrl = window.location.origin + '/api/notion/webhook';
+
+            var html = '<div class="webhook-section" id="webhook"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
+                '<div><div class="memory-section-title">Notion Sync</div>' +
+                '<div class="memory-section-sub">Push updates from Notion via webhooks, with manual pull as fallback</div></div></div>' +
+                '<div class="webhook-card">' +
+                '<div class="webhook-row">' +
+                    '<div class="webhook-health"><span class="webhook-dot ' + dotCls + '"></span><span class="webhook-health-text">' + esc(label) + '</span></div>' +
+                '</div>';
+
+            if (data.events_received) {
+                html += '<div class="webhook-meta">';
+                html += '<span>Events received: ' + data.events_received + '</span>';
+                if (data.last_event_at) html += '<span>Last: ' + new Date(data.last_event_at).toLocaleString() + '</span>';
+                if (data.last_event_type) html += '<span>Type: ' + esc(data.last_event_type) + '</span>';
+                html += '</div>';
+            }
+            if (data.last_error) {
+                html += '<div class="webhook-meta" style="color:var(--red)">Error: ' + esc(data.last_error) + '</div>';
+            }
+
+            html += '<div class="webhook-url">Webhook URL: ' + esc(webhookUrl) + '</div>';
+
+            if (!enabled) {
+                html += '<div class="webhook-secret-row"><input placeholder="Notion webhook secret (optional)" id="wh-secret"><button class="webhook-btn primary" id="wh-enable">Enable push</button></div>';
+            } else {
+                html += '<div class="webhook-actions"><button class="webhook-btn danger" id="wh-disable">Disable push</button></div>';
+            }
+
+            html += '</div></div>';
+            document.getElementById('webhook-content').innerHTML = html;
+
+            if (!enabled) {
+                document.getElementById('wh-enable').onclick = function() {
+                    var secret = document.getElementById('wh-secret').value.trim();
+                    fetch('/api/webhook/enable', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({secret: secret}) })
+                        .then(function() { loadWebhook(); });
+                };
+            } else {
+                document.getElementById('wh-disable').onclick = function() {
+                    fetch('/api/webhook/disable', { method: 'POST' }).then(function() { loadWebhook(); });
+                };
+            }
+        }
+
+        function loadWebhook() {
+            fetch('/api/webhook/status').then(function(r) { return r.json(); }).then(renderWebhook).catch(function() {});
+        }
+        loadWebhook();
+
+        /* ── Scan Fallback Section ── */
+        function renderScan() {
+            var html = '<div class="scan-section"><div class="memory-section-title">Manual Scan (Fallback)</div>' +
+                '<div class="memory-section-sub" style="margin-bottom:12px">Pull data from Notion manually when push is unavailable</div>' +
+                '<div class="scan-card">' +
+                '<div class="scan-info-text" id="scan-info">Ready to scan.</div>' +
+                '<div class="scan-actions">' +
+                    '<button class="webhook-btn primary" id="scan-inc">Incremental Scan</button>' +
+                    '<button class="webhook-btn" id="scan-full">Full Scan</button>' +
+                    '<span class="scan-result" id="scan-result"></span>' +
+                '</div></div></div>';
+            document.getElementById('scan-content').innerHTML = html;
+
+            document.getElementById('scan-inc').onclick = function() { doScan(false); };
+            document.getElementById('scan-full').onclick = function() { doScan(true); };
+        }
+
+        function doScan(full) {
+            var btn = full ? document.getElementById('scan-full') : document.getElementById('scan-inc');
+            var result = document.getElementById('scan-result');
+            btn.disabled = true;
+            btn.textContent = 'Scanning...';
+            result.textContent = '';
+            fetch('/api/intel/scan?full_scan=' + full, { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    btn.disabled = false;
+                    btn.textContent = full ? 'Full Scan' : 'Incremental Scan';
+                    if (data.error) { result.textContent = 'Error: ' + data.error; result.style.color = 'var(--red)'; }
+                    else { result.textContent = 'Done — ' + (data.pages_scanned || 0) + ' pages, ' + (data.new_tasks || 0) + ' new tasks'; result.style.color = 'var(--green-text)'; }
+                })
+                .catch(function(err) {
+                    btn.disabled = false;
+                    btn.textContent = full ? 'Full Scan' : 'Incremental Scan';
+                    result.textContent = 'Scan failed'; result.style.color = 'var(--red)';
+                });
+        }
+
+        renderScan();
     </script>
+<script src="/static/js/webhook-status.js"></script>
 </body>
 </html>

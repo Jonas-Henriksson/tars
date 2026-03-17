@@ -16,7 +16,7 @@ from pathlib import Path
 import httpx
 import asyncio
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -1609,6 +1609,86 @@ async def delete_memory_pref(key: str):
 async def clear_memory_api():
     from integrations.memory import clear_memory
     return JSONResponse(clear_memory())
+
+
+# ── Notion Webhook Push ──────────────────────────────────────────────
+
+@app.get("/api/webhook/status")
+async def webhook_status():
+    """Return current webhook health and stats."""
+    from integrations.webhook_status import get_status
+    return JSONResponse(get_status())
+
+
+class WebhookEnableBody(BaseModel):
+    secret: str = ""
+
+
+@app.post("/api/webhook/enable")
+async def webhook_enable(body: WebhookEnableBody):
+    from integrations.webhook_status import enable
+    return JSONResponse(enable(body.secret or None))
+
+
+@app.post("/api/webhook/disable")
+async def webhook_disable():
+    from integrations.webhook_status import disable
+    return JSONResponse(disable())
+
+
+@app.post("/api/notion/webhook")
+async def notion_webhook(request: Request):
+    """Receive Notion webhook events and trigger incremental scans.
+
+    Notion sends:
+    - A verification challenge on first setup (respond with challenge value)
+    - page.content_updated, comment.created, etc. for real events
+    """
+    import hmac
+    import hashlib
+    from integrations.webhook_status import get_secret, record_event, record_error
+
+    body_bytes = await request.body()
+
+    # Verify HMAC signature if a secret is configured
+    secret = get_secret()
+    if secret:
+        sig_header = request.headers.get("x-notion-signature", "")
+        expected = "v0=" + hmac.HMAC(
+            secret.encode(), body_bytes, hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(sig_header, expected):
+            record_error("Invalid signature")
+            return JSONResponse({"error": "Invalid signature"}, status_code=401)
+
+    try:
+        payload = json.loads(body_bytes)
+    except json.JSONDecodeError:
+        record_error("Invalid JSON payload")
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    # Handle Notion verification challenge
+    if "challenge" in payload:
+        record_event("verification")
+        return JSONResponse({"challenge": payload["challenge"]})
+
+    event_type = payload.get("type", "unknown")
+    record_event(event_type)
+
+    # Trigger incremental scan in background for content events
+    if event_type in ("page.content_updated", "page.created", "page.properties_updated"):
+        async def _background_scan():
+            try:
+                from integrations.intel import scan_notion
+                await scan_notion(max_pages=10, full_scan=False)
+                logger.info("Webhook-triggered incremental scan complete")
+            except Exception as exc:
+                logger.warning("Webhook-triggered scan failed: %s", exc)
+                record_error(f"Scan failed: {exc}")
+
+        asyncio.create_task(_background_scan())
+
+    return JSONResponse({"ok": True})
 
 
 @app.get("/api/review/weekly")
