@@ -14,10 +14,69 @@ of work maps to a cohesive delivery plan.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Heuristics to classify unlinked tasks as deliverable vs operational
+# ---------------------------------------------------------------------------
+# Tasks matching these patterns look like structured deliverables that
+# should belong to an epic/story (build, ship, design, implement, etc.)
+_DELIVERABLE_SIGNALS = re.compile(
+    r"\b("
+    r"build|implement|develop|create|design|architect|deploy|migrate|ship|launch|"
+    r"integrate|refactor|automate|poc|prototype|mvp|release|rollout|"
+    r"feature|module|component|service|api|pipeline|platform|system|"
+    r"roadmap|milestone|deliverable|sprint|phase|v[0-9]|spec|rfc"
+    r")\b",
+    re.IGNORECASE,
+)
+# Tasks matching these patterns are operational/admin — fine standalone
+_OPERATIONAL_SIGNALS = re.compile(
+    r"\b("
+    r"schedule|book|arrange|send|reply|forward|follow.?up|check.?in|"
+    r"remind|review doc|approve|sign|expense|invoice|reimburse|"
+    r"hire|interview|onboard|offboard|feedback|1:1|one.on.one|"
+    r"renew|license|subscription|vendor|procurement|compliance|audit|"
+    r"update slide|prepare deck|meeting notes|status update|standup|"
+    r"order|purchase|travel|visa|admin"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _classify_task(task: dict) -> str:
+    """Classify an unlinked task as 'deliverable' or 'operational'.
+
+    Returns 'deliverable' if the task looks like structured work that
+    should belong to an epic, 'operational' otherwise.
+    """
+    text = task.get("description", "") + " " + task.get("source_title", "")
+    topics = task.get("topics", [])
+    if isinstance(topics, list):
+        text += " " + " ".join(topics)
+
+    has_deliverable = bool(_DELIVERABLE_SIGNALS.search(text))
+    has_operational = bool(_OPERATIONAL_SIGNALS.search(text))
+
+    # Eisenhower quadrant 1-2 (important) + deliverable keywords = strong signal
+    quadrant = task.get("priority", {}).get("quadrant") if isinstance(task.get("priority"), dict) else None
+    is_important = quadrant in (1, 2)
+
+    if has_deliverable and not has_operational:
+        return "deliverable"
+    if has_operational and not has_deliverable:
+        return "operational"
+    if has_deliverable and has_operational:
+        # Both signals — lean deliverable if it's important work
+        return "deliverable" if is_important else "operational"
+    # No clear signals — if it's Q1/Q2 (important), flag it for review
+    if is_important:
+        return "deliverable"
+    return "operational"
 
 
 def get_team_portfolio(
@@ -115,7 +174,7 @@ def get_team_portfolio(
             if person_l in t.get("owner", "").lower()
         ]
 
-        # Unlinked tasks (not attached to any story)
+        # Unlinked tasks (not attached to any story) — classify each one
         unlinked_smart = [
             t for t in person_smart
             if t.get("id") not in linked_task_ids
@@ -124,6 +183,11 @@ def get_team_portfolio(
             t for t in person_tracked
             if t.get("id") not in linked_task_ids
         ]
+
+        # Split unlinked into deliverable (should have an epic) vs operational (fine standalone)
+        needs_epic_smart = [t for t in unlinked_smart if _classify_task(t) == "deliverable"]
+        needs_epic_tracked = [t for t in unlinked_tracked if _classify_task(t) == "deliverable"]
+        needs_epic = needs_epic_smart + needs_epic_tracked
 
         # Workload metrics
         blocked_stories = sum(1 for s in person_stories if s.get("status") == "blocked")
@@ -219,6 +283,16 @@ def get_team_portfolio(
                 for t in person_tracked
             ],
             "unlinked_tasks": len(unlinked_smart) + len(unlinked_tracked),
+            "needs_epic": [
+                {
+                    "id": t.get("id"),
+                    "description": t.get("description", ""),
+                    "owner": t.get("owner", ""),
+                    "topics": t.get("topics", []) if isinstance(t.get("topics"), list) else [],
+                }
+                for t in needs_epic
+            ],
+            "needs_epic_count": len(needs_epic),
             "workload": {
                 "total_items": total_items,
                 "epics": len(person_epics),
@@ -228,6 +302,7 @@ def get_team_portfolio(
                 "blocked": blocked_stories,
                 "overdue": overdue_tasks,
                 "unlinked": len(unlinked_smart) + len(unlinked_tracked),
+                "needs_epic": len(needs_epic),
             },
         }
 
@@ -237,7 +312,7 @@ def get_team_portfolio(
 
     overloaded = [m for m in members if m["workload"]["total_items"] >= 7]
     blocked = [m for m in members if m["workload"]["blocked"] > 0]
-    unlinked_total = sum(m["workload"]["unlinked"] for m in members)
+    needs_epic_total = sum(m["workload"]["needs_epic"] for m in members)
 
     parts = [f"Team portfolio: {len(members)} member{'s' if len(members) != 1 else ''}"]
     if overloaded:
@@ -245,15 +320,24 @@ def get_team_portfolio(
         parts.append(f"{names} {'are' if len(overloaded) > 1 else 'is'} heavily loaded")
     if blocked:
         parts.append(f"{len(blocked)} member{'s' if len(blocked) != 1 else ''} with blocked stories")
-    if unlinked_total:
-        parts.append(f"{unlinked_total} task{'s' if unlinked_total != 1 else ''} not linked to any epic")
+    if needs_epic_total:
+        parts.append(
+            f"{needs_epic_total} deliverable task{'s' if needs_epic_total != 1 else ''} "
+            f"not linked to any epic and should be"
+        )
+
+    # Collect all needs-epic tasks for the top-level summary
+    all_needs_epic = []
+    for m in members:
+        all_needs_epic.extend(m.get("needs_epic", []))
 
     return {
         "portfolio": portfolio,
         "member_count": len(portfolio),
         "total_epics": len(epics),
         "total_stories": len(stories),
-        "unlinked_tasks": unlinked_total,
+        "needs_epic": all_needs_epic,
+        "needs_epic_count": needs_epic_total,
         "voice_summary": ". ".join(parts) + ".",
     }
 
@@ -289,8 +373,11 @@ def get_member_portfolio(name: str, include_done: bool = False) -> dict[str, Any
         parts.append(f"{wl['overdue']} overdue")
     if wl["blocked"]:
         parts.append(f"{wl['blocked']} blocked")
-    if wl["unlinked"]:
-        parts.append(f"{wl['unlinked']} task{'s' if wl['unlinked'] != 1 else ''} not linked to an epic")
+    if wl.get("needs_epic"):
+        parts.append(
+            f"{wl['needs_epic']} deliverable task{'s' if wl['needs_epic'] != 1 else ''} "
+            f"should be linked to an epic"
+        )
 
     return {
         "member": member,

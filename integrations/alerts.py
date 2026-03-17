@@ -31,6 +31,7 @@ async def get_alerts() -> dict[str, Any]:
     alerts.extend(_check_relationship_health())
     alerts.extend(_check_initiative_risks())
     alerts.extend(_check_stale_decisions())
+    alerts.extend(_check_orphaned_deliverables())
 
     # Sort by severity
     severity_order = {"critical": 0, "warning": 1, "info": 2}
@@ -363,5 +364,47 @@ def _check_stale_decisions() -> list[dict]:
                 })
         except (ValueError, TypeError):
             continue
+
+    return alerts
+
+
+def _check_orphaned_deliverables() -> list[dict]:
+    """Flag deliverable tasks that should belong to an epic but don't.
+
+    Uses keyword heuristics to distinguish structured deliverables (build,
+    implement, deploy, etc.) from operational/admin work. Only flags when
+    a person has 2+ orphaned deliverables to avoid noise.
+    """
+    try:
+        from integrations.team_portfolio import get_team_portfolio
+        result = get_team_portfolio()
+        portfolio = result.get("portfolio", {})
+    except Exception:
+        return []
+
+    alerts = []
+
+    for name, member in portfolio.items():
+        needs_epic = member.get("needs_epic", [])
+        if not needs_epic:
+            continue
+
+        # Only alert if there are 2+ orphaned deliverables per person (avoid noise)
+        if len(needs_epic) >= 2:
+            sample_tasks = ", ".join(
+                t.get("description", "")[:50] for t in needs_epic[:3]
+            )
+            alerts.append({
+                "type": "orphaned_deliverable",
+                "severity": "warning" if len(needs_epic) >= 4 else "info",
+                "title": f"{name} has {len(needs_epic)} deliverable tasks without an epic",
+                "detail": f"{name} is working on deliverable tasks that aren't linked "
+                          f"to any epic: {sample_tasks}. "
+                          f"Consider creating an epic to give these structure and context.",
+                "person": name,
+                "task_count": len(needs_epic),
+                "tasks": [t.get("description", "")[:60] for t in needs_epic[:5]],
+                "suggested_action": "create_epic",
+            })
 
     return alerts
