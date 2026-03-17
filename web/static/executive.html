@@ -148,8 +148,8 @@
             content.innerHTML = '<div class="loading">Scanning and analyzing your Notion pages...</div>';
             try {
                 const resp = await fetch('/api/intel/scan', { method: 'POST' });
-                if (!resp.ok) throw new Error('Scan failed: ' + resp.status);
                 const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || 'Scan failed: ' + resp.status);
                 scanInfo.textContent = 'Scanned ' + data.pages_scanned + ' pages — ' + data.new_tasks_added + ' new tasks found';
                 await loadIntel();
             } catch(err) {
