@@ -1086,7 +1086,7 @@ def get_intel() -> dict:
     return intel
 
 
-def build_graph_data(max_nodes: int = 0) -> dict:
+def build_graph_data(max_nodes: int = 500, min_edge_weight: int = 1) -> dict:
     """Build graph nodes and edges for the relationship visualization.
 
     Derives relationships from three sources (in priority order):
@@ -1097,6 +1097,8 @@ def build_graph_data(max_nodes: int = 0) -> dict:
     Args:
         max_nodes: Cap the number of nodes to prevent browser crashes.
                    0 means no limit.
+        min_edge_weight: Only include edges with weight >= this value.
+                         Higher values dramatically reduce edge count.
 
     Returns {"nodes": [...], "edges": [...], "tasks": [...]}.
     """
@@ -1241,6 +1243,12 @@ def build_graph_data(max_nodes: int = 0) -> dict:
         edge_weights = {
             k: v for k, v in edge_weights.items()
             if k[0] in kept_ids and k[1] in kept_ids
+        }
+
+    # --- Filter low-weight edges ---
+    if min_edge_weight > 1:
+        edge_weights = {
+            k: v for k, v in edge_weights.items() if v >= min_edge_weight
         }
 
     # --- Build response ---

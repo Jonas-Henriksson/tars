@@ -179,6 +179,10 @@
                 </div>
                 <div class="ctrl-section-body open" id="filtersBody">
                     <input type="text" class="ctrl-search" id="searchBox" placeholder="Search nodes...">
+                    <div class="ctrl-slider-row">
+                        <div class="ctrl-slider-label">Density <span class="ctrl-slider-val" id="densityVal">500</span> <span style="color:var(--text-muted);font-size:10px" id="densityInfo"></span></div>
+                        <input type="range" class="ctrl-slider" id="densitySlider" min="50" max="2500" step="50" value="500">
+                    </div>
                     <div class="ctrl-toggle-row">
                         <span class="ctrl-toggle-label">Orphan nodes</span>
                         <label class="ctrl-switch"><input type="checkbox" id="toggleOrphans" checked><span class="slider"></span></label>
@@ -219,8 +223,8 @@
                         <input type="range" class="ctrl-slider" id="linkThickness" min="0.1" max="3" step="0.1" value="1">
                     </div>
                     <div class="ctrl-slider-row">
-                        <div class="ctrl-slider-label">Link opacity <span class="ctrl-slider-val" id="linkOpacityVal">0.15</span></div>
-                        <input type="range" class="ctrl-slider" id="linkOpacity" min="0.01" max="0.6" step="0.01" value="0.15">
+                        <div class="ctrl-slider-label">Link opacity <span class="ctrl-slider-val" id="linkOpacityVal">0.08</span></div>
+                        <input type="range" class="ctrl-slider" id="linkOpacity" min="0.01" max="0.6" step="0.01" value="0.08">
                     </div>
                 </div>
             </div>
@@ -279,7 +283,7 @@
         let showArrows = false;
         let nodeSizeMul = 1;
         let linkThicknessMul = 1;
-        let baseLinkOpacity = 0.15;
+        let baseLinkOpacity = 0.08;
 
         // Force settings
         let forceCenter = 0.05;
@@ -341,20 +345,41 @@
         });
 
         // --- Load data ---
-        let currentMaxNodes = 0;
+        let currentMaxNodes = 500;
 
         async function loadGraph(maxNodes) {
             if (maxNodes === undefined) maxNodes = currentMaxNodes;
+            currentMaxNodes = maxNodes;
             try {
-                const resp = await fetch('/api/intel/graph' + (maxNodes ? '?max_nodes=' + maxNodes : ''));
+                const resp = await fetch('/api/intel/graph?max_nodes=' + maxNodes);
                 if (!resp.ok) return;
                 graphData = await resp.json();
                 tasks = graphData.tasks || [];
+                // Destroy existing graph before rebuilding
+                if (Graph) {
+                    Graph._destructor && Graph._destructor();
+                    Graph = null;
+                    graphEl.innerHTML = '';
+                }
                 initGraph(graphData);
+                // Update density info
+                const info = document.getElementById('densityInfo');
+                if (info) info.textContent = graphNodes.length + ' nodes, ' + graphEdges.length + ' edges';
             } catch(e) {
                 console.error('Failed to load graph', e);
             }
         }
+
+        // Density slider
+        let densityTimer = null;
+        const densitySlider = document.getElementById('densitySlider');
+        const densityVal = document.getElementById('densityVal');
+        densitySlider.addEventListener('input', () => {
+            const v = parseInt(densitySlider.value);
+            densityVal.textContent = v;
+            clearTimeout(densityTimer);
+            densityTimer = setTimeout(() => loadGraph(v), 400);
+        });
 
         function initGraph(data) {
             graphNodes = [];
@@ -497,7 +522,7 @@
                 return;
             }
 
-            const nodeRes = data.nodes.length > 300 ? 8 : 20;
+            const nodeRes = data.nodes.length > 300 ? 6 : 16;
             console.log('Creating graph with', data.nodes.length, 'nodes and', data.links.length, 'links', 'in', width, 'x', height, '(resolution:', nodeRes + ')');
 
             try {
@@ -537,20 +562,6 @@
                     })
                     .linkDirectionalArrowLength(showArrows ? 4 : 0)
                     .linkDirectionalArrowRelPos(1)
-                    .linkDirectionalParticles(e => {
-                        const sid = typeof e.source === 'object' ? e.source.id : e.source;
-                        const tid = typeof e.target === 'object' ? e.target.id : e.target;
-                        if (selectedNodeId && (sid === selectedNodeId || tid === selectedNodeId)) return 2;
-                        return 0;
-                    })
-                    .linkDirectionalParticleWidth(1.2)
-                    .linkDirectionalParticleSpeed(0.006)
-                    .linkDirectionalParticleColor(e => {
-                        const sid = typeof e.source === 'object' ? e.source.id : e.source;
-                        return nodeMap[sid] ? NODE_COLORS_HIGHLIGHT[nodeMap[sid].type] : '#fff';
-                    })
-                    .linkCurvature(0.15)
-                    .linkCurveRotation(0.5)
 
                     .onNodeClick(n => selectNode(n.id))
                     .onNodeHover(n => {
@@ -564,9 +575,12 @@
                         refreshGraph();
                     })
 
+                    // Pre-compute layout then limit simulation
+                    .warmupTicks(100)
+                    .cooldownTicks(300)
                     .d3AlphaDecay(0.02)
                     .d3VelocityDecay(0.3)
-                    .onEngineStop(() => {});
+                    .onEngineStop(() => { console.log('Force simulation settled'); });
 
                 // Defer force config until layout is initialized
                 // (graphData init is async — calling d3ReheatSimulation
@@ -609,7 +623,6 @@
             if (!Graph) return;
             Graph.nodeColor(Graph.nodeColor());
             Graph.linkColor(Graph.linkColor());
-            Graph.linkDirectionalParticles(Graph.linkDirectionalParticles());
             Graph.linkOpacity(e => {
                 const sid = typeof e.source === 'object' ? e.source.id : e.source;
                 const tid = typeof e.target === 'object' ? e.target.id : e.target;
@@ -668,7 +681,7 @@
             // Reset all sliders
             const defaults = {
                 centerForce: 0.05, repelForce: 80, linkForce: 1, linkDistance: 60,
-                nodeSize: 1, linkThickness: 1, linkOpacity: 0.15
+                nodeSize: 1, linkThickness: 1, linkOpacity: 0.08
             };
             for (const [id, val] of Object.entries(defaults)) {
                 const el = document.getElementById(id);

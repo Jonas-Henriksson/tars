@@ -430,12 +430,12 @@ async def graph_page():
 
 
 @app.get("/api/intel/graph")
-async def get_intel_graph(max_nodes: int = 0):
+async def get_intel_graph(max_nodes: int = 500, min_edge_weight: int = 1):
     """Build graph nodes and edges for relationship visualization."""
     from integrations.intel import build_graph_data
 
     try:
-        data = build_graph_data(max_nodes=max_nodes)
+        data = build_graph_data(max_nodes=max_nodes, min_edge_weight=min_edge_weight)
         return JSONResponse(data)
     except Exception as exc:
         logger.exception("Failed to build graph data")
