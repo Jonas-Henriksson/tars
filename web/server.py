@@ -441,7 +441,7 @@ _TOOL_MAP = {
     "add_known_names": ("integrations.notion_review", "add_known_names"),
     "daily_briefing": ("integrations.briefing_daily", "compile_daily_briefing"),
     "scan_notion": ("integrations.intel", "scan_notion"),
-    "get_intel": ("integrations.intel", "get_intel"),
+    "get_intel": ("integrations.intel", "get_intel_voice"),
     "get_smart_tasks": ("integrations.intel", "get_smart_tasks"),
     "update_smart_task": ("integrations.intel", "update_smart_task"),
     "delete_smart_task": ("integrations.intel", "delete_smart_task"),

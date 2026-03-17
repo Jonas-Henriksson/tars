@@ -1452,6 +1452,46 @@ def delete_smart_task(task_id: str) -> dict:
     return {"error": f"Task not found: {task_id}"}
 
 
+def get_intel_voice() -> dict:
+    """Get intelligence data optimized for voice — excludes page_index, adds guidance."""
+    intel = get_intel()
+
+    # Strip page_index — too large for voice context
+    result = {k: v for k, v in intel.items() if k != "page_index"}
+
+    # Add voice-friendly summary
+    es = result.get("executive_summary", {})
+    mx = es.get("matrix", {})
+    if not result.get("smart_tasks"):
+        result["voice_summary"] = (
+            "No intelligence data yet. The user needs to run a Notion scan first "
+            "from the Executive page, or ask you to scan with the scan_notion tool."
+        )
+    else:
+        q1 = mx.get("q1_count", 0)
+        q2 = mx.get("q2_count", 0)
+        overdue = es.get("total_overdue", 0)
+        total = es.get("total_open", 0)
+        delegated = es.get("total_delegated", 0)
+        parts = [f"{total} open tasks"]
+        if q1:
+            parts.append(f"{q1} need immediate action")
+        if overdue:
+            parts.append(f"{overdue} overdue")
+        if delegated:
+            parts.append(f"{delegated} delegated")
+        result["voice_summary"] = ". ".join(parts) + "."
+
+    # Remove smart_tasks list — voice should use get_smart_tasks for details
+    tasks_list = result.pop("smart_tasks", [])
+    result["smart_tasks_count"] = len(tasks_list)
+
+    # Also strip scan_history to save tokens
+    result.pop("scan_history", None)
+
+    return result
+
+
 def search_intel(query: str, max_results: int = 10) -> dict:
     """Search the intelligence knowledge base.
 

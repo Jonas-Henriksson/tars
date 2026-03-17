@@ -49,7 +49,59 @@ async def compile_daily_briefing() -> dict[str, Any]:
     # 6. Meta
     sections["generated_at"] = datetime.now(timezone.utc).isoformat()
 
+    # 7. Voice-friendly summary
+    sections["voice_summary"] = _build_voice_summary(sections)
+
     return sections
+
+
+def _build_voice_summary(sections: dict) -> str:
+    """Build a concise narrative summary for voice readback."""
+    parts = []
+
+    # Calendar
+    cal = sections.get("calendar", {})
+    if cal.get("available") and cal.get("count", 0) > 0:
+        parts.append(f"You had {cal['count']} calendar event{'s' if cal['count'] != 1 else ''} today")
+    elif not cal.get("available"):
+        parts.append("Calendar is not connected")
+
+    # Notion activity
+    notion = sections.get("notion_activity", {})
+    if notion.get("available") and notion.get("count", 0) > 0:
+        parts.append(f"{notion['count']} Notion page{'s were' if notion['count'] != 1 else ' was'} edited today")
+    elif not notion.get("available"):
+        parts.append("Notion is not connected")
+
+    # Tasks
+    tasks = sections.get("task_analysis", {})
+    if tasks.get("open_count", 0) > 0:
+        parts.append(f"{tasks['open_count']} open task{'s' if tasks['open_count'] != 1 else ''}")
+        if tasks.get("stale_count", 0) > 0:
+            parts.append(f"{tasks['stale_count']} stale and need attention")
+        if tasks.get("others_open_count", 0) > 0:
+            parts.append(f"{tasks['others_open_count']} delegated to others")
+
+    # Email
+    email = sections.get("email", {})
+    if email.get("available") and email.get("unread_count", 0) > 0:
+        parts.append(f"{email['unread_count']} unread email{'s' if email['unread_count'] != 1 else ''}")
+    elif not email.get("available"):
+        parts.append("Email is not connected")
+
+    # Recommendations
+    recs = sections.get("recommendations", [])
+    if recs:
+        high = sum(1 for r in recs if r.get("priority") == "high")
+        if high:
+            parts.append(f"{high} high-priority recommendation{'s' if high != 1 else ''}")
+        else:
+            parts.append(f"{len(recs)} recommendation{'s' if len(recs) != 1 else ''}")
+
+    if not parts:
+        return "No data available yet. Connect your integrations to get started."
+
+    return ". ".join(parts) + "."
 
 
 async def _get_calendar_section() -> dict:
