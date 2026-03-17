@@ -334,12 +334,95 @@
             }
         }
 
+        // Track pending function call arguments
+        const pendingCalls = {};
+
         function handleRealtimeEvent(event) {
-            // Log events for debugging
-            if (event.type === 'session.created') {
-                console.log('Session created:', event.session?.id);
-            } else if (event.type === 'error') {
-                console.error('Realtime error:', event.error);
+            switch (event.type) {
+                case 'session.created':
+                    console.log('Session created:', event.session?.id);
+                    break;
+
+                case 'response.function_call_arguments.delta':
+                    // Accumulate function call arguments
+                    const callId = event.call_id;
+                    if (!pendingCalls[callId]) {
+                        pendingCalls[callId] = { name: event.name || '', args: '' };
+                    }
+                    if (event.name) pendingCalls[callId].name = event.name;
+                    pendingCalls[callId].args += event.delta || '';
+                    break;
+
+                case 'response.function_call_arguments.done':
+                    // Function call complete — execute it
+                    handleFunctionCall(
+                        event.call_id,
+                        event.name,
+                        event.arguments,
+                    );
+                    break;
+
+                case 'error':
+                    console.error('Realtime error:', event.error);
+                    break;
+
+                default:
+                    // Log other events for debugging
+                    if (event.type.startsWith('response.')) {
+                        console.log('Event:', event.type);
+                    }
+            }
+        }
+
+        async function handleFunctionCall(callId, name, argsStr) {
+            console.log(`Tool call: ${name}(${argsStr})`);
+
+            try {
+                // Send to our server for execution
+                const resp = await fetch('/api/tool', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        arguments: JSON.parse(argsStr || '{}'),
+                    }),
+                });
+
+                const data = await resp.json();
+                const output = data.error
+                    ? JSON.stringify({ error: data.error })
+                    : JSON.stringify(data.result);
+
+                // Send result back to OpenAI via data channel
+                if (dc && dc.readyState === 'open') {
+                    dc.send(JSON.stringify({
+                        type: 'conversation.item.create',
+                        item: {
+                            type: 'function_call_output',
+                            call_id: callId,
+                            output: output,
+                        },
+                    }));
+
+                    // Tell OpenAI to continue responding
+                    dc.send(JSON.stringify({
+                        type: 'response.create',
+                    }));
+                }
+
+            } catch (err) {
+                console.error('Tool execution failed:', err);
+                if (dc && dc.readyState === 'open') {
+                    dc.send(JSON.stringify({
+                        type: 'conversation.item.create',
+                        item: {
+                            type: 'function_call_output',
+                            call_id: callId,
+                            output: JSON.stringify({ error: err.message }),
+                        },
+                    }));
+                    dc.send(JSON.stringify({ type: 'response.create' }));
+                }
             }
         }
 

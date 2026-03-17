@@ -53,3 +53,26 @@ class TestEphemeralToken:
         assert resp.status_code == 200
         data = resp.json()
         assert data["token"] == "eph-token-123"
+
+
+class TestToolEndpoint:
+    def test_unknown_tool_returns_400(self):
+        resp = client.post("/api/tool", json={"name": "fake_tool", "arguments": {}})
+        assert resp.status_code == 400
+
+    def test_executes_tool_successfully(self):
+        mock_result = {"tasks": [{"title": "Test"}], "count": 1, "list_name": "Tasks"}
+
+        with patch("integrations.tasks.get_tasks", new_callable=AsyncMock, return_value=mock_result):
+            resp = client.post("/api/tool", json={"name": "get_tasks", "arguments": {}})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["result"]["count"] == 1
+
+    def test_returns_error_on_runtime_error(self):
+        with patch("integrations.tasks.get_tasks", new_callable=AsyncMock, side_effect=RuntimeError("Not signed in")):
+            resp = client.post("/api/tool", json={"name": "get_tasks", "arguments": {}})
+
+        assert resp.status_code == 200
+        assert "Not signed in" in resp.json()["error"]
