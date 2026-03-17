@@ -297,6 +297,23 @@
         const ctrlPanel = document.getElementById('ctrlPanel');
         const groupsBody = document.getElementById('groupsBody');
 
+        // Catch async errors from ForceGraph3D animation loop
+        let graphCrashed = false;
+        window.addEventListener('error', (evt) => {
+            if (graphCrashed) return;
+            if (evt.filename && evt.filename.includes('3d-force-graph')) {
+                graphCrashed = true;
+                console.error('3D graph engine crashed, stopping animation');
+                if (Graph) { try { Graph.pauseAnimation(); } catch(e) {} }
+                graphEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">'
+                    + '<div style="text-align:center"><h3 style="margin-bottom:8px">3D rendering error</h3>'
+                    + '<p style="font-size:13px;margin-bottom:12px">The graph has too many nodes for 3D rendering.</p>'
+                    + '<button onclick="location.reload()" style="padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer">Reload</button>'
+                    + '</div></div>';
+                evt.preventDefault();
+            }
+        });
+
         const NODE_COLORS = { person: '#3b82f6', topic: '#a855f7', page: '#f59e0b', project: '#22c55e', organization: '#06b6d4', decision: '#f43f5e', tag: '#8b5cf6' };
         const NODE_COLORS_HIGHLIGHT = { person: '#60a5fa', topic: '#c084fc', page: '#fbbf24', project: '#4ade80', organization: '#22d3ee', decision: '#fb7185', tag: '#a78bfa' };
         const GROUP_LABELS = { person: 'People', topic: 'Topics', page: 'Pages', project: 'Projects', organization: 'Organizations', decision: 'Decisions', tag: 'Tags' };
@@ -324,9 +341,12 @@
         });
 
         // --- Load data ---
-        async function loadGraph() {
+        let currentMaxNodes = 500;
+
+        async function loadGraph(maxNodes) {
+            maxNodes = maxNodes || currentMaxNodes;
             try {
-                const resp = await fetch('/api/intel/graph');
+                const resp = await fetch('/api/intel/graph?max_nodes=' + maxNodes);
                 if (!resp.ok) return;
                 graphData = await resp.json();
                 tasks = graphData.tasks || [];
@@ -477,79 +497,86 @@
                 return;
             }
 
-            console.log('Creating graph with', data.nodes.length, 'nodes and', data.links.length, 'links', 'in', width, 'x', height);
+            const nodeRes = data.nodes.length > 300 ? 8 : 20;
+            console.log('Creating graph with', data.nodes.length, 'nodes and', data.links.length, 'links', 'in', width, 'x', height, '(resolution:', nodeRes + ')');
 
-            Graph = ForceGraph3D()(graphEl)
-                .width(width)
-                .height(height)
-                .backgroundColor('#0a0a0a')
-                .graphData(data)
+            try {
+                Graph = ForceGraph3D()(graphEl)
+                    .width(width)
+                    .height(height)
+                    .backgroundColor('#0a0a0a')
+                    .graphData(data)
 
-                .nodeVal(n => n.baseVal * nodeSizeMul)
-                .nodeColor(n => {
-                    if (selectedNodeId && n.id !== selectedNodeId && !adjacency[selectedNodeId].has(n.id)) {
-                        return 'rgba(60,60,70,0.3)';
-                    }
-                    if (n.id === hoveredNodeId || n.id === selectedNodeId) {
-                        return NODE_COLORS_HIGHLIGHT[n.type] || '#aaa';
-                    }
-                    return n.color;
-                })
-                .nodeOpacity(0.9)
-                .nodeResolution(20)
-
-                .nodeLabel(n => '<div class="node-label">' + esc(n.label) + ' <span style="opacity:0.5;font-size:10px">' + n.type + '</span></div>')
-
-                .linkWidth(e => Math.min(2, 0.2 + e.weight * 0.15) * linkThicknessMul)
-                .linkOpacity(baseLinkOpacity)
-                .linkColor(e => {
-                    const sid = typeof e.source === 'object' ? e.source.id : e.source;
-                    const tid = typeof e.target === 'object' ? e.target.id : e.target;
-                    if (selectedNodeId) {
-                        if (sid === selectedNodeId || tid === selectedNodeId) {
-                            return NODE_COLORS[nodeMap[sid] ? nodeMap[sid].type : 'person'];
+                    .nodeVal(n => n.baseVal * nodeSizeMul)
+                    .nodeColor(n => {
+                        if (selectedNodeId && n.id !== selectedNodeId && !adjacency[selectedNodeId].has(n.id)) {
+                            return 'rgba(60,60,70,0.3)';
                         }
-                        return 'rgba(40,40,50,0.1)';
-                    }
-                    return nodeMap[sid] ? nodeMap[sid].color : '#555';
-                })
-                .linkDirectionalArrowLength(showArrows ? 4 : 0)
-                .linkDirectionalArrowRelPos(1)
-                .linkDirectionalParticles(e => {
-                    const sid = typeof e.source === 'object' ? e.source.id : e.source;
-                    const tid = typeof e.target === 'object' ? e.target.id : e.target;
-                    if (selectedNodeId && (sid === selectedNodeId || tid === selectedNodeId)) return 2;
-                    return 0;
-                })
-                .linkDirectionalParticleWidth(1.2)
-                .linkDirectionalParticleSpeed(0.006)
-                .linkDirectionalParticleColor(e => {
-                    const sid = typeof e.source === 'object' ? e.source.id : e.source;
-                    return nodeMap[sid] ? NODE_COLORS_HIGHLIGHT[nodeMap[sid].type] : '#fff';
-                })
-                .linkCurvature(0.15)
-                .linkCurveRotation(0.5)
+                        if (n.id === hoveredNodeId || n.id === selectedNodeId) {
+                            return NODE_COLORS_HIGHLIGHT[n.type] || '#aaa';
+                        }
+                        return n.color;
+                    })
+                    .nodeOpacity(0.9)
+                    .nodeResolution(nodeRes)
 
-                .onNodeClick(n => selectNode(n.id))
-                .onNodeHover(n => {
-                    hoveredNodeId = n ? n.id : null;
-                    graphEl.style.cursor = n ? 'pointer' : 'default';
-                })
-                .onBackgroundClick(() => {
-                    selectedNodeId = null;
-                    closeSidebar();
-                    resetPageVisibility();
-                    refreshGraph();
-                })
+                    .nodeLabel(n => '<div class="node-label">' + esc(n.label) + ' <span style="opacity:0.5;font-size:10px">' + n.type + '</span></div>')
 
-                .d3AlphaDecay(0.02)
-                .d3VelocityDecay(0.3);
+                    .linkWidth(e => Math.min(2, 0.2 + e.weight * 0.15) * linkThicknessMul)
+                    .linkOpacity(baseLinkOpacity)
+                    .linkColor(e => {
+                        const sid = typeof e.source === 'object' ? e.source.id : e.source;
+                        const tid = typeof e.target === 'object' ? e.target.id : e.target;
+                        if (selectedNodeId) {
+                            if (sid === selectedNodeId || tid === selectedNodeId) {
+                                return NODE_COLORS[nodeMap[sid] ? nodeMap[sid].type : 'person'];
+                            }
+                            return 'rgba(40,40,50,0.1)';
+                        }
+                        return nodeMap[sid] ? nodeMap[sid].color : '#555';
+                    })
+                    .linkDirectionalArrowLength(showArrows ? 4 : 0)
+                    .linkDirectionalArrowRelPos(1)
+                    .linkDirectionalParticles(e => {
+                        const sid = typeof e.source === 'object' ? e.source.id : e.source;
+                        const tid = typeof e.target === 'object' ? e.target.id : e.target;
+                        if (selectedNodeId && (sid === selectedNodeId || tid === selectedNodeId)) return 2;
+                        return 0;
+                    })
+                    .linkDirectionalParticleWidth(1.2)
+                    .linkDirectionalParticleSpeed(0.006)
+                    .linkDirectionalParticleColor(e => {
+                        const sid = typeof e.source === 'object' ? e.source.id : e.source;
+                        return nodeMap[sid] ? NODE_COLORS_HIGHLIGHT[nodeMap[sid].type] : '#fff';
+                    })
+                    .linkCurvature(0.15)
+                    .linkCurveRotation(0.5)
 
-            // Force config
-            applyForces();
+                    .onNodeClick(n => selectNode(n.id))
+                    .onNodeHover(n => {
+                        hoveredNodeId = n ? n.id : null;
+                        graphEl.style.cursor = n ? 'pointer' : 'default';
+                    })
+                    .onBackgroundClick(() => {
+                        selectedNodeId = null;
+                        closeSidebar();
+                        resetPageVisibility();
+                        refreshGraph();
+                    })
 
-            // Bloom
-            addBloomEffect();
+                    .d3AlphaDecay(0.02)
+                    .d3VelocityDecay(0.3);
+
+                // Force config
+                applyForces();
+
+                // Bloom
+                addBloomEffect();
+            } catch(err) {
+                console.error('ForceGraph3D crashed:', err);
+                Graph = null;
+                graphEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)"><div style="text-align:center"><h3 style="margin-bottom:8px">3D graph failed to render</h3><p style="font-size:13px">' + esc(err.message) + '</p></div></div>';
+            }
         }
 
         function applyForces() {

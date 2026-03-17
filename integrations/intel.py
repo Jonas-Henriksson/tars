@@ -1086,13 +1086,17 @@ def get_intel() -> dict:
     return intel
 
 
-def build_graph_data() -> dict:
+def build_graph_data(max_nodes: int = 500) -> dict:
     """Build graph nodes and edges for the relationship visualization.
 
     Derives relationships from three sources (in priority order):
     1. page_index — per-page people + topic associations from scan
     2. smart_tasks — owner/topic/source_page links
     3. global people/topics dicts — fallback for weight info
+
+    Args:
+        max_nodes: Cap the number of nodes to prevent browser crashes.
+                   0 means no limit.
 
     Returns {"nodes": [...], "edges": [...], "tasks": [...]}.
     """
@@ -1222,6 +1226,23 @@ def build_graph_data() -> dict:
                           url=task.get("source_url", ""))
             _add_edge(o_nid, sp_nid, "mention")
 
+    # --- Prune to max_nodes if the graph is too large ---
+    all_nodes = list(nodes.values())
+    if max_nodes and len(all_nodes) > max_nodes:
+        # Keep highest-weight nodes, but always keep pages (they anchor edges)
+        pages = [n for n in all_nodes if n["type"] == "page"]
+        others = [n for n in all_nodes if n["type"] != "page"]
+        others.sort(key=lambda n: n["weight"], reverse=True)
+        remaining_slots = max(0, max_nodes - len(pages))
+        kept = pages + others[:remaining_slots]
+        kept_ids = {n["id"] for n in kept}
+        all_nodes = kept
+        # Prune edges that reference removed nodes
+        edge_weights = {
+            k: v for k, v in edge_weights.items()
+            if k[0] in kept_ids and k[1] in kept_ids
+        }
+
     # --- Build response ---
     edge_list = [
         {"source": s, "target": t, "type": tp, "weight": w}
@@ -1245,7 +1266,7 @@ def build_graph_data() -> dict:
     ]
 
     return {
-        "nodes": list(nodes.values()),
+        "nodes": all_nodes,
         "edges": edge_list,
         "tasks": task_summaries,
     }
