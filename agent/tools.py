@@ -34,8 +34,13 @@ def register_tool(name: str, description: str, input_schema: dict, handler) -> N
     _TOOL_HANDLERS[name] = handler
 
 
-async def execute_tool(name: str, tool_input: dict) -> dict:
+async def execute_tool(name: str, tool_input: dict, *, chat_id: int = 0) -> dict:
     """Execute a registered tool by name.
+
+    Args:
+        name: Tool name.
+        tool_input: Tool input parameters from Claude.
+        chat_id: Telegram chat ID (passed to tools that need it, like reminders).
 
     Returns:
         Result dict to send back to Claude.
@@ -44,11 +49,18 @@ async def execute_tool(name: str, tool_input: dict) -> dict:
     if handler is None:
         return {"error": f"Unknown tool: {name}"}
     try:
+        # Inject chat_id for tools that need it
+        if name in _CHAT_ID_TOOLS:
+            tool_input = {**tool_input, "_chat_id": chat_id}
         return await handler(tool_input)
     except RuntimeError as exc:
         return {"error": str(exc)}
     except Exception as exc:
         return {"error": f"Tool '{name}' failed: {exc}"}
+
+
+# Tools that need chat_id injected
+_CHAT_ID_TOOLS: set[str] = set()
 
 
 # ---------------------------------------------------------------------------
@@ -494,7 +506,92 @@ def _register_mail_tools() -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Register reminder tools
+# ---------------------------------------------------------------------------
+
+def _register_reminder_tools() -> None:
+    """Register reminder tools (always available, no M365 needed)."""
+    from integrations.reminders import create_reminder, delete_reminder, get_reminders
+
+    async def _handle_create_reminder(tool_input: dict) -> dict:
+        chat_id = tool_input.pop("_chat_id", 0)
+        return create_reminder(
+            chat_id=chat_id,
+            message=tool_input["message"],
+            remind_at=tool_input["remind_at"],
+        )
+
+    register_tool(
+        name="create_reminder",
+        description=(
+            "Set a reminder that will notify the user at a specific time via Telegram. "
+            "Always confirm the time and message with the user before creating."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "The reminder message to send.",
+                },
+                "remind_at": {
+                    "type": "string",
+                    "description": (
+                        "When to send the reminder, in ISO 8601 format with timezone "
+                        "(e.g. '2025-01-15T10:00:00+01:00'). "
+                        "Ask the user what timezone they're in if unclear."
+                    ),
+                },
+            },
+            "required": ["message", "remind_at"],
+        },
+        handler=_handle_create_reminder,
+    )
+    _CHAT_ID_TOOLS.add("create_reminder")
+
+    async def _handle_get_reminders(tool_input: dict) -> dict:
+        chat_id = tool_input.pop("_chat_id", 0)
+        return get_reminders(chat_id)
+
+    register_tool(
+        name="get_reminders",
+        description="Get all pending reminders for the user.",
+        input_schema={"type": "object", "properties": {}},
+        handler=_handle_get_reminders,
+    )
+    _CHAT_ID_TOOLS.add("get_reminders")
+
+    async def _handle_delete_reminder(tool_input: dict) -> dict:
+        chat_id = tool_input.pop("_chat_id", 0)
+        return delete_reminder(
+            reminder_id=tool_input["reminder_id"],
+            chat_id=chat_id,
+        )
+
+    register_tool(
+        name="delete_reminder",
+        description=(
+            "Delete a pending reminder. Requires the reminder ID "
+            "(get it from get_reminders first)."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "reminder_id": {
+                    "type": "string",
+                    "description": "The reminder ID to delete.",
+                },
+            },
+            "required": ["reminder_id"],
+        },
+        handler=_handle_delete_reminder,
+    )
+    _CHAT_ID_TOOLS.add("delete_reminder")
+
+
 # Auto-register tools on import
 _register_calendar_tools()
 _register_task_tools()
 _register_mail_tools()
+_register_reminder_tools()

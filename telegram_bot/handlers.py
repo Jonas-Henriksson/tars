@@ -165,6 +165,21 @@ async def briefing_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
 
 
+async def _check_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Periodic callback — check for due reminders and send them."""
+    from integrations.reminders import get_due_reminders
+
+    due = get_due_reminders()
+    for reminder in due:
+        try:
+            await context.bot.send_message(
+                chat_id=reminder["chat_id"],
+                text=f"⏰ Reminder: {reminder['message']}",
+            )
+        except Exception:
+            logger.exception("Failed to send reminder %s", reminder["id"])
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle all regular text messages — route to TARS agent."""
     if not update.message or not update.message.text:
@@ -195,3 +210,6 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("briefing", briefing_command))
     # Message handler — must be added last (catches all text)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Check for due reminders every 30 seconds
+    app.job_queue.run_repeating(_check_reminders, interval=30, first=10)

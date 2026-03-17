@@ -81,7 +81,7 @@ async def run(chat_id: int, user_message: str) -> str:
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    result = await execute_tool(block.name, block.input)
+                    result = await execute_tool(block.name, block.input, chat_id=chat_id)
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
