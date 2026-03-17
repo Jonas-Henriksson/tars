@@ -49,10 +49,15 @@
 
         /* Matrix */
         .matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px; }
-        .matrix-cell { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; min-height: 120px; }
-        .matrix-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); }
+        .matrix-cell { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; min-height: 120px; transition: background 0.15s; }
+        .matrix-cell.drag-over { background: var(--surface-raised); border-color: var(--accent); }
+        .matrix-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); cursor: pointer; user-select: none; }
         .matrix-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
         .matrix-count { font-size: 11px; color: var(--text-muted); }
+        .matrix-toggle { font-size: 10px; color: var(--text-muted); margin-left: 6px; transition: transform 0.2s; display: inline-block; }
+        .matrix-toggle.collapsed { transform: rotate(-90deg); }
+        .matrix-items { overflow: hidden; transition: max-height 0.25s ease; }
+        .matrix-items.collapsed { max-height: 0 !important; }
 
         .q1 .matrix-label { color: var(--red-text); }
         .q1 { border-left: 3px solid var(--red); }
@@ -63,15 +68,26 @@
         .q4 .matrix-label { color: var(--text-muted); }
         .q4 { border-left: 3px solid var(--border); }
 
-        .matrix-item { padding: 5px 0; font-size: 13px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+        .matrix-item { padding: 5px 0; font-size: 13px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 6px; cursor: grab; }
+        .matrix-item:active { cursor: grabbing; }
+        .matrix-item.dragging { opacity: 0.4; }
         .matrix-item:last-child { border-bottom: none; }
-        .matrix-desc { flex: 1; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .matrix-desc { flex: 1; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+        .matrix-desc:hover { color: var(--accent); }
         .matrix-owner { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
         .matrix-date { font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
         .date-overdue { color: var(--red-text); }
         .date-soon { color: var(--amber-text); }
         .date-ok { color: var(--text-muted); }
         .matrix-empty { font-size: 12px; color: var(--text-muted); font-style: italic; padding: 8px 0; }
+
+        .matrix-actions { display: flex; gap: 2px; flex-shrink: 0; }
+        .act-btn { background: none; border: none; cursor: pointer; padding: 2px 4px; font-size: 14px; line-height: 1; border-radius: 3px; transition: background 0.15s; color: var(--text-muted); }
+        .act-btn:hover { background: var(--surface-raised); }
+        .act-done:hover { color: var(--green-text); }
+        .act-del:hover { color: var(--red-text); }
+        .show-more { font-size: 12px; color: var(--text-muted); cursor: pointer; padding: 6px 0; }
+        .show-more:hover { color: var(--text-secondary); }
 
         /* Sections */
         .section { margin-bottom: 28px; }
@@ -95,7 +111,32 @@
         .tag-count { color: var(--text-muted); font-size: 11px; }
 
         .empty { text-align: center; padding: 48px; color: var(--text-muted); font-size: 13px; }
-        .loading { text-align: center; padding: 48px; color: var(--text-muted); font-size: 13px; }
+
+        /* Modal overlay */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 100; display: none; align-items: center; justify-content: center; }
+        .modal-overlay.visible { display: flex; }
+        .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; padding: 24px; }
+        .modal h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+        .modal-field { margin-bottom: 14px; }
+        .modal-field label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 4px; }
+        .modal-field input, .modal-field textarea, .modal-field select {
+            width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+            font-family: inherit; font-size: 13px; padding: 8px 10px; border-radius: 6px; outline: none;
+        }
+        .modal-field input:focus, .modal-field textarea:focus, .modal-field select:focus { border-color: var(--accent); }
+        .modal-field textarea { resize: vertical; min-height: 80px; }
+        .modal-field .hint { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+        .modal-row { display: flex; gap: 12px; }
+        .modal-row .modal-field { flex: 1; }
+        .modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+        .modal-foot button { font-family: inherit; font-size: 13px; padding: 7px 18px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border); }
+        .btn-cancel { background: var(--surface-raised); color: var(--text-secondary); }
+        .btn-cancel:hover { background: var(--border); }
+        .btn-save { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .btn-save:hover { opacity: 0.9; }
+        .modal-source { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+        .modal-source a { color: var(--accent); text-decoration: none; }
+        .modal-source a:hover { text-decoration: underline; }
 
         @media (max-width: 700px) {
             .matrix { grid-template-columns: 1fr; }
@@ -131,17 +172,75 @@
             </div>
         </div>
         <div class="scan-toast" id="scanToast"><div class="scan-spinner" id="scanSpinner"></div><span id="scanToastMsg">Scanning...</span></div>
-        <div id="content"><div class="empty">Click "Scan Notion" to analyze your pages and build your intelligence profile.</div></div>
+        <div id="content"><div class="empty">Click "Scan New" to analyze your pages and build your intelligence profile.</div></div>
     </main>
+
+    <!-- Task detail modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal" id="modal">
+            <h2 id="modalTitle">Edit Task</h2>
+            <input type="hidden" id="modalTaskId">
+            <div class="modal-field">
+                <label>Title / Description</label>
+                <input type="text" id="modalDesc">
+            </div>
+            <div class="modal-row">
+                <div class="modal-field">
+                    <label>Owner</label>
+                    <input type="text" id="modalOwner">
+                </div>
+                <div class="modal-field">
+                    <label>Quadrant</label>
+                    <select id="modalQuadrant">
+                        <option value="1">Q1: Do First</option>
+                        <option value="2">Q2: Schedule</option>
+                        <option value="3">Q3: Delegate</option>
+                        <option value="4">Q4: Defer</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-row">
+                <div class="modal-field">
+                    <label>Follow-up Date</label>
+                    <input type="date" id="modalDate">
+                </div>
+                <div class="modal-field">
+                    <label>Status</label>
+                    <select id="modalStatus">
+                        <option value="open">Open</option>
+                        <option value="done">Done</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-field">
+                <label>Steps / Action Items</label>
+                <textarea id="modalSteps" placeholder="1. First step&#10;2. Second step&#10;3. ..."></textarea>
+                <div class="hint">Break down the task into clear, delegatable steps.</div>
+            </div>
+            <div class="modal-source" id="modalSource"></div>
+            <div class="modal-foot">
+                <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="btn-save" onclick="saveModal()">Save</button>
+            </div>
+        </div>
+    </div>
+
     <script>
     (function(){
         'use strict';
         const content = document.getElementById('content');
         const scanInfo = document.getElementById('scanInfo');
         const scanBtn = document.getElementById('scanBtn');
+        const fullScanBtn = document.getElementById('fullScanBtn');
         const scanToast = document.getElementById('scanToast');
         const scanSpinner = document.getElementById('scanSpinner');
         const scanToastMsg = document.getElementById('scanToastMsg');
+        const modalOverlay = document.getElementById('modalOverlay');
+
+        // Collapse state per quadrant (persisted in sessionStorage)
+        const collapseState = JSON.parse(sessionStorage.getItem('execCollapse') || '{}');
+        // Expand state per quadrant (show all vs first 6)
+        const expandState = {};
 
         function showToast(msg, type) {
             scanToast.className = 'scan-toast visible' + (type ? ' scan-' + type : '');
@@ -157,12 +256,10 @@
                 const data = await resp.json();
                 if (data.last_scan_at) {
                     renderIntel(data);
-                    scanInfo.textContent = 'Last scan: ' + new Date(data.last_scan_at).toLocaleString() + ' — ' + data.pages_scanned + ' pages';
+                    scanInfo.textContent = 'Last scan: ' + new Date(data.last_scan_at).toLocaleString(undefined, {hour12:false}) + ' \u2014 ' + data.pages_scanned + ' pages';
                 }
             } catch(e) {}
         }
-
-        const fullScanBtn = document.getElementById('fullScanBtn');
 
         window.runScan = async function(full) {
             scanBtn.disabled = true;
@@ -175,8 +272,8 @@
                 const resp = await fetch(url, { method: 'POST' });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error || 'Scan failed: ' + resp.status);
-                scanInfo.textContent = 'Last scan: ' + new Date().toLocaleString() + ' — ' + data.pages_scanned + ' pages';
-                showToast(label + ' complete — ' + data.pages_scanned + ' pages, ' + data.new_tasks_added + ' new tasks', 'success');
+                scanInfo.textContent = 'Last scan: ' + new Date().toLocaleString(undefined, {hour12:false}) + ' \u2014 ' + data.pages_scanned + ' pages';
+                showToast(label + ' complete \u2014 ' + data.pages_scanned + ' pages, ' + data.new_tasks_added + ' new tasks', 'success');
                 await loadIntel();
             } catch(err) {
                 showToast('Scan failed: ' + err.message, 'error');
@@ -186,7 +283,11 @@
             scanBtn.textContent = 'Scan New';
         };
 
+        // Keep a reference to the full data for the modal
+        let currentIntel = null;
+
         function renderIntel(data) {
+            currentIntel = data;
             const es = data.executive_summary || {};
             const mx = es.matrix || {};
             let html = '';
@@ -203,10 +304,10 @@
 
             // Eisenhower Matrix
             html += '<div class="matrix">';
-            html += matrixCell('q1', 'Q1: Do First', 'Urgent + Important', mx.q1_do_first || []);
-            html += matrixCell('q2', 'Q2: Schedule', 'Important, Not Urgent', mx.q2_schedule || []);
-            html += matrixCell('q3', 'Q3: Delegate', 'Urgent, Not Important', mx.q3_delegate || []);
-            html += matrixCell('q4', 'Q4: Defer', 'Neither', mx.q4_defer || []);
+            html += matrixCell('q1', 'Q1: Do First', mx.q1_do_first || [], 1);
+            html += matrixCell('q2', 'Q2: Schedule', mx.q2_schedule || [], 2);
+            html += matrixCell('q3', 'Q3: Delegate', mx.q3_delegate || [], 3);
+            html += matrixCell('q4', 'Q4: Defer', mx.q4_defer || [], 4);
             html += '</div>';
 
             // Overdue follow-ups
@@ -263,11 +364,10 @@
 
             content.innerHTML = html || '<div class="empty">No intelligence data yet.</div>';
 
-            // Bind done buttons
+            // Bind done buttons in follow-up sections
             content.querySelectorAll('.fu-action').forEach(btn => {
                 btn.addEventListener('click', async () => {
-                    const id = btn.dataset.id;
-                    await fetch('/api/intel/tasks/' + id, {
+                    await fetch('/api/intel/tasks/' + btn.dataset.id, {
                         method: 'PATCH',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({status: 'done'}),
@@ -275,29 +375,190 @@
                     await loadIntel();
                 });
             });
+
+            // Bind drag-and-drop
+            initDragAndDrop();
+
+            // Bind collapse toggles
+            content.querySelectorAll('.matrix-head').forEach(head => {
+                head.addEventListener('click', () => {
+                    const qid = head.dataset.qid;
+                    const items = head.nextElementSibling;
+                    const toggle = head.querySelector('.matrix-toggle');
+                    const isCollapsed = !items.classList.contains('collapsed');
+                    if (isCollapsed) {
+                        items.classList.add('collapsed');
+                        toggle.classList.add('collapsed');
+                        collapseState[qid] = true;
+                    } else {
+                        items.classList.remove('collapsed');
+                        toggle.classList.remove('collapsed');
+                        delete collapseState[qid];
+                    }
+                    sessionStorage.setItem('execCollapse', JSON.stringify(collapseState));
+                });
+            });
+
+            // Bind show-more
+            content.querySelectorAll('.show-more').forEach(el => {
+                el.addEventListener('click', () => {
+                    expandState[el.dataset.qid] = true;
+                    renderIntel(currentIntel);
+                });
+            });
+
+            // Bind task actions (done / delete)
+            content.querySelectorAll('.act-done').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    await fetch('/api/intel/tasks/' + btn.dataset.id, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({status: 'done'}),
+                    });
+                    await loadIntel();
+                });
+            });
+            content.querySelectorAll('.act-del').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    await fetch('/api/intel/tasks/' + btn.dataset.id, { method: 'DELETE' });
+                    await loadIntel();
+                });
+            });
+
+            // Bind click-to-edit on description
+            content.querySelectorAll('.matrix-desc').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openModal(el.dataset.id);
+                });
+            });
         }
 
+        // ---- Drag & Drop ----
+        function initDragAndDrop() {
+            const items = content.querySelectorAll('.matrix-item');
+            const cells = content.querySelectorAll('.matrix-cell');
+
+            items.forEach(item => {
+                item.setAttribute('draggable', 'true');
+                item.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', item.dataset.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                    requestAnimationFrame(() => item.classList.add('dragging'));
+                });
+                item.addEventListener('dragend', () => item.classList.remove('dragging'));
+            });
+
+            cells.forEach(cell => {
+                cell.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; cell.classList.add('drag-over'); });
+                cell.addEventListener('dragleave', () => cell.classList.remove('drag-over'));
+                cell.addEventListener('drop', async (e) => {
+                    e.preventDefault();
+                    cell.classList.remove('drag-over');
+                    const taskId = e.dataTransfer.getData('text/plain');
+                    const newQ = parseInt(cell.dataset.quadrant);
+                    if (!taskId || !newQ) return;
+                    await fetch('/api/intel/tasks/' + taskId, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({quadrant: newQ}),
+                    });
+                    await loadIntel();
+                });
+            });
+        }
+
+        // ---- Modal ----
+        function findTask(id) {
+            if (!currentIntel) return null;
+            const mx = currentIntel.executive_summary?.matrix || {};
+            for (const list of [mx.q1_do_first, mx.q2_schedule, mx.q3_delegate, mx.q4_defer]) {
+                if (!list) continue;
+                const t = list.find(x => x.id === id);
+                if (t) return t;
+            }
+            return null;
+        }
+
+        function openModal(taskId) {
+            const t = findTask(taskId);
+            if (!t) return;
+            document.getElementById('modalTaskId').value = taskId;
+            document.getElementById('modalDesc').value = t.description || '';
+            document.getElementById('modalOwner').value = t.owner || '';
+            document.getElementById('modalQuadrant').value = t.quadrant || 4;
+            document.getElementById('modalDate').value = t.follow_up_date || '';
+            document.getElementById('modalStatus').value = t.status || 'open';
+            document.getElementById('modalSteps').value = t.steps || '';
+            const src = document.getElementById('modalSource');
+            if (t.source_title) {
+                src.innerHTML = 'Source: ' + (t.source_url ? '<a href="' + esc(t.source_url) + '" target="_blank">' + esc(t.source_title) + '</a>' : esc(t.source_title));
+            } else {
+                src.innerHTML = '';
+            }
+            modalOverlay.classList.add('visible');
+        }
+
+        window.closeModal = function() {
+            modalOverlay.classList.remove('visible');
+        };
+
+        window.saveModal = async function() {
+            const taskId = document.getElementById('modalTaskId').value;
+            const payload = {
+                description: document.getElementById('modalDesc').value,
+                owner: document.getElementById('modalOwner').value,
+                quadrant: parseInt(document.getElementById('modalQuadrant').value),
+                follow_up_date: document.getElementById('modalDate').value,
+                status: document.getElementById('modalStatus').value,
+                steps: document.getElementById('modalSteps').value,
+            };
+            await fetch('/api/intel/tasks/' + taskId, {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload),
+            });
+            closeModal();
+            await loadIntel();
+        };
+
+        modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) closeModal(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+        // ---- Render helpers ----
         function stat(val, label, color) {
             return '<div class="stat"><div class="stat-val" style="color:var(' + color + ')">' + val + '</div><div class="stat-lbl">' + label + '</div></div>';
         }
 
-        function matrixCell(cls, title, sub, items) {
-            let h = '<div class="matrix-cell ' + cls + '">';
-            h += '<div class="matrix-head"><span class="matrix-label">' + title + '</span><span class="matrix-count">' + items.length + '</span></div>';
+        function matrixCell(cls, title, items, qnum) {
+            const isCollapsed = collapseState[cls];
+            const showAll = expandState[cls];
+            let h = '<div class="matrix-cell ' + cls + '" data-quadrant="' + qnum + '">';
+            h += '<div class="matrix-head" data-qid="' + cls + '"><span class="matrix-label">' + title + ' <span class="matrix-toggle' + (isCollapsed ? ' collapsed' : '') + '">\u25BC</span></span><span class="matrix-count">' + items.length + '</span></div>';
+            h += '<div class="matrix-items' + (isCollapsed ? ' collapsed' : '') + '">';
             if (items.length === 0) {
                 h += '<div class="matrix-empty">No items</div>';
             } else {
-                for (const t of items.slice(0, 6)) {
+                const limit = showAll ? items.length : 6;
+                for (const t of items.slice(0, limit)) {
                     const dc = dateClass(t.follow_up_date);
-                    h += '<div class="matrix-item">';
-                    h += '<span class="matrix-desc">' + esc(t.description) + '</span>';
+                    h += '<div class="matrix-item" data-id="' + t.id + '">';
+                    h += '<span class="matrix-desc" data-id="' + t.id + '">' + esc(t.description) + '</span>';
                     h += '<span class="matrix-owner">' + esc(t.owner || '') + '</span>';
                     if (t.follow_up_date) h += '<span class="matrix-date ' + dc + '">' + t.follow_up_date + '</span>';
+                    h += '<span class="matrix-actions">';
+                    h += '<button class="act-btn act-done" data-id="' + t.id + '" title="Mark done">\u2713</button>';
+                    h += '<button class="act-btn act-del" data-id="' + t.id + '" title="Delete">\u2715</button>';
+                    h += '</span>';
                     h += '</div>';
                 }
-                if (items.length > 6) h += '<div class="matrix-empty">+ ' + (items.length - 6) + ' more</div>';
+                if (!showAll && items.length > 6) {
+                    h += '<div class="show-more" data-qid="' + cls + '">+ ' + (items.length - 6) + ' more \u2014 click to expand</div>';
+                }
             }
-            h += '</div>';
+            h += '</div></div>';
             return h;
         }
 

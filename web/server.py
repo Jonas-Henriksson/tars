@@ -451,6 +451,10 @@ async def get_briefing():
 class SmartTaskUpdate(BaseModel):
     status: str = ""
     follow_up_date: str = ""
+    quadrant: int = 0
+    description: str = ""
+    owner: str = ""
+    steps: str = ""
 
 
 @app.get("/api/intel")
@@ -483,14 +487,29 @@ async def scan_intel(max_pages: int = 50, full_scan: bool = False):
 
 @app.patch("/api/intel/tasks/{task_id}")
 async def update_smart_task(task_id: str, body: SmartTaskUpdate):
-    """Update a smart task's status or follow-up date."""
+    """Update a smart task."""
     from integrations.intel import update_smart_task as _update
 
     result = _update(
         task_id=task_id,
         status=body.status,
         follow_up_date=body.follow_up_date,
+        quadrant=body.quadrant,
+        description=body.description,
+        owner=body.owner,
+        steps=body.steps,
     )
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@app.delete("/api/intel/tasks/{task_id}")
+async def delete_smart_task(task_id: str):
+    """Delete a smart task."""
+    from integrations.intel import delete_smart_task as _delete
+
+    result = _delete(task_id=task_id)
     if "error" in result:
         return JSONResponse(result, status_code=404)
     return JSONResponse(result)

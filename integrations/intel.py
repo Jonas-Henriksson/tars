@@ -599,11 +599,13 @@ def _summarize_task(task: dict) -> dict:
         "delegated": task.get("delegated", False),
         "follow_up_date": task.get("follow_up_date"),
         "source_title": task.get("source_title", ""),
+        "source_url": task.get("source_url", ""),
         "age_days": task.get("age_days", 0),
         "quadrant": task.get("priority", {}).get("quadrant"),
         "quadrant_label": task.get("priority", {}).get("quadrant_label", ""),
         "topics": task.get("topics", []),
         "status": task.get("status", "open"),
+        "steps": task.get("steps", ""),
     }
 
 
@@ -669,8 +671,16 @@ def get_smart_tasks(owner: str = "", topic: str = "", quadrant: int = 0,
     return {"tasks": [_summarize_task(t) for t in tasks], "count": len(tasks)}
 
 
-def update_smart_task(task_id: str, status: str = "", follow_up_date: str = "") -> dict:
-    """Update a smart task's status or follow-up date."""
+def update_smart_task(
+    task_id: str,
+    status: str = "",
+    follow_up_date: str = "",
+    quadrant: int = 0,
+    description: str = "",
+    owner: str = "",
+    steps: str = "",
+) -> dict:
+    """Update a smart task's fields."""
     intel = _load_intel()
     for task in intel.get("smart_tasks", []):
         if task["id"] == task_id:
@@ -678,6 +688,34 @@ def update_smart_task(task_id: str, status: str = "", follow_up_date: str = "") 
                 task["status"] = status
             if follow_up_date:
                 task["follow_up_date"] = follow_up_date
+            if quadrant in (1, 2, 3, 4):
+                labels = {1: "Do First", 2: "Schedule", 3: "Delegate", 4: "Defer"}
+                task["priority"] = {
+                    "urgent": quadrant in (1, 3),
+                    "important": quadrant in (1, 2),
+                    "quadrant": quadrant,
+                    "quadrant_label": labels[quadrant],
+                }
+            if description:
+                task["description"] = description
+            if owner:
+                task["owner"] = owner
+            if steps is not None and steps != "":
+                task["steps"] = steps
+            intel["executive_summary"] = _build_executive_summary(intel)
             _save_intel(intel)
-            return {"message": f"Task updated.", "task": _summarize_task(task)}
+            return {"message": "Task updated.", "task": _summarize_task(task)}
+    return {"error": f"Task not found: {task_id}"}
+
+
+def delete_smart_task(task_id: str) -> dict:
+    """Delete a smart task."""
+    intel = _load_intel()
+    tasks = intel.get("smart_tasks", [])
+    for i, task in enumerate(tasks):
+        if task["id"] == task_id:
+            tasks.pop(i)
+            intel["executive_summary"] = _build_executive_summary(intel)
+            _save_intel(intel)
+            return {"message": "Task deleted."}
     return {"error": f"Task not found: {task_id}"}
