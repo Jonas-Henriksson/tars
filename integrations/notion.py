@@ -235,6 +235,152 @@ def _extract_properties(props: dict) -> dict[str, Any]:
     return result
 
 
+async def update_page_title(page_id: str, new_title: str) -> dict:
+    """Update a page's title property.
+
+    Args:
+        page_id: The Notion page ID.
+        new_title: The new title text.
+
+    Returns:
+        Dict with updated page info.
+    """
+    if not is_configured():
+        raise RuntimeError("Notion is not configured. Set NOTION_API_KEY in .env.")
+
+    # First, find the title property name
+    async with httpx.AsyncClient(timeout=30) as client:
+        page_resp = await client.get(
+            f"{_BASE_URL}/pages/{page_id}",
+            headers=_headers(),
+        )
+        page_resp.raise_for_status()
+        page_data = page_resp.json()
+
+        title_prop_name = None
+        for prop_name, prop in page_data.get("properties", {}).items():
+            if prop.get("type") == "title":
+                title_prop_name = prop_name
+                break
+
+        if not title_prop_name:
+            return {"error": "Could not find title property on page."}
+
+        resp = await client.patch(
+            f"{_BASE_URL}/pages/{page_id}",
+            headers=_headers(),
+            json={
+                "properties": {
+                    title_prop_name: {
+                        "title": [{"text": {"content": new_title}}],
+                    },
+                },
+            },
+        )
+        resp.raise_for_status()
+
+    return {"message": f"Title updated to '{new_title}'.", "page_id": page_id}
+
+
+async def update_block_text(block_id: str, new_text: str, block_type: str = "paragraph") -> dict:
+    """Update the text content of a block.
+
+    Args:
+        block_id: The block ID.
+        new_text: New text content.
+        block_type: Block type (paragraph, heading_1, etc.).
+
+    Returns:
+        Dict with update confirmation.
+    """
+    if not is_configured():
+        raise RuntimeError("Notion is not configured. Set NOTION_API_KEY in .env.")
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.patch(
+            f"{_BASE_URL}/blocks/{block_id}",
+            headers=_headers(),
+            json={
+                block_type: {
+                    "rich_text": [{"text": {"content": new_text}}],
+                },
+            },
+        )
+        resp.raise_for_status()
+
+    return {"message": "Block updated.", "block_id": block_id}
+
+
+async def get_page_blocks(page_id: str) -> list[dict]:
+    """Get all blocks (with IDs and types) for a page.
+
+    Args:
+        page_id: The Notion page ID.
+
+    Returns:
+        List of block dicts with id, type, and text content.
+    """
+    if not is_configured():
+        raise RuntimeError("Notion is not configured. Set NOTION_API_KEY in .env.")
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(
+            f"{_BASE_URL}/blocks/{page_id}/children",
+            headers=_headers(),
+            params={"page_size": 100},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+    blocks = []
+    for block in data.get("results", []):
+        block_type = block.get("type", "")
+        block_data = block.get(block_type, {})
+        text = _extract_text(block_data.get("rich_text", []))
+        blocks.append({
+            "id": block["id"],
+            "type": block_type,
+            "text": text,
+            "has_children": block.get("has_children", False),
+        })
+    return blocks
+
+
+async def get_recently_edited_pages(since: str | None = None,
+                                     max_results: int = 20) -> dict:
+    """Get pages edited recently, sorted by last_edited_time descending.
+
+    Args:
+        since: ISO 8601 timestamp — only return pages edited after this.
+        max_results: Max pages to return.
+
+    Returns:
+        Dict with pages list and count.
+    """
+    if not is_configured():
+        raise RuntimeError("Notion is not configured. Set NOTION_API_KEY in .env.")
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"{_BASE_URL}/search",
+            headers=_headers(),
+            json={
+                "filter": {"value": "page", "property": "object"},
+                "sort": {"direction": "descending", "timestamp": "last_edited_time"},
+                "page_size": max_results,
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+    pages = [_format_page(p) for p in data.get("results", [])]
+
+    if since:
+        pages = [p for p in pages if p["last_edited_time"] > since]
+
+    return {"pages": pages, "count": len(pages)}
+
+
 async def list_databases(max_results: int = 20) -> dict:
     """List all databases shared with the integration.
 

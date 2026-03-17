@@ -248,6 +248,42 @@ REALTIME_TOOLS = [
             "required": ["query"],
         },
     },
+    {
+        "type": "function",
+        "name": "review_notion_pages",
+        "description": "Review all Notion pages edited since last review. Checks title consistency, name spelling, and structure. Set auto_fix to true to auto-correct issues.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "auto_fix": {"type": "boolean", "description": "Auto-fix spelling issues. Default false."},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "name": "review_notion_page",
+        "description": "Review a specific Notion page for consistency and spelling issues.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "page_id": {"type": "string", "description": "The Notion page ID."},
+                "auto_fix": {"type": "boolean", "description": "Auto-fix issues. Default false."},
+            },
+            "required": ["page_id"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "add_known_names",
+        "description": "Add names to the spell-check list so TARS can detect misspellings in Notion.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "names": {"type": "array", "items": {"type": "string"}, "description": "Canonical name spellings."},
+            },
+            "required": ["names"],
+        },
+    },
 ]
 
 # Map tool names to their handler functions (lazy-loaded)
@@ -268,6 +304,9 @@ _TOOL_MAP = {
     "track_meeting_tasks": ("integrations.notion_tasks", "track_meeting_tasks"),
     "get_tracked_tasks": ("integrations.notion_tasks", "get_tracked_tasks"),
     "search_meeting_notes": ("integrations.notion_tasks", "search_meeting_notes"),
+    "review_notion_pages": ("integrations.notion_review", "review_recent_pages"),
+    "review_notion_page": ("integrations.notion_review", "review_page"),
+    "add_known_names": ("integrations.notion_review", "add_known_names"),
 }
 
 # Argument name mapping (Realtime tool params -> our function params)

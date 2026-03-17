@@ -874,9 +874,157 @@ def _register_notion_tools() -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Register Notion review tools
+# ---------------------------------------------------------------------------
+
+def _register_notion_review_tools() -> None:
+    """Register Notion page review and consistency tools."""
+    from config import NOTION_API_KEY
+
+    if not NOTION_API_KEY:
+        return
+
+    from integrations.notion_review import (
+        add_known_names,
+        get_known_names,
+        get_review_state,
+        remove_known_names,
+        review_page,
+        review_recent_pages,
+    )
+
+    async def _handle_review_recent_pages(tool_input: dict) -> dict:
+        return await review_recent_pages(
+            auto_fix=tool_input.get("auto_fix", False),
+        )
+
+    register_tool(
+        name="review_notion_pages",
+        description=(
+            "Review all Notion pages edited since the last review. "
+            "Checks for title consistency (dates in meeting titles, names in 1:1 titles), "
+            "name spelling errors against known names, and structural issues. "
+            "Set auto_fix=true to automatically correct spelling in content."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "auto_fix": {
+                    "type": "boolean",
+                    "description": (
+                        "Automatically fix detected spelling issues. Default false. "
+                        "When false, only reports issues without changing anything."
+                    ),
+                },
+            },
+        },
+        handler=_handle_review_recent_pages,
+    )
+
+    async def _handle_review_page(tool_input: dict) -> dict:
+        return await review_page(
+            page_id=tool_input["page_id"],
+            auto_fix=tool_input.get("auto_fix", False),
+        )
+
+    register_tool(
+        name="review_notion_page",
+        description=(
+            "Review a specific Notion page for consistency and spelling issues. "
+            "Checks title format, name spelling against known names, and structure. "
+            "Set auto_fix=true to automatically correct issues."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "page_id": {
+                    "type": "string",
+                    "description": "The Notion page ID to review.",
+                },
+                "auto_fix": {
+                    "type": "boolean",
+                    "description": "Auto-fix detected issues. Default false.",
+                },
+            },
+            "required": ["page_id"],
+        },
+        handler=_handle_review_page,
+    )
+
+    async def _handle_add_known_names(tool_input: dict) -> dict:
+        return add_known_names(names=tool_input["names"])
+
+    register_tool(
+        name="add_known_names",
+        description=(
+            "Add names to the known names list for spell-checking. "
+            "These are the canonical spellings of people's names that TARS "
+            "will use to detect and fix misspellings in Notion pages. "
+            "E.g. add 'Jonas', 'Alice', 'Björk' so that 'Jon', 'Alise', 'Bjork' get flagged."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "names": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of canonical name spellings to add.",
+                },
+            },
+            "required": ["names"],
+        },
+        handler=_handle_add_known_names,
+    )
+
+    async def _handle_remove_known_names(tool_input: dict) -> dict:
+        return remove_known_names(names=tool_input["names"])
+
+    register_tool(
+        name="remove_known_names",
+        description="Remove names from the known names spell-check list.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "names": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Names to remove.",
+                },
+            },
+            "required": ["names"],
+        },
+        handler=_handle_remove_known_names,
+    )
+
+    async def _handle_get_known_names(tool_input: dict) -> dict:
+        return get_known_names()
+
+    register_tool(
+        name="get_known_names",
+        description="Get the current list of known names used for spell-checking Notion pages.",
+        input_schema={"type": "object", "properties": {}},
+        handler=_handle_get_known_names,
+    )
+
+    async def _handle_get_review_state(tool_input: dict) -> dict:
+        return get_review_state()
+
+    register_tool(
+        name="get_notion_review_state",
+        description=(
+            "Get the current Notion review state — when pages were last reviewed, "
+            "how many known names are configured, etc."
+        ),
+        input_schema={"type": "object", "properties": {}},
+        handler=_handle_get_review_state,
+    )
+
+
 # Auto-register tools on import
 _register_calendar_tools()
 _register_task_tools()
 _register_mail_tools()
 _register_reminder_tools()
 _register_notion_tools()
+_register_notion_review_tools()
