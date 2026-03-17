@@ -18,3 +18,5 @@ epics.json
 initiatives.json
 people_profiles.json
 webhook_status.json
+tunnel_status.json
+bin/

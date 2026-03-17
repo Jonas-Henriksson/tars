@@ -382,6 +382,8 @@
         loadMemory();
 
         /* ── Webhook Section ── */
+        var _tunnelData = null;
+
         function renderWebhook(data) {
             var h = data.health || 'disabled';
             var dotCls = h === 'green' ? 'green' : h === 'amber' ? 'amber' : h === 'red' ? 'red' : 'grey';
@@ -389,12 +391,36 @@
             var label = labels[h] || h;
             var enabled = data.enabled;
 
-            var webhookUrl = window.location.origin + '/api/notion/webhook';
+            var tunnelRunning = _tunnelData && _tunnelData.running;
+            var webhookUrl = tunnelRunning ? (_tunnelData.webhook_url || _tunnelData.url + '/api/notion/webhook') : window.location.origin + '/api/notion/webhook';
 
             var html = '<div class="webhook-section" id="webhook"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
                 '<div><div class="memory-section-title">Notion Sync</div>' +
-                '<div class="memory-section-sub">Push updates from Notion via webhooks, with manual pull as fallback</div></div></div>' +
-                '<div class="webhook-card">' +
+                '<div class="memory-section-sub">Push updates from Notion via webhooks, with manual pull as fallback</div></div></div>';
+
+            /* Tunnel status card */
+            html += '<div class="webhook-card" style="margin-bottom:12px">' +
+                '<div class="webhook-row">' +
+                    '<div class="webhook-health">' +
+                        '<span class="webhook-dot ' + (tunnelRunning ? 'green' : 'grey') + '"></span>' +
+                        '<span class="webhook-health-text">' + (tunnelRunning ? 'Tunnel active' : 'Tunnel not running') + '</span>' +
+                    '</div>' +
+                '</div>';
+
+            if (tunnelRunning) {
+                html += '<div class="webhook-meta"><span>Public URL: ' + esc(_tunnelData.url) + '</span>';
+                if (_tunnelData.type) html += '<span>Type: ' + esc(_tunnelData.type) + '</span>';
+                html += '</div>';
+            } else {
+                html += '<div class="webhook-meta">Start a tunnel to get a public URL for Notion webhooks:</div>' +
+                    '<div class="webhook-url" style="margin-top:6px;font-size:12px;color:var(--text-secondary)">' +
+                        'python -m scripts.tunnel' +
+                    '</div>';
+            }
+            html += '</div>';
+
+            /* Webhook push status card */
+            html += '<div class="webhook-card">' +
                 '<div class="webhook-row">' +
                     '<div class="webhook-health"><span class="webhook-dot ' + dotCls + '"></span><span class="webhook-health-text">' + esc(label) + '</span></div>' +
                 '</div>';
@@ -411,6 +437,13 @@
             }
 
             html += '<div class="webhook-url">Webhook URL: ' + esc(webhookUrl) + '</div>';
+
+            /* Setup instructions */
+            html += '<div class="webhook-meta" style="margin-top:8px">' +
+                '1. Start tunnel: <code style="font-size:11px;background:var(--surface-raised);padding:2px 6px;border-radius:3px">python -m scripts.tunnel</code><br>' +
+                '2. Copy the Webhook URL above<br>' +
+                '3. In Notion: Integration settings → Webhooks → paste the URL<br>' +
+                '4. Click "Enable push" below</div>';
 
             if (!enabled) {
                 html += '<div class="webhook-secret-row"><input placeholder="Notion webhook secret (optional)" id="wh-secret"><button class="webhook-btn primary" id="wh-enable">Enable push</button></div>';
@@ -435,7 +468,13 @@
         }
 
         function loadWebhook() {
-            fetch('/api/webhook/status').then(function(r) { return r.json(); }).then(renderWebhook).catch(function() {});
+            Promise.all([
+                fetch('/api/webhook/status').then(function(r) { return r.json(); }),
+                fetch('/api/tunnel/status').then(function(r) { return r.json(); }).catch(function() { return { running: false }; })
+            ]).then(function(results) {
+                _tunnelData = results[1];
+                renderWebhook(results[0]);
+            }).catch(function() {});
         }
         loadWebhook();
 

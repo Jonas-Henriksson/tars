@@ -1636,6 +1636,19 @@ async def webhook_disable():
     return JSONResponse(disable())
 
 
+@app.get("/api/tunnel/status")
+async def tunnel_status():
+    """Return current Cloudflare Tunnel status."""
+    status_file = Path(__file__).parent.parent / "tunnel_status.json"
+    if status_file.exists():
+        try:
+            data = json.loads(status_file.read_text())
+            return JSONResponse(data)
+        except (json.JSONDecodeError, OSError):
+            pass
+    return JSONResponse({"running": False, "url": None})
+
+
 @app.post("/api/notion/webhook")
 async def notion_webhook(request: Request):
     """Receive Notion webhook events and trigger incremental scans.
