@@ -213,9 +213,9 @@
                 adjacency[idx] = new Set();
             }
 
-            // Position in circle
+            // Position in circle — spread out well
             const cx = canvas.width / 2, cy = canvas.height / 2;
-            const r = Math.min(cx, cy) * 0.6;
+            const r = Math.min(cx, cy) * 0.8;
             const visibleNodes = nodes.filter(n => n.visible);
             visibleNodes.forEach((n, i) => {
                 const angle = (2 * Math.PI * i) / visibleNodes.length;
@@ -242,6 +242,7 @@
             // Reset view
             tx = 0; ty = 0; scale = 1;
             simFrame = 0;
+            alpha = 1.0;
             simRunning = true;
 
             buildChips();
@@ -271,12 +272,16 @@
         }
 
         // --- Force simulation ---
+        let alpha = 1.0;  // Cooling factor — decreases each frame
+
         function simLoop() {
             if (!simRunning) return;
             simStep();
             render();
             simFrame++;
-            if (simFrame > 300 && totalEnergy() < 0.5) {
+            alpha *= 0.97;  // Exponential cooling
+            if (alpha < 0.001) {
+                alpha = 0;
                 simRunning = false;
             }
             requestAnimationFrame(simLoop);
@@ -284,14 +289,14 @@
 
         function simStep() {
             const N = nodes.length;
-            const repK = 600;
-            const springK = 0.008;
-            const springLen = 120;
-            const gravity = 0.005;
-            const damping = 0.88;
+            const repK = 2000;        // Strong repulsion to spread nodes
+            const springK = 0.003;    // Gentle springs
+            const springLen = 180;    // Longer rest length for spacing
+            const gravity = 0.008;
+            const damping = 0.6;      // Heavy damping to prevent wild motion
             const cx = canvas.width / 2, cy = canvas.height / 2;
 
-            // Repulsion (only between visible nodes)
+            // Repulsion (only between visible nodes) — scaled by alpha
             for (let i = 0; i < N; i++) {
                 if (!nodes[i].visible) continue;
                 for (let j = i + 1; j < N; j++) {
@@ -300,7 +305,7 @@
                     let dy = nodes[j].y - nodes[i].y;
                     let d2 = dx * dx + dy * dy;
                     if (d2 < 1) d2 = 1;
-                    const f = repK / d2;
+                    const f = (repK * alpha) / d2;
                     const d = Math.sqrt(d2);
                     const fx = (dx / d) * f;
                     const fy = (dy / d) * f;
@@ -311,7 +316,7 @@
                 }
             }
 
-            // Spring (edges)
+            // Spring (edges) — scaled by alpha
             for (const e of edges) {
                 const a = nodes[e.source], b = nodes[e.target];
                 if (!a.visible || !b.visible) continue;
@@ -320,7 +325,7 @@
                 let d = Math.sqrt(dx * dx + dy * dy);
                 if (d < 1) d = 1;
                 const rest = e.type === 'works_on' ? springLen * 0.7 : springLen;
-                const f = springK * (d - rest);
+                const f = springK * alpha * (d - rest);
                 const fx = (dx / d) * f;
                 const fy = (dy / d) * f;
                 a.vx += fx;
@@ -334,10 +339,14 @@
                 const n = nodes[i];
                 if (!n.visible) continue;
                 if (dragNode === i) { n.vx = 0; n.vy = 0; continue; }
-                n.vx += (cx - n.x) * gravity;
-                n.vy += (cy - n.y) * gravity;
+                n.vx += (cx - n.x) * gravity * alpha;
+                n.vy += (cy - n.y) * gravity * alpha;
                 n.vx *= damping;
                 n.vy *= damping;
+                // Clamp max velocity to prevent wild jumps
+                const maxV = 8;
+                n.vx = Math.max(-maxV, Math.min(maxV, n.vx));
+                n.vy = Math.max(-maxV, Math.min(maxV, n.vy));
                 n.x += n.vx;
                 n.y += n.vy;
             }
@@ -587,7 +596,8 @@
                 openSidebar(idx);
                 // Restart sim briefly to position new page nodes
                 if (!simRunning) {
-                    simFrame = 250;
+                    simFrame = 0;
+                    alpha = 0.3;  // Gentle restart, not full force
                     simRunning = true;
                     requestAnimationFrame(simLoop);
                 }
