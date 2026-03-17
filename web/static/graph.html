@@ -166,7 +166,8 @@
         let isPanning = false, panStartX = 0, panStartY = 0;
 
         const NODE_COLORS = { person: '#3b82f6', topic: '#a855f7', page: '#f59e0b' };
-        const NODE_COLORS_DIM = { person: 'rgba(59,130,246,0.15)', topic: 'rgba(168,85,247,0.15)', page: 'rgba(245,158,11,0.15)' };
+        const NODE_COLORS_RGB = { person: [59,130,246], topic: [168,85,247], page: [245,158,11] };
+        const NODE_COLORS_DIM = { person: 'rgba(59,130,246,0.08)', topic: 'rgba(168,85,247,0.08)', page: 'rgba(245,158,11,0.08)' };
 
         // --- Load data ---
         async function loadGraph() {
@@ -187,35 +188,64 @@
             nodeMap = {};
             adjacency = {};
 
-            // Build nodes
+            // Build nodes — collect weights per type for relative sizing
+            const weightsByType = { person: [], topic: [], page: [] };
+            for (const n of data.nodes) {
+                const w = n.weight || 1;
+                if (weightsByType[n.type]) weightsByType[n.type].push(w);
+            }
+            // Compute max weight per type for normalization
+            const maxWeight = {};
+            for (const t of ['person', 'topic', 'page']) {
+                maxWeight[t] = Math.max(1, ...weightsByType[t]);
+            }
+            // Radius ranges per type
+            const radiusRange = { person: [6, 18], topic: [8, 22], page: [5, 12] };
+
             for (const n of data.nodes) {
                 const idx = nodes.length;
                 const weight = n.weight || 1;
-                const radius = Math.min(28, Math.max(8, 8 + Math.sqrt(weight) * 3));
+                const type = n.type;
+                const [rMin, rMax] = radiusRange[type] || [6, 16];
+                // Log-normalized radius within type
+                const norm = Math.log(1 + weight) / Math.log(1 + maxWeight[type]);
+                const radius = rMin + norm * (rMax - rMin);
                 nodes.push({
                     id: n.id,
                     label: n.label,
-                    type: n.type,
+                    type: type,
                     weight: weight,
                     url: n.url || '',
                     x: 0, y: 0,
                     vx: 0, vy: 0,
                     radius: radius,
-                    color: NODE_COLORS[n.type] || '#71717a',
-                    visible: n.type !== 'page',  // Hide pages by default
+                    color: NODE_COLORS[type] || '#71717a',
+                    visible: type !== 'page',  // Hide pages by default
                 });
                 nodeMap[n.id] = idx;
                 adjacency[idx] = new Set();
             }
 
-            // Position in circle — spread out well
-            const cx = canvas.width / 2, cy = canvas.height / 2;
-            const r = Math.min(cx, cy) * 0.8;
+            // Position in circle — use CSS dimensions (not DPR-scaled)
+            const dpr = window.devicePixelRatio || 1;
+            const cx = (canvas.width / dpr) / 2, cy = (canvas.height / dpr) / 2;
+            const r = Math.min(cx, cy) * 0.75;
             const visibleNodes = nodes.filter(n => n.visible);
-            visibleNodes.forEach((n, i) => {
-                const angle = (2 * Math.PI * i) / visibleNodes.length;
-                n.x = cx + r * Math.cos(angle) + (Math.random() - 0.5) * 40;
-                n.y = cy + r * Math.sin(angle) + (Math.random() - 0.5) * 40;
+            // Separate people and topics for better initial layout
+            const initPeople = visibleNodes.filter(n => n.type === 'person');
+            const initTopics = visibleNodes.filter(n => n.type === 'topic');
+            // Place people in outer ring
+            initPeople.forEach((n, i) => {
+                const angle = (2 * Math.PI * i) / initPeople.length;
+                n.x = cx + r * Math.cos(angle) + (Math.random() - 0.5) * 20;
+                n.y = cy + r * Math.sin(angle) + (Math.random() - 0.5) * 20;
+            });
+            // Place topics in inner ring
+            const innerR = r * 0.45;
+            initTopics.forEach((n, i) => {
+                const angle = (2 * Math.PI * i) / initTopics.length + 0.3;
+                n.x = cx + innerR * Math.cos(angle) + (Math.random() - 0.5) * 20;
+                n.y = cy + innerR * Math.sin(angle) + (Math.random() - 0.5) * 20;
             });
             // Position hidden page nodes near center
             nodes.filter(n => !n.visible).forEach(n => {
@@ -325,14 +355,15 @@
 
         function simStep() {
             const N = nodes.length;
-            const repK = 2000;        // Strong repulsion to spread nodes
-            const springK = 0.003;    // Gentle springs
-            const springLen = 180;    // Longer rest length for spacing
-            const gravity = 0.008;
-            const damping = 0.6;      // Heavy damping to prevent wild motion
-            const cx = canvas.width / 2, cy = canvas.height / 2;
+            const repK = 4000;        // Strong repulsion
+            const springK = 0.002;    // Very gentle springs
+            const springLen = 220;    // Long rest length for spacing
+            const gravity = 0.004;    // Gentle center pull
+            const damping = 0.55;     // Heavy damping
+            const dpr = window.devicePixelRatio || 1;
+            const cx = (canvas.width / dpr) / 2, cy = (canvas.height / dpr) / 2;
 
-            // Repulsion (only between visible nodes) — scaled by alpha
+            // Repulsion — radius-aware: bigger nodes push harder
             for (let i = 0; i < N; i++) {
                 if (!nodes[i].visible) continue;
                 for (let j = i + 1; j < N; j++) {
@@ -340,8 +371,11 @@
                     let dx = nodes[j].x - nodes[i].x;
                     let dy = nodes[j].y - nodes[i].y;
                     let d2 = dx * dx + dy * dy;
+                    const minDist = nodes[i].radius + nodes[j].radius + 30;
+                    if (d2 < minDist * minDist) d2 = minDist * minDist * 0.5; // Strong push when overlapping
                     if (d2 < 1) d2 = 1;
-                    const f = (repK * alpha) / d2;
+                    const radiusFactor = (nodes[i].radius + nodes[j].radius) / 20;
+                    const f = (repK * alpha * radiusFactor) / d2;
                     const d = Math.sqrt(d2);
                     const fx = (dx / d) * f;
                     const fy = (dy / d) * f;
@@ -352,7 +386,7 @@
                 }
             }
 
-            // Spring (edges) — scaled by alpha
+            // Spring (edges)
             for (const e of edges) {
                 const a = nodes[e.source], b = nodes[e.target];
                 if (!a.visible || !b.visible) continue;
@@ -360,7 +394,7 @@
                 let dy = b.y - a.y;
                 let d = Math.sqrt(dx * dx + dy * dy);
                 if (d < 1) d = 1;
-                const rest = e.type === 'works_on' ? springLen * 0.7 : springLen;
+                const rest = springLen + (a.radius + b.radius);
                 const f = springK * alpha * (d - rest);
                 const fx = (dx / d) * f;
                 const fy = (dy / d) * f;
@@ -379,8 +413,7 @@
                 n.vy += (cy - n.y) * gravity * alpha;
                 n.vx *= damping;
                 n.vy *= damping;
-                // Clamp max velocity to prevent wild jumps
-                const maxV = 8;
+                const maxV = 6;
                 n.vx = Math.max(-maxV, Math.min(maxV, n.vx));
                 n.vy = Math.max(-maxV, Math.min(maxV, n.vy));
                 n.x += n.vx;
@@ -399,8 +432,12 @@
 
         // --- Render ---
         function render() {
-            const w = canvas.width, h = canvas.height;
+            const dpr = window.devicePixelRatio || 1;
+            const w = canvas.width / dpr, h = canvas.height / dpr;
+            ctx.save();
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctx.clearRect(0, 0, w, h);
+
             ctx.save();
             ctx.translate(tx, ty);
             ctx.scale(scale, scale);
@@ -408,68 +445,120 @@
             const activeSet = getActiveSet();
             const hasFilter = selectedNode !== null || searchBox.value.trim() !== '';
 
-            // Draw edges
+            // --- Draw edges as subtle curves ---
             for (const e of edges) {
                 const a = nodes[e.source], b = nodes[e.target];
                 if (!a.visible || !b.visible) continue;
                 const active = !hasFilter || (activeSet.has(e.source) && activeSet.has(e.target));
+
+                // Curve control point — slight offset perpendicular to the line
+                const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+                const dx = b.x - a.x, dy = b.y - a.y;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                const curveAmount = Math.min(20, len * 0.08);
+                const cpx = mx + (-dy / len) * curveAmount;
+                const cpy = my + (dx / len) * curveAmount;
+
                 ctx.beginPath();
                 ctx.moveTo(a.x, a.y);
-                ctx.lineTo(b.x, b.y);
-                const alpha = active ? Math.min(0.5, 0.15 + e.weight * 0.05) : 0.04;
-                ctx.strokeStyle = active ? 'rgba(250,250,250,' + alpha + ')' : 'rgba(250,250,250,0.03)';
-                ctx.lineWidth = active ? Math.min(3, 0.8 + e.weight * 0.4) : 0.5;
-                if (e.type === 'covers') {
-                    ctx.setLineDash([4, 4]);
+                ctx.quadraticCurveTo(cpx, cpy, b.x, b.y);
+
+                if (active) {
+                    const rgb = NODE_COLORS_RGB[a.type] || [250,250,250];
+                    const edgeAlpha = Math.min(0.35, 0.08 + e.weight * 0.04);
+                    ctx.strokeStyle = 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + edgeAlpha + ')';
+                    ctx.lineWidth = Math.min(2, 0.5 + e.weight * 0.25);
                 } else {
-                    ctx.setLineDash([]);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.025)';
+                    ctx.lineWidth = 0.5;
                 }
                 ctx.stroke();
-                ctx.setLineDash([]);
             }
 
-            // Draw nodes
+            // --- Draw nodes with glow + gradient ---
             for (let i = 0; i < nodes.length; i++) {
                 const n = nodes[i];
                 if (!n.visible) continue;
                 const active = !hasFilter || activeSet.has(i);
                 const isHovered = hoveredNode === i;
                 const isSelected = selectedNode === i;
+                const rgb = NODE_COLORS_RGB[n.type] || [113,113,122];
 
-                // Glow for hovered/selected
-                if ((isHovered || isSelected) && active) {
+                // Ambient glow for all active nodes
+                if (active) {
+                    const glowRadius = n.radius * 2.5;
+                    const glow = ctx.createRadialGradient(n.x, n.y, n.radius * 0.5, n.x, n.y, glowRadius);
+                    const glowAlpha = (isHovered || isSelected) ? 0.25 : 0.08;
+                    glow.addColorStop(0, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + glowAlpha + ')');
+                    glow.addColorStop(1, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0)');
                     ctx.beginPath();
-                    ctx.arc(n.x, n.y, n.radius + 6, 0, Math.PI * 2);
-                    ctx.fillStyle = n.color.replace(')', ',0.2)').replace('rgb', 'rgba');
+                    ctx.arc(n.x, n.y, glowRadius, 0, Math.PI * 2);
+                    ctx.fillStyle = glow;
                     ctx.fill();
+                }
+
+                // Main node — radial gradient for 3D sphere look
+                const grad = ctx.createRadialGradient(
+                    n.x - n.radius * 0.3, n.y - n.radius * 0.3, n.radius * 0.1,
+                    n.x, n.y, n.radius
+                );
+                if (active) {
+                    // Bright highlight in upper-left, saturated color at edge
+                    grad.addColorStop(0, 'rgba(' + Math.min(255, rgb[0]+80) + ',' + Math.min(255, rgb[1]+80) + ',' + Math.min(255, rgb[2]+80) + ',0.95)');
+                    grad.addColorStop(0.6, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.9)');
+                    grad.addColorStop(1, 'rgba(' + Math.floor(rgb[0]*0.6) + ',' + Math.floor(rgb[1]*0.6) + ',' + Math.floor(rgb[2]*0.6) + ',0.85)');
+                } else {
+                    grad.addColorStop(0, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.12)');
+                    grad.addColorStop(1, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.06)');
                 }
 
                 ctx.beginPath();
                 ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
-                ctx.fillStyle = active ? n.color : NODE_COLORS_DIM[n.type] || 'rgba(113,113,122,0.15)';
+                ctx.fillStyle = grad;
                 ctx.fill();
 
+                // Subtle rim highlight
+                if (active) {
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(' + Math.min(255, rgb[0]+40) + ',' + Math.min(255, rgb[1]+40) + ',' + Math.min(255, rgb[2]+40) + ',0.3)';
+                    ctx.lineWidth = 0.5;
+                    ctx.stroke();
+                }
+
+                // Selection ring
                 if (isSelected) {
-                    ctx.strokeStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, n.radius + 3, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
                     ctx.lineWidth = 2;
                     ctx.stroke();
                 }
 
                 // Label
                 if (active || isHovered) {
-                    const fontSize = Math.max(10, Math.min(13, 10 + n.radius * 0.15));
+                    const fontSize = Math.max(10, Math.min(13, 10 + n.radius * 0.12));
                     ctx.font = '500 ' + fontSize + 'px -apple-system, BlinkMacSystemFont, sans-serif';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'top';
-                    // Dark outline for readability
-                    ctx.strokeStyle = 'rgba(10,10,10,0.8)';
-                    ctx.lineWidth = 3;
-                    ctx.strokeText(n.label, n.x, n.y + n.radius + 4);
-                    ctx.fillStyle = active ? 'rgba(250,250,250,0.9)' : 'rgba(250,250,250,0.3)';
-                    ctx.fillText(n.label, n.x, n.y + n.radius + 4);
+                    const labelY = n.y + n.radius + 6;
+
+                    // Shadow for readability
+                    ctx.shadowColor = 'rgba(0,0,0,0.7)';
+                    ctx.shadowBlur = 4;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 1;
+
+                    ctx.fillStyle = active ? 'rgba(250,250,250,0.9)' : 'rgba(250,250,250,0.25)';
+                    ctx.fillText(n.label, n.x, labelY);
+
+                    // Reset shadow
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
                 }
             }
 
+            ctx.restore();
             ctx.restore();
         }
 
@@ -881,7 +970,7 @@
             canvas.height = rect.height * dpr;
             canvas.style.width = (rect.width - sidebarW) + 'px';
             canvas.style.height = rect.height + 'px';
-            ctx.scale(dpr, dpr);
+            // DPR scaling is handled in render() via setTransform
             if (!simRunning) render();
         }
 
