@@ -97,15 +97,41 @@ def _extract_source_context(text: str, description: str, window: int = 300) -> s
 
     Returns up to `window` chars of context around the task description.
     """
+    text_lower = text.lower()
     desc_lower = description.lower()[:60]
-    idx = text.lower().find(desc_lower)
+    idx = text_lower.find(desc_lower)
+
     if idx == -1:
         # Try partial match with first few words
         words = description.split()[:4]
         partial = " ".join(words).lower()
-        idx = text.lower().find(partial)
+        idx = text_lower.find(partial)
+
     if idx == -1:
+        # Try matching each significant word (3+ chars) to find the best line
+        sig_words = [w.lower() for w in description.split() if len(w) >= 3]
+        if sig_words:
+            best_line = ""
+            best_score = 0
+            for line in text.split("\n"):
+                ll = line.lower()
+                score = sum(1 for w in sig_words if w in ll)
+                if score > best_score:
+                    best_score = score
+                    best_line = line.strip()
+            # Require at least half the significant words to match
+            if best_score >= max(1, len(sig_words) // 2) and best_line:
+                idx = text_lower.find(best_line.lower())
+
+    if idx == -1:
+        # Fallback: return first chunk of content as generic context
+        if len(text.strip()) > 20:
+            snippet = text.strip()[:window]
+            if len(text.strip()) > window:
+                snippet += "..."
+            return snippet
         return ""
+
     start = max(0, idx - window // 2)
     end = min(len(text), idx + len(description) + window // 2)
     snippet = text[start:end].strip()
@@ -184,6 +210,18 @@ def _suggest_steps(description: str, source_context: str, topics: list[str],
             "Make the required changes",
             "Review and validate the updates",
             "Share updated version with stakeholders",
+        ]
+    # Collaborate / align / work with
+    elif any(kw in desc_lower for kw in ["collaborate", "align", "work with", "partner", "sync with"]):
+        # Extract people names from description
+        people = re.findall(r"(?:with|and)\s+([A-Z][a-z]+)", description)
+        people_str = ", ".join(people) if people else "key stakeholders"
+        steps = [
+            f"Reach out to {people_str} to align on goals and scope",
+            "Agree on roles, responsibilities, and timeline",
+            "Set up a working session or shared workspace",
+            "Draft initial structure or framework together",
+            "Review progress and finalize deliverables",
         ]
     # Organize / coordinate / plan
     elif any(kw in desc_lower for kw in ["organize", "coordinate", "plan", "schedule", "set up", "arrange"]):
@@ -842,7 +880,7 @@ def _build_executive_summary(intel: dict) -> dict:
 
 def _summarize_task(task: dict) -> dict:
     # Auto-generate steps for tasks that don't have any yet
-    steps = task.get("steps", "")
+    steps = (task.get("steps") or "").strip()
     if not steps:
         steps = _suggest_steps(
             task.get("description", ""),
@@ -851,6 +889,8 @@ def _summarize_task(task: dict) -> dict:
             owner=task.get("owner", ""),
             delegated=task.get("delegated", False),
         )
+        # Persist generated steps back to the task so they're saved on next write
+        task["steps"] = steps
     return {
         "id": task.get("id"),
         "description": task.get("description", ""),
@@ -877,7 +917,12 @@ def get_intel() -> dict:
     """Get the full intelligence data."""
     intel = _load_intel()
     if intel.get("smart_tasks"):
+        # _build_executive_summary -> _summarize_task may auto-generate steps
+        # for tasks that were missing them. Since _summarize_task writes back
+        # to the task dict (which is a reference into intel["smart_tasks"]),
+        # we save once after rebuilding to persist any generated steps.
         intel["executive_summary"] = _build_executive_summary(intel)
+        _save_intel(intel)
     return intel
 
 
