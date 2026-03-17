@@ -11,3 +11,9 @@ reminders.json
 notion_tracked_tasks.json
 notion_review_state.json
 notion_intel.json
+conversation_history.json
+user_memory.json
+decisions.json
+epics.json
+initiatives.json
+people_profiles.json
