@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TARS Graph</title>
-    <script src="/static/js/three.min.js"></script>
-    <script src="/static/js/three-spritetext.min.js"></script>
     <script src="/static/js/3d-force-graph.min.js"></script>
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -450,6 +448,14 @@
                 return;
             }
 
+            if (typeof ForceGraph3D === 'undefined') {
+                console.error('ForceGraph3D not loaded. Check /static/js/3d-force-graph.min.js');
+                graphEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)"><div style="text-align:center"><h3 style="margin-bottom:8px">Graph library failed to load</h3><p style="font-size:13px">Check browser console for errors</p></div></div>';
+                return;
+            }
+
+            console.log('Creating graph with', data.nodes.length, 'nodes and', data.links.length, 'links', 'in', width, 'x', height);
+
             Graph = ForceGraph3D()(graphEl)
                 .width(width)
                 .height(height)
@@ -470,20 +476,6 @@
                 .nodeResolution(20)
 
                 .nodeLabel(n => '<div class="node-label">' + esc(n.label) + ' <span style="opacity:0.5;font-size:10px">' + n.type + '</span></div>')
-                .nodeThreeObject(n => {
-                    if (!showLabels || typeof SpriteText === 'undefined') return null;
-                    const sprite = new SpriteText(n.label);
-                    sprite.color = '#ffffff';
-                    sprite.textHeight = 2.5;
-                    sprite.fontFace = '-apple-system, BlinkMacSystemFont, sans-serif';
-                    sprite.fontWeight = '500';
-                    sprite.backgroundColor = false;
-                    sprite.padding = 1;
-                    const nodeRadius = Math.cbrt(n.baseVal * nodeSizeMul) * 2;
-                    sprite.position.y = nodeRadius + 3;
-                    return sprite;
-                })
-                .nodeThreeObjectExtend(true)
 
                 .linkWidth(e => Math.min(2, 0.2 + e.weight * 0.15) * linkThicknessMul)
                 .linkOpacity(baseLinkOpacity)
@@ -595,10 +587,7 @@
         // Display sliders
         bindSlider('nodeSize', 'nodeSizeVal', v => {
             nodeSizeMul = v;
-            if (Graph) {
-                Graph.nodeVal(n => n.baseVal * nodeSizeMul);
-                Graph.nodeThreeObject(Graph.nodeThreeObject()); // refresh labels
-            }
+            if (Graph) Graph.nodeVal(n => n.baseVal * nodeSizeMul);
         });
         bindSlider('linkThickness', 'linkThicknessVal', v => {
             linkThicknessMul = v;
@@ -612,7 +601,7 @@
         // Display toggles
         document.getElementById('toggleLabels').addEventListener('change', (e) => {
             showLabels = e.target.checked;
-            if (Graph) Graph.nodeThreeObject(Graph.nodeThreeObject()); // refresh
+            // Labels are shown via HTML tooltip on hover — toggle doesn't need graph refresh
         });
         document.getElementById('toggleArrows').addEventListener('change', (e) => {
             showArrows = e.target.checked;
@@ -643,7 +632,6 @@
             buildGroups();
             if (Graph) {
                 Graph.linkDirectionalArrowLength(0);
-                Graph.nodeThreeObject(Graph.nodeThreeObject());
             }
         });
 
