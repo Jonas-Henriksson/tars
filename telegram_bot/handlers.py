@@ -21,7 +21,7 @@ from integrations.ms_auth import (
     is_configured,
     start_device_flow,
 )
-from integrations.voice import is_configured as voice_configured, transcribe
+from integrations.voice import is_configured as voice_configured, text_to_speech, transcribe
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +186,7 @@ async def _check_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle voice messages — transcribe and route to TARS agent."""
+    """Handle voice messages — transcribe, process, and reply with voice."""
     if not update.message or not update.message.voice:
         return
 
@@ -216,20 +216,31 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         result = await transcribe(tmp_path)
         user_text = result["text"]
 
-        # Clean up temp file
+        # Clean up input audio
         Path(tmp_path).unlink(missing_ok=True)
 
         if not user_text.strip():
             await update.message.reply_text("I couldn't make out what you said. Try again?")
             return
 
-        # Show what was heard, then process
-        await update.message.reply_text(f"🎙️ \"{user_text}\"")
-        await update.effective_chat.send_action(ChatAction.TYPING)
+        # Show what was heard
+        await update.message.reply_text(f'🎙️ "{user_text}"')
+        await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
 
         # Route through TARS agent
         response = await run(chat_id, user_text)
-        await _send_long_message(update, response)
+
+        # Send voice reply + text fallback
+        try:
+            tts_path = await text_to_speech(response)
+            await update.message.reply_voice(
+                voice=open(tts_path, "rb"),
+                caption=response[:1024] if len(response) > 200 else None,
+            )
+            Path(tts_path).unlink(missing_ok=True)
+        except Exception:
+            logger.warning("TTS failed, falling back to text")
+            await _send_long_message(update, response)
 
     except Exception:
         logger.exception("Error processing voice message")
