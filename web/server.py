@@ -1531,6 +1531,21 @@ async def add_person(body: PersonCreate):
     return JSONResponse(result, status_code=201)
 
 
+class PersonRename(BaseModel):
+    new_name: str
+
+
+@app.post("/api/people/{name}/rename")
+async def rename_person(name: str, body: PersonRename):
+    """Rename/merge a person across all data sources."""
+    from integrations.people import rename_person as _rename
+
+    result = _rename(name, body.new_name)
+    if "error" in result:
+        return JSONResponse(result, status_code=400)
+    return JSONResponse(result)
+
+
 @app.delete("/api/people/{name}")
 async def delete_person(name: str):
     """Remove a person's saved profile."""

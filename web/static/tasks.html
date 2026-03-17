@@ -944,7 +944,12 @@
 
             // Owner
             const ownerCls = (!t.owner || t.owner === 'Unassigned') ? 'owner-unassigned' : 'owner-name';
-            html += '<td class="col-owner"><span class="' + ownerCls + '">' + esc(t.owner || 'Unassigned') + '</span></td>';
+            const ownerVal = t.owner || 'Unassigned';
+            if (ownerVal !== 'Me' && ownerVal !== 'Unassigned') {
+                html += '<td class="col-owner"><span class="' + ownerCls + ' person-editable" data-person="' + esc(ownerVal) + '">' + esc(ownerVal) + '</span></td>';
+            } else {
+                html += '<td class="col-owner"><span class="' + ownerCls + '">' + esc(ownerVal) + '</span></td>';
+            }
 
             // Topic
             const topicCls = t.topic ? 'topic-tag' : 'topic-tag empty';
@@ -1272,7 +1277,11 @@
                 const pct = Math.round((count / maxP) * 100);
                 const isActive = activePeopleFilter && activePeopleFilter.toLowerCase() === name.toLowerCase();
                 ph += '<div class="filter-bar-row' + (isActive ? ' active' : '') + '" data-person="' + esc(name) + '">';
-                ph += '<span class="filter-bar-label">' + esc(name) + '</span>';
+                if (name !== 'Me' && name !== 'Unassigned') {
+                    ph += '<span class="filter-bar-label person-editable" data-person="' + esc(name) + '">' + esc(name) + '</span>';
+                } else {
+                    ph += '<span class="filter-bar-label">' + esc(name) + '</span>';
+                }
                 ph += '<div class="filter-bar-track"><div class="filter-bar-fill person" style="width:' + pct + '%"></div></div>';
                 ph += '<span class="filter-bar-count">' + count + '</span></div>';
             }
@@ -1320,5 +1329,6 @@
     })();
     </script>
 <script src="/static/js/webhook-status.js"></script>
+<script src="/static/js/person-rename.js"></script>
 </body>
 </html>

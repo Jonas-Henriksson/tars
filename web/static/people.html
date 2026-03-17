@@ -691,7 +691,7 @@
 
                 return '<div class="person-card' + (isSelected ? ' selected' : '') + '" data-name="' + esc(p.name) + '">' +
                     '<div class="card-top">' +
-                        '<span class="card-name">' + esc(p.name) +
+                        '<span class="card-name person-editable" data-person="' + esc(p.name) + '">' + esc(p.name) +
                             (dots.length ? ' <span class="card-dots">' + dots.join('') + '</span>' : '') +
                         '</span>' +
                         '<span class="mention-badge">' + (p.mentions || 0) + ' mention' + ((p.mentions || 0) !== 1 ? 's' : '') + '</span>' +
@@ -724,7 +724,7 @@
             const snippets = p.context_snippets || [];
 
             let html = '<div class="detail-header">' +
-                '<div class="detail-name">' + esc(p.name) + '</div>' +
+                '<div class="detail-name person-editable" data-person="' + esc(p.name) + '">' + esc(p.name) + '</div>' +
                 '<div class="detail-fields">' +
                     editableField('Role', 'role', p.role, p.name) +
                     editableField('Relationship', 'relationship', p.relationship, p.name) +
@@ -959,5 +959,6 @@
         loadPeople();
     </script>
 <script src="/static/js/webhook-status.js"></script>
+<script src="/static/js/person-rename.js"></script>
 </body>
 </html>

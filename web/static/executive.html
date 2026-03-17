@@ -826,7 +826,12 @@
                     html += badge;
                     html += '<span style="font-size:10px;color:var(--text-muted);font-weight:500">' + qLabel + '</span>';
                     html += '<span class="attention-hero-desc" data-id="' + t.id + '">' + esc(capitalize(t.description)) + '</span>';
-                    html += '<span class="attention-hero-owner">' + esc(t.owner || '') + '</span>';
+                    const aho = t.owner || '';
+                    if (aho && aho !== 'Me' && aho !== 'Unassigned') {
+                        html += '<span class="attention-hero-owner person-editable" data-person="' + esc(aho) + '">' + esc(aho) + '</span>';
+                    } else {
+                        html += '<span class="attention-hero-owner">' + esc(aho) + '</span>';
+                    }
                     html += '<span class="attention-hero-date ' + (t._urgency === 'overdue' ? 'date-overdue' : 'date-soon') + '">' + (t.follow_up_date || '') + '</span>';
                     html += '<span class="attention-hero-actions">';
                     html += '<button class="act-btn act-done" data-id="' + t.id + '" title="Mark done">&#10003;</button>';
@@ -1115,7 +1120,12 @@
                     const dc = dateClass(t.follow_up_date);
                     h += '<div class="matrix-item" data-id="' + t.id + '">';
                     h += '<span class="matrix-desc" data-id="' + t.id + '">' + esc(capitalize(t.description)) + '</span>';
-                    h += '<span class="matrix-owner">' + esc(t.owner || '') + '</span>';
+                    const mow = t.owner || '';
+                    if (mow && mow !== 'Me' && mow !== 'Unassigned') {
+                        h += '<span class="matrix-owner person-editable" data-person="' + esc(mow) + '">' + esc(mow) + '</span>';
+                    } else {
+                        h += '<span class="matrix-owner">' + esc(mow) + '</span>';
+                    }
                     if (t.follow_up_date) h += '<span class="matrix-date ' + dc + '">' + t.follow_up_date + '</span>';
                     h += '<span class="matrix-actions">';
                     h += '<button class="act-btn act-done" data-id="' + t.id + '" title="Mark done">\u2713</button>';
@@ -1139,7 +1149,12 @@
                 h += '<div class="fu-row">';
                 h += '<span class="fu-date ' + cls + '">' + (t.follow_up_date || '--') + '</span>';
                 h += '<span class="fu-desc matrix-desc" data-id="' + t.id + '" style="cursor:pointer">' + esc(capitalize(t.description)) + '</span>';
-                h += '<span class="fu-owner">' + esc(t.owner || '') + '</span>';
+                const fow = t.owner || '';
+                if (fow && fow !== 'Me' && fow !== 'Unassigned') {
+                    h += '<span class="fu-owner person-editable" data-person="' + esc(fow) + '">' + esc(fow) + '</span>';
+                } else {
+                    h += '<span class="fu-owner">' + esc(fow) + '</span>';
+                }
                 h += '<span class="matrix-actions">';
                 h += '<button class="act-btn fu-done" data-id="' + t.id + '" title="Mark done">&#10003;</button>';
                 h += '<button class="act-btn fu-del" data-id="' + t.id + '" title="Delete">&#10005;</button>';
@@ -1156,7 +1171,12 @@
                 h += '<div class="fu-row">';
                 h += '<span class="fu-date ' + cls + '">' + (t.follow_up_date || '--') + '</span>';
                 h += '<span class="fu-desc matrix-desc" data-id="' + t.id + '" style="cursor:pointer">' + esc(capitalize(t.description)) + '</span>';
-                h += '<span class="fu-owner">' + esc(t.owner || '') + '</span>';
+                const fow = t.owner || '';
+                if (fow && fow !== 'Me' && fow !== 'Unassigned') {
+                    h += '<span class="fu-owner person-editable" data-person="' + esc(fow) + '">' + esc(fow) + '</span>';
+                } else {
+                    h += '<span class="fu-owner">' + esc(fow) + '</span>';
+                }
                 h += '<span class="matrix-actions">';
                 h += '<button class="act-btn fu-done" data-id="' + t.id + '" title="Mark done">&#10003;</button>';
                 h += '<button class="act-btn fu-del" data-id="' + t.id + '" title="Delete">&#10005;</button>';
@@ -1294,7 +1314,11 @@
                 const pct = Math.round((count / maxPeopleCount) * 100);
                 const isActive = activePeopleFilter && activePeopleFilter.toLowerCase() === name.toLowerCase();
                 ph += '<div class="filter-bar-row' + (isActive ? ' active' : '') + '" data-person="' + esc(name) + '">';
-                ph += '<span class="filter-bar-label">' + esc(name) + '</span>';
+                if (name !== 'Me' && name !== 'Unassigned') {
+                    ph += '<span class="filter-bar-label person-editable" data-person="' + esc(name) + '">' + esc(name) + '</span>';
+                } else {
+                    ph += '<span class="filter-bar-label">' + esc(name) + '</span>';
+                }
                 ph += '<div class="filter-bar-track"><div class="filter-bar-fill person" style="width:' + pct + '%"></div></div>';
                 ph += '<span class="filter-bar-count">' + count + '</span>';
                 ph += '</div>';
@@ -1357,5 +1381,6 @@
     })();
     </script>
 <script src="/static/js/webhook-status.js"></script>
+<script src="/static/js/person-rename.js"></script>
 </body>
 </html>

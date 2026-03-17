@@ -416,7 +416,7 @@
                     const pct = Math.max(3, Math.round((count / maxCount) * 100));
                     const color = count >= 40 ? 'var(--red)' : count >= 15 ? 'var(--amber)' : 'var(--accent)';
                     html += '<tr>';
-                    html += '<td class="deleg-name">' + esc(owner) + '</td>';
+                    html += '<td class="deleg-name"><span class="person-editable" data-person="' + esc(owner) + '">' + esc(owner) + '</span></td>';
                     html += '<td class="deleg-count">' + count + '</td>';
                     html += '<td><div class="deleg-bar" style="width:' + pct + '%;background:' + color + '"></div></td>';
                     html += '</tr>';
@@ -434,7 +434,12 @@
                     html += '<div class="stale-row">';
                     html += '<span class="stale-age ' + ageCls + '">' + t.age_days + 'd</span>';
                     html += '<span class="stale-desc">' + esc(t.description) + '</span>';
-                    html += '<span class="stale-owner">' + esc(t.owner || 'Unassigned') + '</span>';
+                    const staleOwner = t.owner || 'Unassigned';
+                    if (staleOwner !== 'Me' && staleOwner !== 'Unassigned') {
+                        html += '<span class="stale-owner person-editable" data-person="' + esc(staleOwner) + '">' + esc(staleOwner) + '</span>';
+                    } else {
+                        html += '<span class="stale-owner">' + esc(staleOwner) + '</span>';
+                    }
                     html += '</div>';
                 }
                 if (stale.length > 10) {
@@ -675,5 +680,6 @@
     })();
     </script>
 <script src="/static/js/webhook-status.js"></script>
+<script src="/static/js/person-rename.js"></script>
 </body>
 </html>
