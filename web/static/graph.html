@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TARS Graph</title>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0a0a0a; --surface: #111113; --surface-raised: #18181b;
+            --border: #27272a; --border-subtle: #1e1e21;
+            --text: #fafafa; --text-secondary: #a1a1aa; --text-muted: #71717a;
+            --accent: #3b82f6; --green: #22c55e; --green-dim: rgba(34,197,94,0.12); --green-text: #4ade80;
+            --amber: #f59e0b; --amber-dim: rgba(245,158,11,0.10); --amber-text: #fbbf24;
+            --red: #ef4444; --red-dim: rgba(239,68,68,0.10); --red-text: #f87171;
+            --blue-dim: rgba(59,130,246,0.10); --purple: #a855f7; --purple-dim: rgba(168,85,247,0.10); --purple-text: #c084fc;
+            --node-person: #3b82f6; --node-topic: #a855f7; --node-page: #f59e0b;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; -webkit-font-smoothing: antialiased; overflow: hidden; height: 100vh; }
+        header { border-bottom: 1px solid var(--border-subtle); padding: 12px 24px; position: sticky; top: 0; background: var(--bg); z-index: 50; }
+        .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 1400px; margin: 0 auto; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+        .brand span { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+        .nav-links a:hover { color: var(--text-secondary); background: var(--surface); }
+        .nav-links a.active { color: var(--text); background: var(--surface-raised); }
+
+        /* Toolbar */
+        .toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 24px; border-bottom: 1px solid var(--border-subtle); background: var(--bg); overflow-x: auto; max-width: 100%; }
+        .toolbar::-webkit-scrollbar { height: 0; }
+        .chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 14px; font-size: 12px; cursor: pointer; border: 1px solid var(--border); color: var(--text-muted); background: transparent; transition: all 0.15s; white-space: nowrap; font-family: inherit; }
+        .chip:hover { border-color: var(--text-muted); color: var(--text-secondary); }
+        .chip.active { border-color: var(--accent); color: var(--accent); background: var(--blue-dim); }
+        .chip.person { border-color: var(--node-person); color: var(--node-person); }
+        .chip.person.active { background: rgba(59,130,246,0.15); }
+        .chip.topic { border-color: var(--node-topic); color: var(--node-topic); }
+        .chip.topic.active { background: var(--purple-dim); }
+        .chip-dot { width: 6px; height: 6px; border-radius: 50%; }
+        .chip-dot.person { background: var(--node-person); }
+        .chip-dot.topic { background: var(--node-topic); }
+        .chip-dot.page { background: var(--node-page); }
+        .search-box { margin-left: auto; padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12px; width: 180px; font-family: inherit; outline: none; transition: border-color 0.15s; }
+        .search-box:focus { border-color: var(--accent); }
+        .search-box::placeholder { color: var(--text-muted); }
+        .legend { display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--text-muted); margin-left: 8px; white-space: nowrap; }
+        .legend-item { display: flex; align-items: center; gap: 4px; }
+        .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+        /* Main layout */
+        .graph-wrap { display: flex; height: calc(100vh - 90px); }
+        canvas { flex: 1; display: block; cursor: grab; }
+        canvas.dragging { cursor: grabbing; }
+
+        /* Sidebar */
+        .sidebar { width: 0; overflow: hidden; border-left: 1px solid var(--border-subtle); background: var(--surface); transition: width 0.25s ease; flex-shrink: 0; }
+        .sidebar.open { width: 340px; }
+        .sidebar-inner { width: 340px; padding: 20px; overflow-y: auto; height: 100%; }
+        .sidebar-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .sidebar-title { font-size: 16px; font-weight: 600; }
+        .sidebar-type { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 4px; }
+        .sidebar-type.person { background: rgba(59,130,246,0.15); color: var(--node-person); }
+        .sidebar-type.topic { background: var(--purple-dim); color: var(--purple-text); }
+        .sidebar-type.page { background: var(--amber-dim); color: var(--amber-text); }
+        .sidebar-close { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+        .sidebar-close:hover { color: var(--text); background: var(--surface-raised); }
+        .sidebar-section { margin-bottom: 18px; }
+        .sidebar-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 8px; }
+        .sidebar-item { padding: 6px 0; font-size: 13px; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); display: flex; align-items: flex-start; gap: 8px; }
+        .sidebar-item:last-child { border-bottom: none; }
+        .sidebar-item a { color: var(--accent); text-decoration: none; }
+        .sidebar-item a:hover { text-decoration: underline; }
+        .sidebar-task { padding: 8px 10px; background: var(--surface-raised); border-radius: 6px; margin-bottom: 6px; font-size: 12px; }
+        .sidebar-task-desc { color: var(--text); margin-bottom: 4px; }
+        .sidebar-task-meta { color: var(--text-muted); font-size: 11px; display: flex; gap: 8px; }
+        .sidebar-badge { font-size: 10px; padding: 1px 6px; border-radius: 3px; }
+        .sidebar-badge.q1 { background: var(--red-dim); color: var(--red-text); }
+        .sidebar-badge.q2 { background: var(--blue-dim); color: var(--accent); }
+        .sidebar-badge.q3 { background: var(--amber-dim); color: var(--amber-text); }
+        .sidebar-badge.q4 { background: rgba(113,113,122,0.15); color: var(--text-muted); }
+        .sidebar-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin: 2px 2px; }
+        .sidebar-tag.person { background: rgba(59,130,246,0.12); color: var(--node-person); }
+        .sidebar-tag.topic { background: var(--purple-dim); color: var(--purple-text); }
+        .sidebar-tag.page { background: var(--amber-dim); color: var(--amber-text); }
+        .sidebar-empty { color: var(--text-muted); font-size: 12px; font-style: italic; padding: 4px 0; }
+        .sidebar-page-link { display: flex; align-items: center; gap: 6px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border-subtle); }
+        .sidebar-page-link:last-child { border-bottom: none; }
+        .sidebar-page-link a { color: var(--accent); text-decoration: none; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sidebar-page-link a:hover { text-decoration: underline; }
+
+        /* Empty state */
+        .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); gap: 12px; }
+        .empty-state h2 { font-size: 18px; font-weight: 600; color: var(--text-secondary); }
+        .empty-state p { font-size: 13px; text-align: center; max-width: 400px; }
+
+        /* Tooltip */
+        .tooltip { position: fixed; padding: 6px 10px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--text); pointer-events: none; z-index: 100; white-space: nowrap; display: none; }
+        .tooltip.visible { display: block; }
+        .tooltip-type { color: var(--text-muted); font-size: 10px; text-transform: uppercase; margin-left: 6px; }
+
+        @media (max-width: 768px) {
+            .sidebar.open { width: 280px; }
+            .sidebar-inner { width: 280px; }
+            .legend { display: none; }
+            .search-box { width: 120px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-row">
+            <div class="brand"><h1>TARS</h1><span>Graph</span></div>
+            <nav class="nav-links">
+                <a href="/">Voice</a>
+                <a href="/tasks">Tasks</a>
+                <a href="/briefing">Briefing</a>
+                <a href="/executive">Executive</a>
+                <a href="/graph" class="active">Graph</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="toolbar" id="toolbar">
+        <div class="legend">
+            <div class="legend-item"><div class="legend-dot" style="background:var(--node-person)"></div>People</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--node-topic)"></div>Topics</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--node-page)"></div>Pages</div>
+        </div>
+        <div id="chips"></div>
+        <input type="text" class="search-box" id="searchBox" placeholder="Search nodes...">
+    </div>
+
+    <div class="graph-wrap">
+        <canvas id="graphCanvas"></canvas>
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-inner" id="sidebarContent"></div>
+        </div>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+
+    <script>
+    (function() {
+        'use strict';
+
+        // --- State ---
+        let graphData = null;   // {nodes, edges, tasks}
+        let nodes = [];         // [{id, label, type, weight, x, y, vx, vy, radius, color, url}]
+        let edges = [];         // [{source, target, type, weight}]
+        let tasks = [];
+        let nodeMap = {};       // id -> node index
+        let adjacency = {};     // node index -> Set of neighbor indices
+        const canvas = document.getElementById('graphCanvas');
+        const ctx = canvas.getContext('2d');
+        const tooltip = document.getElementById('tooltip');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarContent = document.getElementById('sidebarContent');
+        const searchBox = document.getElementById('searchBox');
+        const chipsEl = document.getElementById('chips');
+
+        let hoveredNode = null;
+        let selectedNode = null;
+        let dragNode = null;
+        let simRunning = true;
+        let simFrame = 0;
+        let showPages = false;  // Only show pages when a node is selected
+
+        // Transform (pan + zoom)
+        let tx = 0, ty = 0, scale = 1;
+        let isPanning = false, panStartX = 0, panStartY = 0;
+
+        const NODE_COLORS = { person: '#3b82f6', topic: '#a855f7', page: '#f59e0b' };
+        const NODE_COLORS_DIM = { person: 'rgba(59,130,246,0.15)', topic: 'rgba(168,85,247,0.15)', page: 'rgba(245,158,11,0.15)' };
+
+        // --- Load data ---
+        async function loadGraph() {
+            try {
+                const resp = await fetch('/api/intel/graph');
+                if (!resp.ok) return;
+                graphData = await resp.json();
+                tasks = graphData.tasks || [];
+                initGraph(graphData);
+            } catch(e) {
+                console.error('Failed to load graph', e);
+            }
+        }
+
+        function initGraph(data) {
+            nodes = [];
+            edges = [];
+            nodeMap = {};
+            adjacency = {};
+
+            // Build nodes
+            for (const n of data.nodes) {
+                const idx = nodes.length;
+                const weight = n.weight || 1;
+                const radius = Math.min(28, Math.max(8, 8 + Math.sqrt(weight) * 3));
+                nodes.push({
+                    id: n.id,
+                    label: n.label,
+                    type: n.type,
+                    weight: weight,
+                    url: n.url || '',
+                    x: 0, y: 0,
+                    vx: 0, vy: 0,
+                    radius: radius,
+                    color: NODE_COLORS[n.type] || '#71717a',
+                    visible: n.type !== 'page',  // Hide pages by default
+                });
+                nodeMap[n.id] = idx;
+                adjacency[idx] = new Set();
+            }
+
+            // Position in circle
+            const cx = canvas.width / 2, cy = canvas.height / 2;
+            const r = Math.min(cx, cy) * 0.6;
+            const visibleNodes = nodes.filter(n => n.visible);
+            visibleNodes.forEach((n, i) => {
+                const angle = (2 * Math.PI * i) / visibleNodes.length;
+                n.x = cx + r * Math.cos(angle) + (Math.random() - 0.5) * 40;
+                n.y = cy + r * Math.sin(angle) + (Math.random() - 0.5) * 40;
+            });
+            // Position hidden page nodes near center
+            nodes.filter(n => !n.visible).forEach(n => {
+                n.x = cx + (Math.random() - 0.5) * 100;
+                n.y = cy + (Math.random() - 0.5) * 100;
+            });
+
+            // Build edges (only between existing nodes)
+            for (const e of data.edges) {
+                const si = nodeMap[e.source];
+                const ti = nodeMap[e.target];
+                if (si !== undefined && ti !== undefined) {
+                    edges.push({ source: si, target: ti, type: e.type, weight: e.weight || 1 });
+                    adjacency[si].add(ti);
+                    adjacency[ti].add(si);
+                }
+            }
+
+            // Reset view
+            tx = 0; ty = 0; scale = 1;
+            simFrame = 0;
+            simRunning = true;
+
+            buildChips();
+            requestAnimationFrame(simLoop);
+        }
+
+        // --- Filter chips ---
+        function buildChips() {
+            let html = '';
+            const people = nodes.filter(n => n.type === 'person').sort((a, b) => b.weight - a.weight);
+            for (const n of people) {
+                html += '<button class="chip person" data-id="' + esc(n.id) + '"><span class="chip-dot person"></span>' + esc(n.label) + '</button>';
+            }
+            const topics = nodes.filter(n => n.type === 'topic').sort((a, b) => b.weight - a.weight);
+            for (const n of topics) {
+                html += '<button class="chip topic" data-id="' + esc(n.id) + '"><span class="chip-dot topic"></span>' + esc(n.label) + '</button>';
+            }
+            chipsEl.innerHTML = html;
+
+            chipsEl.querySelectorAll('.chip').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const nid = btn.dataset.id;
+                    const idx = nodeMap[nid];
+                    if (idx !== undefined) selectNode(idx);
+                });
+            });
+        }
+
+        // --- Force simulation ---
+        function simLoop() {
+            if (!simRunning) return;
+            simStep();
+            render();
+            simFrame++;
+            if (simFrame > 300 && totalEnergy() < 0.5) {
+                simRunning = false;
+            }
+            requestAnimationFrame(simLoop);
+        }
+
+        function simStep() {
+            const N = nodes.length;
+            const repK = 600;
+            const springK = 0.008;
+            const springLen = 120;
+            const gravity = 0.005;
+            const damping = 0.88;
+            const cx = canvas.width / 2, cy = canvas.height / 2;
+
+            // Repulsion (only between visible nodes)
+            for (let i = 0; i < N; i++) {
+                if (!nodes[i].visible) continue;
+                for (let j = i + 1; j < N; j++) {
+                    if (!nodes[j].visible) continue;
+                    let dx = nodes[j].x - nodes[i].x;
+                    let dy = nodes[j].y - nodes[i].y;
+                    let d2 = dx * dx + dy * dy;
+                    if (d2 < 1) d2 = 1;
+                    const f = repK / d2;
+                    const d = Math.sqrt(d2);
+                    const fx = (dx / d) * f;
+                    const fy = (dy / d) * f;
+                    nodes[i].vx -= fx;
+                    nodes[i].vy -= fy;
+                    nodes[j].vx += fx;
+                    nodes[j].vy += fy;
+                }
+            }
+
+            // Spring (edges)
+            for (const e of edges) {
+                const a = nodes[e.source], b = nodes[e.target];
+                if (!a.visible || !b.visible) continue;
+                let dx = b.x - a.x;
+                let dy = b.y - a.y;
+                let d = Math.sqrt(dx * dx + dy * dy);
+                if (d < 1) d = 1;
+                const rest = e.type === 'works_on' ? springLen * 0.7 : springLen;
+                const f = springK * (d - rest);
+                const fx = (dx / d) * f;
+                const fy = (dy / d) * f;
+                a.vx += fx;
+                a.vy += fy;
+                b.vx -= fx;
+                b.vy -= fy;
+            }
+
+            // Center gravity + damping + update
+            for (let i = 0; i < N; i++) {
+                const n = nodes[i];
+                if (!n.visible) continue;
+                if (dragNode === i) { n.vx = 0; n.vy = 0; continue; }
+                n.vx += (cx - n.x) * gravity;
+                n.vy += (cy - n.y) * gravity;
+                n.vx *= damping;
+                n.vy *= damping;
+                n.x += n.vx;
+                n.y += n.vy;
+            }
+        }
+
+        function totalEnergy() {
+            let e = 0;
+            for (const n of nodes) {
+                if (!n.visible) continue;
+                e += n.vx * n.vx + n.vy * n.vy;
+            }
+            return e;
+        }
+
+        // --- Render ---
+        function render() {
+            const w = canvas.width, h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+            ctx.save();
+            ctx.translate(tx, ty);
+            ctx.scale(scale, scale);
+
+            const activeSet = getActiveSet();
+            const hasFilter = selectedNode !== null || searchBox.value.trim() !== '';
+
+            // Draw edges
+            for (const e of edges) {
+                const a = nodes[e.source], b = nodes[e.target];
+                if (!a.visible || !b.visible) continue;
+                const active = !hasFilter || (activeSet.has(e.source) && activeSet.has(e.target));
+                ctx.beginPath();
+                ctx.moveTo(a.x, a.y);
+                ctx.lineTo(b.x, b.y);
+                const alpha = active ? Math.min(0.5, 0.15 + e.weight * 0.05) : 0.04;
+                ctx.strokeStyle = active ? 'rgba(250,250,250,' + alpha + ')' : 'rgba(250,250,250,0.03)';
+                ctx.lineWidth = active ? Math.min(3, 0.8 + e.weight * 0.4) : 0.5;
+                if (e.type === 'covers') {
+                    ctx.setLineDash([4, 4]);
+                } else {
+                    ctx.setLineDash([]);
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Draw nodes
+            for (let i = 0; i < nodes.length; i++) {
+                const n = nodes[i];
+                if (!n.visible) continue;
+                const active = !hasFilter || activeSet.has(i);
+                const isHovered = hoveredNode === i;
+                const isSelected = selectedNode === i;
+
+                // Glow for hovered/selected
+                if ((isHovered || isSelected) && active) {
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, n.radius + 6, 0, Math.PI * 2);
+                    ctx.fillStyle = n.color.replace(')', ',0.2)').replace('rgb', 'rgba');
+                    ctx.fill();
+                }
+
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+                ctx.fillStyle = active ? n.color : NODE_COLORS_DIM[n.type] || 'rgba(113,113,122,0.15)';
+                ctx.fill();
+
+                if (isSelected) {
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                // Label
+                if (active || isHovered) {
+                    const fontSize = Math.max(10, Math.min(13, 10 + n.radius * 0.15));
+                    ctx.font = '500 ' + fontSize + 'px -apple-system, BlinkMacSystemFont, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    // Dark outline for readability
+                    ctx.strokeStyle = 'rgba(10,10,10,0.8)';
+                    ctx.lineWidth = 3;
+                    ctx.strokeText(n.label, n.x, n.y + n.radius + 4);
+                    ctx.fillStyle = active ? 'rgba(250,250,250,0.9)' : 'rgba(250,250,250,0.3)';
+                    ctx.fillText(n.label, n.x, n.y + n.radius + 4);
+                }
+            }
+
+            ctx.restore();
+        }
+
+        function getActiveSet() {
+            const set = new Set();
+            const query = searchBox.value.trim().toLowerCase();
+
+            if (selectedNode !== null) {
+                set.add(selectedNode);
+                for (const neighbor of adjacency[selectedNode] || []) {
+                    if (nodes[neighbor].visible) set.add(neighbor);
+                }
+            }
+
+            if (query) {
+                for (let i = 0; i < nodes.length; i++) {
+                    if (nodes[i].visible && nodes[i].label.toLowerCase().includes(query)) {
+                        set.add(i);
+                        for (const neighbor of adjacency[i] || []) {
+                            if (nodes[neighbor].visible) set.add(neighbor);
+                        }
+                    }
+                }
+            }
+
+            return set;
+        }
+
+        // --- Interactions ---
+        function screenToWorld(sx, sy) {
+            return { x: (sx - tx) / scale, y: (sy - ty) / scale };
+        }
+
+        function hitTest(sx, sy) {
+            const { x, y } = screenToWorld(sx, sy);
+            let closest = null, minD = Infinity;
+            for (let i = 0; i < nodes.length; i++) {
+                if (!nodes[i].visible) continue;
+                const dx = nodes[i].x - x, dy = nodes[i].y - y;
+                const d = Math.sqrt(dx * dx + dy * dy);
+                if (d < nodes[i].radius + 4 && d < minD) {
+                    minD = d;
+                    closest = i;
+                }
+            }
+            return closest;
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+
+            if (isPanning) {
+                tx += e.clientX - panStartX;
+                ty += e.clientY - panStartY;
+                panStartX = e.clientX;
+                panStartY = e.clientY;
+                render();
+                return;
+            }
+
+            if (dragNode !== null) {
+                const w = screenToWorld(mx, my);
+                nodes[dragNode].x = w.x;
+                nodes[dragNode].y = w.y;
+                if (!simRunning) render();
+                return;
+            }
+
+            const hit = hitTest(mx, my);
+            if (hit !== hoveredNode) {
+                hoveredNode = hit;
+                canvas.style.cursor = hit !== null ? 'pointer' : 'grab';
+                if (hit !== null) {
+                    const n = nodes[hit];
+                    tooltip.innerHTML = esc(n.label) + '<span class="tooltip-type">' + n.type + '</span>';
+                    tooltip.style.left = (e.clientX + 14) + 'px';
+                    tooltip.style.top = (e.clientY - 10) + 'px';
+                    tooltip.classList.add('visible');
+                } else {
+                    tooltip.classList.remove('visible');
+                }
+                if (!simRunning) render();
+            } else if (hit !== null) {
+                tooltip.style.left = (e.clientX + 14) + 'px';
+                tooltip.style.top = (e.clientY - 10) + 'px';
+            }
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+            const hit = hitTest(mx, my);
+
+            if (hit !== null) {
+                dragNode = hit;
+                canvas.classList.add('dragging');
+            } else {
+                isPanning = true;
+                panStartX = e.clientX;
+                panStartY = e.clientY;
+                canvas.classList.add('dragging');
+            }
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (dragNode !== null) {
+                // If barely moved, treat as click
+                const rect = canvas.getBoundingClientRect();
+                const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+                const hit = hitTest(mx, my);
+                if (hit === dragNode) {
+                    selectNode(dragNode);
+                }
+                dragNode = null;
+            }
+            isPanning = false;
+            canvas.classList.remove('dragging');
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+            const factor = e.deltaY < 0 ? 1.1 : 0.9;
+            const newScale = Math.min(5, Math.max(0.2, scale * factor));
+            // Zoom toward cursor
+            tx = mx - (mx - tx) * (newScale / scale);
+            ty = my - (my - ty) * (newScale / scale);
+            scale = newScale;
+            if (!simRunning) render();
+        }, { passive: false });
+
+        // Double-click to reset view
+        canvas.addEventListener('dblclick', () => {
+            tx = 0; ty = 0; scale = 1;
+            selectedNode = null;
+            closeSidebar();
+            resetPageVisibility();
+            updateChipState();
+            if (!simRunning) render();
+        });
+
+        // Search
+        searchBox.addEventListener('input', () => {
+            if (!simRunning) render();
+        });
+
+        // --- Selection ---
+        function selectNode(idx) {
+            if (selectedNode === idx) {
+                // Deselect
+                selectedNode = null;
+                closeSidebar();
+                resetPageVisibility();
+            } else {
+                selectedNode = idx;
+                // Show page nodes connected to the selection
+                showConnectedPages(idx);
+                openSidebar(idx);
+                // Restart sim briefly to position new page nodes
+                if (!simRunning) {
+                    simFrame = 250;
+                    simRunning = true;
+                    requestAnimationFrame(simLoop);
+                }
+            }
+            updateChipState();
+            if (!simRunning) render();
+        }
+
+        function showConnectedPages(idx) {
+            // Hide all pages first
+            for (const n of nodes) {
+                if (n.type === 'page') n.visible = false;
+            }
+            // Show pages connected to selected node
+            for (const neighbor of adjacency[idx] || []) {
+                if (nodes[neighbor].type === 'page') {
+                    nodes[neighbor].visible = true;
+                    // Position near the selected node
+                    nodes[neighbor].x = nodes[idx].x + (Math.random() - 0.5) * 80;
+                    nodes[neighbor].y = nodes[idx].y + (Math.random() - 0.5) * 80;
+                }
+            }
+        }
+
+        function resetPageVisibility() {
+            for (const n of nodes) {
+                if (n.type === 'page') n.visible = false;
+            }
+        }
+
+        function updateChipState() {
+            chipsEl.querySelectorAll('.chip').forEach(btn => {
+                const nid = btn.dataset.id;
+                const idx = nodeMap[nid];
+                btn.classList.toggle('active', idx === selectedNode);
+            });
+        }
+
+        // --- Sidebar ---
+        function openSidebar(idx) {
+            const node = nodes[idx];
+            sidebar.classList.add('open');
+
+            let html = '<div class="sidebar-head">';
+            html += '<div><div class="sidebar-title">' + esc(node.label) + '</div>';
+            html += '<span class="sidebar-type ' + node.type + '">' + node.type + '</span></div>';
+            html += '<button class="sidebar-close" onclick="closeSidebarGlobal()">&times;</button></div>';
+
+            if (node.type === 'person') {
+                html += renderPersonSidebar(idx, node);
+            } else if (node.type === 'topic') {
+                html += renderTopicSidebar(idx, node);
+            } else if (node.type === 'page') {
+                html += renderPageSidebar(idx, node);
+            }
+
+            sidebarContent.innerHTML = html;
+        }
+
+        function renderPersonSidebar(idx, node) {
+            let html = '';
+            const neighbors = Array.from(adjacency[idx] || []);
+            const connTopics = neighbors.filter(i => nodes[i].type === 'topic').map(i => nodes[i]);
+            const connPages = neighbors.filter(i => nodes[i].type === 'page').map(i => nodes[i]);
+            const personTasks = tasks.filter(t => t.owner && t.owner.toLowerCase() === node.label.toLowerCase());
+
+            // Topics
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">Topics (' + connTopics.length + ')</div>';
+            if (connTopics.length) {
+                for (const t of connTopics.sort((a, b) => b.weight - a.weight)) {
+                    html += '<span class="sidebar-tag topic">' + esc(t.label) + '</span>';
+                }
+            } else {
+                html += '<div class="sidebar-empty">No connected topics</div>';
+            }
+            html += '</div>';
+
+            // Tasks
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">Open Tasks (' + personTasks.length + ')</div>';
+            if (personTasks.length) {
+                for (const t of personTasks.sort((a, b) => (a.quadrant || 4) - (b.quadrant || 4))) {
+                    html += renderTaskCard(t);
+                }
+            } else {
+                html += '<div class="sidebar-empty">No open tasks</div>';
+            }
+            html += '</div>';
+
+            // Pages
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">Source Pages (' + connPages.length + ')</div>';
+            if (connPages.length) {
+                for (const p of connPages) {
+                    html += renderPageLink(p);
+                }
+            } else {
+                html += '<div class="sidebar-empty">No connected pages</div>';
+            }
+            html += '</div>';
+
+            return html;
+        }
+
+        function renderTopicSidebar(idx, node) {
+            let html = '';
+            const neighbors = Array.from(adjacency[idx] || []);
+            const connPeople = neighbors.filter(i => nodes[i].type === 'person').map(i => nodes[i]);
+            const connPages = neighbors.filter(i => nodes[i].type === 'page').map(i => nodes[i]);
+            const topicTasks = tasks.filter(t => t.topics && t.topics.includes(node.label));
+
+            // People
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">People (' + connPeople.length + ')</div>';
+            if (connPeople.length) {
+                for (const p of connPeople.sort((a, b) => b.weight - a.weight)) {
+                    html += '<span class="sidebar-tag person">' + esc(p.label) + '</span>';
+                }
+            } else {
+                html += '<div class="sidebar-empty">No connected people</div>';
+            }
+            html += '</div>';
+
+            // Tasks
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">Open Tasks (' + topicTasks.length + ')</div>';
+            if (topicTasks.length) {
+                for (const t of topicTasks.sort((a, b) => (a.quadrant || 4) - (b.quadrant || 4))) {
+                    html += renderTaskCard(t);
+                }
+            } else {
+                html += '<div class="sidebar-empty">No open tasks for this topic</div>';
+            }
+            html += '</div>';
+
+            // Pages
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">Source Pages (' + connPages.length + ')</div>';
+            if (connPages.length) {
+                for (const p of connPages) {
+                    html += renderPageLink(p);
+                }
+            } else {
+                html += '<div class="sidebar-empty">No connected pages</div>';
+            }
+            html += '</div>';
+
+            return html;
+        }
+
+        function renderPageSidebar(idx, node) {
+            let html = '';
+            const neighbors = Array.from(adjacency[idx] || []);
+            const connPeople = neighbors.filter(i => nodes[i].type === 'person').map(i => nodes[i]);
+            const connTopics = neighbors.filter(i => nodes[i].type === 'topic').map(i => nodes[i]);
+
+            // URL link
+            if (node.url) {
+                html += '<div class="sidebar-section">';
+                html += '<a href="' + esc(node.url) + '" target="_blank" style="color:var(--accent);font-size:13px;">Open in Notion &rarr;</a>';
+                html += '</div>';
+            }
+
+            // People
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">People (' + connPeople.length + ')</div>';
+            if (connPeople.length) {
+                for (const p of connPeople) {
+                    html += '<span class="sidebar-tag person">' + esc(p.label) + '</span>';
+                }
+            } else {
+                html += '<div class="sidebar-empty">No people mentioned</div>';
+            }
+            html += '</div>';
+
+            // Topics
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">Topics (' + connTopics.length + ')</div>';
+            if (connTopics.length) {
+                for (const t of connTopics) {
+                    html += '<span class="sidebar-tag topic">' + esc(t.label) + '</span>';
+                }
+            } else {
+                html += '<div class="sidebar-empty">No topics detected</div>';
+            }
+            html += '</div>';
+
+            // Tasks from this page
+            const pageId = node.id.replace('page:', '');
+            const pageTasks = tasks.filter(t => t.source_page_id === pageId);
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">Tasks from this page (' + pageTasks.length + ')</div>';
+            if (pageTasks.length) {
+                for (const t of pageTasks) {
+                    html += renderTaskCard(t);
+                }
+            } else {
+                html += '<div class="sidebar-empty">No tasks extracted</div>';
+            }
+            html += '</div>';
+
+            return html;
+        }
+
+        function renderTaskCard(t) {
+            const qClass = 'q' + (t.quadrant || 4);
+            let html = '<div class="sidebar-task">';
+            html += '<div class="sidebar-task-desc">' + esc(t.description) + '</div>';
+            html += '<div class="sidebar-task-meta">';
+            html += '<span class="sidebar-badge ' + qClass + '">' + esc(t.quadrant_label || 'Defer') + '</span>';
+            if (t.follow_up_date) {
+                html += '<span>' + t.follow_up_date + '</span>';
+            }
+            if (t.owner) {
+                html += '<span>' + esc(t.owner) + '</span>';
+            }
+            html += '</div></div>';
+            return html;
+        }
+
+        function renderPageLink(p) {
+            let html = '<div class="sidebar-page-link">';
+            if (p.url) {
+                html += '<a href="' + esc(p.url) + '" target="_blank">' + esc(p.label) + '</a>';
+            } else {
+                html += '<span style="color:var(--text-secondary)">' + esc(p.label) + '</span>';
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function closeSidebar() {
+            sidebar.classList.remove('open');
+        }
+        // Expose for onclick
+        window.closeSidebarGlobal = closeSidebar;
+
+        // --- Resize ---
+        function resize() {
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const sidebarW = sidebar.classList.contains('open') ? 340 : 0;
+            canvas.width = (rect.width - sidebarW) * dpr;
+            canvas.height = rect.height * dpr;
+            canvas.style.width = (rect.width - sidebarW) + 'px';
+            canvas.style.height = rect.height + 'px';
+            ctx.scale(dpr, dpr);
+            if (!simRunning) render();
+        }
+
+        // Observe sidebar transitions
+        const resizeObs = new ResizeObserver(() => resize());
+        resizeObs.observe(canvas.parentElement);
+        window.addEventListener('resize', resize);
+
+        // --- Escape to deselect ---
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                selectedNode = null;
+                closeSidebar();
+                resetPageVisibility();
+                updateChipState();
+                searchBox.value = '';
+                if (!simRunning) render();
+            }
+        });
+
+        // --- Utilities ---
+        function esc(s) {
+            if (!s) return '';
+            const el = document.createElement('span');
+            el.textContent = s;
+            return el.innerHTML;
+        }
+
+        // --- Init ---
+        resize();
+        loadGraph();
+    })();
+    </script>
+</body>
+</html>

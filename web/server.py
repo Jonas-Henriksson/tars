@@ -418,6 +418,25 @@ async def executive_page():
     return FileResponse(_STATIC_DIR / "executive.html")
 
 
+@app.get("/graph")
+async def graph_page():
+    """Serve the graph visualization page."""
+    return FileResponse(_STATIC_DIR / "graph.html")
+
+
+@app.get("/api/intel/graph")
+async def get_intel_graph():
+    """Build graph nodes and edges for relationship visualization."""
+    from integrations.intel import build_graph_data
+
+    try:
+        data = build_graph_data()
+        return JSONResponse(data)
+    except Exception as exc:
+        logger.exception("Failed to build graph data")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 @app.get("/api/tasks")
 async def get_tasks(
     owner: str = "",

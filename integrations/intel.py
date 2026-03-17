@@ -46,6 +46,7 @@ def _empty_intel() -> dict:
         "topics": {},
         "people": {},
         "smart_tasks": [],
+        "page_index": {},
         "executive_summary": {},
         "scan_history": [],
     }
@@ -535,6 +536,7 @@ async def scan_notion(
 
     topic_counter: Counter = Counter()
     people_counter: Counter = Counter()
+    page_index: dict[str, dict] = {}
     new_tasks: list[dict] = []
     existing_task_descs = {t["description"].lower() for t in intel.get("smart_tasks", [])}
     pages_with_content = 0
@@ -560,6 +562,15 @@ async def scan_notion(
         people = _extract_people(content, title)
         for p in people:
             people_counter[p] += 1
+
+        # Store per-page metadata for graph visualization
+        page_index[page_id] = {
+            "title": title,
+            "url": page_url,
+            "topics": topics,
+            "people": people,
+            "last_edited": page_date,
+        }
 
         # Detect delegations -> smart tasks
         delegations = _detect_delegations(content)
@@ -693,6 +704,9 @@ async def scan_notion(
     # Merge into intel
     intel["topics"] = dict(topic_counter.most_common())
     intel["people"] = dict(people_counter.most_common())
+    existing_page_index = intel.get("page_index", {})
+    existing_page_index.update(page_index)
+    intel["page_index"] = existing_page_index
     intel["smart_tasks"] = intel.get("smart_tasks", []) + new_tasks
     intel["pages_scanned"] = len(pages)
     intel["last_scan_at"] = now.isoformat()
@@ -924,6 +938,123 @@ def get_intel() -> dict:
         intel["executive_summary"] = _build_executive_summary(intel)
         _save_intel(intel)
     return intel
+
+
+def build_graph_data() -> dict:
+    """Build graph nodes and edges for the relationship visualization.
+
+    Derives relationships from three sources (in priority order):
+    1. page_index — per-page people + topic associations from scan
+    2. smart_tasks — owner/topic/source_page links
+    3. global people/topics dicts — fallback for weight info
+
+    Returns {"nodes": [...], "edges": [...], "tasks": [...]}.
+    """
+    intel = _load_intel()
+    page_index = intel.get("page_index", {})
+    tasks = [t for t in intel.get("smart_tasks", []) if t.get("status") != "done"]
+    global_people = intel.get("people", {})
+    global_topics = intel.get("topics", {})
+
+    nodes: dict[str, dict] = {}
+    edge_weights: dict[tuple[str, str, str], int] = {}  # (src, tgt, type) -> weight
+
+    def _add_node(nid: str, label: str, ntype: str, weight: int = 1, **extra: str) -> None:
+        if nid in nodes:
+            nodes[nid]["weight"] += weight
+        else:
+            nodes[nid] = {"id": nid, "label": label, "type": ntype, "weight": weight, **extra}
+
+    def _add_edge(src: str, tgt: str, etype: str, weight: int = 1) -> None:
+        key = (src, tgt, etype) if src < tgt else (tgt, src, etype)
+        edge_weights[key] = edge_weights.get(key, 0) + weight
+
+    # --- Nodes from global dicts ---
+    for person, count in global_people.items():
+        _add_node(f"person:{person}", person, "person", count)
+    for topic, count in global_topics.items():
+        if topic == "general":
+            continue
+        _add_node(f"topic:{topic}", topic, "topic", count)
+
+    # --- Edges + nodes from page_index ---
+    for pid, page in page_index.items():
+        title = page.get("title", "Untitled")
+        # Shorten long titles (e.g., "Parent > Child" -> keep as-is but truncate)
+        short = title[:50] + "..." if len(title) > 50 else title
+        page_nid = f"page:{pid}"
+        _add_node(page_nid, short, "page", 1, url=page.get("url", ""))
+
+        for person in page.get("people", []):
+            p_nid = f"person:{person}"
+            _add_node(p_nid, person, "person", 0)  # weight added by global dict
+            _add_edge(page_nid, p_nid, "mention")
+
+        for topic in page.get("topics", []):
+            if topic == "general":
+                continue
+            t_nid = f"topic:{topic}"
+            _add_node(t_nid, topic, "topic", 0)
+            _add_edge(page_nid, t_nid, "covers")
+
+        # Derive person<->topic edges from co-occurrence on this page
+        for person in page.get("people", []):
+            for topic in page.get("topics", []):
+                if topic == "general":
+                    continue
+                _add_edge(f"person:{person}", f"topic:{topic}", "works_on")
+
+    # --- Edges from smart_tasks (fallback + enrichment) ---
+    for task in tasks:
+        owner = task.get("owner", "")
+        if not owner or owner == "Me":
+            continue
+        o_nid = f"person:{owner}"
+        _add_node(o_nid, owner, "person", 0)
+
+        for topic in task.get("topics", []):
+            if topic == "general":
+                continue
+            t_nid = f"topic:{topic}"
+            _add_node(t_nid, topic, "topic", 0)
+            _add_edge(o_nid, t_nid, "works_on")
+
+        # Task -> source page link
+        sp_id = task.get("source_page_id")
+        if sp_id:
+            sp_nid = f"page:{sp_id}"
+            if sp_nid not in nodes:
+                _add_node(sp_nid, task.get("source_title", "Untitled")[:50], "page", 1,
+                          url=task.get("source_url", ""))
+            _add_edge(o_nid, sp_nid, "mention")
+
+    # --- Build response ---
+    edge_list = [
+        {"source": s, "target": t, "type": tp, "weight": w}
+        for (s, t, tp), w in edge_weights.items()
+    ]
+
+    # Include open tasks for sidebar display
+    task_summaries = [
+        {
+            "id": t.get("id"),
+            "description": t.get("description", ""),
+            "owner": t.get("owner", ""),
+            "topics": t.get("topics", []),
+            "quadrant": t.get("priority", {}).get("quadrant"),
+            "quadrant_label": t.get("priority", {}).get("quadrant_label", ""),
+            "follow_up_date": t.get("follow_up_date"),
+            "source_title": t.get("source_title", ""),
+            "source_page_id": t.get("source_page_id", ""),
+        }
+        for t in tasks
+    ]
+
+    return {
+        "nodes": list(nodes.values()),
+        "edges": edge_list,
+        "tasks": task_summaries,
+    }
 
 
 def get_smart_tasks(owner: str = "", topic: str = "", quadrant: int = 0,
