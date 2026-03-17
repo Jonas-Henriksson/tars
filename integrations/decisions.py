@@ -82,8 +82,8 @@ def log_decision(
         "message": f"{status_label}: {title}",
         "decision": decision,
         "voice_summary": f"{status_label}. '{title}'. "
-                         f"{'Rationale: ' + rationale + '. ' if rationale else ''}"
-                         f"{'Stakeholders: ' + ', '.join(stakeholders) + '.' if stakeholders else ''}",
+                         f"{'Because ' + rationale + '. ' if rationale else ''}"
+                         f"{'Involves ' + ', '.join(stakeholders) + '.' if stakeholders else ''}",
     }
 
 
@@ -182,9 +182,23 @@ def update_decision(
                 d["title"] = title
             d["updated_at"] = datetime.now(timezone.utc).isoformat()
             _save_decisions(decisions)
+
+            status_label = {
+                "decided": "decided",
+                "pending": "pending",
+                "revisit": "flagged for revisit",
+            }.get(d.get("status", ""), d.get("status", ""))
+
+            parts = [f"Updated decision: {d.get('title', '')}"]
+            if status:
+                parts.append(f"now {status_label}")
+            if outcome_notes:
+                parts.append("outcome notes added")
+
             return {
                 "message": "Decision updated.",
                 "decision": d,
+                "voice_summary": ". ".join(parts) + ".",
             }
 
     return {"error": f"Decision not found: {decision_id}"}

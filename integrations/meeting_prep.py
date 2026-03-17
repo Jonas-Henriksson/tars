@@ -68,16 +68,21 @@ async def get_meeting_prep(event_id: str = "", minutes_ahead: int = 30) -> dict[
         except (ValueError, TypeError):
             pass
 
-    voice_parts = [f"Prep for '{subject}'"]
+    # Build a natural, flowing voice summary
+    voice = f"Prep for {subject}"
     if time_until:
-        voice_parts.append(f"starting {time_until}")
+        voice += f", starting {time_until}"
     if attendees:
         names = [_extract_name(a) for a in attendees[:5]]
-        voice_parts.append(f"with {', '.join(names)}")
-    if talking_points:
-        voice_parts.append(f"I have {len(talking_points)} talking points ready")
-    if open_items:
-        voice_parts.append(f"and {len(open_items)} open items to discuss")
+        voice += f", with {', '.join(names)}"
+    voice += "."
+    if talking_points or open_items:
+        extras = []
+        if talking_points:
+            extras.append(f"{len(talking_points)} talking points")
+        if open_items:
+            extras.append(f"{len(open_items)} open items to discuss")
+        voice += f" I have {' and '.join(extras)} ready."
 
     return {
         "available": True,
@@ -88,7 +93,7 @@ async def get_meeting_prep(event_id: str = "", minutes_ahead: int = 30) -> dict[
         "open_items": open_items,
         "pending_decisions": pending_decisions,
         "talking_points": talking_points,
-        "voice_summary": ". ".join(voice_parts) + ".",
+        "voice_summary": voice,
     }
 
 
@@ -153,11 +158,17 @@ async def _find_next_event(minutes_ahead: int) -> dict | None:
 def _extract_name(attendee: str | dict) -> str:
     """Extract a display name from an attendee (email or dict)."""
     if isinstance(attendee, dict):
-        return attendee.get("name", attendee.get("email", "Unknown"))
-    # If it's an email, take the part before @
-    if "@" in str(attendee):
-        return str(attendee).split("@")[0].replace(".", " ").title()
-    return str(attendee)
+        name = attendee.get("name", "")
+        if name:
+            return name
+        # Fall through to email-based extraction
+        raw = attendee.get("email", "Unknown")
+    else:
+        raw = str(attendee)
+    # If it's an email, take the part before @ and humanize
+    if "@" in raw:
+        return raw.split("@")[0].replace(".", " ").title()
+    return raw
 
 
 def _extract_email(attendee: str | dict) -> str:

@@ -219,7 +219,7 @@ def update_initiative(
             return {
                 "message": "Initiative updated.",
                 "initiative": i,
-                "voice_summary": f"Updated '{i.get('title', '')}'. Status: {status_label}.",
+                "voice_summary": f"Updated {i.get('title', '')}. It's now {status_label}.",
             }
 
     return {"error": f"Initiative not found: {initiative_id}"}
@@ -248,8 +248,10 @@ def complete_milestone(initiative_id: str, milestone_index: int) -> dict[str, An
                     "message": f"Milestone completed: {milestones[milestone_index]['text']}",
                     "progress": f"{done}/{len(milestones)}",
                     "initiative": i,
-                    "voice_summary": f"Milestone done. Progress: {done} of {len(milestones)} complete.",
+                    "voice_summary": f"Milestone done, {done} of {len(milestones)} complete.",
                 }
+            if not milestones:
+                return {"error": "This initiative has no milestones."}
             return {"error": f"Milestone index {milestone_index} out of range (0-{len(milestones)-1})"}
 
     return {"error": f"Initiative not found: {initiative_id}"}
@@ -302,8 +304,8 @@ def add_key_result(
     return {
         "message": f"Key result added to '{initiative.get('title', '')}'",
         "key_result": kr,
-        "voice_summary": f"Added key result: '{description}'"
-                         f"{'. Target: ' + target if target else ''}.",
+        "voice_summary": f"Added key result, {description}"
+                         f"{', targeting ' + target if target else ''}.",
     }
 
 
@@ -336,9 +338,9 @@ def update_key_result(
             return {
                 "message": "Key result updated.",
                 "key_result": kr,
-                "voice_summary": f"Updated key result: {kr.get('description', '')}. "
-                                 f"{'Current: ' + current + '. ' if current else ''}"
-                                 f"{'Status: ' + status + '.' if status else ''}",
+                "voice_summary": f"Updated key result, {kr.get('description', '')}. "
+                                 f"{'Currently at ' + current + '. ' if current else ''}"
+                                 f"{status.replace('_', ' ') + '.' if status else ''}",
             }
 
     return {"error": f"Key result not found: {kr_id}"}

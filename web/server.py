@@ -71,6 +71,12 @@ calendar conflicts, relationship health issues, initiative risks, and stale \
 decisions. Use when the user asks "anything I should worry about", "what needs \
 my attention", or at the start of the day.
 
+IMPORTANT — When the user references a decision or initiative by name \
+(e.g. "update the EMEA initiative" or "change the migration decision"), \
+first call get_decisions or get_initiatives to find the matching ID, \
+then use update_decision, update_initiative, complete_milestone, etc. \
+with the resolved ID. Never ask the user for an ID directly.
+
 When the user asks about tasks, priorities, delegation, what needs \
 attention, who owns what, or any question about their work — use the \
 intelligence tools. Start with get_intel for a broad overview or \
