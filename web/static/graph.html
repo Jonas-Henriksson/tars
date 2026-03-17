@@ -28,8 +28,10 @@
         .nav-links a.active { color: var(--text); background: var(--surface-raised); }
 
         /* Toolbar */
-        .toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 24px; border-bottom: 1px solid var(--border-subtle); background: var(--bg); overflow-x: auto; max-width: 100%; }
-        .toolbar::-webkit-scrollbar { height: 0; }
+        .toolbar { display: flex; align-items: flex-start; gap: 8px; padding: 10px 24px; border-bottom: 1px solid var(--border-subtle); background: var(--bg); max-width: 100%; flex-wrap: wrap; }
+        .chip-groups { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; align-items: flex-start; }
+        .chip-group { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+        .chip-group + .chip-group { padding-left: 8px; border-left: 1px solid var(--border-subtle); }
         .chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 14px; font-size: 12px; cursor: pointer; border: 1px solid var(--border); color: var(--text-muted); background: transparent; transition: all 0.15s; white-space: nowrap; font-family: inherit; }
         .chip:hover { border-color: var(--text-muted); color: var(--text-secondary); }
         .chip.active { border-color: var(--accent); color: var(--accent); background: var(--blue-dim); }
@@ -37,16 +39,15 @@
         .chip.person.active { background: rgba(59,130,246,0.15); }
         .chip.topic { border-color: var(--node-topic); color: var(--node-topic); }
         .chip.topic.active { background: var(--purple-dim); }
+        .chip.expand-toggle { border-color: var(--border); color: var(--text-muted); font-size: 11px; padding: 4px 10px; }
+        .chip.expand-toggle:hover { border-color: var(--text-muted); color: var(--text-secondary); }
         .chip-dot { width: 6px; height: 6px; border-radius: 50%; }
         .chip-dot.person { background: var(--node-person); }
         .chip-dot.topic { background: var(--node-topic); }
         .chip-dot.page { background: var(--node-page); }
-        .search-box { margin-left: auto; padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12px; width: 180px; font-family: inherit; outline: none; transition: border-color 0.15s; }
+        .search-box { padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12px; width: 180px; font-family: inherit; outline: none; transition: border-color 0.15s; flex-shrink: 0; }
         .search-box:focus { border-color: var(--accent); }
         .search-box::placeholder { color: var(--text-muted); }
-        .legend { display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--text-muted); margin-left: 8px; white-space: nowrap; }
-        .legend-item { display: flex; align-items: center; gap: 4px; }
-        .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
 
         /* Main layout */
         .graph-wrap { display: flex; height: calc(100vh - 90px); }
@@ -102,7 +103,6 @@
         @media (max-width: 768px) {
             .sidebar.open { width: 280px; }
             .sidebar-inner { width: 280px; }
-            .legend { display: none; }
             .search-box { width: 120px; }
         }
     </style>
@@ -122,12 +122,7 @@
     </header>
 
     <div class="toolbar" id="toolbar">
-        <div class="legend">
-            <div class="legend-item"><div class="legend-dot" style="background:var(--node-person)"></div>People</div>
-            <div class="legend-item"><div class="legend-dot" style="background:var(--node-topic)"></div>Topics</div>
-            <div class="legend-item"><div class="legend-dot" style="background:var(--node-page)"></div>Pages</div>
-        </div>
-        <div id="chips"></div>
+        <div class="chip-groups" id="chips"></div>
         <input type="text" class="search-box" id="searchBox" placeholder="Search nodes...">
     </div>
 
@@ -250,23 +245,64 @@
         }
 
         // --- Filter chips ---
+        const CHIP_LIMIT = 10;
+        let peopleExpanded = false;
+        let topicsExpanded = false;
+
         function buildChips() {
-            let html = '';
             const people = nodes.filter(n => n.type === 'person').sort((a, b) => b.weight - a.weight);
-            for (const n of people) {
+            const topics = nodes.filter(n => n.type === 'topic').sort((a, b) => b.weight - a.weight);
+
+            let html = '';
+
+            // People group
+            html += '<div class="chip-group" id="peopleGroup">';
+            const showPeople = peopleExpanded ? people : people.slice(0, CHIP_LIMIT);
+            for (const n of showPeople) {
                 html += '<button class="chip person" data-id="' + esc(n.id) + '"><span class="chip-dot person"></span>' + esc(n.label) + '</button>';
             }
-            const topics = nodes.filter(n => n.type === 'topic').sort((a, b) => b.weight - a.weight);
-            for (const n of topics) {
+            if (people.length > CHIP_LIMIT) {
+                if (peopleExpanded) {
+                    html += '<button class="chip expand-toggle" data-toggle="people">Show less</button>';
+                } else {
+                    html += '<button class="chip expand-toggle" data-toggle="people">+' + (people.length - CHIP_LIMIT) + ' more</button>';
+                }
+            }
+            html += '</div>';
+
+            // Topics group
+            html += '<div class="chip-group" id="topicsGroup">';
+            const showTopics = topicsExpanded ? topics : topics.slice(0, CHIP_LIMIT);
+            for (const n of showTopics) {
                 html += '<button class="chip topic" data-id="' + esc(n.id) + '"><span class="chip-dot topic"></span>' + esc(n.label) + '</button>';
             }
+            if (topics.length > CHIP_LIMIT) {
+                if (topicsExpanded) {
+                    html += '<button class="chip expand-toggle" data-toggle="topics">Show less</button>';
+                } else {
+                    html += '<button class="chip expand-toggle" data-toggle="topics">+' + (topics.length - CHIP_LIMIT) + ' more</button>';
+                }
+            }
+            html += '</div>';
+
             chipsEl.innerHTML = html;
 
-            chipsEl.querySelectorAll('.chip').forEach(btn => {
+            // Node chip clicks
+            chipsEl.querySelectorAll('.chip[data-id]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const nid = btn.dataset.id;
                     const idx = nodeMap[nid];
                     if (idx !== undefined) selectNode(idx);
+                });
+            });
+
+            // Expand toggle clicks
+            chipsEl.querySelectorAll('.chip[data-toggle]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (btn.dataset.toggle === 'people') peopleExpanded = !peopleExpanded;
+                    if (btn.dataset.toggle === 'topics') topicsExpanded = !topicsExpanded;
+                    buildChips();
+                    updateChipState();
                 });
             });
         }
