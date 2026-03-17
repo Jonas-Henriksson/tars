@@ -23,11 +23,12 @@ import argparse
 import json
 import logging
 import os
+import platform
 import shutil
 import signal
 import subprocess
 import sys
-import time
+import urllib.request
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -35,18 +36,30 @@ log = logging.getLogger(__name__)
 
 _ROOT = Path(__file__).parent.parent
 _STATUS_FILE = _ROOT / "tunnel_status.json"
-_CLOUDFLARED_URL = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+
+_BASE_URL = "https://github.com/cloudflare/cloudflared/releases/latest/download/"
+
+def _cloudflared_url() -> str:
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    if system == "windows":
+        return _BASE_URL + ("cloudflared-windows-amd64.exe" if "64" in machine else "cloudflared-windows-386.exe")
+    if system == "darwin":
+        return _BASE_URL + ("cloudflared-darwin-arm64.tgz" if "arm" in machine else "cloudflared-darwin-amd64.tgz")
+    # Linux default
+    return _BASE_URL + ("cloudflared-linux-arm64" if "arm" in machine else "cloudflared-linux-amd64")
+
+def _binary_name() -> str:
+    return "cloudflared.exe" if platform.system().lower() == "windows" else "cloudflared"
 
 
 def _find_cloudflared() -> str | None:
     """Find cloudflared binary."""
-    # Check PATH
     path = shutil.which("cloudflared")
     if path:
         return path
-    # Check local install
-    local = _ROOT / "bin" / "cloudflared"
-    if local.exists() and os.access(str(local), os.X_OK):
+    local = _ROOT / "bin" / _binary_name()
+    if local.exists():
         return str(local)
     return None
 
@@ -58,21 +71,20 @@ def install_cloudflared() -> str:
         log.info("cloudflared found: %s", existing)
         return existing
 
-    log.info("Downloading cloudflared...")
+    url = _cloudflared_url()
+    log.info("Downloading cloudflared for %s/%s...", platform.system(), platform.machine())
     bin_dir = _ROOT / "bin"
     bin_dir.mkdir(exist_ok=True)
-    target = bin_dir / "cloudflared"
+    target = bin_dir / _binary_name()
 
     try:
-        subprocess.run(
-            ["curl", "-L", _CLOUDFLARED_URL, "-o", str(target)],
-            check=True, capture_output=True,
-        )
-        target.chmod(0o755)
+        urllib.request.urlretrieve(url, str(target))
+        if platform.system().lower() != "windows":
+            target.chmod(0o755)
         log.info("Installed cloudflared to %s", target)
         return str(target)
-    except subprocess.CalledProcessError as e:
-        log.error("Failed to download cloudflared: %s", e.stderr.decode())
+    except Exception as e:
+        log.error("Failed to download cloudflared: %s", e)
         sys.exit(1)
 
 
@@ -123,7 +135,8 @@ def run_quick_tunnel(
         sys.exit(0)
 
     signal.signal(signal.SIGINT, _shutdown)
-    signal.signal(signal.SIGTERM, _shutdown)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, _shutdown)
 
     # Read output and find the tunnel URL
     for line in iter(proc.stdout.readline, ""):
@@ -239,7 +252,8 @@ def run_named_tunnel(
         sys.exit(0)
 
     signal.signal(signal.SIGINT, _shutdown)
-    signal.signal(signal.SIGTERM, _shutdown)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, _shutdown)
 
     subprocess.run(cmd)
 
