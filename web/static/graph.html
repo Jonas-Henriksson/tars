@@ -16,6 +16,10 @@
             --red: #ef4444; --red-dim: rgba(239,68,68,0.10); --red-text: #f87171;
             --blue-dim: rgba(59,130,246,0.10); --purple: #a855f7; --purple-dim: rgba(168,85,247,0.10); --purple-text: #c084fc;
             --node-person: #3b82f6; --node-topic: #a855f7; --node-page: #f59e0b;
+            --node-project: #22c55e; --node-organization: #06b6d4; --node-decision: #f43f5e; --node-tag: #8b5cf6;
+            --cyan: #06b6d4; --cyan-dim: rgba(6,182,212,0.12); --cyan-text: #22d3ee;
+            --rose: #f43f5e; --rose-dim: rgba(244,63,94,0.12); --rose-text: #fb7185;
+            --violet: #8b5cf6; --violet-dim: rgba(139,92,246,0.12); --violet-text: #a78bfa;
         }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; -webkit-font-smoothing: antialiased; overflow: hidden; height: 100vh; }
         header { border-bottom: 1px solid var(--border-subtle); padding: 12px 24px; position: sticky; top: 0; background: var(--bg); z-index: 50; }
@@ -92,6 +96,10 @@
         .sidebar-type.person { background: rgba(59,130,246,0.15); color: var(--node-person); }
         .sidebar-type.topic { background: var(--purple-dim); color: var(--purple-text); }
         .sidebar-type.page { background: var(--amber-dim); color: var(--amber-text); }
+        .sidebar-type.project { background: var(--green-dim); color: var(--green-text); }
+        .sidebar-type.organization { background: var(--cyan-dim); color: var(--cyan-text); }
+        .sidebar-type.decision { background: var(--rose-dim); color: var(--rose-text); }
+        .sidebar-type.tag { background: var(--violet-dim); color: var(--violet-text); }
         .sidebar-close { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
         .sidebar-close:hover { color: var(--text); background: var(--surface-raised); }
         .sidebar-section { margin-bottom: 18px; }
@@ -112,6 +120,10 @@
         .sidebar-tag.person { background: rgba(59,130,246,0.12); color: var(--node-person); }
         .sidebar-tag.topic { background: var(--purple-dim); color: var(--purple-text); }
         .sidebar-tag.page { background: var(--amber-dim); color: var(--amber-text); }
+        .sidebar-tag.project { background: var(--green-dim); color: var(--green-text); }
+        .sidebar-tag.organization { background: var(--cyan-dim); color: var(--cyan-text); }
+        .sidebar-tag.decision { background: var(--rose-dim); color: var(--rose-text); }
+        .sidebar-tag.tag { background: var(--violet-dim); color: var(--violet-text); }
         .sidebar-empty { color: var(--text-muted); font-size: 12px; font-style: italic; padding: 4px 0; }
         .sidebar-page-link { display: flex; align-items: center; gap: 6px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border-subtle); }
         .sidebar-page-link:last-child { border-bottom: none; }
@@ -276,7 +288,7 @@
         let forceLinkDist = 60;
 
         // Group visibility
-        let groupVisible = { person: true, topic: true, page: false };
+        let groupVisible = { person: true, topic: true, page: false, project: true, organization: true, decision: true, tag: true };
 
         const sidebar = document.getElementById('sidebar');
         const sidebarContent = document.getElementById('sidebarContent');
@@ -285,8 +297,10 @@
         const ctrlPanel = document.getElementById('ctrlPanel');
         const groupsBody = document.getElementById('groupsBody');
 
-        const NODE_COLORS = { person: '#3b82f6', topic: '#a855f7', page: '#f59e0b' };
-        const NODE_COLORS_HIGHLIGHT = { person: '#60a5fa', topic: '#c084fc', page: '#fbbf24' };
+        const NODE_COLORS = { person: '#3b82f6', topic: '#a855f7', page: '#f59e0b', project: '#22c55e', organization: '#06b6d4', decision: '#f43f5e', tag: '#8b5cf6' };
+        const NODE_COLORS_HIGHLIGHT = { person: '#60a5fa', topic: '#c084fc', page: '#fbbf24', project: '#4ade80', organization: '#22d3ee', decision: '#fb7185', tag: '#a78bfa' };
+        const GROUP_LABELS = { person: 'People', topic: 'Topics', page: 'Pages', project: 'Projects', organization: 'Organizations', decision: 'Decisions', tag: 'Tags' };
+        const GROUP_ORDER = ['person', 'topic', 'project', 'organization', 'decision', 'tag', 'page'];
 
         // --- Control Panel: collapsible sections ---
         document.querySelectorAll('.ctrl-section-head').forEach(head => {
@@ -336,7 +350,7 @@
             for (const t of ['person', 'topic', 'page']) {
                 maxWeight[t] = Math.max(1, ...weightsByType[t]);
             }
-            const sizeRange = { person: [3, 10], topic: [4, 14], page: [2, 6] };
+            const sizeRange = { person: [3, 10], topic: [4, 14], page: [2, 6], project: [4, 12], organization: [4, 12], decision: [3, 8], tag: [3, 8] };
 
             for (const n of data.nodes) {
                 const weight = n.weight || 1;
@@ -380,11 +394,20 @@
 
         // --- Groups panel ---
         function buildGroups() {
-            const groups = [
-                { key: 'person', label: 'People', color: NODE_COLORS.person, count: graphNodes.filter(n => n.type === 'person').length },
-                { key: 'topic', label: 'Topics', color: NODE_COLORS.topic, count: graphNodes.filter(n => n.type === 'topic').length },
-                { key: 'page', label: 'Pages', color: NODE_COLORS.page, count: graphNodes.filter(n => n.type === 'page').length },
-            ];
+            // Dynamically discover all node types present in the data
+            const typeCounts = {};
+            for (const n of graphNodes) {
+                typeCounts[n.type] = (typeCounts[n.type] || 0) + 1;
+            }
+            const groups = GROUP_ORDER
+                .filter(key => typeCounts[key] > 0)
+                .map(key => ({ key, label: GROUP_LABELS[key] || key, color: NODE_COLORS[key] || '#71717a', count: typeCounts[key] }));
+            // Add any types not in GROUP_ORDER
+            for (const [key, count] of Object.entries(typeCounts)) {
+                if (!GROUP_ORDER.includes(key)) {
+                    groups.push({ key, label: GROUP_LABELS[key] || key, color: NODE_COLORS[key] || '#71717a', count });
+                }
+            }
 
             let html = '';
             for (const g of groups) {
@@ -627,7 +650,7 @@
             document.getElementById('toggleArrows').checked = false; showArrows = false;
             document.getElementById('toggleOrphans').checked = true;
             // Reset groups
-            groupVisible = { person: true, topic: true, page: false };
+            groupVisible = { person: true, topic: true, page: false, project: true, organization: true, decision: true, tag: true };
             applyGroupVisibility();
             buildGroups();
             if (Graph) {
@@ -698,6 +721,8 @@
                 html += renderTopicSidebar(nodeId, node);
             } else if (node.type === 'page') {
                 html += renderPageSidebar(nodeId, node);
+            } else {
+                html += renderGenericSidebar(nodeId, node);
             }
 
             sidebarContent.innerHTML = html;
@@ -706,20 +731,26 @@
         function renderPersonSidebar(nodeId, node) {
             let html = '';
             const neighbors = Array.from(adjacency[nodeId] || []);
-            const connTopics = neighbors.filter(id => nodeMap[id] && nodeMap[id].type === 'topic').map(id => nodeMap[id]);
-            const connPages = neighbors.filter(id => nodeMap[id] && nodeMap[id].type === 'page').map(id => nodeMap[id]);
+            const byType = (type) => neighbors.filter(id => nodeMap[id] && nodeMap[id].type === type).map(id => nodeMap[id]);
+            const connTopics = byType('topic');
+            const connPages = byType('page');
+            const connProjects = byType('project');
+            const connOrgs = byType('organization');
+            const connDecisions = byType('decision');
             const personTasks = tasks.filter(t => t.owner && t.owner.toLowerCase() === node.label.toLowerCase());
 
-            html += '<div class="sidebar-section">';
-            html += '<div class="sidebar-label">Topics (' + connTopics.length + ')</div>';
-            if (connTopics.length) {
-                for (const t of connTopics.sort((a, b) => b.weight - a.weight)) {
-                    html += '<span class="sidebar-tag topic">' + esc(t.label) + '</span>';
+            html += renderTagSection('Organizations', connOrgs, 'organization');
+            html += renderTagSection('Projects', connProjects, 'project');
+            html += renderTagSection('Topics', connTopics, 'topic');
+
+            if (connDecisions.length) {
+                html += '<div class="sidebar-section">';
+                html += '<div class="sidebar-label">Decisions (' + connDecisions.length + ')</div>';
+                for (const d of connDecisions) {
+                    html += '<div class="sidebar-item" style="font-size:12px;color:var(--rose-text)">' + esc(d.label) + '</div>';
                 }
-            } else {
-                html += '<div class="sidebar-empty">No connected topics</div>';
+                html += '</div>';
             }
-            html += '</div>';
 
             html += '<div class="sidebar-section">';
             html += '<div class="sidebar-label">Open Tasks (' + personTasks.length + ')</div>';
@@ -749,20 +780,14 @@
         function renderTopicSidebar(nodeId, node) {
             let html = '';
             const neighbors = Array.from(adjacency[nodeId] || []);
-            const connPeople = neighbors.filter(id => nodeMap[id] && nodeMap[id].type === 'person').map(id => nodeMap[id]);
-            const connPages = neighbors.filter(id => nodeMap[id] && nodeMap[id].type === 'page').map(id => nodeMap[id]);
+            const byType = (type) => neighbors.filter(id => nodeMap[id] && nodeMap[id].type === type).map(id => nodeMap[id]);
+            const connPeople = byType('person');
+            const connPages = byType('page');
+            const connProjects = byType('project');
             const topicTasks = tasks.filter(t => t.topics && t.topics.includes(node.label));
 
-            html += '<div class="sidebar-section">';
-            html += '<div class="sidebar-label">People (' + connPeople.length + ')</div>';
-            if (connPeople.length) {
-                for (const p of connPeople.sort((a, b) => b.weight - a.weight)) {
-                    html += '<span class="sidebar-tag person">' + esc(p.label) + '</span>';
-                }
-            } else {
-                html += '<div class="sidebar-empty">No connected people</div>';
-            }
-            html += '</div>';
+            html += renderTagSection('People', connPeople, 'person');
+            if (connProjects.length) html += renderTagSection('Projects', connProjects, 'project');
 
             html += '<div class="sidebar-section">';
             html += '<div class="sidebar-label">Open Tasks (' + topicTasks.length + ')</div>';
@@ -792,8 +817,13 @@
         function renderPageSidebar(nodeId, node) {
             let html = '';
             const neighbors = Array.from(adjacency[nodeId] || []);
-            const connPeople = neighbors.filter(id => nodeMap[id] && nodeMap[id].type === 'person').map(id => nodeMap[id]);
-            const connTopics = neighbors.filter(id => nodeMap[id] && nodeMap[id].type === 'topic').map(id => nodeMap[id]);
+            const byType = (type) => neighbors.filter(id => nodeMap[id] && nodeMap[id].type === type).map(id => nodeMap[id]);
+            const connPeople = byType('person');
+            const connTopics = byType('topic');
+            const connProjects = byType('project');
+            const connOrgs = byType('organization');
+            const connDecisions = byType('decision');
+            const connTags = byType('tag');
 
             if (node.url) {
                 html += '<div class="sidebar-section">';
@@ -801,27 +831,20 @@
                 html += '</div>';
             }
 
-            html += '<div class="sidebar-section">';
-            html += '<div class="sidebar-label">People (' + connPeople.length + ')</div>';
-            if (connPeople.length) {
-                for (const p of connPeople) {
-                    html += '<span class="sidebar-tag person">' + esc(p.label) + '</span>';
-                }
-            } else {
-                html += '<div class="sidebar-empty">No people mentioned</div>';
-            }
-            html += '</div>';
+            html += renderTagSection('People', connPeople, 'person');
+            html += renderTagSection('Projects', connProjects, 'project');
+            html += renderTagSection('Organizations', connOrgs, 'organization');
+            html += renderTagSection('Topics', connTopics, 'topic');
+            html += renderTagSection('Tags', connTags, 'tag');
 
-            html += '<div class="sidebar-section">';
-            html += '<div class="sidebar-label">Topics (' + connTopics.length + ')</div>';
-            if (connTopics.length) {
-                for (const t of connTopics) {
-                    html += '<span class="sidebar-tag topic">' + esc(t.label) + '</span>';
+            if (connDecisions.length) {
+                html += '<div class="sidebar-section">';
+                html += '<div class="sidebar-label">Decisions (' + connDecisions.length + ')</div>';
+                for (const d of connDecisions) {
+                    html += '<div class="sidebar-item" style="font-size:12px;color:var(--rose-text)">' + esc(d.label) + '</div>';
                 }
-            } else {
-                html += '<div class="sidebar-empty">No topics detected</div>';
+                html += '</div>';
             }
-            html += '</div>';
 
             const pageId = node.id.replace('page:', '');
             const pageTasks = tasks.filter(t => t.source_page_id === pageId);
@@ -833,6 +856,49 @@
                 }
             } else {
                 html += '<div class="sidebar-empty">No tasks extracted</div>';
+            }
+            html += '</div>';
+
+            return html;
+        }
+
+        function renderTagSection(label, items, cssClass) {
+            let html = '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">' + label + ' (' + items.length + ')</div>';
+            if (items.length) {
+                for (const item of items.sort((a, b) => b.weight - a.weight)) {
+                    html += '<span class="sidebar-tag ' + cssClass + '">' + esc(item.label) + '</span>';
+                }
+            } else {
+                html += '<div class="sidebar-empty">None</div>';
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function renderGenericSidebar(nodeId, node) {
+            let html = '';
+            const neighbors = Array.from(adjacency[nodeId] || []);
+            const byType = (type) => neighbors.filter(id => nodeMap[id] && nodeMap[id].type === type).map(id => nodeMap[id]);
+            const connPeople = byType('person');
+            const connPages = byType('page');
+            const connTopics = byType('topic');
+            const connProjects = byType('project');
+            const connOrgs = byType('organization');
+
+            html += renderTagSection('People', connPeople, 'person');
+            if (connOrgs.length) html += renderTagSection('Organizations', connOrgs, 'organization');
+            if (connProjects.length) html += renderTagSection('Projects', connProjects, 'project');
+            if (connTopics.length) html += renderTagSection('Topics', connTopics, 'topic');
+
+            html += '<div class="sidebar-section">';
+            html += '<div class="sidebar-label">Source Pages (' + connPages.length + ')</div>';
+            if (connPages.length) {
+                for (const p of connPages) {
+                    html += renderPageLink(p);
+                }
+            } else {
+                html += '<div class="sidebar-empty">No connected pages</div>';
             }
             html += '</div>';
 

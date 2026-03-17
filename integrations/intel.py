@@ -93,6 +93,109 @@ def _extract_people(text: str, title: str) -> list[str]:
     return sorted(people)
 
 
+# -----------------------------------------------------------------------
+# LLM-powered metadata extraction (rich tagging for graph)
+# -----------------------------------------------------------------------
+
+_LLM_EXTRACT_PROMPT = """\
+Analyze this Notion page and extract structured metadata. Return ONLY valid JSON.
+
+Page title: {title}
+Page content:
+{content}
+
+Extract:
+- people: All person names mentioned (full names preferred, no duplicates)
+- organizations: Teams, companies, departments, committees, councils mentioned
+- projects: Named projects, initiatives, programs, workstreams
+- topics: Hierarchical topic tags (use "/" for hierarchy, e.g. "supply-chain/optimization", "ai/use-cases", "budget/q3-review"). Be specific, not generic.
+- decisions: Key decisions made (each with "text" and "by" who decided, if known)
+- tags: Obsidian-style category tags for this page (e.g. "meeting/1on1", "review", "planning/quarterly", "escalation")
+- summary: 1-2 sentence summary of the page content
+
+Return JSON:
+{{"people":[],"organizations":[],"projects":[],"topics":[],"decisions":[],"tags":[],"summary":""}}
+"""
+
+_llm_client = None
+
+
+def _get_llm_client():
+    """Lazy-init Anthropic client."""
+    global _llm_client
+    if _llm_client is not None:
+        return _llm_client
+    try:
+        from config import ANTHROPIC_API_KEY
+        if not ANTHROPIC_API_KEY:
+            return None
+        import anthropic
+        _llm_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        return _llm_client
+    except Exception as e:
+        logger.warning("Cannot initialize Anthropic client: %s", e)
+        return None
+
+
+async def _llm_extract_metadata(title: str, content: str) -> dict | None:
+    """Use Claude haiku to extract rich metadata from a page.
+
+    Returns structured dict or None if LLM is unavailable.
+    Content is truncated to ~4000 chars to keep costs low.
+    """
+    client = _get_llm_client()
+    if client is None:
+        return None
+
+    # Truncate long content to control cost
+    max_content = 4000
+    truncated = content[:max_content] + ("..." if len(content) > max_content else "")
+
+    prompt = _LLM_EXTRACT_PROMPT.format(title=title, content=truncated)
+
+    try:
+        response = await asyncio.to_thread(
+            client.messages.create,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = response.content[0].text.strip()
+
+        # Parse JSON — handle markdown code blocks
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+        result = json.loads(text)
+
+        # Validate expected keys
+        defaults = {
+            "people": [], "organizations": [], "projects": [],
+            "topics": [], "decisions": [], "tags": [], "summary": "",
+        }
+        for key, default in defaults.items():
+            if key not in result:
+                result[key] = default
+
+        # Normalize decisions to list of dicts
+        normalized_decisions = []
+        for d in result.get("decisions", []):
+            if isinstance(d, str):
+                normalized_decisions.append({"text": d, "by": ""})
+            elif isinstance(d, dict):
+                normalized_decisions.append({"text": d.get("text", ""), "by": d.get("by", "")})
+        result["decisions"] = normalized_decisions
+
+        return result
+
+    except json.JSONDecodeError as e:
+        logger.warning("LLM returned invalid JSON for '%s': %s", title, e)
+        return None
+    except Exception as e:
+        logger.warning("LLM extraction failed for '%s': %s", title, e)
+        return None
+
+
 def _extract_source_context(text: str, description: str, window: int = 300) -> str:
     """Extract surrounding text around where a task was found in the source.
 
@@ -553,13 +656,50 @@ async def scan_notion(
             return
         pages_with_content += 1
 
-        # Detect topics
-        topics = _detect_topics(content, title)
+        # Check LLM cache — skip extraction if page hasn't changed
+        existing_page = intel.get("page_index", {}).get(page_id, {})
+        cached_llm = (
+            existing_page.get("llm_extracted_at")
+            and existing_page.get("last_edited") == page_date
+        )
+
+        llm_meta = None
+        if not cached_llm:
+            llm_meta = await _llm_extract_metadata(title, content)
+
+        if llm_meta:
+            # Rich LLM extraction
+            topics = llm_meta.get("topics", []) or _detect_topics(content, title)
+            people = llm_meta.get("people", []) or _extract_people(content, title)
+            projects = llm_meta.get("projects", [])
+            organizations = llm_meta.get("organizations", [])
+            decisions = llm_meta.get("decisions", [])
+            tags = llm_meta.get("tags", [])
+            summary = llm_meta.get("summary", "")
+            llm_ts = datetime.now(timezone.utc).isoformat()
+        elif cached_llm:
+            # Use cached LLM data
+            topics = existing_page.get("topics", _detect_topics(content, title))
+            people = existing_page.get("people", _extract_people(content, title))
+            projects = existing_page.get("projects", [])
+            organizations = existing_page.get("organizations", [])
+            decisions = existing_page.get("decisions", [])
+            tags = existing_page.get("tags", [])
+            summary = existing_page.get("summary", "")
+            llm_ts = existing_page.get("llm_extracted_at", "")
+        else:
+            # Fallback to regex
+            topics = _detect_topics(content, title)
+            people = _extract_people(content, title)
+            projects = []
+            organizations = []
+            decisions = []
+            tags = []
+            summary = ""
+            llm_ts = ""
+
         for t in topics:
             topic_counter[t] += 1
-
-        # Detect people
-        people = _extract_people(content, title)
         for p in people:
             people_counter[p] += 1
 
@@ -569,7 +709,13 @@ async def scan_notion(
             "url": page_url,
             "topics": topics,
             "people": people,
+            "projects": projects,
+            "organizations": organizations,
+            "decisions": decisions,
+            "tags": tags,
+            "summary": summary,
             "last_edited": page_date,
+            "llm_extracted_at": llm_ts,
         }
 
         # Detect delegations -> smart tasks
@@ -1003,6 +1149,54 @@ def build_graph_data() -> dict:
                 if topic == "general":
                     continue
                 _add_edge(f"person:{person}", f"topic:{topic}", "works_on")
+
+        # --- New node types from LLM-enriched data ---
+
+        # Projects
+        for project in page.get("projects", []):
+            proj_nid = f"project:{project}"
+            _add_node(proj_nid, project, "project", 1)
+            _add_edge(page_nid, proj_nid, "covers")
+            # Link people on this page to the project
+            for person in page.get("people", []):
+                _add_edge(f"person:{person}", proj_nid, "works_on")
+
+        # Organizations
+        for org in page.get("organizations", []):
+            org_nid = f"organization:{org}"
+            _add_node(org_nid, org, "organization", 1)
+            _add_edge(page_nid, org_nid, "covers")
+            # Link people on this page to the org (member_of)
+            for person in page.get("people", []):
+                _add_edge(f"person:{person}", org_nid, "member_of")
+            # Link projects on this page to the org (part_of)
+            for project in page.get("projects", []):
+                _add_edge(f"project:{project}", org_nid, "part_of")
+
+        # Decisions
+        for decision in page.get("decisions", []):
+            if not isinstance(decision, dict):
+                continue
+            dec_text = decision.get("text", "")
+            if not dec_text:
+                continue
+            dec_id = dec_text[:60].replace(" ", "_").lower()
+            dec_nid = f"decision:{dec_id}"
+            short_text = dec_text[:80] + ("..." if len(dec_text) > 80 else "")
+            _add_node(dec_nid, short_text, "decision", 1)
+            _add_edge(page_nid, dec_nid, "covers")
+            # Link the decider
+            decided_by = decision.get("by", "")
+            if decided_by:
+                by_nid = f"person:{decided_by}"
+                _add_node(by_nid, decided_by, "person", 0)
+                _add_edge(by_nid, dec_nid, "decided")
+
+        # Tags
+        for tag in page.get("tags", []):
+            tag_nid = f"tag:{tag}"
+            _add_node(tag_nid, tag, "tag", 1)
+            _add_edge(page_nid, tag_nid, "tagged")
 
     # --- Edges from smart_tasks (fallback + enrichment) ---
     for task in tasks:
