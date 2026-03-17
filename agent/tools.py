@@ -26,6 +26,9 @@ def register_tool(name: str, description: str, input_schema: dict, handler) -> N
         input_schema: JSON Schema for the tool's input parameters.
         handler: Async function that executes the tool. Receives input dict, returns result dict.
     """
+    # Prevent duplicate registrations
+    if name in _TOOL_HANDLERS:
+        return
     TOOL_DEFINITIONS.append({
         "name": name,
         "description": description,
