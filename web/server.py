@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
@@ -21,6 +22,8 @@ from pydantic import BaseModel
 from config import OPENAI_API_KEY
 
 logger = logging.getLogger(__name__)
+
+_STATIC_DIR = Path(__file__).parent / "static"
 
 app = FastAPI(title="TARS Voice Call")
 
@@ -331,13 +334,13 @@ class TaskStatusUpdate(BaseModel):
 @app.get("/")
 async def index():
     """Serve the call UI."""
-    return FileResponse("web/static/call.html")
+    return FileResponse(_STATIC_DIR / "call.html")
 
 
 @app.get("/tasks")
 async def tasks_page():
     """Serve the task tracker dashboard."""
-    return FileResponse("web/static/tasks.html")
+    return FileResponse(_STATIC_DIR / "tasks.html")
 
 
 @app.get("/api/tasks")
