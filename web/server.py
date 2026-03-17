@@ -649,6 +649,36 @@ async def update_task_status(task_id: str, body: TaskStatusUpdate):
     return JSONResponse(result)
 
 
+class TrackedTaskUpdate(BaseModel):
+    owner: str = None
+    topic: str = None
+    description: str = None
+    status: str = None
+    follow_up_date: str = None
+
+
+@app.patch("/api/tasks/{task_id}")
+async def update_tracked_task(task_id: str, body: TrackedTaskUpdate):
+    """Update a tracked task's fields."""
+    from integrations.notion_tasks import update_task as _update
+
+    fields = {k: v for k, v in body.dict().items() if v is not None}
+    if not fields:
+        return JSONResponse({"error": "No fields to update"}, status_code=400)
+    result = _update(task_id=task_id, **fields)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@app.get("/api/tasks/owners")
+async def get_task_owners():
+    """Get task owners sorted by frequency."""
+    from integrations.notion_tasks import get_owner_frequencies
+
+    return JSONResponse(get_owner_frequencies())
+
+
 @app.get("/api/token")
 async def get_ephemeral_token():
     """Get an ephemeral token for OpenAI Realtime API."""

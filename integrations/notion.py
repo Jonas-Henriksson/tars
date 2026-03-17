@@ -205,6 +205,8 @@ async def get_page_content(page_id: str, recurse: bool = True) -> dict:
         "id": page_info["id"],
         "title": page_info["title"],
         "url": page_info["url"],
+        "created_time": page_info.get("created_time", ""),
+        "last_edited_time": page_info.get("last_edited_time", ""),
         "content": "\n".join(lines),
         "block_count": len(blocks),
         "child_pages": child_pages,

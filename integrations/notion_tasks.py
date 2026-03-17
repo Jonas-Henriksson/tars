@@ -67,7 +67,8 @@ def _extract_tasks_from_text(text: str, source_title: str, source_url: str) -> l
 
         task_info = _parse_task_line(stripped)
         if task_info:
-            task_info["topic"] = current_topic
+            # Use heading as topic; fall back to source page title if empty
+            task_info["topic"] = current_topic or source_title
             task_info["source_title"] = source_title
             task_info["source_url"] = source_url
             tasks.append(task_info)
@@ -163,6 +164,7 @@ async def extract_meeting_tasks(page_id: str) -> dict:
     return {
         "page_title": page["title"],
         "page_url": page["url"],
+        "page_created_time": page.get("created_time", ""),
         "total_tasks": len(raw_tasks),
         "tasks_by_owner": by_owner,
         "tasks": raw_tasks,
@@ -185,6 +187,7 @@ async def track_meeting_tasks(page_id: str) -> dict:
 
     existing = _load_tasks()
     now = datetime.now(timezone.utc).isoformat()
+    page_created = extracted.get("page_created_time", "")
     added = 0
 
     for task in extracted["tasks"]:
@@ -199,7 +202,8 @@ async def track_meeting_tasks(page_id: str) -> dict:
             "completed": task["completed"],
             "status": "done" if task["completed"] else "open",
             "followed_up": False,
-            "created_at": now,
+            "created_at": page_created or now,
+            "scanned_at": now,
         }
         existing.append(task_entry)
         added += 1
@@ -280,6 +284,41 @@ def update_task_status(task_id: str, status: str) -> dict:
             return {"message": f"Task '{task['description'][:50]}' updated to '{status}'.", "task": task}
 
     return {"error": f"Task not found: {task_id}"}
+
+
+def update_task(task_id: str, **fields) -> dict:
+    """Update arbitrary fields on a tracked task.
+
+    Supports: owner, topic, description, status, follow_up_date.
+    """
+    tasks = _load_tasks()
+    for task in tasks:
+        if task["id"] == task_id:
+            for key in ("owner", "topic", "description", "status", "follow_up_date"):
+                if key in fields and fields[key] is not None:
+                    task[key] = fields[key]
+            if "status" in fields:
+                if fields["status"] == "done":
+                    task["completed"] = True
+                elif fields["status"] == "open":
+                    task["completed"] = False
+            _save_tasks(tasks)
+            return {"message": "Task updated.", "task": task}
+    return {"error": f"Task not found: {task_id}"}
+
+
+def get_owner_frequencies() -> list[dict]:
+    """Get owners sorted by task count (most frequent first)."""
+    tasks = _load_tasks()
+    counts: dict[str, int] = {}
+    for t in tasks:
+        owner = t.get("owner", "Unassigned")
+        counts[owner] = counts.get(owner, 0) + 1
+    return sorted(
+        [{"name": k, "count": v} for k, v in counts.items()],
+        key=lambda x: x["count"],
+        reverse=True,
+    )
 
 
 async def search_meeting_notes(query: str, max_results: int = 5) -> dict:
