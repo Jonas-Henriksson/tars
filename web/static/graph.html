@@ -277,10 +277,11 @@
                 .nodeOpacity(0.9)
                 .nodeResolution(20)
 
-                // --- Node labels ---
-                .nodeLabel(n => '')
+                // --- Node labels: use built-in HTML tooltip + 3D sprite if available ---
+                .nodeLabel(n => '<div class="node-label">' + esc(n.label) + ' <span style="opacity:0.5;font-size:10px">' + n.type + '</span></div>')
                 .nodeThreeObject(n => {
-                    // Create a sprite label
+                    // Create a sprite label using SpriteText if loaded
+                    if (typeof SpriteText === 'undefined') return null;
                     const sprite = new SpriteText(n.label);
                     sprite.color = '#ffffff';
                     sprite.textHeight = 2.5;
@@ -288,7 +289,6 @@
                     sprite.fontWeight = '500';
                     sprite.backgroundColor = false;
                     sprite.padding = 1;
-                    // Position above node
                     const nodeRadius = Math.cbrt(n.val) * 2;
                     sprite.position.y = nodeRadius + 3;
                     return sprite;
@@ -329,33 +329,28 @@
                 .linkCurvature(0.15)
                 .linkCurveRotation(0.5)
 
-                // --- Force config ---
-                .d3Force('charge').strength(n => {
-                    return -80 * (n.val || 4);
-                });
+                // --- Interactions ---
+                .onNodeClick(n => selectNode(n.id))
+                .onNodeHover(n => {
+                    hoveredNodeId = n ? n.id : null;
+                    graphEl.style.cursor = n ? 'pointer' : 'default';
+                })
+                .onBackgroundClick(() => {
+                    selectedNodeId = null;
+                    closeSidebar();
+                    resetPageVisibility();
+                    updateChipState();
+                    refreshGraph();
+                })
 
-            // Additional force tuning
+                // --- Warm up ---
+                .d3AlphaDecay(0.02)
+                .d3VelocityDecay(0.3);
+
+            // --- Force config (must be done after graph creation) ---
+            Graph.d3Force('charge').strength(n => -80 * (n.val || 4));
             Graph.d3Force('link').distance(e => 60 + (e.weight || 1) * 5);
             Graph.d3Force('center').strength(0.05);
-
-            // Warm up
-            Graph.d3AlphaDecay(0.02);
-            Graph.d3VelocityDecay(0.3);
-
-            // --- Interactions ---
-            Graph.onNodeClick(n => selectNode(n.id));
-            Graph.onNodeHover(n => {
-                hoveredNodeId = n ? n.id : null;
-                graphEl.style.cursor = n ? 'pointer' : 'default';
-                Graph.nodeColor(Graph.nodeColor()); // refresh
-            });
-            Graph.onBackgroundClick(() => {
-                selectedNodeId = null;
-                closeSidebar();
-                resetPageVisibility();
-                updateChipState();
-                refreshGraph();
-            });
 
             // Add bloom post-processing
             addBloomEffect();
