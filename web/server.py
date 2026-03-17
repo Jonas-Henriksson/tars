@@ -324,10 +324,56 @@ class ToolCallRequest(BaseModel):
     arguments: dict
 
 
+class TaskStatusUpdate(BaseModel):
+    status: str
+
+
 @app.get("/")
 async def index():
     """Serve the call UI."""
     return FileResponse("web/static/call.html")
+
+
+@app.get("/tasks")
+async def tasks_page():
+    """Serve the task tracker dashboard."""
+    return FileResponse("web/static/tasks.html")
+
+
+@app.get("/api/tasks")
+async def get_tasks(
+    owner: str = "",
+    topic: str = "",
+    status: str = "",
+    include_completed: bool = False,
+):
+    """Get tracked meeting tasks with optional filters."""
+    from integrations.notion_tasks import get_tracked_tasks
+
+    result = get_tracked_tasks(
+        owner=owner,
+        topic=topic,
+        status=status,
+        include_completed=include_completed,
+    )
+    return JSONResponse(result)
+
+
+@app.patch("/api/tasks/{task_id}/status")
+async def update_task_status(task_id: str, body: TaskStatusUpdate):
+    """Update a tracked task's status."""
+    from integrations.notion_tasks import update_task_status as _update
+
+    if body.status not in ("open", "done", "followed_up"):
+        return JSONResponse(
+            {"error": f"Invalid status: {body.status}"},
+            status_code=400,
+        )
+
+    result = _update(task_id=task_id, status=body.status)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
 
 
 @app.get("/api/token")

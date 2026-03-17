@@ -76,3 +76,68 @@ class TestToolEndpoint:
 
         assert resp.status_code == 200
         assert "Not signed in" in resp.json()["error"]
+
+
+class TestTasksPage:
+    def test_serves_tasks_dashboard(self):
+        resp = client.get("/tasks")
+        assert resp.status_code == 200
+        assert "Task Tracker" in resp.text
+        assert "summary-strip" in resp.text
+
+
+class TestTasksAPI:
+    def test_get_tasks_returns_data(self):
+        mock_result = {
+            "tasks": [
+                {"id": "a1", "description": "Review PR", "owner": "Jonas", "status": "open",
+                 "topic": "Sprint", "source_title": "Standup", "source_url": "", "created_at": "2025-03-17"},
+            ],
+            "count": 1,
+            "by_owner": {"Jonas": [{"id": "a1"}]},
+            "by_topic": {"Sprint": [{"id": "a1"}]},
+        }
+
+        with patch("integrations.notion_tasks.get_tracked_tasks", return_value=mock_result):
+            resp = client.get("/api/tasks?include_completed=true")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] == 1
+        assert data["tasks"][0]["owner"] == "Jonas"
+
+    def test_get_tasks_with_filters(self):
+        mock_result = {"tasks": [], "count": 0, "by_owner": {}, "by_topic": {}}
+
+        with patch("integrations.notion_tasks.get_tracked_tasks", return_value=mock_result) as mock_fn:
+            resp = client.get("/api/tasks?owner=Jonas&status=open")
+
+        assert resp.status_code == 200
+        mock_fn.assert_called_once_with(
+            owner="Jonas", topic="", status="open", include_completed=False,
+        )
+
+    def test_update_task_status_success(self):
+        mock_result = {
+            "message": "Task 'Review PR' updated to 'done'.",
+            "task": {"id": "a1", "status": "done", "completed": True},
+        }
+
+        with patch("integrations.notion_tasks.update_task_status", return_value=mock_result):
+            resp = client.patch("/api/tasks/a1/status", json={"status": "done"})
+
+        assert resp.status_code == 200
+        assert resp.json()["task"]["status"] == "done"
+
+    def test_update_task_status_invalid(self):
+        resp = client.patch("/api/tasks/a1/status", json={"status": "invalid"})
+        assert resp.status_code == 400
+        assert "Invalid status" in resp.json()["error"]
+
+    def test_update_task_status_not_found(self):
+        mock_result = {"error": "Task not found: xyz"}
+
+        with patch("integrations.notion_tasks.update_task_status", return_value=mock_result):
+            resp = client.patch("/api/tasks/xyz/status", json={"status": "done"})
+
+        assert resp.status_code == 404
