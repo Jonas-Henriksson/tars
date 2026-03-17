@@ -1086,6 +1086,30 @@ def get_intel() -> dict:
     return intel
 
 
+def get_intel_summary() -> str:
+    """Return a brief plain-text summary of current work state for system prompt injection.
+
+    Reads cached data only — never triggers a new scan.
+    Returns empty string if no scan has been run yet.
+    """
+    data = _load_intel()
+    if not data.get("last_scan_at"):
+        return ""
+    es = data.get("executive_summary", {})
+    topics = list((data.get("topics") or {}).keys())[:5]
+    people = list((data.get("people") or {}).keys())[:5]
+    open_tasks = es.get("total_open", 0)
+    overdue = es.get("total_overdue", 0)
+    lines = []
+    if open_tasks:
+        lines.append(f"Active tasks: {open_tasks} open, {overdue} overdue.")
+    if topics:
+        lines.append(f"Work topics: {', '.join(topics)}.")
+    if people:
+        lines.append(f"Key people: {', '.join(people)}.")
+    return " ".join(lines)
+
+
 def build_graph_data(max_nodes: int = 500, min_edge_weight: int = 1) -> dict:
     """Build graph nodes and edges for the relationship visualization.
 

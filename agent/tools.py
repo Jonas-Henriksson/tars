@@ -1590,6 +1590,110 @@ def _register_epic_tools() -> None:
     )
 
 
+def _register_memory_tools() -> None:
+    from integrations.memory import (
+        get_memory, set_preference, set_fact, add_note, delete_note, clear_memory
+    )
+
+    async def _handle_remember_preference(tool_input: dict) -> dict:
+        return set_preference(tool_input["key"], tool_input["value"])
+
+    register_tool(
+        name="remember_preference",
+        description=(
+            "Store a user preference so TARS remembers it across sessions "
+            "(e.g. response style, language, how brief to be, format). "
+            "Call this whenever the user states how they want TARS to behave."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "Short label for the preference (e.g. 'response_style')."},
+                "value": {"type": "string", "description": "The preference value (e.g. 'concise bullet points')."},
+            },
+            "required": ["key", "value"],
+        },
+        handler=_handle_remember_preference,
+    )
+
+    async def _handle_remember_fact(tool_input: dict) -> dict:
+        return set_fact(tool_input["key"], tool_input["value"])
+
+    register_tool(
+        name="remember_fact",
+        description=(
+            "Store a personal fact about the user to remember across sessions "
+            "(e.g. name, role, timezone, company, key team members). "
+            "Call this when the user shares personal or work context."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "Short label (e.g. 'name', 'role', 'timezone')."},
+                "value": {"type": "string", "description": "The fact value."},
+            },
+            "required": ["key", "value"],
+        },
+        handler=_handle_remember_fact,
+    )
+
+    async def _handle_add_memory_note(tool_input: dict) -> dict:
+        return add_note(tool_input["text"])
+
+    register_tool(
+        name="add_memory_note",
+        description=(
+            "Store an important freeform note to remember across sessions "
+            "(e.g. 'Board meeting is April 15', 'User prefers no meetings on Fridays', "
+            "'Partner is called Anna'). Use for context that doesn't fit a structured field."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "The note to remember."},
+            },
+            "required": ["text"],
+        },
+        handler=_handle_add_memory_note,
+    )
+
+    async def _handle_get_memory(tool_input: dict) -> dict:
+        return get_memory()
+
+    register_tool(
+        name="get_memory",
+        description="Retrieve all stored preferences, facts, and notes about the user.",
+        input_schema={"type": "object", "properties": {}},
+        handler=_handle_get_memory,
+    )
+
+    async def _handle_delete_memory_note(tool_input: dict) -> dict:
+        return delete_note(tool_input["index"])
+
+    register_tool(
+        name="delete_memory_note",
+        description="Delete a stored memory note by its index (0-based). Use get_memory first to see notes.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "index": {"type": "integer", "description": "0-based index of the note to delete."},
+            },
+            "required": ["index"],
+        },
+        handler=_handle_delete_memory_note,
+    )
+
+    async def _handle_clear_memory(tool_input: dict) -> dict:
+        return clear_memory()
+
+    register_tool(
+        name="clear_memory",
+        description="Wipe all stored user memory (preferences, facts, and notes). Use only if user asks to forget everything.",
+        input_schema={"type": "object", "properties": {}},
+        handler=_handle_clear_memory,
+    )
+
+
 # Auto-register tools on import
 _register_calendar_tools()
 _register_task_tools()
@@ -1600,3 +1704,4 @@ _register_notion_review_tools()
 _register_briefing_tools()
 _register_intel_tools()
 _register_epic_tools()
+_register_memory_tools()
