@@ -984,7 +984,9 @@
                 const resp = await fetch('/api/people');
                 const data = await resp.json();
                 // Sort by mentions descending
-                const people = Object.entries(data)
+                const peopleMap = data.people || data;
+                const people = Object.entries(peopleMap)
+                    .filter(function(kv) { return kv[1] && typeof kv[1] === 'object'; })
                     .map(function(kv) { return { name: kv[0], mentions: kv[1].mentions || 0 }; })
                     .sort(function(a, b) { return b.mentions - a.mentions; });
                 _ppPeopleCache = people;
