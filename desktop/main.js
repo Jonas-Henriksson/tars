@@ -12,7 +12,7 @@ let tray;
 let localServer;
 
 const BUBBLE_SIZE = { width: 72, height: 72 };
-const BUBBLE_VOICE_SIZE = { width: 140, height: 140 }; // Larger to fit wave rings
+const BUBBLE_VOICE_SIZE = { width: 220, height: 220 }; // Larger to fit waveform orb
 const CHAT_SIZE = { width: 420, height: 640 };
 let isInVoiceBubble = false;
 

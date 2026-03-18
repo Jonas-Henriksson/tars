@@ -13,11 +13,14 @@
     let dc = null;   // RTCDataChannel
     let audioEl = null;
     let micStream = null;
+    let waveAnimId = null;
 
     // ── DOM refs ────────────────────────────────────────────────────
 
     const bubble = document.getElementById('bubble');
     const chat = document.getElementById('chat');
+    const voiceOrb = document.getElementById('voiceOrb');
+    const waveCanvas = document.getElementById('waveCanvas');
     const statusDot = document.getElementById('statusDot');
     const messages = document.getElementById('messages');
     const msgInput = document.getElementById('msgInput');
@@ -265,10 +268,12 @@
     async function startVoice() {
         voiceBtn.classList.add('active');
         isVoiceActive = true;
-        bubble.classList.add('voice-active');
-        // Expand bubble window to fit wave animation
-        if (!isExpanded && window.tarsAPI && window.tarsAPI.setVoiceBubble) {
-            window.tarsAPI.setVoiceBubble(true);
+        // Show waveform orb in bubble mode
+        if (!isExpanded) {
+            bubble.classList.add('hidden');
+            voiceOrb.classList.remove('hidden');
+            if (window.tarsAPI && window.tarsAPI.setVoiceBubble) window.tarsAPI.setVoiceBubble(true);
+            startWaveAnimation();
         }
 
         try {
@@ -335,9 +340,11 @@
         if (audioEl) { audioEl.srcObject = null; audioEl = null; }
         if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
         voiceBtn.classList.remove('active');
-        bubble.classList.remove('voice-active');
         isVoiceActive = false;
-        // Shrink bubble window back
+        stopWaveAnimation();
+        // Restore bubble
+        voiceOrb.classList.add('hidden');
+        bubble.classList.remove('hidden');
         if (!isExpanded && window.tarsAPI && window.tarsAPI.setVoiceBubble) {
             window.tarsAPI.setVoiceBubble(false);
         }
@@ -409,6 +416,83 @@
             if (!isVoiceActive) startVoice();
         });
     }
+
+    // ── Waveform Canvas Animation ──────────────────────────────────
+
+    function startWaveAnimation() {
+        if (waveAnimId) return;
+        const ctx = waveCanvas.getContext('2d');
+        const W = waveCanvas.width;
+        const H = waveCanvas.height;
+        const cx = W / 2;
+        const cy = H / 2;
+        const baseRadius = 65;
+        const t0 = performance.now();
+
+        const colors = [
+            'rgba(34, 197, 94, 0.7)',   // green
+            'rgba(139, 92, 246, 0.6)',   // purple
+            'rgba(250, 204, 21, 0.5)',   // yellow
+            'rgba(59, 130, 246, 0.5)',   // blue
+            'rgba(236, 72, 153, 0.5)',   // pink
+            'rgba(34, 197, 94, 0.4)',    // green dim
+            'rgba(168, 85, 247, 0.4)',   // violet
+            'rgba(52, 211, 153, 0.5)',   // emerald
+        ];
+
+        function draw() {
+            const t = (performance.now() - t0) / 1000;
+            ctx.clearRect(0, 0, W, H);
+
+            // Draw multiple flowing wave lines in a circular pattern
+            for (let i = 0; i < colors.length; i++) {
+                ctx.beginPath();
+                ctx.strokeStyle = colors[i];
+                ctx.lineWidth = 1.2 + Math.sin(t * 0.7 + i) * 0.4;
+
+                const freq = 3 + i * 0.7;
+                const amp = 8 + Math.sin(t * (0.5 + i * 0.15)) * 6;
+                const phase = t * (1.2 + i * 0.3) + i * 0.8;
+
+                for (let a = 0; a <= 360; a += 2) {
+                    const rad = (a * Math.PI) / 180;
+                    const wave = Math.sin(rad * freq + phase) * amp;
+                    const wave2 = Math.cos(rad * (freq * 0.5) + phase * 0.7) * amp * 0.5;
+                    const r = baseRadius + wave + wave2;
+                    const x = cx + Math.cos(rad) * r;
+                    const y = cy + Math.sin(rad) * r;
+                    if (a === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.stroke();
+            }
+
+            // Inner glow
+            const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, baseRadius * 0.6);
+            grad.addColorStop(0, 'rgba(34, 197, 94, 0.08)');
+            grad.addColorStop(1, 'transparent');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, W, H);
+
+            waveAnimId = requestAnimationFrame(draw);
+        }
+        draw();
+    }
+
+    function stopWaveAnimation() {
+        if (waveAnimId) {
+            cancelAnimationFrame(waveAnimId);
+            waveAnimId = null;
+        }
+    }
+
+    // Click orb to expand into chat
+    voiceOrb.addEventListener('click', () => {
+        stopWaveAnimation();
+        voiceOrb.classList.add('hidden');
+        expand();
+    });
 
     // ── Backend Health Check ────────────────────────────────────────
 
