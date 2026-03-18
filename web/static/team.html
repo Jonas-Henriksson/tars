@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TARS Team Board</title>
+    <title>TARS Portfolio Board</title>
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -128,6 +128,22 @@
         .empty-state h2 { font-size: 18px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; }
         .empty-state p { font-size: 13px; color: var(--text-muted); max-width: 420px; margin: 0 auto; }
 
+        /* Epic modal */
+        .epic-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center; }
+        .epic-modal-overlay.open { display: flex; }
+        .epic-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 520px; max-width: 90vw; max-height: 85vh; overflow-y: auto; padding: 24px; }
+        .epic-modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+        .epic-modal label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 4px; margin-top: 12px; }
+        .epic-modal input, .epic-modal select, .epic-modal textarea { width: 100%; font-size: 13px; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: inherit; }
+        .epic-modal textarea { resize: vertical; min-height: 60px; }
+        .epic-modal-actions { display: flex; gap: 8px; margin-top: 20px; justify-content: space-between; }
+        .epic-modal-actions button { font-size: 12px; padding: 7px 16px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; font-family: inherit; }
+        .epic-modal-actions .btn-save { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .epic-modal-actions .btn-cancel { background: var(--surface-raised); color: var(--text-secondary); }
+        .epic-modal-actions .btn-delete { background: var(--red-dim); color: var(--red-text); border-color: rgba(239,68,68,0.3); }
+        .epic-row { cursor: pointer; }
+        .epic-row:hover { background: var(--surface-raised); border-radius: 4px; }
+
         /* Loading */
         .loading { text-align: center; padding: 60px 20px; color: var(--text-muted); font-size: 13px; }
         .loading-spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
@@ -140,13 +156,13 @@
     <header>
         <div class="shell">
             <div class="header-row">
-                <div class="brand"><h1>TARS</h1><span>Team Board</span></div>
+                <div class="brand"><h1>TARS</h1><span>Portfolio Board</span></div>
                 <nav class="nav-links">
                     <a href="/call">Voice</a>
                     <a href="/tasks">Tasks</a>
                     <a href="/briefing">Briefing</a>
                     <a href="/executive">Executive</a>
-                    <a href="/team" class="active">Team</a>
+                    <a href="/team" class="active">Portfolio</a>
                     <a href="/people">People</a>
                     <a href="/review">Review</a>
                     <a href="/graph">Graph</a>
@@ -195,12 +211,54 @@
         <div id="content">
             <div class="loading"><div class="loading-spinner"></div>Loading team data...</div>
         </div>
+        <!-- Epic edit modal -->
+        <div class="epic-modal-overlay" id="epic-modal-overlay" onclick="if(event.target===this)closeEpicModal()">
+            <div class="epic-modal">
+                <h3 id="epic-modal-title">Edit Epic</h3>
+                <input type="hidden" id="epic-modal-id">
+                <label>Title</label>
+                <input type="text" id="epic-field-title">
+                <label>Description</label>
+                <textarea id="epic-field-description"></textarea>
+                <label>Owner</label>
+                <input type="text" id="epic-field-owner">
+                <div style="display:flex;gap:12px">
+                    <div style="flex:1"><label>Status</label>
+                        <select id="epic-field-status">
+                            <option value="backlog">Backlog</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="done">Done</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    </div>
+                    <div style="flex:1"><label>Priority</label>
+                        <select id="epic-field-priority">
+                            <option value="">—</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+                    <div style="flex:1"><label>Quarter</label>
+                        <input type="text" id="epic-field-quarter" placeholder="e.g. Q2 2026">
+                    </div>
+                </div>
+                <div class="epic-modal-actions">
+                    <button class="btn-delete" onclick="deleteEpic()">Delete</button>
+                    <div style="display:flex;gap:8px">
+                        <button class="btn-cancel" onclick="closeEpicModal()">Cancel</button>
+                        <button class="btn-save" onclick="saveEpic()">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <script src="/static/js/person-rename.js"></script>
     <script src="/static/js/webhook-status.js"></script>
     <script>
     (function() {
+        window._epicData = {};
         let flaggedOpen = true;
 
         window.toggleFlagged = function() {
@@ -286,11 +344,12 @@
 
             // Flagged banner
             const needsEpic = data.needs_epic || [];
-            if (data.needs_epic_count > 0 && needsEpic.length > 0) {
+            const visibleNE = needsEpic.filter(t => t.description && t.description.trim());
+            if (visibleNE.length > 0) {
                 const banner = document.getElementById('flagged-banner');
                 banner.classList.remove('hidden');
                 const itemsEl = document.getElementById('flagged-items');
-                itemsEl.innerHTML = needsEpic.map(t => `
+                itemsEl.innerHTML = visibleNE.map(t => `
                     <div class="flagged-item">
                         <span class="pill pill-amber">Needs Epic</span>
                         <span class="flagged-item-desc">${esc(t.description)}</span>
@@ -351,12 +410,13 @@
                     </div>`;
                     html += `<div class="section-body" id="body-${eid}" style="max-height:2000px">`;
                     epics.forEach((e, ei) => {
+                        window._epicData[e.id] = e;
                         const stories = e.stories || [];
                         const doneCount = stories.filter(s => s.status === 'done').length;
                         const totalStories = e.story_count || stories.length;
                         const progressPct = totalStories > 0 ? Math.round((doneCount / totalStories) * 100) : 0;
 
-                        html += `<div class="epic-row">
+                        html += `<div class="epic-row" onclick="openEpicModal('${esc(e.id)}')">
                             ${statusPill(e.status)}
                             <span class="epic-title">${esc(e.title)}</span>
                             ${e.priority ? priorityPill(e.priority) : ''}
@@ -385,12 +445,11 @@
                 }
 
                 // Needs epic section
-                const memberNE = m.needs_epic || [];
-                if (memberNE.length > 0 || (m.needs_epic_count || 0) > 0) {
-                    const neCount = m.needs_epic_count || memberNE.length;
+                const memberNE = (m.needs_epic || []).filter(t => t.description && t.description.trim());
+                if (memberNE.length > 0) {
                     html += `<div class="needs-epic-section">
                         <div class="section-head" style="color:var(--amber-text); padding-top:0">
-                            <span>NEEDS EPIC</span><span class="count">${neCount}</span>
+                            <span>NEEDS EPIC</span><span class="count">${memberNE.length}</span>
                         </div>`;
                     memberNE.forEach(t => {
                         html += `<div class="needs-epic-item">
@@ -532,6 +591,68 @@
             } catch (e) {
                 btn.textContent = 'Error';
                 setTimeout(() => { btn.textContent = 'Enrich People'; btn.disabled = false; }, 3000);
+            }
+        };
+        window.openEpicModal = function(id) {
+            const e = window._epicData[id];
+            if (!e) return;
+            document.getElementById('epic-modal-id').value = id;
+            document.getElementById('epic-field-title').value = e.title || '';
+            document.getElementById('epic-field-description').value = e.description || '';
+            document.getElementById('epic-field-owner').value = e.owner || '';
+            document.getElementById('epic-field-status').value = e.status || 'backlog';
+            document.getElementById('epic-field-priority').value = e.priority || '';
+            document.getElementById('epic-field-quarter').value = e.quarter || '';
+            document.getElementById('epic-modal-overlay').classList.add('open');
+        };
+
+        window.closeEpicModal = function() {
+            document.getElementById('epic-modal-overlay').classList.remove('open');
+        };
+
+        window.saveEpic = async function() {
+            const id = document.getElementById('epic-modal-id').value;
+            const body = {
+                title: document.getElementById('epic-field-title').value,
+                description: document.getElementById('epic-field-description').value,
+                owner: document.getElementById('epic-field-owner').value,
+                status: document.getElementById('epic-field-status').value,
+                priority: document.getElementById('epic-field-priority').value || null,
+                quarter: document.getElementById('epic-field-quarter').value || null,
+            };
+            try {
+                const resp = await fetch('/api/epics/' + id, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                if (resp.ok) {
+                    closeEpicModal();
+                    location.reload();
+                } else {
+                    const err = await resp.json();
+                    alert('Save failed: ' + (err.error || resp.status));
+                }
+            } catch (e) {
+                alert('Save failed: ' + e.message);
+            }
+        };
+
+        window.deleteEpic = async function() {
+            const id = document.getElementById('epic-modal-id').value;
+            const title = document.getElementById('epic-field-title').value;
+            if (!confirm('Delete epic "' + title + '" and all its stories?')) return;
+            try {
+                const resp = await fetch('/api/epics/' + id, { method: 'DELETE' });
+                if (resp.ok) {
+                    closeEpicModal();
+                    location.reload();
+                } else {
+                    const err = await resp.json();
+                    alert('Delete failed: ' + (err.error || resp.status));
+                }
+            } catch (e) {
+                alert('Delete failed: ' + e.message);
             }
         };
     })();
