@@ -76,9 +76,41 @@ body {
     animation: pulse-glow 1.5s ease-in-out infinite;
 }
 
+/* Sound wave rings expanding outward */
+#bubble.voice-active::before,
+#bubble.voice-active::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 56px;
+    height: 56px;
+    margin-top: -28px;
+    margin-left: -28px;
+    border-radius: 50%;
+    border: 2px solid rgba(34, 197, 94, 0.6);
+    animation: wave-ring 2s ease-out infinite;
+    pointer-events: none;
+}
+
+#bubble.voice-active::after {
+    animation-delay: 0.7s;
+}
+
 @keyframes pulse-glow {
     0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); }
-    50% { box-shadow: 0 0 30px rgba(34, 197, 94, 0.6); }
+    50% { box-shadow: 0 0 35px rgba(34, 197, 94, 0.7); }
+}
+
+@keyframes wave-ring {
+    0% {
+        transform: scale(1);
+        opacity: 0.7;
+    }
+    100% {
+        transform: scale(2.2);
+        opacity: 0;
+    }
 }
 
 /* ── Chat Panel ─────────────────────────────────────────────────── */
