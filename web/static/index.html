@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TARS</title>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0a0a0a; --surface: #111113; --surface-raised: #18181b;
+            --border: #27272a; --border-subtle: #1e1e21;
+            --text: #fafafa; --text-secondary: #a1a1aa; --text-muted: #71717a;
+            --accent: #3b82f6; --accent-dim: rgba(59,130,246,0.12);
+            --green: #22c55e; --green-dim: rgba(34,197,94,0.12); --green-text: #4ade80;
+            --amber: #f59e0b; --amber-dim: rgba(245,158,11,0.10); --amber-text: #fbbf24;
+            --red: #ef4444; --red-dim: rgba(239,68,68,0.10); --red-text: #f87171;
+            --blue-dim: rgba(59,130,246,0.10); --purple: #a855f7; --purple-dim: rgba(168,85,247,0.10); --purple-text: #c084fc;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+        .shell { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+        header { border-bottom: 1px solid var(--border-subtle); padding: 16px 0; position: sticky; top: 0; background: var(--bg); z-index: 50; }
+        .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+        .brand span { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+        .nav-links a:hover { color: var(--text-secondary); background: var(--surface); }
+        .nav-links a.active { color: var(--text); background: var(--surface-raised); }
+
+        .dash { padding: 24px 0; }
+
+        /* Hero / Summary */
+        .hero { margin-bottom: 28px; }
+        .hero-greeting { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
+        .hero-headline { font-size: 20px; font-weight: 600; line-height: 1.35; margin-bottom: 6px; }
+        .hero-sub { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+
+        /* Quick stats strip */
+        .stats { display: flex; gap: 1px; background: var(--border-subtle); border-radius: 8px; overflow: hidden; margin-bottom: 24px; }
+        .stat { flex: 1; background: var(--surface); padding: 14px 16px; text-align: center; position: relative; }
+        .stat-val { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+        .stat-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-top: 2px; }
+        .stat.has-accent::before { content: ''; position: absolute; left: 0; top: 20%; bottom: 20%; width: 3px; border-radius: 0 2px 2px 0; }
+        .stat.accent-red::before { background: var(--red); }
+        .stat.accent-amber::before { background: var(--amber); }
+        .stat.accent-green::before { background: var(--green); }
+        .stat.accent-blue::before { background: var(--accent); }
+
+        /* Two-column grid */
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+        @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+
+        /* Card */
+        .card { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 16px 20px; }
+        .card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+        .card-title a { color: var(--text-muted); text-decoration: none; font-size: 10px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+        .card-title a:hover { color: var(--text-secondary); }
+
+        /* Attention list */
+        .attn-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); }
+        .attn-item:last-child { border-bottom: none; }
+        .attn-badge { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; white-space: nowrap; flex-shrink: 0; margin-top: 1px; }
+        .attn-badge.overdue { background: var(--red-dim); color: var(--red-text); }
+        .attn-badge.today { background: var(--amber-dim); color: var(--amber-text); }
+        .attn-badge.alert { background: var(--blue-dim); color: var(--accent); }
+        .attn-desc { font-size: 12px; color: var(--text-secondary); flex: 1; }
+        .attn-owner { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+
+        /* Meeting list */
+        .meeting-item { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); }
+        .meeting-item:last-child { border-bottom: none; }
+        .meeting-time { font-size: 12px; font-weight: 500; color: var(--text-muted); font-variant-numeric: tabular-nums; width: 44px; flex-shrink: 0; }
+        .meeting-name { font-size: 12px; color: var(--text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .meeting-count { font-size: 10px; color: var(--text-muted); }
+
+        /* Delegation */
+        .deleg-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+        .deleg-name { font-size: 12px; color: var(--text-secondary); width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+        .deleg-bar { flex: 1; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+        .deleg-bar span { display: block; height: 100%; border-radius: 3px; transition: width 0.3s; }
+        .deleg-count { font-size: 11px; color: var(--text-muted); width: 20px; text-align: right; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+        /* Quadrant mini-grid */
+        .quad-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .quad-cell { background: var(--bg); border-radius: 6px; padding: 10px; text-align: center; }
+        .quad-val { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .quad-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-top: 2px; }
+        .quad-cell.q1 .quad-val { color: var(--red-text); }
+        .quad-cell.q2 .quad-val { color: var(--accent); }
+        .quad-cell.q3 .quad-val { color: var(--amber-text); }
+        .quad-cell.q4 .quad-val { color: var(--purple-text); }
+
+        /* Quick actions */
+        .actions { display: flex; gap: 8px; margin-bottom: 24px; }
+        .action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 500; text-decoration: none; transition: all 0.15s; border: 1px solid var(--border); color: var(--text-secondary); background: var(--surface); }
+        .action-btn:hover { background: var(--surface-raised); color: var(--text); }
+        .action-btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
+        .action-btn.primary:hover { opacity: 0.9; }
+
+        /* Scan meta */
+        .scan-meta { font-size: 11px; color: var(--text-muted); text-align: center; padding: 16px 0; }
+
+        /* Empty state */
+        .empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 12px; }
+
+        /* Loading */
+        .loading { color: var(--text-muted); font-size: 13px; padding: 60px 0; text-align: center; }
+    </style>
+    <link rel="stylesheet" href="/static/css/themes.css">
+    <script src="/static/js/themes.js"></script>
+</head>
+<body>
+    <header>
+        <div class="shell">
+            <div class="header-row">
+                <div class="brand">
+                    <h1>TARS</h1>
+                </div>
+                <nav class="nav-links">
+                    <a href="/call">Voice</a>
+                    <a href="/tasks">Tasks</a>
+                    <a href="/briefing">Briefing</a>
+                    <a href="/executive">Executive</a>
+                    <a href="/team">Team</a>
+                    <a href="/people">People</a>
+                    <a href="/review">Review</a>
+                    <a href="/graph">Graph</a>
+                    <a href="/settings">Settings</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <div class="dash">
+        <div class="shell">
+            <div id="dashboard">
+                <p class="loading">Loading dashboard...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+        function timeAgo(iso) {
+            if (!iso) return '';
+            var diff = (Date.now() - new Date(iso).getTime()) / 1000;
+            if (diff < 60) return 'just now';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            return Math.floor(diff / 86400) + 'd ago';
+        }
+
+        function fmtTime(iso) {
+            if (!iso) return '';
+            try {
+                var d = new Date(iso);
+                return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+            } catch(e) { return ''; }
+        }
+
+        function greeting() {
+            var h = new Date().getHours();
+            if (h < 12) return 'Good morning';
+            if (h < 17) return 'Good afternoon';
+            return 'Good evening';
+        }
+
+        async function load() {
+            var el = document.getElementById('dashboard');
+            try {
+                var resp = await fetch('/api/dashboard');
+                if (!resp.ok) throw new Error('API error ' + resp.status);
+                var d = await resp.json();
+                render(d, el);
+            } catch(err) {
+                el.innerHTML = '<p class="empty">Could not load dashboard. ' + esc(err.message) + '</p>';
+            }
+        }
+
+        function render(d, el) {
+            var tasks = d.tasks || {};
+            var meetings = d.meetings || {};
+            var alerts = d.alerts || {};
+            var scan = d.scan || {};
+            var decisions = d.decisions || {};
+            var summary = d.summary || {};
+
+            var html = '';
+
+            // ── Hero ──
+            html += '<div class="hero">';
+            html += '<div class="hero-greeting">' + greeting() + '</div>';
+            var headline = '';
+            if (tasks.overdue_count > 0 && alerts.count > 0) {
+                headline = tasks.overdue_count + ' overdue task' + (tasks.overdue_count !== 1 ? 's' : '') + '. ' + alerts.count + ' alert' + (alerts.count !== 1 ? 's' : '') + ' need attention.';
+            } else if (tasks.overdue_count > 0) {
+                headline = tasks.overdue_count + ' task' + (tasks.overdue_count !== 1 ? 's' : '') + ' overdue.';
+            } else if (tasks.open > 0) {
+                headline = tasks.open + ' open tasks across your team.';
+            } else {
+                headline = 'All clear. No open items.';
+            }
+            if (decisions.pending > 0) {
+                headline += ' ' + decisions.pending + ' decision' + (decisions.pending !== 1 ? 's' : '') + ' pending.';
+            }
+            html += '<div class="hero-headline">' + esc(headline) + '</div>';
+
+            var subParts = [];
+            if (meetings.count > 0) subParts.push(meetings.count + ' meeting' + (meetings.count !== 1 ? 's' : '') + ' today');
+            if (scan.last_scan_at) subParts.push('Last scan ' + timeAgo(scan.last_scan_at) + ' — ' + scan.pages_scanned + ' pages, ' + scan.topics_count + ' topics, ' + scan.people_count + ' people');
+            if (subParts.length) html += '<div class="hero-sub">' + esc(subParts.join(' · ')) + '</div>';
+            html += '</div>';
+
+            // ── Quick actions ──
+            html += '<div class="actions">';
+            html += '<a href="/call" class="action-btn primary">Start Voice Call</a>';
+            html += '<a href="/briefing" class="action-btn">Daily Briefing</a>';
+            html += '<a href="/tasks" class="action-btn">Task Board</a>';
+            html += '<a href="/executive" class="action-btn">Executive View</a>';
+            html += '</div>';
+
+            // ── Stats strip ──
+            html += '<div class="stats">';
+            html += '<div class="stat' + (tasks.open > 0 ? ' has-accent accent-blue' : '') + '"><div class="stat-val">' + (tasks.open || 0) + '</div><div class="stat-lbl">Open Tasks</div></div>';
+            html += '<div class="stat' + (tasks.overdue_count > 0 ? ' has-accent accent-red' : '') + '"><div class="stat-val">' + (tasks.overdue_count || 0) + '</div><div class="stat-lbl">Overdue</div></div>';
+            html += '<div class="stat' + (meetings.count > 0 ? ' has-accent accent-amber' : '') + '"><div class="stat-val">' + (meetings.count || 0) + '</div><div class="stat-lbl">Meetings Today</div></div>';
+            html += '<div class="stat' + (tasks.done > 0 ? ' has-accent accent-green' : '') + '"><div class="stat-val">' + (tasks.done || 0) + '</div><div class="stat-lbl">Completed</div></div>';
+            html += '</div>';
+
+            // ── Two-column grid ──
+            html += '<div class="grid">';
+
+            // Left column: Attention items
+            html += '<div class="card">';
+            html += '<div class="card-title">Requires Attention <a href="/tasks">View all &rarr;</a></div>';
+            var overdue = tasks.overdue || [];
+            var dueToday = tasks.due_today || [];
+            var alertItems = (alerts.items || []);
+            if (overdue.length === 0 && dueToday.length === 0 && alertItems.length === 0) {
+                html += '<div class="empty">Nothing urgent right now.</div>';
+            } else {
+                for (var i = 0; i < overdue.length && i < 4; i++) {
+                    html += '<div class="attn-item">';
+                    html += '<span class="attn-badge overdue">' + overdue[i].days_overdue + 'd overdue</span>';
+                    html += '<span class="attn-desc">' + esc(overdue[i].description) + '</span>';
+                    html += '<span class="attn-owner">' + esc(overdue[i].owner) + '</span>';
+                    html += '</div>';
+                }
+                for (var i = 0; i < dueToday.length && i < 3; i++) {
+                    html += '<div class="attn-item">';
+                    html += '<span class="attn-badge today">Due today</span>';
+                    html += '<span class="attn-desc">' + esc(dueToday[i].description) + '</span>';
+                    html += '<span class="attn-owner">' + esc(dueToday[i].owner) + '</span>';
+                    html += '</div>';
+                }
+                for (var i = 0; i < alertItems.length && i < 2; i++) {
+                    html += '<div class="attn-item">';
+                    html += '<span class="attn-badge alert">' + esc(alertItems[i].type || 'Alert') + '</span>';
+                    html += '<span class="attn-desc">' + esc(alertItems[i].message || alertItems[i].title || '') + '</span>';
+                    html += '</div>';
+                }
+            }
+            html += '</div>';
+
+            // Right column: Today's meetings
+            html += '<div class="card">';
+            html += '<div class="card-title">Today\'s Schedule <a href="/briefing">Full briefing &rarr;</a></div>';
+            var mtgs = meetings.today || [];
+            if (mtgs.length === 0) {
+                html += '<div class="empty">No meetings scheduled.</div>';
+            } else {
+                for (var i = 0; i < mtgs.length; i++) {
+                    html += '<div class="meeting-item">';
+                    html += '<span class="meeting-time">' + fmtTime(mtgs[i].start) + '</span>';
+                    html += '<span class="meeting-name">' + esc(mtgs[i].subject) + '</span>';
+                    if (mtgs[i].attendees_count > 0) html += '<span class="meeting-count">+' + mtgs[i].attendees_count + '</span>';
+                    html += '</div>';
+                }
+            }
+            html += '</div>';
+
+            html += '</div>'; // grid
+
+            // ── Second row: Eisenhower + Delegation ──
+            html += '<div class="grid">';
+
+            // Eisenhower quadrant
+            html += '<div class="card">';
+            html += '<div class="card-title">Priority Matrix <a href="/tasks">Task board &rarr;</a></div>';
+            var q = tasks.quadrants || {};
+            html += '<div class="quad-grid">';
+            html += '<div class="quad-cell q1"><div class="quad-val">' + (q[1] || 0) + '</div><div class="quad-lbl">Do First</div></div>';
+            html += '<div class="quad-cell q2"><div class="quad-val">' + (q[2] || 0) + '</div><div class="quad-lbl">Schedule</div></div>';
+            html += '<div class="quad-cell q3"><div class="quad-val">' + (q[3] || 0) + '</div><div class="quad-lbl">Delegate</div></div>';
+            html += '<div class="quad-cell q4"><div class="quad-val">' + (q[4] || 0) + '</div><div class="quad-lbl">Defer</div></div>';
+            html += '</div>';
+            html += '</div>';
+
+            // Delegation
+            html += '<div class="card">';
+            html += '<div class="card-title">Team Load <a href="/team">Team board &rarr;</a></div>';
+            var deleg = tasks.delegation || [];
+            if (deleg.length === 0) {
+                html += '<div class="empty">No delegation data yet.</div>';
+            } else {
+                var maxCount = Math.max.apply(null, deleg.map(function(d) { return d.count; })) || 1;
+                for (var i = 0; i < deleg.length; i++) {
+                    var pct = Math.round((deleg[i].count / maxCount) * 100);
+                    var barColor = deleg[i].overdue > 0 ? 'var(--red)' : pct > 75 ? 'var(--amber)' : 'var(--accent)';
+                    html += '<div class="deleg-row">';
+                    html += '<span class="deleg-name">' + esc(deleg[i].name) + '</span>';
+                    html += '<span class="deleg-bar"><span style="width:' + pct + '%;background:' + barColor + '"></span></span>';
+                    html += '<span class="deleg-count">' + deleg[i].count + '</span>';
+                    html += '</div>';
+                }
+            }
+            html += '</div>';
+
+            html += '</div>'; // grid
+
+            // ── Scan meta ──
+            if (scan.last_scan_at) {
+                html += '<div class="scan-meta">Intelligence last updated ' + timeAgo(scan.last_scan_at) + ' &middot; ' + scan.pages_scanned + ' pages scanned &middot; ' + scan.topics_count + ' topics &middot; ' + scan.people_count + ' people tracked</div>';
+            }
+
+            el.innerHTML = html;
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', load);
+        } else {
+            load();
+        }
+    })();
+    </script>
+<script src="/static/js/webhook-status.js"></script>
+</body>
+</html>
