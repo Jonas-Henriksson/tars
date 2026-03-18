@@ -1980,6 +1980,106 @@ async def notification_stream(request: Request):
     )
 
 
+# ── Header status (combined) ─────────────────────────────────────────
+
+
+@app.get("/api/header/status")
+async def header_status():
+    """Combined endpoint for the header status indicator.
+
+    Returns integration health summary, last sync time, tunnel status,
+    and active scan state — everything the header bar needs in one call.
+    """
+    from integrations.webhook_status import get_status as wh_status
+
+    result: dict = {}
+
+    # 1) Integration health summary
+    try:
+        from config import (
+            OPENAI_API_KEY as _oai,
+            ANTHROPIC_API_KEY as _ant,
+            NOTION_API_KEY as _notion,
+            MS_CLIENT_ID as _ms_id,
+            MS_TENANT_ID as _ms_tid,
+            TELEGRAM_BOT_TOKEN as _tg,
+        )
+        greens, ambers, reds = 0, 0, 0
+        # Microsoft 365
+        if _ms_id and _ms_tid:
+            try:
+                from integrations.ms_auth import get_token_silent
+                if get_token_silent():
+                    greens += 1
+                else:
+                    ambers += 1
+            except Exception:
+                ambers += 1
+        else:
+            reds += 1
+        # Notion
+        if _notion:
+            greens += 1
+        else:
+            reds += 1
+        # OpenAI
+        if _oai:
+            greens += 1
+        else:
+            reds += 1
+        # Anthropic
+        if _ant:
+            greens += 1
+        else:
+            reds += 1
+        # Telegram (optional — don't penalise if absent)
+        if _tg:
+            greens += 1
+
+        result["integrations"] = {"green": greens, "amber": ambers, "red": reds}
+    except Exception:
+        result["integrations"] = {"green": 0, "amber": 0, "red": 0}
+
+    # 2) Webhook / last sync info
+    try:
+        wh = wh_status()
+        result["webhook"] = {
+            "health": wh.get("health"),
+            "last_event_at": wh.get("last_event_at"),
+            "enabled": wh.get("enabled", False),
+        }
+    except Exception:
+        result["webhook"] = {"health": "disabled", "last_event_at": None, "enabled": False}
+
+    # 3) Tunnel status
+    try:
+        tfile = Path(__file__).parent.parent / "tunnel_status.json"
+        if tfile.exists():
+            tdata = json.loads(tfile.read_text())
+            result["tunnel"] = {"running": tdata.get("running", False)}
+        else:
+            result["tunnel"] = {"running": False}
+    except Exception:
+        result["tunnel"] = {"running": False}
+
+    # 4) Scan status
+    scan = _get_scan_state()
+    if scan and not scan["done"]:
+        last_p = scan["progress"][-1] if scan["progress"] else {}
+        result["scan"] = {
+            "running": True,
+            "scan_id": scan["id"],
+            "current": last_p.get("current", 0),
+            "total": last_p.get("total", 0),
+            "page_title": last_p.get("page_title"),
+            "status": last_p.get("status"),
+        }
+    else:
+        result["scan"] = {"running": False}
+
+    return JSONResponse(result)
+
+
 # ── Notion Webhook Push ──────────────────────────────────────────────
 
 @app.get("/api/webhook/status")
