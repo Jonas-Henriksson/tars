@@ -113,6 +113,65 @@ def _detect_topics(text: str, title: str) -> list[str]:
     return [t for t, _ in ranked[:3]]
 
 
+_TOPIC_NORMALIZE_PROMPT = """\
+You are normalizing topic tags extracted from {page_count} business documents.
+The topics were extracted independently per page and contain duplicates, inconsistencies,
+and overly generic labels. Your job is to create a clean, hierarchical topic taxonomy.
+
+Current topics with occurrence counts:
+{topics_json}
+
+Sample page titles for context:
+{page_titles}
+
+Rules:
+1. Merge duplicates and near-duplicates (e.g. "supply-chain" and "supply chain/logistics" -> "supply-chain/logistics")
+2. Create hierarchy where appropriate (e.g. "finance" + "budget" -> "finance/budgeting")
+3. Replace generic labels ("strategy", "management", "planning") with specific alternatives based on context
+4. Keep counts — when merging, sum the counts
+5. Aim for 8-20 distinct top-level topics
+6. Use kebab-case with "/" for hierarchy
+
+Return ONLY a valid JSON object mapping topic names to their counts, e.g.:
+{{"supply-chain/optimization": 12, "engineering/platform-migration": 8, "finance/q2-forecast": 5}}
+"""
+
+
+async def _normalize_topics_batch(
+    topic_counter: Counter, page_index: dict,
+) -> dict[str, int] | None:
+    """Post-scan topic normalization via Opus.
+
+    Takes all collected topics and page titles, sends to Opus for
+    cross-library inference, deduplication, and hierarchy normalization.
+    Returns normalized {topic: count} dict or None on failure.
+    """
+    from llm import llm_call
+
+    topics_json = json.dumps(dict(topic_counter.most_common()), indent=2)
+    page_titles = "\n".join(
+        f"- {p.get('title', '?')}" for p in list(page_index.values())[:30]
+    )
+
+    prompt = _TOPIC_NORMALIZE_PROMPT.format(
+        page_count=len(page_index),
+        topics_json=topics_json,
+        page_titles=page_titles,
+    )
+
+    try:
+        text = await llm_call("topic_normalization", prompt, max_tokens=2000)
+        if text is None:
+            return None
+        result = json.loads(text)
+        if isinstance(result, dict):
+            return result
+        return None
+    except (json.JSONDecodeError, Exception) as e:
+        logger.warning("Topic normalization failed: %s", e)
+        return None
+
+
 def _extract_people(text: str, title: str) -> list[str]:
     """Extract people mentions from text."""
     people = set()
@@ -150,54 +209,24 @@ Return JSON:
 {{"people":[],"organizations":[],"projects":[],"topics":[],"decisions":[],"tags":[],"summary":""}}
 """
 
-_llm_client = None
-
-
-def _get_llm_client():
-    """Lazy-init Anthropic client."""
-    global _llm_client
-    if _llm_client is not None:
-        return _llm_client
-    try:
-        from config import ANTHROPIC_API_KEY
-        if not ANTHROPIC_API_KEY:
-            return None
-        import anthropic
-        _llm_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        return _llm_client
-    except Exception as e:
-        logger.warning("Cannot initialize Anthropic client: %s", e)
-        return None
-
-
 async def _llm_extract_metadata(title: str, content: str) -> dict | None:
-    """Use Claude haiku to extract rich metadata from a page.
+    """Use LLM to extract rich metadata from a page.
 
     Returns structured dict or None if LLM is unavailable.
-    Content is truncated to ~4000 chars to keep costs low.
+    Content is truncated to ~8000 chars to give Opus more context.
     """
-    client = _get_llm_client()
-    if client is None:
-        return None
+    from llm import llm_call
 
-    # Truncate long content to control cost
-    max_content = 4000
+    # Truncate long content — Opus can handle more context for richer extraction
+    max_content = 8000
     truncated = content[:max_content] + ("..." if len(content) > max_content else "")
 
     prompt = _LLM_EXTRACT_PROMPT.format(title=title, content=truncated)
 
     try:
-        response = await asyncio.to_thread(
-            client.messages.create,
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = response.content[0].text.strip()
-
-        # Parse JSON — handle markdown code blocks
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        text = await llm_call("metadata_extraction", prompt, max_tokens=1024)
+        if text is None:
+            return None
 
         result = json.loads(text)
 
@@ -880,6 +909,12 @@ async def scan_notion(
     if not was_cancelled:
         await _emit_progress(total_pages, total_pages, "", "finalizing")
 
+    # Run topic normalization pass via Opus (cross-library deduplication)
+    if not was_cancelled and topic_counter:
+        normalized = await _normalize_topics_batch(topic_counter, page_index)
+        if normalized:
+            topic_counter = Counter(normalized)
+
     # Merge into intel
     intel["topics"] = dict(topic_counter.most_common())
     intel["people"] = dict(people_counter.most_common())
@@ -1428,54 +1463,56 @@ def update_smart_task(
 
 
 async def rewrite_task_titles() -> dict:
-    """Use LLM to rewrite task descriptions into clear, actionable titles.
+    """Use Opus to rewrite task descriptions into clear, actionable titles.
 
-    Processes all open tasks in a single batch call for efficiency.
+    Gives Opus the full source context per task so it can infer the real
+    actionable work — not just reformat, but understand and distill.
     Returns {"updated": count, "tasks": [...]}.
     """
-    client = _get_llm_client()
-    if client is None:
-        return {"error": "No Anthropic API key configured"}
+    from llm import llm_call
 
     intel = _load_intel()
     open_tasks = [t for t in intel.get("smart_tasks", []) if t.get("status") != "done"]
     if not open_tasks:
         return {"updated": 0, "tasks": []}
 
-    # Build batch prompt with context
+    # Build batch prompt with FULL source context for deeper inference
     task_lines = []
     for t in open_tasks:
-        ctx = t.get("source_context", "")[:100]
+        ctx = t.get("source_context", "")[:500]
         task_lines.append(json.dumps({
             "id": t["id"],
             "current": t.get("description", ""),
             "owner": t.get("owner", ""),
-            "context": ctx,
+            "source_title": t.get("source_title", ""),
+            "topics": t.get("topics", []),
+            "source_context": ctx,
         }))
 
     prompt = (
-        "Rewrite each task description into a clear, professional, actionable title. "
+        "You are analyzing tasks extracted from executive meeting notes and documents. "
+        "For each task, you have the raw source context where it was found. "
+        "Use this context to deeply understand what the actual actionable work is, "
+        "then generate a concise, insight-driven title.\n\n"
         "Rules:\n"
-        "- Start with a verb (Review, Prepare, Follow up, Coordinate, etc.)\n"
+        "- Start with an action verb (Review, Prepare, Follow up, Coordinate, Decide, etc.)\n"
         "- Be specific but concise (5-12 words)\n"
-        "- Include the key subject/topic\n"
-        "- Remove filler words like 'tomorrow', 'this afternoon', relative dates\n"
+        "- Capture the REAL intent from the source context, not just the surface description\n"
+        "- If the source context reveals the task is about a decision, budget, deadline, "
+        "or strategic choice — reflect that in the title\n"
+        "- Include key subjects, stakeholders, or deliverables\n"
+        "- Remove filler words, relative dates, and meeting scaffolding\n"
         "- Keep proper nouns and names\n\n"
-        "Input tasks (JSON lines):\n" + "\n".join(task_lines) + "\n\n"
+        "Input tasks (JSON lines — read source_context carefully):\n"
+        + "\n".join(task_lines) + "\n\n"
         "Return a JSON array of {\"id\": \"...\", \"title\": \"...\"} objects. "
         "Only return the JSON array, no other text."
     )
 
     try:
-        response = await asyncio.to_thread(
-            client.messages.create,
-            model="claude-haiku-4-5-20251001",
-            max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = response.content[0].text.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        text = await llm_call("task_title_rewrite", prompt, max_tokens=4096)
+        if text is None:
+            return {"error": "LLM unavailable"}
 
         rewrites = json.loads(text)
         rewrite_map = {r["id"]: r["title"] for r in rewrites if "id" in r and "title" in r}

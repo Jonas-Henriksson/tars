@@ -177,7 +177,7 @@ async def run(chat_id: int, user_message: str, model: str = None) -> str:
     # Agent loop: keep going while Claude wants to use tools
     while True:
         kwargs: dict[str, Any] = {
-            "model": model or "claude-sonnet-4-20250514",
+            "model": model or "claude-sonnet-4-6",
             "max_tokens": 4096,
             "system": _build_system_prompt(),
             "messages": messages,

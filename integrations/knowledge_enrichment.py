@@ -13,7 +13,6 @@ Examples:
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -111,15 +110,6 @@ def _save_kb(data: dict[str, Any]) -> None:
     _KB_FILE.write_text(json.dumps(data, indent=2, default=str))
 
 
-def _get_llm_client():
-    try:
-        from config import ANTHROPIC_API_KEY
-        if not ANTHROPIC_API_KEY:
-            return None
-        import anthropic
-        return anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    except Exception:
-        return None
 
 
 _SYNTHESIZE_PROMPT = """\
@@ -202,41 +192,17 @@ async def enrich_topic(topic: str, custom_queries: list[str] | None = None) -> d
     if not all_results:
         return {"topic": topic, "status": "no_results", "articles_added": 0}
 
-    # Use LLM to synthesize into actionable brief
-    client = _get_llm_client()
-    if client is None:
-        # Store raw results without synthesis
-        article = {
-            "topic": topic,
-            "title": f"Best Practices: {topic.title()}",
-            "content": "\n".join(f"- {r['title']}: {r['snippet']}" for r in all_results),
-            "source": "web_search",
-            "sources": [r.get("url", "") for r in all_results if r.get("url")],
-            "added_at": datetime.now(timezone.utc).isoformat(),
-            "type": "best_practice",
-        }
-        kb["articles"].append(article)
-        if topic not in kb["topics_enriched"]:
-            kb["topics_enriched"].append(topic)
-        _save_kb(kb)
-        return {"topic": topic, "status": "added_raw", "articles_added": 1}
+    # Synthesize with LLM (Opus for advanced cross-domain insights)
+    from llm import llm_call
 
-    # Synthesize with LLM
     search_text = "\n\n".join(
         f"### {r['title']}\n{r['snippet']}" for r in all_results[:8]
     )
     prompt = _SYNTHESIZE_PROMPT.format(topic=topic, search_results=search_text)
 
-    try:
-        response = await asyncio.to_thread(
-            client.messages.create,
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        synthesis = response.content[0].text.strip()
-    except Exception as e:
-        logger.warning("LLM synthesis failed: %s", e)
+    synthesis = await llm_call("knowledge_synthesis", prompt, max_tokens=1500)
+    if synthesis is None:
+        # Fallback: store raw results without synthesis
         synthesis = "\n".join(f"- {r['snippet']}" for r in all_results)
 
     # Check for duplicates

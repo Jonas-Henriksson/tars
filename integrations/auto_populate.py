@@ -6,7 +6,6 @@ deliverables. Also enriches people profiles from intel context.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
@@ -83,38 +82,6 @@ Return ONLY valid JSON array:
 """
 
 
-def _get_llm_client():
-    """Get Anthropic client for LLM calls."""
-    try:
-        from config import ANTHROPIC_API_KEY
-        if not ANTHROPIC_API_KEY:
-            return None
-        import anthropic
-        return anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    except Exception:
-        return None
-
-
-async def _llm_call(prompt: str, max_tokens: int = 2048) -> str | None:
-    """Make an LLM call and return the text response."""
-    client = _get_llm_client()
-    if client is None:
-        return None
-
-    try:
-        response = await asyncio.to_thread(
-            client.messages.create,
-            model="claude-haiku-4-5-20251001",
-            max_tokens=max_tokens,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = response.content[0].text.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-        return text
-    except Exception as e:
-        logger.warning("LLM call failed: %s", e)
-        return None
 
 
 async def auto_populate_epics() -> dict[str, Any]:
@@ -187,7 +154,8 @@ async def auto_populate_epics() -> dict[str, Any]:
         existing_epics=existing_titles_str,
     )
 
-    raw = await _llm_call(prompt, max_tokens=3000)
+    from llm import llm_call
+    raw = await llm_call("epic_generation", prompt, max_tokens=3000)
     if not raw:
         return {"error": "LLM unavailable", "epics_created": 0, "stories_created": 0}
 
@@ -314,7 +282,8 @@ async def auto_enrich_people() -> dict[str, Any]:
     person_text = json.dumps(needs_enrichment[:20], indent=2)
     prompt = _PEOPLE_PROMPT.format(person_data=person_text)
 
-    raw = await _llm_call(prompt, max_tokens=2000)
+    from llm import llm_call
+    raw = await llm_call("people_enrichment", prompt, max_tokens=2000)
     if not raw:
         return {"error": "LLM unavailable", "updated": 0}
 

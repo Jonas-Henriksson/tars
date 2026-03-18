@@ -17,3 +17,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 MS_CLIENT_ID = os.environ.get("MS_CLIENT_ID", "")
 MS_TENANT_ID = os.environ.get("MS_TENANT_ID", "")
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
+
+# LLM model override — set to force all TARS LLM calls to a specific model
+# e.g. "claude-haiku-4-5-20251001" for testing/budget control
+TARS_MODEL_OVERRIDE = os.environ.get("TARS_MODEL_OVERRIDE", "")

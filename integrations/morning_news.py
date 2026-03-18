@@ -10,7 +10,6 @@ Classifies by relevance, impact, and need-to-react.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -103,17 +102,6 @@ def _save_cache(data: dict[str, Any]) -> None:
     _CACHE_FILE.write_text(json.dumps(data, indent=2, default=str))
 
 
-def _get_llm_client():
-    try:
-        from config import ANTHROPIC_API_KEY
-        if not ANTHROPIC_API_KEY:
-            return None
-        import anthropic
-        return anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    except Exception:
-        return None
-
-
 async def _search_news(query: str) -> list[dict[str, str]]:
     """Search for recent news using DuckDuckGo."""
     try:
@@ -182,31 +170,23 @@ async def generate_morning_brief() -> dict[str, Any]:
         }
         return result
 
-    # Classify with LLM
-    client = _get_llm_client()
+    # Classify with LLM (Opus for deeper business relevance inference)
+    from llm import llm_call
+
     classified_items = []
+    news_text = "\n".join(
+        f"- [{item.get('category', '')}] {item['title']}" +
+        (f"\n  {item['snippet'][:200]}" if item.get("snippet") else "")
+        for item in all_items[:20]
+    )
+    prompt = _CLASSIFY_PROMPT.format(news_items=news_text)
 
-    if client:
-        news_text = "\n".join(
-            f"- [{item.get('category', '')}] {item['title']}" +
-            (f"\n  {item['snippet'][:200]}" if item.get("snippet") else "")
-            for item in all_items[:20]
-        )
-        prompt = _CLASSIFY_PROMPT.format(news_items=news_text)
-
-        try:
-            response = await asyncio.to_thread(
-                client.messages.create,
-                model="claude-haiku-4-5-20251001",
-                max_tokens=2000,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = response.content[0].text.strip()
-            if text.startswith("```"):
-                text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    try:
+        text = await llm_call("news_classification", prompt, max_tokens=2000)
+        if text:
             classified_items = json.loads(text)
-        except Exception as e:
-            logger.warning("News classification failed: %s", e)
+    except Exception as e:
+        logger.warning("News classification failed: %s", e)
 
     if not classified_items:
         # Fall back to unclassified items
