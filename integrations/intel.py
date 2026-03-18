@@ -24,6 +24,30 @@ from typing import Any, Callable, Optional
 logger = logging.getLogger(__name__)
 
 _INTEL_FILE = Path(__file__).parent.parent / "notion_intel.json"
+_CHECKPOINT_FILE = Path(__file__).parent.parent / "scan_checkpoint.json"
+
+
+def _load_checkpoint() -> dict | None:
+    """Load an in-progress scan checkpoint from disk."""
+    if _CHECKPOINT_FILE.exists():
+        try:
+            return json.loads(_CHECKPOINT_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            pass
+    return None
+
+
+def _save_checkpoint(data: dict) -> None:
+    """Persist scan checkpoint to disk."""
+    _CHECKPOINT_FILE.write_text(json.dumps(data, default=str))
+
+
+def _clear_checkpoint() -> None:
+    """Remove checkpoint after scan completes or is cancelled."""
+    try:
+        _CHECKPOINT_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def _load_intel() -> dict:
@@ -669,6 +693,7 @@ async def scan_notion(
     full_scan: bool = False,
     on_progress: Optional[Callable[[dict], Any]] = None,
     cancel_event: Optional[asyncio.Event] = None,
+    _resume_checkpoint: dict | None = None,
 ) -> dict:
     """Scan Notion pages to build intelligence.
 
@@ -676,11 +701,15 @@ async def scan_notion(
     last scan are fetched and processed.  Pass ``full_scan=True`` to
     re-scan everything.
 
+    If ``_resume_checkpoint`` is provided, the scan resumes from a
+    previously interrupted run, skipping already-processed pages.
+
     Args:
         max_pages: Max pages to scan.
         full_scan: If True, ignore last scan timestamp and scan all pages.
         on_progress: Optional async/sync callback receiving progress dicts.
         cancel_event: Optional asyncio.Event; when set, scan stops early.
+        _resume_checkpoint: Internal — checkpoint dict from a prior run.
 
     Returns:
         Summary of scan results.
@@ -693,11 +722,33 @@ async def scan_notion(
     intel = _load_intel()
     now = datetime.now(timezone.utc)
 
-    # Incremental: only fetch pages edited since last scan
-    since = None if full_scan else intel.get("last_scan_at")
-    pages = await _fetch_all_pages(max_pages, since=since)
-    scan_type = "full" if full_scan or not since else "incremental"
-    logger.info("Intel scan (%s): fetched %d pages from Notion", scan_type, len(pages))
+    # ── Resume from checkpoint or start fresh ─────────────────────
+    cp = _resume_checkpoint
+    if cp:
+        pages = cp["pages"]
+        processed_ids = set(cp.get("processed_ids", []))
+        scan_type = cp.get("scan_type", "full")
+        logger.info(
+            "Intel scan RESUMING (%s): %d/%d pages already done",
+            scan_type, len(processed_ids), len(pages),
+        )
+    else:
+        # Incremental: only fetch pages edited since last scan
+        since = None if full_scan else intel.get("last_scan_at")
+        pages = await _fetch_all_pages(max_pages, since=since)
+        scan_type = "full" if full_scan or not since else "incremental"
+        processed_ids: set[str] = set()
+        logger.info("Intel scan (%s): fetched %d pages from Notion", scan_type, len(pages))
+
+        # Save initial checkpoint so we can resume after restart
+        _save_checkpoint({
+            "pages": pages,
+            "processed_ids": [],
+            "scan_type": scan_type,
+            "full_scan": full_scan,
+            "max_pages": max_pages,
+            "started_at": now.isoformat(),
+        })
 
     topic_counter: Counter = Counter()
     people_counter: Counter = Counter()
@@ -884,9 +935,14 @@ async def scan_notion(
                 await result
 
     total_pages = len(pages)
-    await _emit_progress(0, total_pages, "", "started")
+    already_done = len(processed_ids)
+    await _emit_progress(already_done, total_pages, "", "started")
 
     for idx, page in enumerate(pages):
+        # Skip pages already processed in a prior run (resume support)
+        if page["id"] in processed_ids:
+            continue
+
         # Check for cancellation
         if cancel_event and cancel_event.is_set():
             logger.info("Intel scan cancelled after %d/%d pages", idx, total_pages)
@@ -901,6 +957,7 @@ async def scan_notion(
         except Exception as exc:
             logger.warning("Failed to read page %s (%s): %s", page_title, page["id"], exc)
             errors += 1
+            processed_ids.add(page["id"])
             continue
 
         title = content_data.get("title", "")
@@ -926,8 +983,21 @@ async def scan_notion(
             except Exception as exc:
                 logger.warning("Failed to read child page %s: %s", child.get("title", "?"), exc)
 
+        # Checkpoint after each page so we can resume on restart
+        processed_ids.add(page["id"])
+        _save_checkpoint({
+            "pages": pages,
+            "processed_ids": list(processed_ids),
+            "scan_type": scan_type,
+            "full_scan": full_scan,
+            "max_pages": max_pages,
+            "started_at": cp["started_at"] if cp else now.isoformat(),
+        })
+
     # Emit completion progress
     was_cancelled = cancel_event and cancel_event.is_set()
+    if was_cancelled:
+        _clear_checkpoint()  # User cancelled — discard checkpoint
     if not was_cancelled:
         await _emit_progress(total_pages, total_pages, "", "finalizing")
 
@@ -958,6 +1028,7 @@ async def scan_notion(
     intel["executive_summary"] = _build_executive_summary(intel)
 
     _save_intel(intel)
+    _clear_checkpoint()  # Scan done — remove checkpoint file
 
     # Also save new tasks to the tracked tasks file so the Tasks page shows them
     if new_tasks:

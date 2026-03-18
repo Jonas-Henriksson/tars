@@ -42,6 +42,9 @@ app.add_middleware(
 _JS_DIR = _STATIC_DIR / "js"
 if _JS_DIR.is_dir():
     app.mount("/static/js", StaticFiles(directory=_JS_DIR), name="static-js")
+_CSS_DIR = _STATIC_DIR / "css"
+if _CSS_DIR.is_dir():
+    app.mount("/static/css", StaticFiles(directory=_CSS_DIR), name="static-css")
 
 # TARS system instructions for the Realtime API
 TARS_INSTRUCTIONS = """\
@@ -1179,6 +1182,7 @@ async def scan_intel(max_pages: int = 10000, full_scan: bool = False):
 # The scan runs as a fire-and-forget background task.  Progress events
 # are pushed into a list (append-only) that SSE clients read from.
 # Clients can connect/disconnect/reconnect without affecting the scan.
+# If the server restarts mid-scan, a checkpoint file allows resumption.
 
 _active_scan: dict | None = None   # {id, task, cancel_event, progress, result}
 
@@ -1188,8 +1192,16 @@ def _get_scan_state() -> dict | None:
     return _active_scan
 
 
-def _start_background_scan(max_pages: int, full_scan: bool) -> dict:
-    """Launch a scan as a background asyncio task. Returns scan state dict."""
+def _start_background_scan(
+    max_pages: int,
+    full_scan: bool,
+    resume_checkpoint: dict | None = None,
+) -> dict:
+    """Launch a scan as a background asyncio task. Returns scan state dict.
+
+    If ``resume_checkpoint`` is provided, the scan resumes from a prior
+    interrupted run, skipping already-processed pages.
+    """
     global _active_scan
     import uuid
     from integrations.intel import scan_notion
@@ -1217,6 +1229,7 @@ def _start_background_scan(max_pages: int, full_scan: bool) -> dict:
                 full_scan=full_scan,
                 on_progress=on_progress,
                 cancel_event=cancel_event,
+                _resume_checkpoint=resume_checkpoint,
             )
             scan_state["result"] = result
         except Exception as exc:
@@ -1228,6 +1241,28 @@ def _start_background_scan(max_pages: int, full_scan: bool) -> dict:
     scan_state["task"] = asyncio.create_task(_run())
     _active_scan = scan_state
     return scan_state
+
+
+@app.on_event("startup")
+async def _resume_interrupted_scan():
+    """On server startup, check for an interrupted scan and resume it."""
+    from integrations.intel import _load_checkpoint
+
+    cp = _load_checkpoint()
+    if not cp:
+        return
+
+    total = len(cp.get("pages", []))
+    done = len(cp.get("processed_ids", []))
+    logger.info(
+        "Found interrupted scan checkpoint: %d/%d pages done. Resuming...",
+        done, total,
+    )
+    _start_background_scan(
+        max_pages=cp.get("max_pages", 10000),
+        full_scan=cp.get("full_scan", False),
+        resume_checkpoint=cp,
+    )
 
 
 @app.post("/api/intel/scan/stream")
