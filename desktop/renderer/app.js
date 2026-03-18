@@ -13,7 +13,6 @@
     let dc = null;   // RTCDataChannel
     let audioEl = null;
     let micStream = null;
-    let wakeRecognizer = null;
 
     // ── DOM refs ────────────────────────────────────────────────────
 
@@ -267,7 +266,7 @@
         voiceBtn.classList.add('active');
         isVoiceActive = true;
         bubble.classList.add('voice-active');
-        stopWakeWordListener(); // Pause wake word while voice session is active
+        // Voice session starting
 
         try {
             // Get token
@@ -335,7 +334,6 @@
         voiceBtn.classList.remove('active');
         bubble.classList.remove('voice-active');
         isVoiceActive = false;
-        startWakeWordListener(); // Resume wake word
     }
 
     // ── Realtime Event Handling (tool calls) ────────────────────────
@@ -386,75 +384,9 @@
         delete pendingCalls[callId];
     }
 
-    // ── "Hey TARS" Wake Word Detection ──────────────────────────────
+    // ── Voice Activation (global shortcut: Ctrl+Shift+T) ───────────
 
-    function startWakeWordListener() {
-        if (isVoiceActive) return; // Don't run during active voice session
-
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            console.log('SpeechRecognition not available — wake word disabled');
-            return;
-        }
-
-        if (wakeRecognizer) return; // Already running
-
-        wakeRecognizer = new SpeechRecognition();
-        wakeRecognizer.continuous = true;
-        wakeRecognizer.interimResults = true;
-        wakeRecognizer.lang = 'en-US';
-
-        wakeRecognizer.onresult = (event) => {
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                const transcript = event.results[i][0].transcript.toLowerCase();
-                if (transcript.includes('hey tars') || transcript.includes('hey stars') ||
-                    transcript.includes('hey tar') || transcript.includes('a tars')) {
-                    // Wake word detected!
-                    activateFromWakeWord();
-                    break;
-                }
-            }
-        };
-
-        wakeRecognizer.onerror = (e) => {
-            console.log('Wake word error:', e.error);
-            // Restart on non-fatal errors
-            if (e.error !== 'aborted' && e.error !== 'not-allowed') {
-                setTimeout(() => {
-                    stopWakeWordListener();
-                    startWakeWordListener();
-                }, 2000);
-            } else if (e.error === 'not-allowed') {
-                console.log('Microphone permission denied — wake word disabled');
-            }
-        };
-
-        wakeRecognizer.onend = () => {
-            // Auto-restart if not manually stopped
-            if (wakeRecognizer && !isVoiceActive) {
-                try { wakeRecognizer.start(); } catch (e) { /* already running */ }
-            }
-        };
-
-        try {
-            wakeRecognizer.start();
-            console.log('Wake word listener active');
-        } catch (e) {
-            console.log('Could not start wake word:', e.message);
-        }
-    }
-
-    function stopWakeWordListener() {
-        if (wakeRecognizer) {
-            const r = wakeRecognizer;
-            wakeRecognizer = null;
-            try { r.abort(); } catch (e) {}
-        }
-    }
-
-    function activateFromWakeWord() {
-        stopWakeWordListener();
-
+    function activateVoice() {
         // Say "What's up?" acknowledgment
         if ('speechSynthesis' in window) {
             const utter = new SpeechSynthesisUtterance("What's up?");
@@ -465,14 +397,17 @@
         }
 
         // Expand chat if in bubble mode
-        if (!isExpanded) {
-            expand();
-        }
+        if (!isExpanded) expand();
 
         // Start voice session
         setTimeout(() => {
             if (!isVoiceActive) startVoice();
         }, 500);
+    }
+
+    // Listen for global shortcut from main process
+    if (window.tarsAPI && window.tarsAPI.onActivateVoice) {
+        window.tarsAPI.onActivateVoice(() => activateVoice());
     }
 
     // ── Backend Health Check ────────────────────────────────────────
@@ -499,10 +434,7 @@
     checkHealth();
     setInterval(checkHealth, 10000);
 
-    // Start wake word listener after a short delay
-    setTimeout(startWakeWordListener, 2000);
-
     // Welcome message
-    appendMsg('assistant', renderMarkdown('**TARS ready.** Type a message or say "Hey TARS" to start a voice session.'));
+    appendMsg('assistant', renderMarkdown('**TARS ready.** Type a message or press **Ctrl+Shift+T** to start a voice session.'));
 
 })();

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, session } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, session, globalShortcut } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -108,6 +108,12 @@ app.whenReady().then(async () => {
   const port = await startLocalServer();
   console.log(`TARS renderer serving on http://127.0.0.1:${port}`);
   createWindow(port);
+
+  // Global shortcut: Ctrl+Shift+T to activate TARS voice
+  globalShortcut.register('CommandOrControl+Shift+T', () => {
+    mainWindow.show();
+    mainWindow.webContents.send('activate-voice');
+  });
 
   // System tray
   const trayIcon = path.join(__dirname, 'renderer', 'icons', 'tars-tray.png');
