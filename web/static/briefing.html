@@ -510,6 +510,9 @@
                     html += '<div class="new-task-desc" style="font-weight:500">' + esc(e.title) + '</div>';
                     if (e.owner) html += '<div class="new-task-owner">' + esc(e.owner) + '</div>';
                     html += '<span style="font-size:11px;color:var(--text-muted)">' + (e.story_count || 0) + ' stories</span>';
+                    if ((e.story_count || 0) === 0) {
+                        html += '<button onclick="event.stopPropagation();generateStories(\'' + esc(e.id) + '\', this)" style="background:var(--accent);color:#fff;border:none;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">Generate Stories</button>';
+                    }
                     html += '<button onclick="event.stopPropagation();openBriefingEpicEdit(\'' + esc(e.id) + '\')" style="background:none;border:1px solid var(--border);color:var(--text-muted);font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">Edit</button>';
                     html += '<span style="font-size:10px;color:var(--text-muted)">&#9660;</span>';
                     html += '</div>';
@@ -520,7 +523,7 @@
                     }
                     const stories = e.stories || [];
                     if (stories.length === 0) {
-                        html += '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No stories yet</div>';
+                        html += '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;display:flex;align-items:center;gap:10px">No stories yet <button onclick="event.stopPropagation();generateStories(\'' + esc(e.id) + '\', this)" style="background:var(--accent);color:#fff;border:none;font-size:11px;padding:3px 10px;border-radius:4px;cursor:pointer">Generate Stories</button></div>';
                     }
                     stories.forEach(function(s) {
                         html += '<div style="padding:6px 0;border-bottom:1px solid var(--border-subtle)">';
@@ -874,6 +877,33 @@
                 });
                 if (resp.ok) generateBriefing();
             } catch (e) { console.error(e); }
+        };
+
+        window.generateStories = async function(epicId, btn) {
+            const orig = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Generating...';
+            btn.style.opacity = '0.7';
+            try {
+                const resp = await fetch('/api/epics/' + epicId + '/generate-stories', { method: 'POST' });
+                const data = await resp.json();
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    btn.textContent = orig;
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                } else {
+                    btn.textContent = data.stories_created + ' stories created!';
+                    btn.style.background = 'var(--green-text, #22c55e)';
+                    // Refresh briefing data after short delay
+                    setTimeout(function() { location.reload(); }, 1200);
+                }
+            } catch (err) {
+                alert('Failed to generate stories');
+                btn.textContent = orig;
+                btn.disabled = false;
+                btn.style.opacity = '1';
+            }
         };
 
         window.toggleBriefingEpic = function(eid) {

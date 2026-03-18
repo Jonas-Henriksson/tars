@@ -426,6 +426,7 @@
                                 ${doneCount}/${totalStories} stories
                                 <span class="progress-bar-mini"><span class="progress-fill-mini" style="width:${progressPct}%"></span></span>
                             </span>
+                            ${totalStories === 0 ? `<button onclick="event.stopPropagation();generateStories('${esc(e.id)}', this)" style="background:var(--accent);color:#fff;border:none;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer;white-space:nowrap">Generate Stories</button>` : ''}
                         </div>`;
 
                         // Stories under this epic
@@ -591,6 +592,31 @@
             } catch (e) {
                 btn.textContent = 'Error';
                 setTimeout(() => { btn.textContent = 'Enrich People'; btn.disabled = false; }, 3000);
+            }
+        };
+        window.generateStories = async function(epicId, btn) {
+            const orig = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Generating...';
+            btn.style.opacity = '0.7';
+            try {
+                const resp = await fetch('/api/epics/' + epicId + '/generate-stories', { method: 'POST' });
+                const data = await resp.json();
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    btn.textContent = orig;
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                } else {
+                    btn.textContent = data.stories_created + ' stories created!';
+                    btn.style.background = 'var(--green-text, #22c55e)';
+                    setTimeout(function() { location.reload(); }, 1200);
+                }
+            } catch (err) {
+                alert('Failed to generate stories');
+                btn.textContent = orig;
+                btn.disabled = false;
+                btn.style.opacity = '1';
             }
         };
         window.openEpicModal = function(id) {

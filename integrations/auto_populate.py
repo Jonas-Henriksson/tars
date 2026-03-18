@@ -403,6 +403,192 @@ async def auto_populate_epics(
     }
 
 
+_STORY_PROMPT = """\
+You are an agile project manager creating user stories for an existing epic.
+
+EPIC:
+Title: {epic_title}
+Description: {epic_description}
+Owner: {epic_owner}
+Priority: {epic_priority}
+
+RELATED TASKS (potential work items that relate to this epic):
+{related_tasks}
+
+Rules:
+- Create 3-7 user stories that break this epic into deliverable chunks
+- User stories should follow "As a [role], I want [goal] so that [benefit]" when possible
+- Each story should be a concrete, testable deliverable
+- Assign the epic owner as default story owner unless tasks suggest someone else
+- Set realistic sizes: XS (hours), S (1-2 days), M (3-5 days), L (1-2 weeks), XL (2+ weeks)
+- Link tasks to stories by including matching task descriptions in linked_task_descriptions
+- Skip purely operational/routine tasks
+
+Return ONLY valid JSON array of stories:
+[{{
+  "title": "Story title",
+  "description": "As a..., I want..., so that...",
+  "owner": "Person name",
+  "size": "XS|S|M|L|XL",
+  "priority": "high|medium|low",
+  "linked_task_descriptions": ["task description that maps to this story"]
+}}]
+
+Return an empty array [] if no meaningful stories can be created.
+"""
+
+
+async def generate_stories_for_epic(epic_id: str) -> dict[str, Any]:
+    """Generate user stories for a single epic using LLM.
+
+    Finds related tasks by topic overlap, calls the LLM with a focused
+    prompt, and creates stories via create_story().
+    """
+    from integrations.epics import get_epics, get_stories, create_story, link_task_to_story
+    from integrations.intel import _load_intel
+    from integrations.notion_tasks import _load_tasks
+
+    # Find the epic
+    epics_data = get_epics()
+    epic = None
+    for e in epics_data.get("epics", []):
+        if e.get("id") == epic_id:
+            epic = e
+            break
+    if not epic:
+        return {"error": f"Epic not found: {epic_id}"}
+
+    # Check if epic already has stories
+    existing_stories = get_stories(epic_id=epic_id)
+    if existing_stories.get("count", 0) > 0:
+        return {"error": "Epic already has stories", "story_count": existing_stories["count"]}
+
+    # Gather all open tasks
+    intel = _load_intel()
+    tracked = _load_tasks()
+    smart_tasks = intel.get("smart_tasks", [])
+
+    # Extract keywords from epic title/description for matching
+    epic_words = set()
+    for text in [epic.get("title", ""), epic.get("description", "")]:
+        for word in text.lower().split():
+            if len(word) > 3:
+                epic_words.add(word.strip(".,;:!?"))
+
+    # Find related tasks by topic or keyword overlap
+    related: list[dict] = []
+    desc_to_id: dict[str, str] = {}
+
+    for task in smart_tasks:
+        if task.get("status") == "done":
+            continue
+        desc = task.get("description", "")
+        if not desc.strip():
+            continue
+        topics = [t.lower() for t in task.get("topics", [])]
+        desc_lower = desc.lower()
+        # Match if any epic keyword appears in task description or topics
+        if any(w in desc_lower or w in " ".join(topics) for w in epic_words):
+            related.append({
+                "description": desc,
+                "owner": task.get("owner", "Unassigned"),
+                "topics": task.get("topics", []),
+            })
+            tid = task.get("id", "")
+            if tid:
+                desc_to_id[desc.lower().strip()] = tid
+
+    for task in tracked:
+        if task.get("completed") or task.get("status") == "done":
+            continue
+        desc = task.get("description", "")
+        if not desc.strip():
+            continue
+        desc_lower = desc.lower()
+        topic = task.get("topic", "").lower()
+        if any(w in desc_lower or w in topic for w in epic_words):
+            related.append({
+                "description": desc,
+                "owner": task.get("owner", "Unassigned"),
+                "topics": [task.get("topic", "general")],
+            })
+            tid = task.get("id", "")
+            if tid:
+                desc_to_id[desc.lower().strip()] = tid
+
+    # Build related tasks text
+    if related:
+        tasks_text = "\n".join(f"- [{t['owner']}] {t['description']}" for t in related[:30])
+    else:
+        tasks_text = "(no directly related tasks found — generate stories based on the epic description)"
+
+    prompt = _STORY_PROMPT.format(
+        epic_title=epic.get("title", ""),
+        epic_description=epic.get("description", ""),
+        epic_owner=epic.get("owner", "Unassigned"),
+        epic_priority=epic.get("priority", "medium"),
+        related_tasks=tasks_text,
+    )
+
+    from llm import llm_call
+
+    raw = await llm_call("story_generation", prompt, max_tokens=3000)
+    if not raw:
+        return {"error": "LLM unavailable for story generation"}
+
+    try:
+        suggested_stories = json.loads(raw)
+    except json.JSONDecodeError:
+        try:
+            last_bracket = raw.rfind('}]')
+            if last_bracket > 0:
+                suggested_stories = json.loads(raw[:last_bracket + 2])
+            else:
+                return {"error": "LLM returned invalid JSON"}
+        except json.JSONDecodeError:
+            return {"error": "LLM returned invalid JSON"}
+
+    stories_created = 0
+    created = []
+
+    for story_data in suggested_stories:
+        story_title = story_data.get("title", "").strip()
+        if not story_title:
+            continue
+
+        story_result = create_story(
+            epic_id=epic_id,
+            title=story_title,
+            description=story_data.get("description", ""),
+            owner=story_data.get("owner", epic.get("owner", "")),
+            size=story_data.get("size", "M"),
+            priority=story_data.get("priority", "medium"),
+        )
+
+        story_id = story_result.get("story", {}).get("id", "")
+        if story_id:
+            stories_created += 1
+            created.append(story_title)
+
+            # Link matching tasks
+            for linked_desc in story_data.get("linked_task_descriptions", []):
+                linked_lower = linked_desc.lower().strip()
+                for desc_key, task_id in desc_to_id.items():
+                    if linked_lower in desc_key or desc_key in linked_lower:
+                        try:
+                            link_task_to_story(story_id, task_id)
+                        except Exception:
+                            pass
+                        break
+
+    return {
+        "message": f"Generated {stories_created} stories for '{epic.get('title', '')}'",
+        "stories_created": stories_created,
+        "stories": created,
+        "epic_id": epic_id,
+    }
+
+
 async def auto_enrich_people() -> dict[str, Any]:
     """Analyze intel data to enrich people profiles with inferred roles.
 

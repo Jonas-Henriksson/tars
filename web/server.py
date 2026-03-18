@@ -2929,6 +2929,17 @@ async def get_epic_summary(epic_id: str):
     return JSONResponse(result)
 
 
+@app.post("/api/epics/{epic_id}/generate-stories")
+async def api_generate_stories(epic_id: str):
+    """Generate user stories for an epic using LLM."""
+    from integrations.auto_populate import generate_stories_for_epic
+
+    result = await generate_stories_for_epic(epic_id)
+    if "error" in result:
+        return JSONResponse(result, status_code=400 if "already has" in result.get("error", "") else 404)
+    return JSONResponse(result)
+
+
 @app.get("/api/stories/{story_id}/summary")
 async def get_story_summary(story_id: str):
     """Get a smart context summary for a specific user story."""
