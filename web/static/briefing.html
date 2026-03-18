@@ -231,6 +231,35 @@
         .email-subject { font-size: 13px; color: var(--text); font-weight: 500; }
         .email-from { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
 
+        /* New task row with actions */
+        .new-task-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface); border-radius: 6px; margin-bottom: 4px; }
+        .new-task-desc { flex: 1; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .new-task-owner { font-size: 12px; color: var(--text-secondary); flex-shrink: 0; }
+        .new-task-actions { display: flex; gap: 4px; flex-shrink: 0; }
+        .new-task-actions button { background: none; border: 1px solid var(--border); color: var(--text-muted); font-size: 11px; padding: 3px 8px; border-radius: 4px; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+        .new-task-actions button:hover { border-color: var(--text-secondary); color: var(--text); }
+        .new-task-actions .btn-keep { }
+        .new-task-actions .btn-keep:hover { border-color: var(--green); color: var(--green-text); }
+        .new-task-actions .btn-del:hover { border-color: var(--red); color: var(--red); }
+        .new-task-actions .btn-edit:hover { border-color: var(--accent); color: var(--accent); }
+        .epic-pill { font-size: 10px; font-weight: 500; padding: 2px 6px; border-radius: 3px; background: var(--blue-dim); color: var(--accent); white-space: nowrap; }
+        .story-pill { font-size: 10px; font-weight: 500; padding: 2px 6px; border-radius: 3px; background: rgba(168,85,247,0.10); color: #c084fc; white-space: nowrap; }
+        .orphan-assign { font-size: 11px; padding: 3px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text-secondary); cursor: pointer; font-family: inherit; }
+        .topic-pill-sm { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: var(--surface-raised); color: var(--text-muted); white-space: nowrap; }
+
+        /* Edit modal */
+        .edit-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center; }
+        .edit-modal-overlay.open { display: flex; }
+        .edit-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 460px; max-width: 90vw; padding: 20px 24px; }
+        .edit-modal h3 { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+        .edit-modal label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 3px; margin-top: 10px; }
+        .edit-modal input, .edit-modal textarea { width: 100%; font-size: 13px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: inherit; }
+        .edit-modal textarea { resize: vertical; min-height: 50px; }
+        .edit-modal-btns { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+        .edit-modal-btns button { font-size: 12px; padding: 6px 16px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; font-family: inherit; }
+        .edit-modal-btns .btn-save { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .edit-modal-btns .btn-cancel { background: var(--surface-raised); color: var(--text-secondary); }
+
         /* Empty / loading */
         .empty { padding: 48px 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
         .loading { text-align: center; padding: 48px; color: var(--text-muted); font-size: 13px; }
@@ -282,6 +311,22 @@
         </div>
 
         <div id="content"></div>
+
+        <!-- Task edit modal -->
+        <div class="edit-modal-overlay" id="taskEditOverlay" onclick="if(event.target===this)closeTaskEdit()">
+            <div class="edit-modal">
+                <h3>Edit Task</h3>
+                <input type="hidden" id="taskEditId">
+                <label>Description</label>
+                <textarea id="taskEditDesc"></textarea>
+                <label>Owner</label>
+                <input type="text" id="taskEditOwner">
+                <div class="edit-modal-btns">
+                    <button class="btn-cancel" onclick="closeTaskEdit()">Cancel</button>
+                    <button class="btn-save" onclick="saveTaskEdit()">Save</button>
+                </div>
+            </div>
+        </div>
     </main>
 
     <script>
@@ -402,7 +447,7 @@
                 if (pages.length > 0) {
                     for (const p of pages.slice(0, 5)) {
                         html += '<div class="page-row"><div class="meeting-body">';
-                        html += '<div class="page-title">' + esc(p.title || 'Untitled') + '</div>';
+                        html += '<div class="page-title">' + esc(stripTimestamp(p.title || 'Untitled')) + '</div>';
                         if (p.content_preview) {
                             const preview = p.content_preview.length > 120 ? p.content_preview.slice(0, 120) + '...' : p.content_preview;
                             html += '<div class="page-preview">' + esc(preview) + '</div>';
@@ -415,6 +460,85 @@
                 }
                 html += '</div>';
 
+                html += '</div>';
+            }
+
+            // --- New Tasks Today ---
+            const newTasks = data.new_tasks_today || {};
+            const newTasksList = newTasks.tasks || [];
+            if (newTasksList.length > 0) {
+                html += '<div class="section">';
+                html += sectionHead('New Tasks From Today', newTasksList.length);
+                const NT_LIMIT = 10;
+                function renderNewTask(t) {
+                    const topicPills = (t.topics || []).slice(0, 2).map(tp => '<span class="topic-pill-sm">' + esc(tp) + '</span>').join(' ');
+                    return '<div class="new-task-row">' +
+                        '<div class="new-task-desc">' + esc(t.description) + '</div>' +
+                        (t.owner ? '<div class="new-task-owner">' + esc(t.owner) + '</div>' : '') +
+                        topicPills +
+                        '<div class="new-task-actions">' +
+                        '<button class="btn-edit" onclick="openTaskEdit(\'' + esc(t.id) + '\',\'' + esc(t.description).replace(/'/g, "\\'") + '\',\'' + esc(t.owner || '').replace(/'/g, "\\'") + '\')">Edit</button>' +
+                        '<button class="btn-del" onclick="deleteTask(\'' + esc(t.id) + '\')">Delete</button>' +
+                        '<button class="btn-keep" onclick="markTaskDone(\'' + esc(t.id) + '\')">&#10003; Done</button>' +
+                        '</div></div>';
+                }
+                for (const t of newTasksList.slice(0, NT_LIMIT)) html += renderNewTask(t);
+                if (newTasksList.length > NT_LIMIT) {
+                    html += '<div id="newtasks-hidden" style="display:none">';
+                    for (const t of newTasksList.slice(NT_LIMIT)) html += renderNewTask(t);
+                    html += '</div>';
+                    const ntHidden = newTasksList.length - NT_LIMIT;
+                    html += '<div class="show-more-btn" onclick="var el=document.getElementById(\'newtasks-hidden\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';this.textContent=el.style.display===\'none\'?\'+' + ntHidden + ' more tasks\':\'Show less\'">+' + ntHidden + ' more tasks</div>';
+                }
+                html += '</div>';
+            }
+
+            // --- New Epics/Stories Today ---
+            const newEpics = data.new_epics_today || {};
+            const newEpicsList = newEpics.epics || [];
+            const newStoriesList = newEpics.stories || [];
+            if (newEpicsList.length > 0 || newStoriesList.length > 0) {
+                html += '<div class="section">';
+                html += sectionHead('New Epics & Stories Today', (newEpics.epic_count || 0) + (newEpics.story_count || 0));
+                for (const e of newEpicsList) {
+                    html += '<div class="new-task-row"><span class="epic-pill">Epic</span><div class="new-task-desc" style="font-weight:500">' + esc(e.title) + '</div>';
+                    if (e.owner) html += '<div class="new-task-owner">' + esc(e.owner) + '</div>';
+                    html += '<span style="font-size:11px;color:var(--text-muted)">' + (e.story_count || 0) + ' stories</span></div>';
+                }
+                for (const s of newStoriesList) {
+                    html += '<div class="new-task-row"><span class="story-pill">Story</span><div class="new-task-desc">' + esc(s.title) + '</div>';
+                    if (s.epic_title) html += '<span style="font-size:10px;color:var(--text-muted)">' + esc(s.epic_title) + '</span>';
+                    if (s.owner) html += '<div class="new-task-owner">' + esc(s.owner) + '</div>';
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+
+            // --- Orphaned Tasks (assign to epic) ---
+            const orphaned = data.orphaned_tasks || {};
+            const orphanedList = orphaned.tasks || [];
+            const availableEpics = orphaned.epics || [];
+            if (orphanedList.length > 0 && availableEpics.length > 0) {
+                html += '<div class="section">';
+                html += sectionHead('Orphaned Tasks — Assign to Epic', orphanedList.length);
+                const epicOptions = availableEpics.map(e => '<option value="' + esc(e.id) + '">' + esc(e.title) + '</option>').join('');
+                const ORP_LIMIT = 8;
+                function renderOrphan(t) {
+                    return '<div class="new-task-row">' +
+                        '<div class="new-task-desc">' + esc(t.description) + '</div>' +
+                        (t.owner ? '<div class="new-task-owner">' + esc(t.owner) + '</div>' : '') +
+                        '<select class="orphan-assign" onchange="assignToEpic(\'' + esc(t.id) + '\', this.value)">' +
+                        '<option value="">Assign to epic...</option>' + epicOptions +
+                        '</select></div>';
+                }
+                for (const t of orphanedList.slice(0, ORP_LIMIT)) html += renderOrphan(t);
+                if (orphanedList.length > ORP_LIMIT) {
+                    html += '<div id="orphan-hidden" style="display:none">';
+                    for (const t of orphanedList.slice(ORP_LIMIT)) html += renderOrphan(t);
+                    html += '</div>';
+                    const orpHidden = orphanedList.length - ORP_LIMIT;
+                    html += '<div class="show-more-btn" onclick="var el=document.getElementById(\'orphan-hidden\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';this.textContent=el.style.display===\'none\'?\'+' + orpHidden + ' more\':\'Show less\'">+' + orpHidden + ' more</div>';
+                }
                 html += '</div>';
             }
 
@@ -640,6 +764,81 @@
             el.textContent = s;
             return el.innerHTML;
         }
+
+        function stripTimestamp(title) {
+            if (!title) return '';
+            // Remove ISO timestamps like 2026-03-18T13:00:00.000+01:00
+            return title.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[.\d]*([+-]\d{2}:\d{2}|Z)?/g, '').trim();
+        }
+
+        window.openTaskEdit = function(id, desc, owner) {
+            document.getElementById('taskEditId').value = id;
+            document.getElementById('taskEditDesc').value = desc;
+            document.getElementById('taskEditOwner').value = owner;
+            document.getElementById('taskEditOverlay').classList.add('open');
+        };
+
+        window.closeTaskEdit = function() {
+            document.getElementById('taskEditOverlay').classList.remove('open');
+        };
+
+        window.saveTaskEdit = async function() {
+            const id = document.getElementById('taskEditId').value;
+            const body = {
+                description: document.getElementById('taskEditDesc').value,
+                owner: document.getElementById('taskEditOwner').value,
+            };
+            try {
+                const resp = await fetch('/api/intel/tasks/' + id, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                if (resp.ok) {
+                    closeTaskEdit();
+                    generateBriefing();
+                }
+            } catch (e) { console.error(e); }
+        };
+
+        window.deleteTask = async function(id) {
+            try {
+                const resp = await fetch('/api/intel/tasks/' + id, { method: 'DELETE' });
+                if (resp.ok) generateBriefing();
+            } catch (e) { console.error(e); }
+        };
+
+        window.markTaskDone = async function(id) {
+            try {
+                const resp = await fetch('/api/intel/tasks/' + id, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'done' }),
+                });
+                if (resp.ok) generateBriefing();
+            } catch (e) { console.error(e); }
+        };
+
+        window.assignToEpic = async function(taskId, epicId) {
+            if (!epicId) return;
+            try {
+                // Get stories for this epic, pick the first or create a general one
+                const resp = await fetch('/api/epics');
+                const data = await resp.json();
+                const epic = (data.epics || []).find(e => e.id === epicId);
+                if (!epic) return;
+                const stories = epic.stories || [];
+                if (stories.length > 0) {
+                    // Link to first story
+                    await fetch('/api/stories/' + stories[0].id + '/link-task', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ task_id: taskId }),
+                    });
+                }
+                generateBriefing();
+            } catch (e) { console.error(e); }
+        };
 
         // Auto-generate briefing on page load
         generateBriefing();

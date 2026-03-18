@@ -46,10 +46,19 @@ async def compile_daily_briefing() -> dict[str, Any]:
     # 5. Strategic context (initiatives, decisions, alerts)
     sections["strategic"] = _get_strategic_context()
 
-    # 6. Proactive recommendations
+    # 6. New smart tasks from today's scan
+    sections["new_tasks_today"] = _get_new_tasks_today()
+
+    # 7. New epics/stories created today
+    sections["new_epics_today"] = _get_new_epics_today()
+
+    # 8. Orphaned tasks (not linked to any epic/story)
+    sections["orphaned_tasks"] = _get_orphaned_tasks()
+
+    # 9. Proactive recommendations
     sections["recommendations"] = _generate_recommendations(sections)
 
-    # 7. Meta
+    # 10. Meta
     sections["generated_at"] = datetime.now(timezone.utc).isoformat()
 
     # 8. Voice-friendly summary
@@ -292,6 +301,104 @@ def _get_task_analysis() -> dict:
         logger.debug("Task analysis not available: %s", exc)
         return {"total": 0, "open_count": 0, "stale_tasks": [], "stale_count": 0,
                 "available": False, "reason": str(exc)}
+
+
+def _get_new_tasks_today() -> dict:
+    """Get smart tasks created/scanned today."""
+    try:
+        from integrations.intel import _load_intel
+        intel = _load_intel()
+        smart_tasks = intel.get("smart_tasks", [])
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        new_tasks = []
+        for t in smart_tasks:
+            created = t.get("created_at", "") or t.get("scanned_at", "")
+            if created and created[:10] == today:
+                new_tasks.append({
+                    "id": t.get("id", ""),
+                    "description": t.get("description", ""),
+                    "owner": t.get("owner", ""),
+                    "status": t.get("status", "open"),
+                    "topics": t.get("topics", []),
+                    "source_title": t.get("source_title", ""),
+                    "quadrant": t.get("priority", {}).get("quadrant") if isinstance(t.get("priority"), dict) else None,
+                })
+        return {"tasks": new_tasks, "count": len(new_tasks)}
+    except Exception as exc:
+        logger.debug("New tasks today not available: %s", exc)
+        return {"tasks": [], "count": 0}
+
+
+def _get_new_epics_today() -> dict:
+    """Get epics and stories created today."""
+    try:
+        from integrations.epics import get_epics
+        data = get_epics()
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        new_epics = []
+        new_stories = []
+        for e in data.get("epics", []):
+            if (e.get("created_at", "") or "")[:10] == today:
+                new_epics.append({
+                    "id": e.get("id", ""),
+                    "title": e.get("title", ""),
+                    "owner": e.get("owner", ""),
+                    "status": e.get("status", ""),
+                    "story_count": e.get("story_count", 0),
+                })
+            for s in e.get("stories", []):
+                if (s.get("created_at", "") or "")[:10] == today:
+                    new_stories.append({
+                        "id": s.get("id", ""),
+                        "title": s.get("title", ""),
+                        "epic_id": e.get("id", ""),
+                        "epic_title": e.get("title", ""),
+                        "owner": s.get("owner", ""),
+                        "status": s.get("status", ""),
+                    })
+        return {"epics": new_epics, "stories": new_stories,
+                "epic_count": len(new_epics), "story_count": len(new_stories)}
+    except Exception as exc:
+        logger.debug("New epics today not available: %s", exc)
+        return {"epics": [], "stories": [], "epic_count": 0, "story_count": 0}
+
+
+def _get_orphaned_tasks() -> dict:
+    """Get tasks not linked to any epic/story (first 20)."""
+    try:
+        from integrations.epics import get_epics
+        from integrations.intel import _load_intel
+
+        # Build set of linked task IDs
+        data = get_epics()
+        linked_ids: set = set()
+        epics_list = []
+        for e in data.get("epics", []):
+            epics_list.append({"id": e.get("id"), "title": e.get("title", "")})
+            for s in e.get("stories", []):
+                for tid in s.get("linked_task_ids", []):
+                    linked_ids.add(tid)
+
+        intel = _load_intel()
+        smart_tasks = intel.get("smart_tasks", [])
+        orphaned = []
+        for t in smart_tasks:
+            if t.get("status") == "done":
+                continue
+            if t.get("id") and t["id"] not in linked_ids:
+                orphaned.append({
+                    "id": t.get("id", ""),
+                    "description": t.get("description", ""),
+                    "owner": t.get("owner", ""),
+                    "topics": t.get("topics", []),
+                })
+                if len(orphaned) >= 20:
+                    break
+
+        return {"tasks": orphaned, "count": len(orphaned), "epics": epics_list}
+    except Exception as exc:
+        logger.debug("Orphaned tasks not available: %s", exc)
+        return {"tasks": [], "count": 0, "epics": []}
 
 
 def _generate_recommendations(sections: dict) -> list[dict]:
