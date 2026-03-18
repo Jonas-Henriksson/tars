@@ -30,6 +30,10 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   mainWindow.setVisibleOnAllWorkspaces(true);
 
+  // Windows fix: let clicks pass through transparent regions,
+  // but the renderer will call setIgnoreMouseEvents(false) on mouseover of actual content
+  mainWindow.setIgnoreMouseEvents(true, { forward: true });
+
   // Position bottom-right
   const display = screen.getPrimaryDisplay();
   const x = display.workArea.x + display.workArea.width - BUBBLE_SIZE.width - 24;
@@ -61,6 +65,11 @@ ipcMain.on('collapse', () => {
     width: BUBBLE_SIZE.width,
     height: BUBBLE_SIZE.height,
   });
+});
+
+// IPC: toggle mouse events (for transparent click-through on Windows)
+ipcMain.on('set-ignore-mouse', (_event, ignore) => {
+  mainWindow.setIgnoreMouseEvents(ignore, { forward: true });
 });
 
 // IPC: manual drag (for transparent window regions)

@@ -35,6 +35,21 @@
     const modelSelect = document.getElementById('modelSelect');
     const searchToggle = document.getElementById('searchToggle');
 
+    // ── Windows click-through fix ────────────────────────────────────
+    // Transparent regions ignore mouse; content regions capture mouse
+    document.body.addEventListener('mouseenter', () => {
+        if (window.tarsAPI && window.tarsAPI.setIgnoreMouse) window.tarsAPI.setIgnoreMouse(false);
+    });
+    document.body.addEventListener('mouseleave', () => {
+        if (window.tarsAPI && window.tarsAPI.setIgnoreMouse) window.tarsAPI.setIgnoreMouse(true);
+    });
+    // Also handle the bubble and chat directly
+    [bubble, chat].forEach(el => {
+        el.addEventListener('mouseenter', () => {
+            if (window.tarsAPI && window.tarsAPI.setIgnoreMouse) window.tarsAPI.setIgnoreMouse(false);
+        });
+    });
+
     // ── Expand / Collapse ───────────────────────────────────────────
 
     bubble.addEventListener('click', expand);
