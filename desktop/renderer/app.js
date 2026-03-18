@@ -417,12 +417,15 @@
         };
 
         wakeRecognizer.onerror = (e) => {
+            console.log('Wake word error:', e.error);
             // Restart on non-fatal errors
             if (e.error !== 'aborted' && e.error !== 'not-allowed') {
                 setTimeout(() => {
                     stopWakeWordListener();
                     startWakeWordListener();
-                }, 1000);
+                }, 2000);
+            } else if (e.error === 'not-allowed') {
+                console.log('Microphone permission denied — wake word disabled');
             }
         };
 

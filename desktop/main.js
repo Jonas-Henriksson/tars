@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, session } = require('electron');
 const path = require('path');
 
 // Disable GPU acceleration to avoid chunked_data_pipe errors on Windows
@@ -75,6 +75,15 @@ ipcMain.on('drag-move', (_event, { deltaX, deltaY }) => {
 });
 
 app.whenReady().then(() => {
+  // Auto-grant microphone permission for wake word and voice
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media' || permission === 'microphone') {
+      callback(true);
+    } else {
+      callback(true);
+    }
+  });
+
   createWindow();
 
   // System tray
