@@ -387,22 +387,8 @@
     // ── Voice Activation (global shortcut: Ctrl+Shift+T) ───────────
 
     function activateVoice() {
-        // Say "What's up?" acknowledgment
-        if ('speechSynthesis' in window) {
-            const utter = new SpeechSynthesisUtterance("What's up?");
-            utter.rate = 1.1;
-            utter.pitch = 0.9;
-            utter.volume = 0.8;
-            speechSynthesis.speak(utter);
-        }
-
-        // Expand chat if in bubble mode
         if (!isExpanded) expand();
-
-        // Start voice session
-        setTimeout(() => {
-            if (!isVoiceActive) startVoice();
-        }, 500);
+        if (!isVoiceActive) startVoice();
     }
 
     // Listen for global shortcut from main process (expands + voice)
@@ -413,18 +399,7 @@
     // Listen for wake word (voice only, stay in bubble mode)
     if (window.tarsAPI && window.tarsAPI.onActivateVoiceBackground) {
         window.tarsAPI.onActivateVoiceBackground(() => {
-            // Say "What's up?" acknowledgment
-            if ('speechSynthesis' in window) {
-                const utter = new SpeechSynthesisUtterance("What's up?");
-                utter.rate = 1.1;
-                utter.pitch = 0.9;
-                utter.volume = 0.8;
-                speechSynthesis.speak(utter);
-            }
-            // Start voice without expanding — bubble pulses to show active
-            setTimeout(() => {
-                if (!isVoiceActive) startVoice();
-            }, 500);
+            if (!isVoiceActive) startVoice();
         });
     }
 
