@@ -607,12 +607,16 @@
                         html += '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;display:flex;align-items:center;gap:10px">No stories yet <button onclick="event.stopPropagation();generateStories(\'' + esc(e.id) + '\', this)" style="background:var(--accent);color:#fff;border:none;font-size:11px;font-family:inherit;font-weight:500;padding:4px 12px;border-radius:4px;cursor:pointer">Generate Stories</button></div>';
                     }
                     stories.forEach(function(s) {
+                        const stitleEsc = esc(s.title).replace(/'/g, "\\'");
+                        const sownerEsc = esc(s.owner || '').replace(/'/g, "\\'");
                         html += '<div style="padding:6px 0;border-bottom:1px solid var(--border-subtle)">';
                         html += '<div style="display:flex;align-items:center;gap:8px">';
                         html += '<span class="story-pill">Story</span>';
-                        html += '<span style="font-size:13px;font-weight:500;flex:1">' + esc(s.title) + '</span>';
+                        html += '<span onclick="openStoryEdit(\'' + esc(s.id) + '\',\'' + stitleEsc + '\',\'' + sownerEsc + '\',\'' + esc(s.size || '') + '\')" style="font-size:13px;font-weight:500;flex:1;cursor:pointer" title="Click to edit">' + esc(s.title) + '</span>';
                         if (s.size) html += '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--surface-raised);color:var(--text-muted)">' + esc(s.size) + '</span>';
                         if (s.owner) html += '<span style="font-size:11px;color:var(--text-muted)">' + esc(s.owner) + '</span>';
+                        html += '<button onclick="event.stopPropagation();markStoryDone(\'' + esc(s.id) + '\',this)" title="Mark done" style="background:none;border:1px solid var(--border);color:var(--text-muted);font-size:12px;padding:1px 6px;border-radius:4px;cursor:pointer;line-height:1">&#10003;</button>';
+                        html += '<button onclick="event.stopPropagation();deleteStory(\'' + esc(s.id) + '\',this)" title="Dismiss" style="background:none;border:1px solid var(--border);color:var(--text-muted);font-size:12px;padding:1px 6px;border-radius:4px;cursor:pointer;line-height:1">&times;</button>';
                         html += '</div>';
                         // Linked tasks under story
                         const tasks = s.linked_tasks || [];
@@ -620,10 +624,14 @@
                             html += '<div style="padding-left:16px;margin-top:4px">';
                             tasks.forEach(function(t) {
                                 const statusColor = t.status === 'done' ? 'var(--green-text)' : 'var(--text-muted)';
+                                const tdescEsc = esc(t.description || '').replace(/'/g, "\\'");
+                                const townerEsc = esc(t.owner || '').replace(/'/g, "\\'");
                                 html += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;color:var(--text-secondary)">';
                                 html += '<span style="color:' + statusColor + '">' + (t.status === 'done' ? '&#10003;' : '&#9675;') + '</span>';
-                                html += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.description) + '</span>';
+                                html += '<span onclick="openTaskEdit(\'' + esc(t.id) + '\',\'' + tdescEsc + '\',\'' + townerEsc + '\')" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Click to edit">' + esc(t.description) + '</span>';
                                 if (t.owner) html += '<span style="font-size:10px;color:var(--text-muted)">' + esc(t.owner) + '</span>';
+                                html += '<button onclick="event.stopPropagation();markTaskDone(\'' + esc(t.id) + '\')" title="Done" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:0 3px">&#10003;</button>';
+                                html += '<button onclick="event.stopPropagation();deleteTask(\'' + esc(t.id) + '\')" title="Dismiss" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:0 3px">&times;</button>';
                                 html += '</div>';
                             });
                             html += '</div>';
@@ -911,6 +919,7 @@
 
         window.openTaskEdit = function(id, desc, owner) {
             window._editingEpic = false;
+            window._editingStory = false;
             document.getElementById('taskEditTitle').textContent = 'Edit Task';
             document.getElementById('taskEditDescLabel').textContent = 'Description';
             document.getElementById('taskEditId').value = id;
@@ -946,6 +955,41 @@
             try {
                 const resp = await fetch('/api/intel/tasks/' + id, { method: 'DELETE' });
                 if (resp.ok) generateBriefing();
+            } catch (e) { console.error(e); }
+        };
+
+        window.openStoryEdit = function(id, title, owner, size) {
+            window._editingEpic = false;
+            window._editingStory = true;
+            document.getElementById('taskEditTitle').textContent = 'Edit Story';
+            document.getElementById('taskEditDescLabel').textContent = 'Title';
+            document.getElementById('taskEditId').value = id;
+            document.getElementById('taskEditDesc').value = title;
+            document.getElementById('taskEditOwner').value = owner;
+            document.getElementById('taskEditOverlay').classList.add('open');
+        };
+
+        window.markStoryDone = async function(id, btn) {
+            try {
+                const resp = await fetch('/api/stories/' + id, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'done' }),
+                });
+                if (resp.ok) {
+                    const row = btn.closest('div[style*="border-bottom"]');
+                    if (row) row.style.opacity = '0.4';
+                }
+            } catch (e) { console.error(e); }
+        };
+
+        window.deleteStory = async function(id, btn) {
+            try {
+                const resp = await fetch('/api/stories/' + id, { method: 'DELETE' });
+                if (resp.ok) {
+                    const row = btn.closest('div[style*="border-bottom"]');
+                    if (row) row.remove();
+                }
             } catch (e) { console.error(e); }
         };
 
@@ -1047,6 +1091,23 @@
                 };
                 try {
                     const resp = await fetch('/api/epics/' + id, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    });
+                    if (resp.ok) {
+                        closeTaskEdit();
+                        generateBriefing();
+                    }
+                } catch (e) { console.error(e); }
+            } else if (window._editingStory) {
+                window._editingStory = false;
+                const body = {
+                    title: document.getElementById('taskEditDesc').value,
+                    owner: document.getElementById('taskEditOwner').value,
+                };
+                try {
+                    const resp = await fetch('/api/stories/' + id, {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(body),
