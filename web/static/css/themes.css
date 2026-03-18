@@ -1,0 +1,585 @@
+/* ═══════════════════════════════════════════════════════════════════
+   TARS Theme System
+   Three aesthetic directions loaded on top of each page's base styles.
+   The active theme is set as a data-attribute on <html>:
+     <html data-theme="mission-control">
+   Each theme overrides :root custom properties + adds its own.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Google Fonts preload hint (loaded by themes.js) ─────────────── */
+
+/* ─────────────────────────────────────────────────────────────────
+   THEME 1: MISSION CONTROL
+   CRT phosphor aesthetic. Dense, monospace-forward, zero decoration.
+   ───────────────────────────────────────────────────────────────── */
+[data-theme="mission-control"] {
+    --bg: #05050a;
+    --surface: #0a0b12;
+    --surface-raised: #10111a;
+    --border: #1a1a2e;
+    --border-subtle: #121320;
+    --text: #c8d6e5;
+    --text-secondary: #7f8c9b;
+    --text-muted: #4a5568;
+    --accent: #00e5a0;
+    --accent-dim: rgba(0, 229, 160, 0.10);
+    --green: #00e5a0;
+    --green-dim: rgba(0, 229, 160, 0.08);
+    --green-text: #00e5a0;
+    --amber: #ff6b35;
+    --amber-dim: rgba(255, 107, 53, 0.10);
+    --amber-text: #ff8c5a;
+    --red: #ff3b3b;
+    --red-dim: rgba(255, 59, 59, 0.10);
+    --red-text: #ff6b6b;
+    --blue-dim: rgba(0, 229, 160, 0.08);
+    --purple: #7c6bff;
+    --purple-dim: rgba(124, 107, 255, 0.10);
+    --purple-text: #a08cff;
+
+    /* Graph nodes — cooler palette */
+    --node-person: #00e5a0;
+    --node-topic: #7c6bff;
+    --node-page: #ff6b35;
+    --node-project: #00e5a0;
+    --node-organization: #00b4d8;
+    --node-decision: #ff3b3b;
+    --node-tag: #a08cff;
+    --cyan: #00b4d8;
+    --cyan-dim: rgba(0, 180, 216, 0.10);
+    --cyan-text: #48cae4;
+    --rose: #ff3b3b;
+    --rose-dim: rgba(255, 59, 59, 0.10);
+    --rose-text: #ff6b6b;
+    --violet: #7c6bff;
+    --violet-dim: rgba(124, 107, 255, 0.10);
+    --violet-text: #a08cff;
+
+    /* Theme-specific tokens */
+    --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-data: 'IBM Plex Mono', 'SF Mono', monospace;
+    --font-heading: 'IBM Plex Mono', monospace;
+    --radius: 0px;
+    --radius-sm: 0px;
+    --card-shadow: none;
+    --glow-green: 0 0 8px rgba(0, 229, 160, 0.3);
+    --glow-red: 0 0 8px rgba(255, 59, 59, 0.3);
+    --glow-amber: 0 0 8px rgba(255, 107, 53, 0.3);
+}
+
+[data-theme="mission-control"] body {
+    font-family: var(--font-body);
+}
+
+[data-theme="mission-control"] .brand h1 {
+    font-family: var(--font-data);
+    letter-spacing: 0.12em;
+    color: var(--green);
+}
+
+[data-theme="mission-control"] .brand span {
+    font-family: var(--font-data);
+    font-size: 11px;
+}
+
+[data-theme="mission-control"] .nav-links a {
+    font-family: var(--font-data);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-radius: 0;
+}
+
+[data-theme="mission-control"] .nav-links a.active {
+    color: var(--green);
+    background: rgba(0, 229, 160, 0.08);
+    border-bottom: 1px solid var(--green);
+}
+
+/* Hard edges everywhere */
+[data-theme="mission-control"] .stat,
+[data-theme="mission-control"] .stats,
+[data-theme="mission-control"] .integration-card,
+[data-theme="mission-control"] .qs-card,
+[data-theme="mission-control"] .attention-card,
+[data-theme="mission-control"] .member-card,
+[data-theme="mission-control"] .person-card,
+[data-theme="mission-control"] .flagged-banner,
+[data-theme="mission-control"] .webhook-card,
+[data-theme="mission-control"] .scan-card,
+[data-theme="mission-control"] .memory-card,
+[data-theme="mission-control"] .detail-panel,
+[data-theme="mission-control"] .quad-card,
+[data-theme="mission-control"] .exec-banner {
+    border-radius: 0 !important;
+}
+
+/* Monospace numbers */
+[data-theme="mission-control"] .qs-value,
+[data-theme="mission-control"] .stat-val,
+[data-theme="mission-control"] .quad-card-count,
+[data-theme="mission-control"] .summary-value,
+[data-theme="mission-control"] .metric-pill {
+    font-family: var(--font-data);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Section headers — uppercased, tracked */
+[data-theme="mission-control"] .section-title,
+[data-theme="mission-control"] .section-head,
+[data-theme="mission-control"] .ctrl-section-head,
+[data-theme="mission-control"] h2,
+[data-theme="mission-control"] h3 {
+    font-family: var(--font-data);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+}
+
+/* Telemetry strip override for header status */
+[data-theme="mission-control"] .hdr-status {
+    font-family: var(--font-data);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+[data-theme="mission-control"] .hdr-dot.green {
+    background: var(--green);
+    box-shadow: var(--glow-green);
+}
+
+[data-theme="mission-control"] .hdr-dot.amber {
+    background: var(--amber);
+    box-shadow: var(--glow-amber);
+}
+
+[data-theme="mission-control"] .hdr-dot.red {
+    background: var(--red);
+    box-shadow: var(--glow-red);
+}
+
+/* Briefing title */
+[data-theme="mission-control"] .briefing-title {
+    font-family: var(--font-data);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Call page — green reticle */
+[data-theme="mission-control"] .call-btn.idle {
+    background: transparent !important;
+    border: 2px solid var(--green) !important;
+    box-shadow: var(--glow-green), inset 0 0 30px rgba(0, 229, 160, 0.05) !important;
+}
+
+[data-theme="mission-control"] .call-btn.active {
+    border-color: var(--red) !important;
+    box-shadow: var(--glow-red) !important;
+}
+
+/* Progress bars — sharper */
+[data-theme="mission-control"] .workload-fill,
+[data-theme="mission-control"] .person-bar-fill,
+[data-theme="mission-control"] .topic-bar-fill,
+[data-theme="mission-control"] .scan-progress-bar-fill,
+[data-theme="mission-control"] .deleg-bar span {
+    border-radius: 0 !important;
+}
+
+[data-theme="mission-control"] .workload-bar,
+[data-theme="mission-control"] .person-bar-track,
+[data-theme="mission-control"] .topic-bar-track,
+[data-theme="mission-control"] .scan-progress-bar-track {
+    border-radius: 0 !important;
+}
+
+
+/* ─────────────────────────────────────────────────────────────────
+   THEME 2: THE BROADSHEET
+   Editorial, typography-driven. Serif headlines, warm palette.
+   ───────────────────────────────────────────────────────────────── */
+[data-theme="broadsheet"] {
+    --bg: #0f0f0f;
+    --surface: #161614;
+    --surface-raised: #1c1c19;
+    --border: #2a2724;
+    --border-subtle: #201e1b;
+    --text: #f0ece4;
+    --text-secondary: #b5b0a6;
+    --text-muted: #8a8580;
+    --accent: #e63b2e;
+    --accent-dim: rgba(230, 59, 46, 0.10);
+    --green: #4a9e6b;
+    --green-dim: rgba(74, 158, 107, 0.10);
+    --green-text: #6bbd8a;
+    --amber: #c9a84c;
+    --amber-dim: rgba(201, 168, 76, 0.10);
+    --amber-text: #ddc06a;
+    --red: #e63b2e;
+    --red-dim: rgba(230, 59, 46, 0.10);
+    --red-text: #f06b60;
+    --blue-dim: rgba(230, 59, 46, 0.08);
+    --purple: #8b6bb5;
+    --purple-dim: rgba(139, 107, 181, 0.10);
+    --purple-text: #a88cd4;
+
+    /* Graph */
+    --node-person: #4a82b0;
+    --node-topic: #8b6bb5;
+    --node-page: #c9a84c;
+    --node-project: #4a9e6b;
+    --node-organization: #5ba0ad;
+    --node-decision: #e63b2e;
+    --node-tag: #8b6bb5;
+    --cyan: #5ba0ad;
+    --cyan-dim: rgba(91, 160, 173, 0.10);
+    --cyan-text: #7ab8c4;
+    --rose: #e63b2e;
+    --rose-dim: rgba(230, 59, 46, 0.10);
+    --rose-text: #f06b60;
+    --violet: #8b6bb5;
+    --violet-dim: rgba(139, 107, 181, 0.10);
+    --violet-text: #a88cd4;
+
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-heading: 'Newsreader', 'Georgia', 'Times New Roman', serif;
+    --font-data: 'Inter', -apple-system, sans-serif;
+    --radius: 2px;
+    --radius-sm: 1px;
+}
+
+[data-theme="broadsheet"] body {
+    font-family: var(--font-body);
+    line-height: 1.6;
+}
+
+[data-theme="broadsheet"] .brand h1 {
+    font-family: var(--font-heading);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    font-style: italic;
+}
+
+[data-theme="broadsheet"] .brand span {
+    font-family: var(--font-body);
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+[data-theme="broadsheet"] .nav-links a {
+    font-family: var(--font-body);
+    font-size: 13px;
+    border-radius: 2px;
+}
+
+[data-theme="broadsheet"] .nav-links a.active {
+    color: var(--text);
+    background: var(--surface-raised);
+    border-bottom: 2px solid var(--accent);
+}
+
+/* Serif headings */
+[data-theme="broadsheet"] .briefing-title,
+[data-theme="broadsheet"] .page-title,
+[data-theme="broadsheet"] .exec-banner-text,
+[data-theme="broadsheet"] h2 {
+    font-family: var(--font-heading);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    text-transform: none;
+    font-size: 1.4em;
+    line-height: 1.3;
+}
+
+[data-theme="broadsheet"] .section-title,
+[data-theme="broadsheet"] .section-head,
+[data-theme="broadsheet"] h3 {
+    font-family: var(--font-body);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+}
+
+/* Executive banner as masthead */
+[data-theme="broadsheet"] .exec-banner {
+    border: none;
+    border-top: 3px double var(--border);
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    padding: 24px 0;
+    background: transparent;
+}
+
+/* Stats — understated */
+[data-theme="broadsheet"] .qs-value,
+[data-theme="broadsheet"] .stat-val,
+[data-theme="broadsheet"] .summary-value {
+    font-family: var(--font-heading);
+    font-weight: 400;
+    font-style: italic;
+}
+
+/* Cards — minimal borders, print-like */
+[data-theme="broadsheet"] .attention-card {
+    border-radius: 0;
+    border-left-width: 2px;
+    background: transparent;
+    border-top: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-left: 16px;
+}
+
+[data-theme="broadsheet"] .member-card,
+[data-theme="broadsheet"] .person-card {
+    border-radius: 2px;
+    border: none;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+[data-theme="broadsheet"] .integration-card,
+[data-theme="broadsheet"] .webhook-card,
+[data-theme="broadsheet"] .scan-card,
+[data-theme="broadsheet"] .memory-card {
+    border-radius: 2px;
+}
+
+/* Flagship: the briefing sub-headline */
+[data-theme="broadsheet"] .briefing-sub {
+    font-family: var(--font-heading);
+    font-size: 15px;
+    font-style: italic;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+/* Delegation table — cleaner */
+[data-theme="broadsheet"] .deleg-bar span {
+    border-radius: 1px !important;
+}
+
+/* Vermillion accent on active nav */
+[data-theme="broadsheet"] .hdr-lbl.green {
+    color: var(--green-text);
+}
+
+/* Call page */
+[data-theme="broadsheet"] .call-btn.idle {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+}
+
+/* Quadrant matrix — editorial dashes */
+[data-theme="broadsheet"] .quad-card {
+    border-radius: 0;
+}
+
+[data-theme="broadsheet"] .flagged-banner {
+    border-radius: 0;
+    border-left-width: 2px;
+}
+
+[data-theme="broadsheet"] .stats {
+    border-radius: 2px;
+}
+
+
+/* ─────────────────────────────────────────────────────────────────
+   THEME 3: WAR ROOM
+   Layered depth, heat-gradients, spatial. Contour-map aesthetic.
+   ───────────────────────────────────────────────────────────────── */
+[data-theme="war-room"] {
+    --bg: #0a0b0e;
+    --surface: #111520;
+    --surface-raised: #182030;
+    --border: #232a36;
+    --border-subtle: #1a2030;
+    --text: #d4c5a9;
+    --text-secondary: #9a9080;
+    --text-muted: #6b7a8d;
+    --accent: #4f9eff;
+    --accent-dim: rgba(79, 158, 255, 0.12);
+    --green: #34d399;
+    --green-dim: rgba(52, 211, 153, 0.10);
+    --green-text: #5eead4;
+    --amber: #fbbf24;
+    --amber-dim: rgba(251, 191, 36, 0.10);
+    --amber-text: #fcd34d;
+    --red: #ff4d6a;
+    --red-dim: rgba(255, 77, 106, 0.10);
+    --red-text: #ff7a93;
+    --blue-dim: rgba(79, 158, 255, 0.10);
+    --purple: #a78bfa;
+    --purple-dim: rgba(167, 139, 250, 0.10);
+    --purple-text: #c4b5fd;
+
+    /* Graph */
+    --node-person: #4f9eff;
+    --node-topic: #a78bfa;
+    --node-page: #fbbf24;
+    --node-project: #34d399;
+    --node-organization: #22d3ee;
+    --node-decision: #ff4d6a;
+    --node-tag: #c4b5fd;
+    --cyan: #22d3ee;
+    --cyan-dim: rgba(34, 211, 238, 0.10);
+    --cyan-text: #67e8f9;
+    --rose: #ff4d6a;
+    --rose-dim: rgba(255, 77, 106, 0.10);
+    --rose-text: #ff7a93;
+    --violet: #a78bfa;
+    --violet-dim: rgba(167, 139, 250, 0.10);
+    --violet-text: #c4b5fd;
+
+    --font-body: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-heading: 'Space Grotesk', sans-serif;
+    --font-data: 'Space Grotesk', sans-serif;
+    --radius: 8px;
+    --radius-sm: 4px;
+    --elevation-1: var(--surface);
+    --elevation-2: var(--surface-raised);
+    --elevation-3: #1e2a3e;
+}
+
+[data-theme="war-room"] body {
+    font-family: var(--font-body);
+}
+
+[data-theme="war-room"] .brand h1 {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+}
+
+[data-theme="war-room"] .brand span {
+    font-family: var(--font-body);
+    font-size: 11px;
+}
+
+[data-theme="war-room"] .nav-links a {
+    font-family: var(--font-body);
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    border-radius: 6px;
+}
+
+[data-theme="war-room"] .nav-links a.active {
+    color: var(--accent);
+    background: rgba(79, 158, 255, 0.10);
+}
+
+/* Layered depth — cards get distinct elevation */
+[data-theme="war-room"] .attention-card,
+[data-theme="war-room"] .flagged-banner {
+    background: var(--elevation-2);
+    border-color: var(--border);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="war-room"] .member-card,
+[data-theme="war-room"] .person-card,
+[data-theme="war-room"] .integration-card {
+    background: var(--elevation-2);
+    border-color: var(--border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="war-room"] .member-card:hover,
+[data-theme="war-room"] .person-card:hover {
+    background: var(--elevation-3);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* Section labels — wide letter-spacing, uppercase */
+[data-theme="war-room"] .section-title,
+[data-theme="war-room"] .section-head,
+[data-theme="war-room"] h3 {
+    font-family: var(--font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+[data-theme="war-room"] h2,
+[data-theme="war-room"] .briefing-title,
+[data-theme="war-room"] .page-title {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+/* Heat-gradient progress bars */
+[data-theme="war-room"] .workload-fill,
+[data-theme="war-room"] .person-bar-fill,
+[data-theme="war-room"] .deleg-bar span {
+    background: linear-gradient(90deg, var(--accent) 0%, var(--green) 30%, var(--amber) 65%, var(--red) 100%) !important;
+    background-size: 200% 100% !important;
+}
+
+[data-theme="war-room"] .topic-bar-fill {
+    background: var(--accent);
+}
+
+/* Stats — bold numerics */
+[data-theme="war-room"] .qs-value,
+[data-theme="war-room"] .stat-val,
+[data-theme="war-room"] .quad-card-count,
+[data-theme="war-room"] .summary-value {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Quadrant cards — elevated */
+[data-theme="war-room"] .quad-card {
+    background: var(--elevation-2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Call page — tactical blue */
+[data-theme="war-room"] .call-btn.idle {
+    background: rgba(79, 158, 255, 0.08) !important;
+    border: 2px solid var(--accent) !important;
+    box-shadow: 0 0 40px rgba(79, 158, 255, 0.2) !important;
+}
+
+[data-theme="war-room"] .call-btn.idle:hover {
+    box-shadow: 0 0 60px rgba(79, 158, 255, 0.35) !important;
+}
+
+/* Exec banner — elevated contour */
+[data-theme="war-room"] .exec-banner {
+    background: var(--elevation-2);
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Scan bar — heat gradient */
+[data-theme="war-room"] .scan-progress-bar-fill {
+    background: linear-gradient(90deg, var(--accent), var(--green));
+}
+
+[data-theme="war-room"] .scan-progress-bar-fill.error {
+    background: linear-gradient(90deg, var(--amber), var(--red));
+}
+
+/* Header status — tactical feel */
+[data-theme="war-room"] .hdr-status {
+    font-size: 11px;
+    letter-spacing: 0.02em;
+}
+
+[data-theme="war-room"] .hdr-scan-spinner {
+    border-top-color: var(--accent);
+}

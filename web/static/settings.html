@@ -154,7 +154,22 @@
         .setup-item-name { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
         .setup-item-var { font-size: 12px; color: var(--text-muted); }
         .setup-item-var code { font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace; font-size: 11px; background: var(--surface-raised); border: 1px solid var(--border-subtle); padding: 2px 6px; border-radius: 4px; color: var(--text-secondary); }
+
+        /* Theme picker */
+        .theme-section { margin-bottom: 32px; }
+        .theme-section-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+        .theme-section-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+        .theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+        .theme-card { background: var(--surface); border: 2px solid var(--border-subtle); border-radius: 10px; padding: 16px; cursor: pointer; transition: all 0.15s; }
+        .theme-card:hover { border-color: var(--border); background: var(--surface-raised); }
+        .theme-card.selected { border-color: var(--accent); }
+        .theme-card-preview { height: 48px; border-radius: 6px; margin-bottom: 12px; overflow: hidden; display: flex; gap: 1px; }
+        .theme-card-preview div { flex: 1; }
+        .theme-card-name { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+        .theme-card-desc { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
     </style>
+    <link rel="stylesheet" href="/static/css/themes.css">
+    <script src="/static/js/themes.js"></script>
 </head>
 <body>
     <header>
@@ -183,6 +198,13 @@
         <div class="shell">
             <div class="page-title">Configuration</div>
             <div class="page-subtitle">Integration status and environment variables</div>
+
+            <div class="theme-section">
+                <div class="theme-section-title">Appearance</div>
+                <div class="theme-section-sub">Switch between aesthetic directions — changes apply everywhere instantly.</div>
+                <div class="theme-grid" id="theme-grid"></div>
+            </div>
+
             <div id="content">
                 <p class="loading-text">Loading...</p>
             </div>
@@ -717,6 +739,48 @@
         }
 
         renderScan();
+    </script>
+    <script>
+    /* Theme picker */
+    (function() {
+        var previewColors = {
+            'default':         ['#0a0a0a','#111113','#3b82f6','#22c55e','#fafafa'],
+            'mission-control': ['#05050a','#0a0b12','#00e5a0','#ff6b35','#c8d6e5'],
+            'broadsheet':      ['#0f0f0f','#161614','#e63b2e','#c9a84c','#f0ece4'],
+            'war-room':        ['#0a0b0e','#111520','#4f9eff','#ff4d6a','#d4c5a9'],
+        };
+
+        var grid = document.getElementById('theme-grid');
+        if (!grid || !window.tarsTheme) return;
+
+        var current = tarsTheme.get();
+
+        tarsTheme.themes.forEach(function(id) {
+            var card = document.createElement('div');
+            card.className = 'theme-card' + (id === current ? ' selected' : '');
+            card.setAttribute('data-theme-id', id);
+
+            var colors = previewColors[id] || previewColors['default'];
+            var preview = '<div class="theme-card-preview">';
+            colors.forEach(function(c) {
+                preview += '<div style="background:' + c + '"></div>';
+            });
+            preview += '</div>';
+
+            card.innerHTML = preview +
+                '<div class="theme-card-name">' + tarsTheme.labels[id] + '</div>' +
+                '<div class="theme-card-desc">' + tarsTheme.descriptions[id] + '</div>';
+
+            card.onclick = function() {
+                tarsTheme.set(id);
+                grid.querySelectorAll('.theme-card').forEach(function(c) {
+                    c.classList.toggle('selected', c.getAttribute('data-theme-id') === id);
+                });
+            };
+
+            grid.appendChild(card);
+        });
+    })();
     </script>
 <script src="/static/js/webhook-status.js"></script>
 </body>
