@@ -1161,7 +1161,7 @@ async def get_intel():
 
 
 @app.post("/api/intel/scan")
-async def scan_intel(max_pages: int = 50, full_scan: bool = False):
+async def scan_intel(max_pages: int = 500, full_scan: bool = False):
     """Trigger a Notion intelligence scan (incremental by default)."""
     from integrations.intel import scan_notion
 
@@ -1180,7 +1180,7 @@ _active_scan_cancel: dict[str, asyncio.Event] = {}
 
 
 @app.post("/api/intel/scan/stream")
-async def scan_intel_stream(max_pages: int = 50, full_scan: bool = False):
+async def scan_intel_stream(max_pages: int = 500, full_scan: bool = False):
     """SSE endpoint that streams scan progress events."""
     import json as _json
     from integrations.intel import scan_notion
