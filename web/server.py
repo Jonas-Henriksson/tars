@@ -1393,6 +1393,18 @@ def _start_background_scan(
 
 
 @app.on_event("startup")
+async def _merge_me_into_jonas():
+    """Merge the 'Me' person alias into 'Jonas' across all data sources."""
+    try:
+        from integrations.people import rename_person as _rename
+        result = _rename("Me", "Jonas")
+        if "error" not in result:
+            logger.info("Merged 'Me' into 'Jonas': %s", result)
+    except Exception as e:
+        logger.debug("Me→Jonas merge skipped: %s", e)
+
+
+@app.on_event("startup")
 async def _resume_interrupted_scan():
     """On server startup, check for an interrupted scan and resume it."""
     from integrations.intel import _load_checkpoint
@@ -2410,6 +2422,7 @@ async def get_weekly_review():
                             "owner": t.get("owner", ""),
                             "follow_up_date": fud,
                             "days_overdue": days_overdue,
+                            "quadrant": t.get("priority", {}).get("quadrant", 4),
                         })
                 except (ValueError, TypeError):
                     pass
@@ -2422,6 +2435,7 @@ async def get_weekly_review():
             delegation.setdefault(owner, {"count": 0, "overdue": 0, "tasks": []})
             delegation[owner]["count"] += 1
             delegation[owner]["tasks"].append({
+                "id": t.get("id"),
                 "description": t.get("description", "")[:80],
                 "status": t.get("status"),
                 "quadrant": t.get("priority", {}).get("quadrant"),

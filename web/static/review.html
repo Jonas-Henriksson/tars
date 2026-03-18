@@ -74,10 +74,19 @@ header { border-bottom: 1px solid var(--border-subtle); padding: 16px 0; positio
 .task-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface); border-radius: 6px; margin-bottom: 4px; }
 .task-row-desc { flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .task-row-owner { font-size: 12px; color: var(--text-secondary); flex-shrink: 0; }
+.task-row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.task-row-actions button { background: none; border: 1px solid var(--border); color: var(--text-muted); font-size: 12px; width: 24px; height: 24px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.task-row-actions button:hover { border-color: var(--text-secondary); color: var(--text); }
+.task-row-actions .btn-done:hover { border-color: var(--green); color: var(--green-text); }
+.task-row-actions .btn-dismiss:hover { border-color: var(--red); color: var(--red); }
 .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .badge-red { background: var(--red-dim); color: var(--red); }
 .badge-amber { background: var(--amber-dim); color: var(--amber-text); }
 .badge-quad { font-size: 10px; font-weight: 500; padding: 2px 6px; border-radius: 4px; }
+
+.quad-card { cursor: pointer; transition: all 0.15s; }
+.quad-card:hover { background: var(--surface-raised); }
+.quad-card.active { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 .empty-good { font-size: 13px; color: var(--green-text); padding: 10px 14px; background: var(--green-dim); border-radius: 6px; }
 
@@ -150,6 +159,8 @@ function esc(s) { if (!s) return ''; const el = document.createElement('span'); 
 
 const QUAD_LABELS = { 1: 'Do First', 2: 'Schedule', 3: 'Delegate', 4: 'Defer' };
 const QUAD_COLORS = { 1: 'red', 2: 'accent', 3: 'amber', 4: 'muted' };
+let activeQuadrantFilter = null;
+let currentReviewData = null;
 
 function colorVar(q) {
     const map = { 1: 'var(--red)', 2: 'var(--accent)', 3: 'var(--amber-text)', 4: 'var(--text-muted)' };
@@ -172,7 +183,30 @@ function formatDate(ts) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+function markTaskDone(id) {
+    fetch('/api/intel/tasks/' + id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'done' }),
+    }).then(r => { if (r.ok && currentReviewData) { loadReview(); } });
+}
+
+function dismissTask(id) {
+    fetch('/api/intel/tasks/' + id, {
+        method: 'DELETE',
+    }).then(r => { if (r.ok) { loadReview(); } });
+}
+
+function taskActions(id) {
+    if (!id) return '';
+    return '<div class="task-row-actions">' +
+        '<button class="btn-done" onclick="event.stopPropagation();markTaskDone(\'' + esc(id) + '\')" title="Mark done">&#10003;</button>' +
+        '<button class="btn-dismiss" onclick="event.stopPropagation();dismissTask(\'' + esc(id) + '\')" title="Dismiss">&times;</button>' +
+        '</div>';
+}
+
 function render(data) {
+    currentReviewData = data;
     const main = document.getElementById('main-content');
 
     if (!data || (!data.smart_tasks && !data.tracked_tasks)) {
@@ -226,8 +260,9 @@ function render(data) {
 
     for (let q = 1; q <= 4; q++) {
         const count = quadrants[q] || quadrants[String(q)] || 0;
+        const isActive = activeQuadrantFilter === q;
         html += `
-                    <div class="quad-card">
+                    <div class="quad-card${isActive ? ' active' : ''}" onclick="activeQuadrantFilter = activeQuadrantFilter === ${q} ? null : ${q}; render(currentReviewData);">
                         <div class="quad-card-label" style="color: ${colorVar(q)}">${esc(QUAD_LABELS[q])}</div>
                         <div class="quad-card-count" style="color: ${colorVar(q)}">${esc(String(count))}</div>
                         <div class="quad-card-pct">${pct(count, openCount)} of open</div>
@@ -235,7 +270,11 @@ function render(data) {
     }
 
     html += `
-                </div>
+                </div>`;
+    if (activeQuadrantFilter) {
+        html += `<div style="font-size:12px;color:var(--accent);margin-top:8px;cursor:pointer" onclick="activeQuadrantFilter=null;render(currentReviewData);">Filtering: <strong>${esc(QUAD_LABELS[activeQuadrantFilter])}</strong> &mdash; click to clear</div>`;
+    }
+    html += `
             </div>`;
 
     // Overdue Tasks
@@ -246,18 +285,20 @@ function render(data) {
                     Overdue Tasks
                 </div>`;
 
-    if (overdueList.length === 0) {
-        html += '<div class="empty-good">No overdue tasks</div>';
+    const filteredOverdue = activeQuadrantFilter ? overdueList.filter(t => t.quadrant === activeQuadrantFilter) : overdueList;
+    if (filteredOverdue.length === 0) {
+        html += '<div class="empty-good">No overdue tasks' + (activeQuadrantFilter ? ' in ' + esc(QUAD_LABELS[activeQuadrantFilter]) : '') + '</div>';
     } else {
         const OD_LIMIT = 5;
-        const odVisible = overdueList.slice(0, OD_LIMIT);
-        const odHidden = overdueList.slice(OD_LIMIT);
+        const odVisible = filteredOverdue.slice(0, OD_LIMIT);
+        const odHidden = filteredOverdue.slice(OD_LIMIT);
         odVisible.forEach(function(t) {
             html += `
                 <div class="task-row">
                     <div class="task-row-desc">${esc(t.description)}</div>
                     <div class="task-row-owner">${esc(t.owner)}</div>
                     <span class="badge badge-red">${esc(String(t.days_overdue))}d overdue</span>
+                    ${taskActions(t.id)}
                 </div>`;
         });
         if (odHidden.length > 0) {
@@ -268,6 +309,7 @@ function render(data) {
                     <div class="task-row-desc">${esc(t.description)}</div>
                     <div class="task-row-owner">${esc(t.owner)}</div>
                     <span class="badge badge-red">${esc(String(t.days_overdue))}d overdue</span>
+                    ${taskActions(t.id)}
                 </div>`;
             });
             html += '</div>';
@@ -297,6 +339,7 @@ function render(data) {
                     <div class="task-row-desc">${esc(t.description)}</div>
                     <div class="task-row-owner">${esc(t.owner)}</div>
                     <span class="badge badge-amber">${esc(String(t.age_days))}d old</span>
+                    ${taskActions(t.id)}
                 </div>`;
         });
         if (stHidden.length > 0) {
@@ -307,6 +350,7 @@ function render(data) {
                     <div class="task-row-desc">${esc(t.description)}</div>
                     <div class="task-row-owner">${esc(t.owner)}</div>
                     <span class="badge badge-amber">${esc(String(t.age_days))}d old</span>
+                    ${taskActions(t.id)}
                 </div>`;
             });
             html += '</div>';
@@ -335,7 +379,12 @@ function render(data) {
         const name = entry[0];
         const info = entry[1];
         const barWidth = Math.round((info.count / maxDelegation) * 100);
-        const tasks = info.tasks || [];
+        const allTasks = info.tasks || [];
+        const tasks = activeQuadrantFilter ? allTasks.filter(t => t.quadrant === activeQuadrantFilter) : allTasks;
+
+        if (tasks.length === 0 && activeQuadrantFilter) return '';
+
+        const displayCount = activeQuadrantFilter ? tasks.length : info.count;
 
         let overdueMeta = '';
         if (info.overdue > 0) {
@@ -346,7 +395,7 @@ function render(data) {
                 <div class="person-block">
                     <div class="person-header">
                         <span class="person-name">${esc(name)}</span>
-                        <span class="person-meta">${esc(String(info.count))} tasks${overdueMeta}</span>
+                        <span class="person-meta">${esc(String(displayCount))} tasks${overdueMeta}</span>
                     </div>
                     <div class="person-bar-track">
                         <div class="person-bar-fill" style="width: ${barWidth}%"></div>
@@ -356,30 +405,24 @@ function render(data) {
         const visibleTasks = tasks.slice(0, TASK_LIMIT);
         const hiddenTasks = tasks.slice(TASK_LIMIT);
 
-        visibleTasks.forEach(function(t) {
+        function renderPersonTask(t) {
             const qLabel = QUAD_LABELS[t.quadrant] || '';
             const qColor = t.quadrant ? colorVar(t.quadrant) : 'var(--text-muted)';
             const qDim = t.quadrant ? colorDim(t.quadrant) : 'var(--surface-raised)';
-            h += `
+            return `
                     <div class="person-task">
                         <span class="person-task-desc">${esc(t.description)}</span>
                         ${qLabel ? '<span class="badge badge-quad" style="background:' + qDim + ';color:' + qColor + '">' + esc(qLabel) + '</span>' : ''}
+                        ${t.id ? taskActions(t.id) : ''}
                     </div>`;
-        });
+        }
+
+        visibleTasks.forEach(function(t) { h += renderPersonTask(t); });
 
         if (hiddenTasks.length > 0) {
             const uid = 'dtasks-' + esc(name).replace(/\s/g, '-');
             h += '<div id="' + uid + '" style="display:none">';
-            hiddenTasks.forEach(function(t) {
-                const qLabel = QUAD_LABELS[t.quadrant] || '';
-                const qColor = t.quadrant ? colorVar(t.quadrant) : 'var(--text-muted)';
-                const qDim = t.quadrant ? colorDim(t.quadrant) : 'var(--surface-raised)';
-                h += `
-                    <div class="person-task">
-                        <span class="person-task-desc">${esc(t.description)}</span>
-                        ${qLabel ? '<span class="badge badge-quad" style="background:' + qDim + ';color:' + qColor + '">' + esc(qLabel) + '</span>' : ''}
-                    </div>`;
-            });
+            hiddenTasks.forEach(function(t) { h += renderPersonTask(t); });
             h += '</div>';
             h += '<div class="show-more-btn" onclick="var el=document.getElementById(\'' + uid + '\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';this.textContent=el.style.display===\'none\'?\'+' + hiddenTasks.length + ' more tasks\':\'Show less\'"">+' + hiddenTasks.length + ' more tasks</div>';
         }
