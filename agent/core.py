@@ -94,6 +94,21 @@ def _build_system_prompt() -> str:
     except Exception:
         pass
 
+    # Inject industry best practices and frameworks
+    try:
+        from integrations.knowledge_enrichment import get_best_practices
+        bp = get_best_practices()
+        articles = bp.get("articles", [])
+        if articles:
+            lines = ["\n## Industry Best Practices & Frameworks"]
+            for article in articles[-5:]:  # most recent 5
+                lines.append(f"\n**{article.get('title', '')}**")
+                content = article.get("content", "")
+                lines.append(content[:300] + ("..." if len(content) > 300 else ""))
+            parts.append("\n".join(lines))
+    except Exception:
+        pass
+
     parts.append(_MEMORY_INSTRUCTIONS)
     return "\n".join(parts)
 

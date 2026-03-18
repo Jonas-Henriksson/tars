@@ -38,6 +38,15 @@ Use this historical context to create richer epics that reference past decisions
 incorporate specific details (names, timelines, technical choices), and connect to
 previously discussed work that may not have been formalized as tasks yet.
 
+EXTERNAL BEST PRACTICES (industry frameworks and methodologies for these topics):
+{best_practices}
+
+Leverage these best practices to:
+- Structure epics around proven frameworks and methodologies
+- Include industry-standard KPIs in acceptance criteria
+- Reference specific frameworks (e.g., "Kotter's 8-step model", "SCOR framework") in descriptions
+- Suggest stories that align with best-practice implementation steps
+
 Rules:
 - Each epic should represent a cohesive body of work (not a single task)
 - Only create epics where there are 2+ related tasks that form a larger initiative
@@ -169,10 +178,32 @@ async def auto_populate_epics() -> dict[str, Any]:
     except Exception:
         historical_context = ""
 
+    # Inject relevant best practices from external knowledge
+    try:
+        from integrations.knowledge_enrichment import search_best_practices
+        bp_results = []
+        for topic in eligible_topics.keys():
+            bp_results.extend(search_best_practices(topic))
+        # Deduplicate by title
+        seen_titles = set()
+        unique_bp = []
+        for bp in bp_results:
+            t = bp.get("title", "")
+            if t not in seen_titles:
+                seen_titles.add(t)
+                unique_bp.append(bp)
+        best_practices_text = "\n\n".join(
+            f"**{bp['title']}**\n{bp['content'][:500]}"
+            for bp in unique_bp[:3]
+        ) if unique_bp else ""
+    except Exception:
+        best_practices_text = ""
+
     prompt = _EPIC_PROMPT.format(
         tasks_by_topic=tasks_text,
         existing_epics=existing_titles_str,
         historical_context=historical_context or "(no historical context available)",
+        best_practices=best_practices_text or "(no external best practices available yet)",
     )
 
     from llm import llm_call

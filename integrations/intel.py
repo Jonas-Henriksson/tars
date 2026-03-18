@@ -1063,6 +1063,17 @@ async def _post_scan_enrich(
         logger.warning("Post-scan smart steps enrichment failed: %s", e)
         results["smart_steps"] = {"error": str(e)}
 
+    # Step 6: Auto-enrich best practices for new topics from the web
+    try:
+        await _emit("enriching", "Researching external best practices for new topics...")
+        from integrations.knowledge_enrichment import enrich_from_intel
+        bp_result = await enrich_from_intel()
+        results["best_practices"] = bp_result
+        logger.info("Post-scan: %s", bp_result.get("message", ""))
+    except Exception as e:
+        logger.warning("Post-scan best practices enrichment failed: %s", e)
+        results["best_practices"] = {"error": str(e)}
+
     await _emit("completed", "Scan and enrichment complete")
     return results
 

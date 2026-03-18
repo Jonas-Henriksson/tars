@@ -1905,3 +1905,63 @@ def _register_context_tools() -> None:
 
 
 _register_context_tools()
+
+
+# ── Best practices tools ────────────────────────────────────────────
+
+def _register_best_practices_tools() -> None:
+    from integrations.knowledge_enrichment import search_best_practices, enrich_topic
+
+    async def _handle_search_bp(tool_input: dict) -> dict:
+        results = search_best_practices(tool_input["query"])
+        return {"results": results, "count": len(results)}
+
+    register_tool(
+        name="search_best_practices",
+        description=(
+            "Search the best practices knowledge base for industry frameworks, "
+            "methodologies, and expert guidance. Contains synthesized briefs from "
+            "McKinsey, management consulting, and industry research. Use when the "
+            "user asks about best practices, frameworks, or 'how should we approach X'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query (e.g. 'S&OP', 'supply chain', 'change management')"},
+            },
+            "required": ["query"],
+        },
+        handler=_handle_search_bp,
+    )
+
+    async def _handle_research_bp(tool_input: dict) -> dict:
+        return await enrich_topic(
+            tool_input["topic"],
+            custom_queries=tool_input.get("custom_queries"),
+        )
+
+    register_tool(
+        name="research_best_practices",
+        description=(
+            "Research and synthesize NEW best practices for a topic from the web. "
+            "Searches DuckDuckGo for industry frameworks, synthesizes with Opus, "
+            "and stores in the knowledge base for future use. Use when the user "
+            "wants to research a new topic or update existing best practices."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string", "description": "Topic to research (e.g. 'S&OP', 'lean manufacturing')"},
+                "custom_queries": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional custom search queries (overrides defaults)",
+                },
+            },
+            "required": ["topic"],
+        },
+        handler=_handle_research_bp,
+    )
+
+
+_register_best_practices_tools()

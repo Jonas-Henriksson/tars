@@ -522,14 +522,19 @@ SOURCE PAGE CONTEXT:
 RELATED HISTORICAL CONTEXT (from other discussions and meetings on similar topics):
 {related_context}
 
+RELEVANT INDUSTRY BEST PRACTICES:
+{best_practices}
+
 Create a concise but informative background summary (150-300 words) that covers:
 1. **What this is about**: Plain-language explanation of what this item involves
 2. **Background**: What discussions, decisions, or events led to this item
 3. **Key people**: Who is involved and what their role/stake is
 4. **Connected work**: How this relates to other initiatives, projects, or past decisions
-5. **Things to know**: Risks, open questions, or important context the user should be aware of
+5. **Best practice alignment**: How this relates to industry frameworks or methodologies
+6. **Things to know**: Risks, open questions, or important context the user should be aware of
 
-Be specific — use names, dates, and details from the context. Skip sections that have no relevant info.
+Be specific — use names, dates, and details from the context. Where relevant, reference
+external best practices, frameworks, or methodologies. Skip sections that have no relevant info.
 Return ONLY the summary text, no JSON wrapping.
 """
 
@@ -548,8 +553,12 @@ SOURCE PAGE CONTEXT (the meeting/document where this task originated):
 RELATED CONTEXT (from other discussions and meetings on similar topics):
 {related_context}
 
+INDUSTRY BEST PRACTICES (relevant frameworks and methodologies):
+{best_practices}
+
 Generate 4-7 specific, actionable steps for completing this task. Steps should:
 - Be informed by the actual context (reference specific people, systems, documents, decisions)
+- Incorporate relevant best practices — reference specific frameworks, standard approaches, or recommended methodologies where applicable
 - Be practical and ordered logically
 - Include any coordination or dependencies evident from the context
 - Be concise (one line each)
@@ -559,6 +568,31 @@ Return ONLY a numbered list:
 2. Second step
 ...
 """
+
+
+def _get_best_practices_text(topics: list[str], max_chars: int = 1000) -> str:
+    """Query the best practices KB for articles matching the given topics."""
+    try:
+        from integrations.knowledge_enrichment import search_best_practices
+        results = []
+        seen_titles: set[str] = set()
+        for t in topics:
+            for bp in search_best_practices(t):
+                title = bp.get("title", "")
+                if title not in seen_titles:
+                    seen_titles.add(title)
+                    results.append(bp)
+        if not results:
+            return ""
+        text = ""
+        for bp in results[:3]:
+            chunk = f"**{bp.get('title', '')}**\n{bp.get('content', '')[:400]}\n\n"
+            if len(text) + len(chunk) > max_chars:
+                break
+            text += chunk
+        return text.strip()
+    except Exception:
+        return ""
 
 
 async def generate_item_summary(
@@ -592,12 +626,16 @@ async def generate_item_summary(
         max_chars=2000,
     )
 
+    # Get relevant best practices from external knowledge
+    best_practices = _get_best_practices_text(topics or [], max_chars=1000)
+
     prompt = _ITEM_SUMMARY_PROMPT.format(
         item_type=item_type,
         title=title,
         description=description or "(no description)",
         source_context=source_context or "(no source page context available)",
         related_context=related_context or "(no related context available)",
+        best_practices=best_practices or "(no external best practices available yet)",
     )
 
     summary_text = await llm_call("item_context_summary", prompt, max_tokens=800)
@@ -648,8 +686,11 @@ async def generate_smart_steps(
         max_chars=1500,
     )
 
+    # Get relevant best practices from external knowledge
+    best_practices = _get_best_practices_text(topics or [], max_chars=800)
+
     # Only call LLM if we have some context to work with
-    if not source_context and not related_context:
+    if not source_context and not related_context and not best_practices:
         return None
 
     prompt = _SMART_STEPS_PROMPT.format(
@@ -658,6 +699,7 @@ async def generate_smart_steps(
         topics=", ".join(topics or []),
         source_context=source_context or "(no source context)",
         related_context=related_context or "(no related context)",
+        best_practices=best_practices or "(no best practices available)",
     )
 
     return await llm_call("smart_steps", prompt, max_tokens=500)

@@ -1011,6 +1011,9 @@ _TOOL_MAP = {
     "get_related_context": ("integrations.context_repository", "get_related_context"),
     "get_context_stats": ("integrations.context_repository", "get_stats"),
     "get_item_summary": ("integrations.context_repository", "generate_item_summary"),
+    # Best practices
+    "search_best_practices": ("integrations.knowledge_enrichment", "search_best_practices"),
+    "research_best_practices": ("integrations.knowledge_enrichment", "enrich_topic"),
     # User memory
     "remember_preference": ("integrations.memory", "set_preference"),
     "remember_fact": ("integrations.memory", "set_fact"),
