@@ -1,6 +1,9 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, screen } = require('electron');
 const path = require('path');
 
+// Disable GPU acceleration to avoid chunked_data_pipe errors on Windows
+app.disableHardwareAcceleration();
+
 let mainWindow;
 let tray;
 
