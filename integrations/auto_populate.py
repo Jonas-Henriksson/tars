@@ -287,8 +287,19 @@ async def auto_populate_epics(
                 await _aio.sleep(wait)
 
         if not raw:
-            errors.append(f"Batch {batch_idx + 1}: LLM unavailable after 3 attempts")
-            logger.warning("Epic generation batch %d/%d: LLM unavailable after retries", batch_idx + 1, len(task_batches))
+            # Capture the actual LLM error for diagnostics
+            last_err = getattr(llm_call, '_last_error', 'unknown')
+            err_msg = f"Batch {batch_idx + 1}: LLM failed — {last_err}"
+            errors.append(err_msg)
+            logger.warning("Epic generation batch %d/%d: %s", batch_idx + 1, len(task_batches), err_msg)
+            _progress({
+                "status": err_msg,
+                "phase": "error",
+                "batch": batch_idx + 1,
+                "total_batches": total_batches,
+                "epics_so_far": epics_created,
+                "stories_so_far": stories_created,
+            })
             continue
 
         # Small delay between batches to avoid rate limits

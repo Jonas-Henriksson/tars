@@ -141,7 +141,9 @@ async def llm_call(
     except Exception as e:
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         logger.warning(
-            "LLM [%s] model=%s FAILED after %dms: %s",
-            task, model, elapsed_ms, e,
+            "LLM [%s] model=%s FAILED after %dms: %s: %s",
+            task, model, elapsed_ms, type(e).__name__, e,
         )
+        # Store the last error for diagnostics
+        llm_call._last_error = f"{type(e).__name__}: {e}"  # type: ignore[attr-defined]
         return None

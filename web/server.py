@@ -3120,6 +3120,25 @@ async def api_epic_gen_status():
     })
 
 
+@app.get("/api/llm/test")
+async def api_llm_test():
+    """Quick LLM test — try a simple call and return the result or error."""
+    from llm import llm_call, _get_client, _resolve_model
+    client = _get_client()
+    if client is None:
+        return JSONResponse({"ok": False, "error": "Client unavailable (no API key?)"})
+
+    model = _resolve_model("epic_generation")
+    result = await llm_call("llm_test", "Reply with exactly: OK", max_tokens=16)
+    last_err = getattr(llm_call, '_last_error', None)
+    return JSONResponse({
+        "ok": result is not None,
+        "model": model,
+        "response": result,
+        "last_error": last_err,
+    })
+
+
 @app.post("/api/auto-populate/people")
 async def api_auto_populate_people():
     """Auto-enrich people profiles from intelligence data."""
