@@ -1044,6 +1044,12 @@ class TaskStatusUpdate(BaseModel):
 
 @app.get("/")
 async def index():
+    """Serve the landing page dashboard."""
+    return FileResponse(_STATIC_DIR / "index.html")
+
+
+@app.get("/call")
+async def call_page():
     """Serve the call UI."""
     return FileResponse(_STATIC_DIR / "call.html")
 
@@ -1125,6 +1131,149 @@ async def get_tasks(
         status=status,
         include_completed=include_completed,
     )
+    return JSONResponse(result)
+
+
+@app.get("/api/dashboard")
+async def get_dashboard():
+    """Lightweight dashboard data for the landing page.
+
+    Pulls together key numbers from multiple sources without triggering
+    expensive operations like full briefing compilation.
+    """
+    from integrations.intel import get_intel as _get_intel
+    from integrations.notion_tasks import get_tracked_tasks as _get_tracked
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+
+    result: dict = {}
+
+    # 1) Task stats from smart tasks
+    try:
+        intel = _get_intel()
+        smart_tasks = intel.get("smart_tasks", [])
+        open_tasks = [t for t in smart_tasks if t.get("status") != "done"]
+        done_tasks = [t for t in smart_tasks if t.get("status") == "done"]
+
+        now = _dt.now(_tz.utc)
+        overdue = []
+        due_today = []
+        for t in open_tasks:
+            fud = t.get("follow_up_date", "")
+            if fud:
+                try:
+                    due = _dt.fromisoformat(fud)
+                    if due.tzinfo is None:
+                        due = due.replace(tzinfo=_tz.utc)
+                    if due.date() < now.date():
+                        overdue.append({
+                            "description": t.get("description", "")[:80],
+                            "owner": t.get("owner", ""),
+                            "days_overdue": (now - due).days,
+                        })
+                    elif due.date() == now.date():
+                        due_today.append({
+                            "description": t.get("description", "")[:80],
+                            "owner": t.get("owner", ""),
+                        })
+                except (ValueError, TypeError):
+                    pass
+        overdue.sort(key=lambda x: x["days_overdue"], reverse=True)
+
+        # Quadrant distribution
+        quads = {1: 0, 2: 0, 3: 0, 4: 0}
+        for t in open_tasks:
+            q = t.get("priority", {}).get("quadrant", 4)
+            quads[q] = quads.get(q, 0) + 1
+
+        # Delegation — top people by load
+        delegation: dict = {}
+        for t in open_tasks:
+            owner = t.get("owner", "Unassigned")
+            delegation.setdefault(owner, {"count": 0, "overdue": 0})
+            delegation[owner]["count"] += 1
+        for item in overdue:
+            o = item.get("owner", "")
+            if o in delegation:
+                delegation[o]["overdue"] += 1
+        top_delegation = sorted(delegation.items(), key=lambda x: x[1]["count"], reverse=True)[:8]
+
+        result["tasks"] = {
+            "total": len(smart_tasks),
+            "open": len(open_tasks),
+            "done": len(done_tasks),
+            "overdue": overdue[:5],
+            "overdue_count": len(overdue),
+            "due_today": due_today[:5],
+            "due_today_count": len(due_today),
+            "quadrants": quads,
+            "delegation": [{"name": n, **v} for n, v in top_delegation],
+        }
+
+        result["scan"] = {
+            "last_scan_at": intel.get("last_scan_at"),
+            "pages_scanned": intel.get("pages_scanned", 0),
+            "topics_count": len(intel.get("topics", {})),
+            "people_count": len(intel.get("people", {})),
+        }
+
+        result["summary"] = intel.get("executive_summary", {})
+
+    except Exception as exc:
+        logger.debug("Dashboard task stats unavailable: %s", exc)
+        result["tasks"] = {"total": 0, "open": 0, "done": 0, "overdue": [], "overdue_count": 0}
+        result["scan"] = {}
+        result["summary"] = {}
+
+    # 2) Today's meetings from calendar
+    try:
+        from integrations.calendar import get_today_events
+        events = await get_today_events()
+        result["meetings"] = {
+            "today": [{
+                "subject": e.get("subject", ""),
+                "start": e.get("start", ""),
+                "end": e.get("end", ""),
+                "attendees_count": len(e.get("attendees", [])),
+            } for e in (events or [])[:8]],
+            "count": len(events or []),
+        }
+    except Exception:
+        result["meetings"] = {"today": [], "count": 0}
+
+    # 3) Alerts
+    try:
+        from integrations.alerts import get_alerts as _alerts
+        alerts_data = await _alerts()
+        items = alerts_data.get("alerts", [])
+        result["alerts"] = {
+            "items": items[:5],
+            "count": len(items),
+        }
+    except Exception:
+        result["alerts"] = {"items": [], "count": 0}
+
+    # 4) Decisions pending
+    try:
+        from integrations.decisions import get_decision_summary
+        dec = get_decision_summary()
+        result["decisions"] = {
+            "pending": dec.get("pending_count", 0),
+            "total": dec.get("total", 0),
+        }
+    except Exception:
+        result["decisions"] = {"pending": 0, "total": 0}
+
+    # 5) Initiatives
+    try:
+        from integrations.initiatives import get_strategic_summary
+        init = get_strategic_summary()
+        result["initiatives"] = {
+            "active": init.get("active_count", 0),
+            "at_risk": init.get("at_risk_count", 0),
+        }
+    except Exception:
+        result["initiatives"] = {"active": 0, "at_risk": 0}
+
     return JSONResponse(result)
 
 

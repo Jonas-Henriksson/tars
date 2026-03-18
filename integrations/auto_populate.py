@@ -126,41 +126,45 @@ async def auto_populate_epics() -> dict[str, Any]:
     # Include existing + manually deleted epics in the "don't recreate" list
     existing_titles_str = "\n".join(f"- {e['title']}" for e in existing.get("epics", [])) or "(none)"
 
-    # Group tasks by topic
-    tasks_by_topic: dict[str, list[dict]] = defaultdict(list)
+    # Collect unique tasks (deduplicated by description) with their topics
+    seen_descs: set[str] = set()
+    unique_tasks: list[dict] = []
 
     for task in smart_tasks:
         if task.get("status") == "done":
             continue
-        topics = task.get("topics", ["general"])
         desc = task.get("description", "")
-        owner = task.get("owner", "Unassigned")
-        for topic in topics:
-            tasks_by_topic[topic].append({
-                "id": task.get("id", ""),
-                "description": desc,
-                "owner": owner,
-                "priority": task.get("priority", ""),
-            })
+        desc_key = desc.lower().strip()
+        if desc_key in seen_descs:
+            continue
+        seen_descs.add(desc_key)
+        unique_tasks.append({
+            "id": task.get("id", ""),
+            "description": desc,
+            "owner": task.get("owner", "Unassigned"),
+            "priority": task.get("priority", ""),
+            "topics": task.get("topics", []),
+        })
 
     for task in tracked:
         if task.get("completed") or task.get("status") == "done":
             continue
-        topic = task.get("topic", "general")
-        tasks_by_topic[topic].append({
+        desc = task.get("description", "")
+        desc_key = desc.lower().strip()
+        if desc_key in seen_descs:
+            continue
+        seen_descs.add(desc_key)
+        unique_tasks.append({
             "id": task.get("id", ""),
-            "description": task.get("description", ""),
+            "description": desc,
             "owner": task.get("owner", "Unassigned"),
             "priority": "",
+            "topics": [task.get("topic", "general")],
         })
 
-    # Filter out topics with too few tasks (need at least 2 for a meaningful epic)
-    eligible_topics = {t: tasks for t, tasks in tasks_by_topic.items()
-                       if len(tasks) >= 2 and t != "general"}
-
-    if not eligible_topics:
+    if len(unique_tasks) < 2:
         return {
-            "message": "Not enough related tasks to create epics",
+            "message": "Not enough tasks to create epics",
             "epics_created": 0,
             "stories_created": 0,
         }
@@ -176,7 +180,8 @@ async def auto_populate_epics() -> dict[str, Any]:
     # Inject historical context from context repository
     try:
         from integrations.context_repository import get_related_context
-        historical_context = get_related_context(topics=list(eligible_topics.keys()), max_chars=3000)
+        all_topics = list({t for task in unique_tasks for t in task.get("topics", [])})
+        historical_context = get_related_context(topics=all_topics[:10], max_chars=3000)
     except Exception:
         historical_context = ""
 
@@ -184,7 +189,8 @@ async def auto_populate_epics() -> dict[str, Any]:
     try:
         from integrations.knowledge_enrichment import search_best_practices
         bp_results = []
-        for topic in list(eligible_topics.keys())[:5]:
+        topic_sample = list({t for task in unique_tasks for t in task.get("topics", [])})[:5]
+        for topic in topic_sample:
             bp_results.extend(search_best_practices(topic))
         seen_titles = set()
         unique_bp = []
@@ -200,23 +206,33 @@ async def auto_populate_epics() -> dict[str, Any]:
     except Exception:
         best_practices_text = ""
 
-    # ── Batch topics into groups of ~5 to keep prompts manageable ──
-    topic_names = list(eligible_topics.keys())
-    BATCH_SIZE = 5
-    topic_batches = [topic_names[i:i + BATCH_SIZE] for i in range(0, len(topic_names), BATCH_SIZE)]
+    # ── Batch tasks (not topics) into manageable groups ────────────
+    # Send ~40 unique tasks per LLM call to keep prompts reasonable
+    TASK_BATCH_SIZE = 40
+    task_batches = [unique_tasks[i:i + TASK_BATCH_SIZE]
+                    for i in range(0, len(unique_tasks), TASK_BATCH_SIZE)]
+
+    logger.info(
+        "Epic generation: %d unique tasks → %d batches of ≤%d",
+        len(unique_tasks), len(task_batches), TASK_BATCH_SIZE,
+    )
 
     epics_created = 0
     stories_created = 0
     results = []
     errors = []
 
-    for batch_idx, batch_topics in enumerate(topic_batches):
-        # Build prompt for this batch
+    for batch_idx, batch_tasks in enumerate(task_batches):
+        # Group this batch's tasks by their primary topic for readability
+        tasks_by_topic: dict[str, list[dict]] = defaultdict(list)
+        for t in batch_tasks:
+            primary_topic = t.get("topics", ["general"])[0] if t.get("topics") else "general"
+            tasks_by_topic[primary_topic].append(t)
+
         tasks_text = ""
-        for topic in batch_topics:
-            tasks = eligible_topics[topic]
+        for topic, tasks in sorted(tasks_by_topic.items()):
             tasks_text += f"\n## {topic}\n"
-            for t in tasks[:10]:  # cap per topic to control prompt size
+            for t in tasks:
                 tasks_text += f"- [{t['owner']}] {t['description']}\n"
 
         prompt = _EPIC_PROMPT.format(
@@ -230,25 +246,24 @@ async def auto_populate_epics() -> dict[str, Any]:
         raw = await llm_call("epic_generation", prompt, max_tokens=4096)
         if not raw:
             errors.append(f"Batch {batch_idx + 1}: LLM unavailable")
-            logger.warning("Epic generation batch %d: LLM unavailable", batch_idx + 1)
+            logger.warning("Epic generation batch %d/%d: LLM unavailable", batch_idx + 1, len(task_batches))
             continue
 
         try:
             suggested_epics = json.loads(raw)
         except json.JSONDecodeError:
-            # Try to salvage truncated JSON by finding the last complete object
+            # Try to salvage truncated JSON
             try:
-                # Find last complete '}]' or '}' and try to parse up to there
                 last_bracket = raw.rfind('}]')
                 if last_bracket > 0:
                     suggested_epics = json.loads(raw[:last_bracket + 2])
                 else:
                     raise json.JSONDecodeError("", "", 0)
             except json.JSONDecodeError:
-                errors.append(f"Batch {batch_idx + 1}: LLM returned invalid JSON (len={len(raw)})")
+                errors.append(f"Batch {batch_idx + 1}: invalid JSON (len={len(raw)})")
                 logger.warning(
-                    "Epic generation batch %d: LLM returned invalid JSON (%d chars). First 200: %s",
-                    batch_idx + 1, len(raw), raw[:200],
+                    "Epic generation batch %d/%d: invalid JSON (%d chars). First 200: %s",
+                    batch_idx + 1, len(task_batches), len(raw), raw[:200],
                 )
                 continue
 
