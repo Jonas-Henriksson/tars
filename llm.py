@@ -38,6 +38,10 @@ MODEL_CONFIG: dict[str, str] = {
     "news_classification": MODEL_OPUS,
     "epic_generation": MODEL_OPUS,
     "people_enrichment": MODEL_OPUS,
+    "context_synthesis": MODEL_OPUS,
+    "context_relevance_check": MODEL_OPUS,
+    "item_context_summary": MODEL_OPUS,
+    "smart_steps": MODEL_OPUS,
 }
 
 # -----------------------------------------------------------------------

@@ -1006,6 +1006,11 @@ _TOOL_MAP = {
     "get_best_practices": ("integrations.knowledge_enrichment", "get_best_practices"),
     "search_best_practices": ("integrations.knowledge_enrichment", "search_best_practices"),
     "get_morning_brief": ("integrations.morning_news", "generate_morning_brief"),
+    # Context repository
+    "search_context": ("integrations.context_repository", "search_context"),
+    "get_related_context": ("integrations.context_repository", "get_related_context"),
+    "get_context_stats": ("integrations.context_repository", "get_stats"),
+    "get_item_summary": ("integrations.context_repository", "generate_item_summary"),
     # User memory
     "remember_preference": ("integrations.memory", "set_preference"),
     "remember_fact": ("integrations.memory", "set_fact"),
@@ -1282,6 +1287,32 @@ async def delete_smart_task(task_id: str):
     result = _delete(task_id=task_id)
     if "error" in result:
         return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@app.get("/api/intel/tasks/{task_id}/summary")
+async def get_task_summary(task_id: str):
+    """Get a smart context summary for a specific task."""
+    from integrations.intel import _load_intel
+    from integrations.context_repository import generate_item_summary
+
+    intel = _load_intel()
+    task = None
+    for t in intel.get("smart_tasks", []):
+        if t.get("id") == task_id:
+            task = t
+            break
+    if not task:
+        return JSONResponse({"error": "Task not found"}, status_code=404)
+
+    result = await generate_item_summary(
+        item_type="task",
+        title=task.get("description", ""),
+        description=task.get("source_context", ""),
+        topics=task.get("topics", []),
+        people=[task["owner"]] if task.get("owner") else None,
+        source_page_id=task.get("source_page_id"),
+    )
     return JSONResponse(result)
 
 
@@ -1747,6 +1778,59 @@ async def search_knowledge_api(q: str, company: str = ""):
     from integrations.knowledge import search_knowledge
     results = search_knowledge(q, company)
     return JSONResponse({"results": results, "count": len(results)})
+
+
+# ── Context Repository ───────────────────────────────────────────────
+
+@app.get("/api/context")
+async def get_context_stats():
+    """Get context repository statistics."""
+    from integrations.context_repository import get_stats
+    return JSONResponse(get_stats())
+
+
+@app.get("/api/context/search")
+async def search_context_api(q: str, max_results: int = 10):
+    """Search context repository by keyword."""
+    from integrations.context_repository import search_context
+    results = search_context(q, max_results)
+    return JSONResponse({"results": results, "count": len(results)})
+
+
+@app.get("/api/context/topics/{topic:path}")
+async def get_context_by_topic(topic: str, max_results: int = 10):
+    """Get context entries for a specific topic."""
+    from integrations.context_repository import query_by_topics
+    results = query_by_topics([topic], max_results)
+    return JSONResponse({"results": results, "count": len(results)})
+
+
+@app.get("/api/context/entry/{entry_id}")
+async def get_context_entry_api(entry_id: str):
+    """Get a specific context entry by ID."""
+    from integrations.context_repository import get_context_entry
+    entry = get_context_entry(entry_id)
+    if not entry:
+        return JSONResponse({"error": "Entry not found"}, status_code=404)
+    return JSONResponse(entry)
+
+
+@app.get("/api/context/page/{page_id}")
+async def get_context_for_page_api(page_id: str):
+    """Get context entry for a specific Notion page."""
+    from integrations.context_repository import get_context_for_page
+    entry = get_context_for_page(page_id)
+    if not entry:
+        return JSONResponse({"error": "No context for this page"}, status_code=404)
+    return JSONResponse(entry)
+
+
+@app.get("/api/context/related")
+async def get_related_context_api(topics: str = "", people: str = "", max_results: int = 5):
+    """Get related context entries. topics and people are comma-separated."""
+    from integrations.context_repository import get_related_context
+    result = get_related_context(topics=topics, people=people, max_results=max_results)
+    return JSONResponse({"context": result})
 
 
 # ── Notion Webhook Push ──────────────────────────────────────────────
@@ -2360,6 +2444,71 @@ async def api_delete_epic(epic_id: str):
     result = delete_epic(epic_id)
     if "error" in result:
         return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@app.get("/api/epics/{epic_id}/summary")
+async def get_epic_summary(epic_id: str):
+    """Get a smart context summary for a specific epic."""
+    from integrations.epics import get_epics
+    from integrations.context_repository import generate_item_summary
+
+    epics_data = get_epics()
+    epic = None
+    for e in epics_data.get("epics", []):
+        if e.get("id") == epic_id:
+            epic = e
+            break
+    if not epic:
+        return JSONResponse({"error": "Epic not found"}, status_code=404)
+
+    # Extract topic-like keywords from the epic title for context lookup
+    title_words = [w.lower() for w in epic.get("title", "").split() if len(w) > 3]
+
+    result = await generate_item_summary(
+        item_type="epic",
+        title=epic.get("title", ""),
+        description=epic.get("description", ""),
+        topics=title_words,
+        people=[epic["owner"]] if epic.get("owner") else None,
+    )
+    return JSONResponse(result)
+
+
+@app.get("/api/stories/{story_id}/summary")
+async def get_story_summary(story_id: str):
+    """Get a smart context summary for a specific user story."""
+    from integrations.epics import get_stories, get_epics
+    from integrations.context_repository import generate_item_summary
+
+    stories_data = get_stories()
+    story = None
+    for s in stories_data.get("stories", []):
+        if s.get("id") == story_id:
+            story = s
+            break
+    if not story:
+        return JSONResponse({"error": "Story not found"}, status_code=404)
+
+    # Get parent epic for richer context
+    epic_title = ""
+    epics_data = get_epics()
+    for e in epics_data.get("epics", []):
+        if e.get("id") == story.get("epic_id"):
+            epic_title = e.get("title", "")
+            break
+
+    # Combine story + epic title for topic matching
+    combined = f"{story.get('title', '')} {epic_title}"
+    topic_words = [w.lower() for w in combined.split() if len(w) > 3]
+
+    result = await generate_item_summary(
+        item_type="user story",
+        title=story.get("title", ""),
+        description=story.get("description", ""),
+        topics=topic_words,
+        people=[story["owner"]] if story.get("owner") else None,
+    )
     return JSONResponse(result)
 
 

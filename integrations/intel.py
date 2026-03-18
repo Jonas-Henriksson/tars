@@ -780,6 +780,28 @@ async def scan_notion(
             "llm_extracted_at": llm_ts,
         }
 
+        # Persist rich context digest to the context repository
+        try:
+            from integrations.context_repository import synthesize_context_entry
+            await synthesize_context_entry(
+                page_id=page_id,
+                title=title,
+                content=content,
+                page_url=page_url,
+                page_date=page_date,
+                llm_meta={
+                    "topics": topics,
+                    "people": people,
+                    "organizations": organizations,
+                    "projects": projects,
+                    "decisions": decisions,
+                    "tags": tags,
+                    "summary": summary,
+                },
+            )
+        except Exception as exc:
+            logger.warning("Context repository update failed for '%s': %s", title, exc)
+
         # Detect delegations -> smart tasks
         delegations = _detect_delegations(content)
         for d in delegations:
@@ -1020,8 +1042,70 @@ async def _post_scan_enrich(
         logger.warning("Post-scan title rewrite failed: %s", e)
         results["titles"] = {"error": str(e)}
 
+    # Step 4: Check if new context is relevant to existing epics
+    try:
+        await _emit("enriching", "Reviewing context relevance to existing epics...")
+        from integrations.context_repository import check_context_relevance
+        relevance_result = await check_context_relevance()
+        results["context_relevance"] = relevance_result
+        logger.info("Post-scan: %s", relevance_result.get("message", ""))
+    except Exception as e:
+        logger.warning("Post-scan context relevance check failed: %s", e)
+        results["context_relevance"] = {"error": str(e)}
+
+    # Step 5: Enrich new task steps with context-aware suggestions
+    try:
+        await _emit("enriching", "Generating context-aware task steps...")
+        steps_result = await _enrich_task_steps()
+        results["smart_steps"] = steps_result
+        logger.info("Post-scan: enriched %d task steps", steps_result.get("updated", 0))
+    except Exception as e:
+        logger.warning("Post-scan smart steps enrichment failed: %s", e)
+        results["smart_steps"] = {"error": str(e)}
+
     await _emit("completed", "Scan and enrichment complete")
     return results
+
+
+async def _enrich_task_steps() -> dict:
+    """Upgrade heuristic task steps to context-aware smart steps for recent tasks."""
+    from integrations.context_repository import generate_smart_steps
+    from integrations.manual_changes import get_edited_task_ids
+
+    intel = _load_intel()
+    manually_edited = get_edited_task_ids()
+    tasks = intel.get("smart_tasks", [])
+    updated = 0
+
+    # Only enrich tasks created today (from the current scan)
+    today = datetime.now(timezone.utc).isoformat()[:10]
+
+    for task in tasks:
+        tid = task.get("id", "")
+        if tid in manually_edited:
+            continue
+        if task.get("status") == "done":
+            continue
+        # Only process tasks created today
+        created = (task.get("created_at") or "")[:10]
+        if created != today:
+            continue
+
+        smart = await generate_smart_steps(
+            description=task.get("description", ""),
+            owner=task.get("owner", ""),
+            topics=task.get("topics", []),
+            source_page_id=task.get("source_page_id"),
+            source_context_snippet=task.get("source_context", ""),
+        )
+        if smart:
+            task["steps"] = smart
+            updated += 1
+
+    if updated:
+        _save_intel(intel)
+
+    return {"updated": updated, "message": f"Enriched {updated} tasks with smart steps"}
 
 
 # Action verbs that signal a task when found at the start of a bullet/line

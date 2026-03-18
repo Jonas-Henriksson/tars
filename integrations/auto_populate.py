@@ -31,6 +31,13 @@ TASKS BY TOPIC:
 EXISTING EPICS (avoid duplicates):
 {existing_epics}
 
+HISTORICAL CONTEXT (from past discussions and meetings):
+{historical_context}
+
+Use this historical context to create richer epics that reference past decisions,
+incorporate specific details (names, timelines, technical choices), and connect to
+previously discussed work that may not have been formalized as tasks yet.
+
 Rules:
 - Each epic should represent a cohesive body of work (not a single task)
 - Only create epics where there are 2+ related tasks that form a larger initiative
@@ -155,9 +162,17 @@ async def auto_populate_epics() -> dict[str, Any]:
         for t in tasks[:15]:  # cap per topic to control prompt size
             tasks_text += f"- [{t['owner']}] {t['description']}\n"
 
+    # Inject historical context from context repository
+    try:
+        from integrations.context_repository import get_related_context
+        historical_context = get_related_context(topics=list(eligible_topics.keys()), max_chars=3000)
+    except Exception:
+        historical_context = ""
+
     prompt = _EPIC_PROMPT.format(
         tasks_by_topic=tasks_text,
         existing_epics=existing_titles_str,
+        historical_context=historical_context or "(no historical context available)",
     )
 
     from llm import llm_call

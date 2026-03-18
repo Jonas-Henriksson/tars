@@ -1774,3 +1774,134 @@ def _register_knowledge_tools() -> None:
 
 
 _register_knowledge_tools()
+
+
+# ── Context repository tools ────────────────────────────────────────
+
+def _register_context_tools() -> None:
+    from integrations.context_repository import search_context, get_related_context, get_stats, generate_item_summary
+
+    async def _handle_search_context(tool_input: dict) -> dict:
+        results = search_context(tool_input["query"], tool_input.get("max_results", 10))
+        return {"results": results, "count": len(results)}
+
+    register_tool(
+        name="search_context",
+        description=(
+            "Search the context repository for historical Notion page digests. "
+            "Contains rich synthesized summaries of past discussions, decisions, "
+            "meeting notes, and project context. Use when the user asks about "
+            "past discussions, decisions, or background on a topic."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query (keywords)"},
+                "max_results": {"type": "integer", "description": "Max results (default 10)"},
+            },
+            "required": ["query"],
+        },
+        handler=_handle_search_context,
+    )
+
+    async def _handle_get_related_context(tool_input: dict) -> dict:
+        text = get_related_context(
+            topics=tool_input.get("topics", []),
+            people=tool_input.get("people", []),
+            max_results=tool_input.get("max_results", 5),
+        )
+        return {"context": text}
+
+    register_tool(
+        name="get_related_context",
+        description=(
+            "Get related historical context by topics and/or people. "
+            "Returns a formatted summary of past discussions and decisions "
+            "relevant to the given topics or people. Use for enriching answers "
+            "with historical background."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "topics": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Topics to find related context for",
+                },
+                "people": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "People to find related context for",
+                },
+                "max_results": {"type": "integer", "description": "Max entries (default 5)"},
+            },
+            "required": [],
+        },
+        handler=_handle_get_related_context,
+    )
+
+    async def _handle_get_context_stats(tool_input: dict) -> dict:
+        return get_stats()
+
+    register_tool(
+        name="get_context_stats",
+        description=(
+            "Get statistics about the context repository: total entries, "
+            "topic distribution, date range. Use when the user asks about "
+            "what context or knowledge is available."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+        handler=_handle_get_context_stats,
+    )
+
+    async def _handle_get_item_summary(tool_input: dict) -> dict:
+        return await generate_item_summary(
+            item_type=tool_input.get("item_type", "task"),
+            title=tool_input["title"],
+            description=tool_input.get("description", ""),
+            topics=tool_input.get("topics", []),
+            people=tool_input.get("people", []),
+            source_page_id=tool_input.get("source_page_id"),
+        )
+
+    register_tool(
+        name="get_item_summary",
+        description=(
+            "Generate a smart context summary for a task, epic, or user story. "
+            "Synthesizes background from the context repository to explain what "
+            "this item is about, why it matters, and what the user should know. "
+            "Use when the user asks for details or background on a specific item."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "item_type": {
+                    "type": "string",
+                    "enum": ["task", "epic", "story"],
+                    "description": "Type of item",
+                },
+                "title": {"type": "string", "description": "Item title"},
+                "description": {"type": "string", "description": "Item description"},
+                "topics": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Related topics",
+                },
+                "people": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Related people",
+                },
+                "source_page_id": {"type": "string", "description": "Notion source page ID"},
+            },
+            "required": ["item_type", "title"],
+        },
+        handler=_handle_get_item_summary,
+    )
+
+
+_register_context_tools()
