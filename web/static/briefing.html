@@ -326,7 +326,7 @@
         <div class="briefing-header">
             <div class="briefing-date" id="dateLabel"></div>
             <div class="briefing-title">Evening Briefing</div>
-            <div class="briefing-sub" id="statusLabel">Ready</div>
+            <div class="briefing-sub" id="statusLabel"></div>
             <div class="header-actions">
                 <button class="generate-btn" id="generateBtn" onclick="generateBriefing()">Refresh</button>
             </div>
@@ -476,6 +476,8 @@
                 await new Promise(r => setTimeout(r, 400));
 
                 renderBriefing(data);
+                // Cache for instant reload on navigation
+                try { sessionStorage.setItem('briefing_cache', JSON.stringify(data)); sessionStorage.setItem('briefing_time', new Date().toISOString()); } catch(e) {}
                 statusLabel.textContent = 'Generated at ' + new Date().toLocaleTimeString();
                 generateBtn.textContent = 'Refresh';
             } catch (err) {
@@ -1401,11 +1403,23 @@
             } catch (e) { console.error(e); }
         };
 
-        // Show landing state — user clicks Compile to generate
-        content.innerHTML = '<div style="text-align:center;padding:80px 24px">' +
-            '<div style="font-size:14px;color:var(--text-muted);margin-bottom:16px">Click below to compile your briefing</div>' +
-            '<button onclick="generateBriefing()" style="background:var(--accent);color:#fff;border:none;font-size:14px;font-family:inherit;font-weight:500;padding:10px 28px;border-radius:6px;cursor:pointer">Compile Briefing</button>' +
-            '</div>';
+        // Restore from cache or show empty state
+        try {
+            const cached = sessionStorage.getItem('briefing_cache');
+            const cachedTime = sessionStorage.getItem('briefing_time');
+            if (cached) {
+                const data = JSON.parse(cached);
+                renderBriefing(data);
+                const t = cachedTime ? new Date(cachedTime).toLocaleTimeString() : '?';
+                statusLabel.textContent = 'Last compiled at ' + t + ' — click Refresh to update';
+            } else {
+                content.innerHTML = '<div class="empty">No briefing yet — click <strong>Refresh</strong> above to compile.</div>';
+                statusLabel.textContent = 'Not yet compiled';
+            }
+        } catch (e) {
+            content.innerHTML = '<div class="empty">Click <strong>Refresh</strong> above to compile your briefing.</div>';
+            statusLabel.textContent = 'Ready';
+        }
 
         function getMockData() {
             return {
