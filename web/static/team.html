@@ -48,11 +48,12 @@
         .flagged-toggle.collapsed { transform: rotate(-90deg); }
         .flagged-items { margin-top: 12px; overflow: hidden; transition: max-height 0.25s ease; }
         .flagged-items.collapsed { max-height: 0 !important; margin-top: 0; }
-        .flagged-item { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--border-subtle); font-size: 13px; cursor: pointer; border-radius: 4px; }
-        .flagged-item:last-child { border-bottom: none; }
-        .flagged-item:hover { background: rgba(245,158,11,0.06); }
+        .flagged-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface); border-radius: 6px; margin-bottom: 4px; font-size: 13px; cursor: pointer; }
+        .flagged-item:hover { background: var(--surface-raised); }
         .flagged-item-desc { flex: 1; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .flagged-item-owner { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+        .flagged-item-owner { font-size: 11px; color: var(--text-muted); white-space: nowrap; cursor: pointer; text-decoration: underline dotted; }
+        .flagged-item-owner:hover { color: var(--text-secondary); }
+        .flagged-item-topics { display: flex; gap: 3px; flex-shrink: 1; min-width: 0; overflow: hidden; }
 
         /* Pills & badges */
         .pill { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 3px; white-space: nowrap; display: inline-block; }
@@ -64,13 +65,16 @@
         .pill-gray { background: var(--surface-raised); color: var(--text-muted); }
         .pill-outline-blue { background: transparent; color: var(--accent); border: 1px solid rgba(59,130,246,0.3); }
         .topic-pill { font-size: 9px; font-weight: 500; padding: 1px 6px; border-radius: 3px; background: var(--surface-raised); color: var(--text-muted); white-space: nowrap; display: inline-block; }
+        .topic-pills-wrap { display: flex; flex-wrap: wrap; gap: 3px; max-width: 100%; overflow: hidden; }
+        .show-more-btn { font-size: 11px; color: var(--accent); background: none; border: 1px solid rgba(59,130,246,0.3); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-family: inherit; margin-top: 6px; transition: all 0.15s; }
+        .show-more-btn:hover { background: var(--blue-dim); border-color: var(--accent); }
 
         /* Member cards */
         .members-grid { display: flex; flex-direction: column; gap: 16px; padding-bottom: 40px; }
-        .member-card { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px 20px; }
-        .member-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+        .member-card { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 18px 22px; }
+        .member-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
         .member-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
-        .member-name { font-size: 15px; font-weight: 600; white-space: nowrap; }
+        .member-name { font-size: 16px; font-weight: 600; white-space: nowrap; }
         .member-role { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .member-relationship { font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 3px; background: var(--surface-raised); color: var(--text-secondary); white-space: nowrap; }
         .workload-bar { width: 60px; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; flex-shrink: 0; }
@@ -98,9 +102,10 @@
         .section-body.collapsed { max-height: 0 !important; }
 
         /* Epic rows */
-        .epic-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; flex-wrap: wrap; }
+        .epic-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); font-size: 13px; flex-wrap: wrap; border-radius: 5px; margin-bottom: 2px; }
         .epic-row:last-child { border-bottom: none; }
-        .epic-title { font-weight: 600; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .epic-row:hover { background: var(--surface-raised); }
+        .epic-title { font-weight: 600; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
         .epic-initiative { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
         .story-progress { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
         .progress-bar-mini { width: 40px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; display: inline-block; }
@@ -108,21 +113,28 @@
 
         /* Story rows */
         .story-list { padding-left: 20px; }
-        .story-row { display: flex; align-items: center; gap: 7px; padding: 4px 0; font-size: 12px; color: var(--text-secondary); }
-        .story-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .story-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12px; color: var(--text-secondary); background: transparent; border-radius: 4px; margin-bottom: 1px; }
+        .story-row:hover { background: var(--surface-raised); }
+        .story-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
         .size-badge { font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 3px; background: var(--surface-raised); color: var(--text-muted); white-space: nowrap; }
+        .story-owner-link { font-size: 10px; color: var(--text-muted); cursor: pointer; text-decoration: underline dotted; white-space: nowrap; }
+        .story-owner-link:hover { color: var(--text-secondary); }
 
         /* Needs epic section in member card */
         .needs-epic-section { background: rgba(245,158,11,0.04); border: 1px solid rgba(245,158,11,0.15); border-left: 3px solid var(--amber); border-radius: 6px; padding: 10px 14px; margin-top: 10px; }
-        .needs-epic-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 12px; border-bottom: 1px solid var(--border-subtle); }
-        .needs-epic-item:last-child { border-bottom: none; }
+        .needs-epic-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 12px; background: var(--surface); border-radius: 5px; margin-bottom: 3px; }
+        .needs-epic-item:hover { background: var(--surface-raised); }
         .needs-epic-desc { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .needs-epic-topics { display: flex; gap: 3px; flex-shrink: 1; min-width: 0; overflow: hidden; max-width: 40%; }
+        .ne-hidden { display: none; }
 
         /* Operational tasks */
         .ops-section { margin-top: 10px; }
-        .ops-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; color: var(--text-muted); }
-        .ops-desc { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ops-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 12px; color: var(--text-secondary); background: var(--surface); border-radius: 5px; margin-bottom: 3px; }
+        .ops-item:hover { background: var(--surface-raised); }
+        .ops-desc { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
         .ops-source { font-size: 10px; color: var(--text-muted); opacity: 0.7; white-space: nowrap; }
+        .ops-hidden { display: none; }
 
         /* Empty state */
         .empty-state { text-align: center; padding: 80px 20px; }
@@ -143,20 +155,18 @@
         .epic-modal-actions .btn-cancel { background: var(--surface-raised); color: var(--text-secondary); }
         .epic-modal-actions .btn-delete { background: var(--red-dim); color: var(--red-text); border-color: rgba(239,68,68,0.3); }
         .epic-row { cursor: pointer; }
-        .epic-row:hover { background: var(--surface-raised); border-radius: 4px; }
 
-        /* Row actions */
-        .row-actions { display: inline-flex; gap: 2px; margin-left: auto; flex-shrink: 0; }
-        .row-actions button { background: none; border: 1px solid var(--border); color: var(--text-muted); font-size: 11px; padding: 1px 6px; border-radius: 4px; cursor: pointer; line-height: 1; font-family: inherit; }
+        /* Row actions - show on hover */
+        .row-actions { display: inline-flex; gap: 4px; margin-left: auto; flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
+        .flagged-item:hover .row-actions, .story-row:hover .row-actions, .needs-epic-item:hover .row-actions, .ops-item:hover .row-actions, .epic-row:hover .row-actions { opacity: 1; }
+        .row-actions button { background: none; border: 1px solid var(--border); color: var(--text-muted); font-size: 11px; padding: 3px 8px; border-radius: 4px; cursor: pointer; transition: all 0.15s; font-family: inherit; }
         .row-actions button:hover { border-color: var(--text-secondary); color: var(--text); }
         .row-actions .btn-done:hover { border-color: var(--green); color: var(--green-text); }
         .row-actions .btn-dismiss:hover { border-color: var(--red); color: var(--red); }
+        .row-actions .btn-edit:hover { border-color: var(--accent); color: var(--accent); }
         .story-row { cursor: pointer; }
-        .story-row:hover { background: var(--surface-raised); border-radius: 3px; }
         .needs-epic-item { cursor: pointer; }
-        .needs-epic-item:hover { background: rgba(245,158,11,0.06); }
         .ops-item { cursor: pointer; }
-        .ops-item:hover { background: var(--surface-raised); border-radius: 3px; }
         .clickable-owner { cursor: pointer; text-decoration: underline dotted; }
         .clickable-owner:hover { color: var(--text-secondary); }
 
@@ -449,23 +459,35 @@
 
             // Flagged banner
             const needsEpic = data.needs_epic || [];
-            const visibleNE = needsEpic.filter(t => t.description && t.description.trim());
+            const visibleNE = needsEpic.filter(t => (t.description && t.description.trim()) || (t.topics && t.topics.length));
+            const FLAGGED_LIMIT = 8;
             if (visibleNE.length > 0) {
                 const banner = document.getElementById('flagged-banner');
                 banner.classList.remove('hidden');
                 const itemsEl = document.getElementById('flagged-items');
-                itemsEl.innerHTML = visibleNE.map(t => `
-                    <div class="flagged-item" onclick="openTaskModal('${esc(t.id)}','${capitalize(esc(t.description)).replace(/'/g,"\\'")}','${esc(t.owner||'').replace(/'/g,"\\'")}')">
+                itemsEl.innerHTML = visibleNE.map((t, i) => {
+                    const hidden = i >= FLAGGED_LIMIT ? ' style="display:none" data-flagged-extra' : '';
+                    const desc = t.description && t.description.trim() ? capitalize(esc(t.description)) : '';
+                    const topics = t.topics || [];
+                    const maxTopics = 3;
+                    const shownTopics = topics.slice(0, maxTopics);
+                    const extraTopics = topics.length - maxTopics;
+                    return `<div class="flagged-item"${hidden} onclick="openTaskModal('${esc(t.id)}','${(desc || shownTopics.join(', ')).replace(/'/g,"\\'")}','${esc(t.owner||'').replace(/'/g,"\\'")}')">
                         <span class="pill pill-amber">Needs Epic</span>
-                        <span class="flagged-item-desc">${capitalize(esc(t.description))}</span>
-                        <span class="flagged-item-owner">${esc(t.owner)}</span>
-                        ${(t.topics || []).map(tp => `<span class="topic-pill">${esc(tp)}</span>`).join('')}
+                        ${desc ? `<span class="flagged-item-desc">${desc}</span>` : ''}
+                        ${!desc && shownTopics.length ? `<span class="flagged-item-desc" style="color:var(--text-secondary)">${shownTopics.join(' / ')}</span>` : ''}
+                        ${desc && shownTopics.length ? `<span class="flagged-item-topics">${shownTopics.map(tp => `<span class="topic-pill">${esc(tp)}</span>`).join('')}${extraTopics > 0 ? `<span class="topic-pill" title="${esc(topics.slice(maxTopics).join(', '))}">+${extraTopics}</span>` : ''}</span>` : ''}
+                        ${!desc && extraTopics > 0 ? `<span class="topic-pill" title="${esc(topics.slice(maxTopics).join(', '))}">+${extraTopics} more</span>` : ''}
+                        ${t.owner ? `<span class="flagged-item-owner" onclick="event.stopPropagation();openInlinePersonPicker(this,'task','${esc(t.id)}')">${esc(t.owner)}</span>` : ''}
                         <span class="row-actions">
                             <button class="btn-done" onclick="event.stopPropagation();markTaskDone('${esc(t.id)}',this)" title="Done">&#10003;</button>
                             <button class="btn-dismiss" onclick="event.stopPropagation();dismissTask('${esc(t.id)}',this)" title="Dismiss">&times;</button>
                         </span>
-                    </div>
-                `).join('');
+                    </div>`;
+                }).join('');
+                if (visibleNE.length > FLAGGED_LIMIT) {
+                    itemsEl.innerHTML += `<button class="show-more-btn" onclick="toggleFlaggedMore(this)">Show ${visibleNE.length - FLAGGED_LIMIT} more</button>`;
+                }
             }
 
             // Sort members by total_items desc
@@ -545,7 +567,7 @@
                                     ${statusPill(s.status)}
                                     <span class="story-title">${esc(s.title)}</span>
                                     ${s.size ? `<span class="size-badge">${esc(s.size)}</span>` : ''}
-                                    ${s.owner ? `<span style="font-size:10px;color:var(--text-muted)">${esc(s.owner)}</span>` : ''}
+                                    ${s.owner ? `<span class="story-owner-link" onclick="event.stopPropagation();openInlinePersonPicker(this,'story','${esc(s.id)}')">${esc(s.owner)}</span>` : ''}
                                     <span class="row-actions">
                                         <button class="btn-done" onclick="event.stopPropagation();markStoryDone('${esc(s.id)}',this)" title="Mark done">&#10003;</button>
                                         <button class="btn-dismiss" onclick="event.stopPropagation();dismissStory('${esc(s.id)}',this)" title="Delete">&times;</button>
@@ -554,9 +576,9 @@
                             });
                             html += `</div>`;
                         } else {
-                            html += `<div style="padding:6px 0 4px;display:flex;align-items:center;gap:10px">
-                                <span style="font-size:12px;color:var(--text-muted)">No stories yet</span>
-                                <button onclick="event.stopPropagation();generateStories('${esc(e.id)}', this)" style="background:var(--accent);color:#fff;border:none;font-size:11px;font-family:inherit;font-weight:500;padding:4px 12px;border-radius:4px;cursor:pointer;white-space:nowrap">Generate Stories</button>
+                            html += `<div style="padding:8px 10px 6px 30px;display:flex;align-items:center;gap:10px">
+                                <span style="font-size:12px;color:var(--text-muted);font-style:italic">No stories yet</span>
+                                <button onclick="event.stopPropagation();generateStories('${esc(e.id)}', this)" style="background:var(--accent);color:#fff;border:none;font-size:11px;font-family:inherit;font-weight:500;padding:4px 14px;border-radius:5px;cursor:pointer;white-space:nowrap;transition:opacity 0.15s">Generate Stories</button>
                             </div>`;
                         }
                     });
@@ -564,27 +586,42 @@
                 }
 
                 // Needs epic section
-                const memberNE = (m.needs_epic || []).filter(t => t.description && t.description.trim());
+                const memberNE = (m.needs_epic || []).filter(t => (t.description && t.description.trim()) || (t.topics && t.topics.length));
+                const NE_LIMIT = 5;
                 if (memberNE.length > 0) {
+                    const neId = uid + '-ne';
                     html += `<div class="needs-epic-section">
                         <div class="section-head" style="color:var(--amber-text); padding-top:0">
                             <span>NEEDS EPIC</span><span class="count">${memberNE.length}</span>
                         </div>`;
-                    memberNE.forEach(t => {
-                        html += `<div class="needs-epic-item" onclick="openTaskModal('${esc(t.id)}','${capitalize(esc(t.description)).replace(/'/g,"\\'")}','${esc(t.owner||'').replace(/'/g,"\\'")}')">
-                            <span class="needs-epic-desc">${capitalize(esc(t.description))}</span>
+                    memberNE.forEach((t, ti) => {
+                        const desc = t.description && t.description.trim() ? capitalize(esc(t.description)) : '';
+                        const topics = t.topics || [];
+                        const maxTopics = 3;
+                        const shownTopics = topics.slice(0, maxTopics);
+                        const extraTopics = topics.length - maxTopics;
+                        const extraClass = ti >= NE_LIMIT ? ' ne-hidden' : '';
+                        const descForModal = desc || shownTopics.join(' / ');
+                        html += `<div class="needs-epic-item${extraClass}" data-ne-group="${neId}" onclick="openTaskModal('${esc(t.id)}','${descForModal.replace(/'/g,"\\'")}','${esc(t.owner||'').replace(/'/g,"\\'")}')">
+                            ${desc ? `<span class="needs-epic-desc">${desc}</span>` : ''}
+                            ${!desc && shownTopics.length ? `<span class="needs-epic-desc" style="color:var(--text-secondary);font-style:italic">${shownTopics.join(' / ')}</span>` : ''}
                             <span class="pill pill-amber">Needs Epic</span>
-                            ${(t.topics || []).map(tp => `<span class="topic-pill">${esc(tp)}</span>`).join('')}
+                            ${desc && shownTopics.length ? `<span class="needs-epic-topics">${shownTopics.map(tp => `<span class="topic-pill">${esc(tp)}</span>`).join('')}${extraTopics > 0 ? `<span class="topic-pill" title="${esc(topics.slice(maxTopics).join(', '))}">+${extraTopics}</span>` : ''}</span>` : ''}
+                            ${!desc && extraTopics > 0 ? `<span class="topic-pill" title="${esc(topics.slice(maxTopics).join(', '))}">+${extraTopics}</span>` : ''}
                             <span class="row-actions">
                                 <button class="btn-done" onclick="event.stopPropagation();markTaskDone('${esc(t.id)}',this)" title="Done">&#10003;</button>
                                 <button class="btn-dismiss" onclick="event.stopPropagation();dismissTask('${esc(t.id)}',this)" title="Dismiss">&times;</button>
                             </span>
                         </div>`;
                     });
+                    if (memberNE.length > NE_LIMIT) {
+                        html += `<button class="show-more-btn" data-ne-btn="${neId}" onclick="toggleNeedsEpicMore(this,'${neId}',${memberNE.length},${NE_LIMIT})">Show ${memberNE.length - NE_LIMIT} more</button>`;
+                    }
                     html += `</div>`;
                 }
 
                 // Operational tasks
+                const OPS_LIMIT = 8;
                 if (opsTasks.length > 0) {
                     const oid = uid + '-ops';
                     html += `<div class="ops-section">
@@ -593,10 +630,16 @@
                             <span class="section-toggle collapsed" id="tog-${oid}">&#9660;</span>
                         </div>
                         <div class="section-body collapsed" id="body-${oid}">`;
-                    opsTasks.forEach(t => {
-                        html += `<div class="ops-item" onclick="openTaskModal('${esc(t.id)}','${capitalize(esc(t.description)).replace(/'/g,"\\'")}','${esc(t.owner||m.name).replace(/'/g,"\\'")}')">
+                    opsTasks.forEach((t, ti) => {
+                        const extraClass = ti >= OPS_LIMIT ? ' ops-hidden' : '';
+                        const desc = t.description && t.description.trim() ? capitalize(esc(t.description)) : '';
+                        const topics = t.topics || [];
+                        const maxTopics = 3;
+                        const shownTopics = topics.slice(0, maxTopics);
+                        const descForModal = desc || shownTopics.join(' / ');
+                        html += `<div class="ops-item${extraClass}" data-ops-group="${oid}" onclick="openTaskModal('${esc(t.id)}','${descForModal.replace(/'/g,"\\'")}','${esc(t.owner||m.name).replace(/'/g,"\\'")}')">
                             <span class="pill pill-gray">${esc(t.status || 'open')}</span>
-                            <span class="ops-desc">${capitalize(esc(t.description))}</span>
+                            <span class="ops-desc">${desc || `<span style="color:var(--text-muted);font-style:italic">${shownTopics.join(' / ') || 'No description'}</span>`}</span>
                             ${t.source_title ? `<span class="ops-source">${esc(t.source_title)}</span>` : ''}
                             <span class="row-actions">
                                 <button class="btn-done" onclick="event.stopPropagation();markTaskDone('${esc(t.id)}',this)" title="Done">&#10003;</button>
@@ -604,6 +647,9 @@
                             </span>
                         </div>`;
                     });
+                    if (opsTasks.length > OPS_LIMIT) {
+                        html += `<button class="show-more-btn" onclick="toggleOpsMore(this,'${oid}',${opsTasks.length},${OPS_LIMIT})">Show ${opsTasks.length - OPS_LIMIT} more</button>`;
+                    }
                     html += `</div></div>`;
                 }
 
@@ -758,7 +804,7 @@
                                 shtml += statusPill(s.status || 'backlog');
                                 shtml += '<span class="story-title">' + esc(s.title) + '</span>';
                                 if (s.size) shtml += '<span class="size-badge">' + esc(s.size) + '</span>';
-                                if (s.owner) shtml += '<span style="font-size:10px;color:var(--text-muted)">' + esc(s.owner) + '</span>';
+                                if (s.owner) shtml += '<span class="story-owner-link" onclick="event.stopPropagation();openInlinePersonPicker(this,\'story\',\'' + esc(s.id) + '\')">' + esc(s.owner) + '</span>';
                                 shtml += '<span class="row-actions">';
                                 shtml += '<button class="btn-done" onclick="event.stopPropagation();markStoryDone(\'' + esc(s.id) + '\',this)" title="Mark done">&#10003;</button>';
                                 shtml += '<button class="btn-dismiss" onclick="event.stopPropagation();dismissStory(\'' + esc(s.id) + '\',this)" title="Delete">&times;</button>';
@@ -1180,6 +1226,125 @@
                 }
                 if (resp.ok) _fadeAndRemove(btn);
             } catch (e) { /* silent */ }
+        };
+
+        // --- Show More/Less toggles ---
+        window.toggleFlaggedMore = function(btn) {
+            const extras = document.querySelectorAll('[data-flagged-extra]');
+            const showing = extras[0] && extras[0].style.display !== 'none';
+            extras.forEach(el => { el.style.display = showing ? 'none' : ''; });
+            btn.textContent = showing ? `Show ${extras.length} more` : 'Show less';
+        };
+
+        window.toggleNeedsEpicMore = function(btn, groupId, total, limit) {
+            const items = document.querySelectorAll('[data-ne-group="' + groupId + '"].ne-hidden');
+            const hidden = items.length > 0 && items[0].classList.contains('ne-hidden');
+            if (hidden) {
+                items.forEach(el => el.classList.remove('ne-hidden'));
+                btn.textContent = 'Show less';
+            } else {
+                const all = document.querySelectorAll('[data-ne-group="' + groupId + '"]');
+                all.forEach((el, i) => { if (i >= limit) el.classList.add('ne-hidden'); });
+                btn.textContent = 'Show ' + (total - limit) + ' more';
+            }
+        };
+
+        window.toggleOpsMore = function(btn, groupId, total, limit) {
+            const items = document.querySelectorAll('[data-ops-group="' + groupId + '"].ops-hidden');
+            const hidden = items.length > 0 && items[0].classList.contains('ops-hidden');
+            if (hidden) {
+                items.forEach(el => el.classList.remove('ops-hidden'));
+                btn.textContent = 'Show less';
+            } else {
+                const all = document.querySelectorAll('[data-ops-group="' + groupId + '"]');
+                all.forEach((el, i) => { if (i >= limit) el.classList.add('ops-hidden'); });
+                btn.textContent = 'Show ' + (total - limit) + ' more';
+            }
+        };
+
+        // --- Inline person picker (like Briefing) ---
+        let _inlinePPContext = null;
+        window.openInlinePersonPicker = async function(el, type, id) {
+            // Close any existing picker
+            const existing = document.querySelector('.inline-pp');
+            if (existing) existing.remove();
+
+            const people = await _loadPeople();
+            const rect = el.getBoundingClientRect();
+
+            const picker = document.createElement('div');
+            picker.className = 'inline-pp';
+            picker.style.cssText = 'position:fixed;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.4);width:220px;max-height:260px;overflow:hidden;display:flex;flex-direction:column;top:' + (rect.bottom + 4) + 'px;left:' + Math.min(rect.left, window.innerWidth - 230) + 'px';
+
+            let html = '<div style="padding:6px 8px;border-bottom:1px solid var(--border)"><input type="text" placeholder="Filter..." style="width:100%;font-size:12px;padding:5px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;outline:none" oninput="filterInlinePP(this)"></div>';
+            html += '<div class="inline-pp-list" style="overflow-y:auto;max-height:200px">';
+            people.forEach(function(entry) {
+                const name = entry[0];
+                const info = entry[1] || {};
+                html += '<div class="person-picker-item" onclick="selectInlinePP(\'' + name.replace(/'/g, "\\'") + '\')" style="padding:5px 10px;font-size:12px;cursor:pointer;color:var(--text)">';
+                html += '<span style="font-weight:500">' + esc(name) + '</span>';
+                html += '<span style="font-size:10px;color:var(--text-muted)"> ' + esc(info.role || '') + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+            picker.innerHTML = html;
+
+            _inlinePPContext = { el: el, type: type, id: id };
+            document.body.appendChild(picker);
+            picker.querySelector('input').focus();
+
+            // Close on click outside
+            setTimeout(function() {
+                document.addEventListener('click', function handler(e) {
+                    if (!picker.contains(e.target) && e.target !== el) {
+                        picker.remove();
+                        document.removeEventListener('click', handler);
+                    }
+                });
+            }, 50);
+        };
+
+        window.filterInlinePP = function(input) {
+            const q = input.value.toLowerCase();
+            const items = input.closest('.inline-pp').querySelectorAll('.person-picker-item');
+            items.forEach(function(item) {
+                item.style.display = item.textContent.toLowerCase().includes(q) ? '' : 'none';
+            });
+        };
+
+        window.selectInlinePP = async function(name) {
+            if (!_inlinePPContext) return;
+            const ctx = _inlinePPContext;
+            const picker = document.querySelector('.inline-pp');
+            if (picker) picker.remove();
+
+            try {
+                let resp;
+                if (ctx.type === 'task') {
+                    resp = await fetch('/api/intel/tasks/' + ctx.id, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ owner: name }),
+                    });
+                    if (!resp.ok) {
+                        resp = await fetch('/api/tasks/' + ctx.id, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ owner: name }),
+                        });
+                    }
+                } else if (ctx.type === 'story') {
+                    resp = await fetch('/api/stories/' + ctx.id, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ owner: name }),
+                    });
+                }
+                if (resp && resp.ok) {
+                    ctx.el.textContent = name;
+                }
+            } catch (e) { /* silent */ }
+            _inlinePPContext = null;
         };
     })();
     </script>
