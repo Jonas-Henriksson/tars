@@ -3064,16 +3064,60 @@ async def api_member_portfolio(name: str, include_done: bool = False):
 # Auto-populate & enrichment endpoints
 # -----------------------------------------------------------------------
 
+_epic_gen: dict | None = None  # Background epic generation state
+
+
 @app.post("/api/auto-populate/epics")
 async def api_auto_populate_epics():
-    """Auto-generate epics and user stories from intelligence data."""
-    try:
-        from integrations.auto_populate import auto_populate_epics
-        result = await auto_populate_epics()
-        return JSONResponse(result)
-    except Exception as e:
-        logger.exception("Auto-populate epics failed")
-        return JSONResponse({"error": str(e)}, status_code=500)
+    """Launch epic generation as a background task with progress tracking."""
+    global _epic_gen
+    if _epic_gen and not _epic_gen.get("done"):
+        return JSONResponse({"error": "Epic generation already running"}, status_code=409)
+
+    from integrations.auto_populate import auto_populate_epics
+
+    progress_list: list[dict] = []
+    state: dict = {
+        "progress": progress_list,
+        "result": None,
+        "error": None,
+        "done": False,
+    }
+
+    def on_progress(msg: dict) -> None:
+        progress_list.append(msg)
+
+    async def _run():
+        try:
+            result = await auto_populate_epics(on_progress=on_progress)
+            state["result"] = result
+        except Exception as exc:
+            logger.exception("Auto-populate epics failed")
+            state["error"] = str(exc)
+        finally:
+            state["done"] = True
+
+    state["task"] = asyncio.create_task(_run())
+    _epic_gen = state
+    return JSONResponse({"started": True, "message": "Epic generation started"})
+
+
+@app.get("/api/auto-populate/epics/status")
+async def api_epic_gen_status():
+    """Poll epic generation progress."""
+    if not _epic_gen:
+        return JSONResponse({"running": False})
+
+    progress = _epic_gen.get("progress", [])
+    last = progress[-1] if progress else {}
+    return JSONResponse({
+        "running": not _epic_gen.get("done", False),
+        "done": _epic_gen.get("done", False),
+        "progress_count": len(progress),
+        "last_progress": last,
+        "result": _epic_gen.get("result"),
+        "error": _epic_gen.get("error"),
+    })
 
 
 @app.post("/api/auto-populate/people")

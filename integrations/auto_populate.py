@@ -10,6 +10,7 @@ import json
 import logging
 import re
 from collections import defaultdict
+from collections.abc import Callable
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -100,13 +101,23 @@ Return ONLY valid JSON array:
 
 
 
-async def auto_populate_epics() -> dict[str, Any]:
+async def auto_populate_epics(
+    on_progress: Callable[[dict], None] | None = None,
+) -> dict[str, Any]:
     """Analyze existing tasks and create epics/stories from them.
 
     Groups tasks by topic, uses LLM to identify coherent epics,
     then creates them via the epics module.  Processes topics in
     batches to avoid exceeding prompt/response limits.
+
+    Args:
+        on_progress: Optional callback receiving progress dicts like
+            {"status": "...", "batch": 2, "total_batches": 7, "epics_so_far": 3}
     """
+    def _progress(msg: dict) -> None:
+        if on_progress:
+            on_progress(msg)
+
     from integrations.intel import _load_intel
     from integrations.notion_tasks import _load_tasks
     from integrations.epics import create_epic, create_story, get_epics, link_task_to_story
@@ -212,10 +223,19 @@ async def auto_populate_epics() -> dict[str, Any]:
     task_batches = [unique_tasks[i:i + TASK_BATCH_SIZE]
                     for i in range(0, len(unique_tasks), TASK_BATCH_SIZE)]
 
+    total_batches = len(task_batches)
     logger.info(
         "Epic generation: %d unique tasks → %d batches of ≤%d",
-        len(unique_tasks), len(task_batches), TASK_BATCH_SIZE,
+        len(unique_tasks), total_batches, TASK_BATCH_SIZE,
     )
+    _progress({
+        "status": f"Starting — {len(unique_tasks)} tasks in {total_batches} batches",
+        "phase": "preparing",
+        "batch": 0,
+        "total_batches": total_batches,
+        "epics_so_far": 0,
+        "stories_so_far": 0,
+    })
 
     epics_created = 0
     stories_created = 0
@@ -244,6 +264,15 @@ async def auto_populate_epics() -> dict[str, Any]:
 
         from llm import llm_call
         import asyncio as _aio
+
+        _progress({
+            "status": f"Batch {batch_idx + 1}/{total_batches} — analyzing {len(batch_tasks)} tasks",
+            "phase": "generating",
+            "batch": batch_idx + 1,
+            "total_batches": total_batches,
+            "epics_so_far": epics_created,
+            "stories_so_far": stories_created,
+        })
 
         # Retry up to 2 times with backoff for transient failures
         raw = None
@@ -335,6 +364,24 @@ async def auto_populate_epics() -> dict[str, Any]:
                                 break
 
             results.append({"title": title, "stories": len(epic_data.get("stories", []))})
+
+        _progress({
+            "status": f"Batch {batch_idx + 1}/{total_batches} done — {epics_created} epics, {stories_created} stories so far",
+            "phase": "generating",
+            "batch": batch_idx + 1,
+            "total_batches": total_batches,
+            "epics_so_far": epics_created,
+            "stories_so_far": stories_created,
+        })
+
+    _progress({
+        "status": f"Complete — {epics_created} epics, {stories_created} stories",
+        "phase": "done",
+        "batch": total_batches,
+        "total_batches": total_batches,
+        "epics_so_far": epics_created,
+        "stories_so_far": stories_created,
+    })
 
     return {
         "message": f"Created {epics_created} epics with {stories_created} stories" + (f" ({len(errors)} batch errors)" if errors else ""),

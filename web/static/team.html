@@ -158,7 +158,15 @@
 
     <main class="shell">
         <!-- Action bar -->
-        <div style="display:flex;gap:8px;margin:16px 0 0;justify-content:flex-end" id="action-bar">
+        <div style="display:flex;gap:8px;margin:16px 0 0;justify-content:flex-end;align-items:center;flex-wrap:wrap" id="action-bar">
+            <div id="epic-progress" style="display:none;flex:1;min-width:200px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                    <span id="epic-progress-text" style="font-size:11px;color:var(--text-secondary)"></span>
+                </div>
+                <div style="height:4px;background:var(--bg);border-radius:2px;overflow:hidden">
+                    <div id="epic-progress-bar" style="height:100%;background:var(--accent);border-radius:2px;transition:width 0.3s;width:0%"></div>
+                </div>
+            </div>
             <button onclick="autoPopulateEpics()" id="btn-auto-epics" style="font-size:11px;padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);cursor:pointer;transition:all 0.15s">Auto-generate Epics</button>
             <button onclick="autoEnrichPeople()" id="btn-auto-people" style="font-size:11px;padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);cursor:pointer;transition:all 0.15s">Enrich People</button>
         </div>
@@ -432,20 +440,79 @@
             });
         window.autoPopulateEpics = async function() {
             const btn = document.getElementById('btn-auto-epics');
-            btn.textContent = 'Generating...';
+            const prog = document.getElementById('epic-progress');
+            const progText = document.getElementById('epic-progress-text');
+            const progBar = document.getElementById('epic-progress-bar');
             btn.disabled = true;
+            btn.textContent = 'Starting...';
+            prog.style.display = 'block';
+            progText.textContent = 'Preparing...';
+            progBar.style.width = '0%';
+            progBar.style.background = 'var(--accent)';
             try {
                 const resp = await fetch('/api/auto-populate/epics', { method: 'POST' });
                 const data = await resp.json();
-                btn.textContent = data.message || 'Done';
-                if (data.epics_created > 0) {
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    setTimeout(() => { btn.textContent = 'Auto-generate Epics'; btn.disabled = false; }, 3000);
+                if (data.error) {
+                    progText.textContent = data.error;
+                    btn.textContent = 'Auto-generate Epics';
+                    btn.disabled = false;
+                    setTimeout(() => { prog.style.display = 'none'; }, 3000);
+                    return;
                 }
+                btn.textContent = 'Generating...';
+                // Poll for progress
+                const poll = setInterval(async () => {
+                    try {
+                        const sr = await fetch('/api/auto-populate/epics/status');
+                        const st = await sr.json();
+                        const lp = st.last_progress || {};
+                        const batch = lp.batch || 0;
+                        const total = lp.total_batches || 1;
+                        const pct = Math.round((batch / total) * 100);
+                        progBar.style.width = Math.max(pct, 5) + '%';
+                        const epicsSoFar = lp.epics_so_far || 0;
+                        const storiesSoFar = lp.stories_so_far || 0;
+                        if (lp.phase === 'generating') {
+                            progText.textContent = `Batch ${batch}/${total} — ${epicsSoFar} epics, ${storiesSoFar} stories`;
+                        } else if (lp.status) {
+                            progText.textContent = lp.status;
+                        }
+                        if (st.done) {
+                            clearInterval(poll);
+                            progBar.style.width = '100%';
+                            const r = st.result || {};
+                            const err = st.error;
+                            if (err) {
+                                progText.textContent = 'Error: ' + err;
+                                progBar.style.background = 'var(--red)';
+                                btn.textContent = 'Auto-generate Epics';
+                                btn.disabled = false;
+                                setTimeout(() => { prog.style.display = 'none'; }, 5000);
+                            } else {
+                                progText.textContent = r.message || 'Complete';
+                                progBar.style.background = 'var(--green)';
+                                btn.textContent = r.message || 'Done';
+                                if (r.epics_created > 0) {
+                                    setTimeout(() => location.reload(), 2000);
+                                } else {
+                                    btn.disabled = false;
+                                    setTimeout(() => {
+                                        btn.textContent = 'Auto-generate Epics';
+                                        prog.style.display = 'none';
+                                    }, 4000);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Poll error:', e);
+                    }
+                }, 1500);
             } catch (e) {
                 btn.textContent = 'Error';
-                setTimeout(() => { btn.textContent = 'Auto-generate Epics'; btn.disabled = false; }, 3000);
+                progText.textContent = 'Failed to start';
+                progBar.style.background = 'var(--red)';
+                progBar.style.width = '100%';
+                setTimeout(() => { btn.textContent = 'Auto-generate Epics'; btn.disabled = false; prog.style.display = 'none'; }, 3000);
             }
         };
 
