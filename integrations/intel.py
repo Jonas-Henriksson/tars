@@ -1088,10 +1088,13 @@ async def _post_scan_enrich(
             "created": epic_result.get("epics_created", 0),
             "stories": epic_result.get("stories_created", 0),
             "message": epic_result.get("message", ""),
+            "errors": epic_result.get("errors", []),
         }
         logger.info("Post-scan: %s", epic_result.get("message", ""))
+        if epic_result.get("errors"):
+            logger.warning("Post-scan epic batch errors: %s", epic_result["errors"])
     except Exception as e:
-        logger.warning("Post-scan epic generation failed: %s", e)
+        logger.exception("Post-scan epic generation failed: %s", e)
         results["epics"] = {"error": str(e)}
 
     # Step 2: Enrich people profiles with inferred roles

@@ -104,7 +104,8 @@ async def auto_populate_epics() -> dict[str, Any]:
     """Analyze existing tasks and create epics/stories from them.
 
     Groups tasks by topic, uses LLM to identify coherent epics,
-    then creates them via the epics module.
+    then creates them via the epics module.  Processes topics in
+    batches to avoid exceeding prompt/response limits.
     """
     from integrations.intel import _load_intel
     from integrations.notion_tasks import _load_tasks
@@ -164,12 +165,13 @@ async def auto_populate_epics() -> dict[str, Any]:
             "stories_created": 0,
         }
 
-    # Build prompt
-    tasks_text = ""
-    for topic, tasks in eligible_topics.items():
-        tasks_text += f"\n## {topic}\n"
-        for t in tasks[:15]:  # cap per topic to control prompt size
-            tasks_text += f"- [{t['owner']}] {t['description']}\n"
+    # Build task description -> id map for linking
+    desc_to_id: dict[str, str] = {}
+    for task in smart_tasks + tracked:
+        desc = task.get("description", "").lower().strip()
+        tid = task.get("id", "")
+        if desc and tid:
+            desc_to_id[desc] = tid
 
     # Inject historical context from context repository
     try:
@@ -182,9 +184,8 @@ async def auto_populate_epics() -> dict[str, Any]:
     try:
         from integrations.knowledge_enrichment import search_best_practices
         bp_results = []
-        for topic in eligible_topics.keys():
+        for topic in list(eligible_topics.keys())[:5]:
             bp_results.extend(search_best_practices(topic))
-        # Deduplicate by title
         seen_titles = set()
         unique_bp = []
         for bp in bp_results:
@@ -199,94 +200,116 @@ async def auto_populate_epics() -> dict[str, Any]:
     except Exception:
         best_practices_text = ""
 
-    prompt = _EPIC_PROMPT.format(
-        tasks_by_topic=tasks_text,
-        existing_epics=existing_titles_str,
-        historical_context=historical_context or "(no historical context available)",
-        best_practices=best_practices_text or "(no external best practices available yet)",
-    )
+    # ── Batch topics into groups of ~5 to keep prompts manageable ──
+    topic_names = list(eligible_topics.keys())
+    BATCH_SIZE = 5
+    topic_batches = [topic_names[i:i + BATCH_SIZE] for i in range(0, len(topic_names), BATCH_SIZE)]
 
-    from llm import llm_call
-    raw = await llm_call("epic_generation", prompt, max_tokens=3000)
-    if not raw:
-        return {"error": "LLM unavailable", "epics_created": 0, "stories_created": 0}
-
-    try:
-        suggested_epics = json.loads(raw)
-    except json.JSONDecodeError:
-        logger.warning("LLM returned invalid JSON for epic generation")
-        return {"error": "LLM returned invalid response", "epics_created": 0, "stories_created": 0}
-
-    # Create the epics and stories
     epics_created = 0
     stories_created = 0
     results = []
+    errors = []
 
-    # Build task description -> id map for linking
-    desc_to_id: dict[str, str] = {}
-    for task in smart_tasks + tracked:
-        desc = task.get("description", "").lower().strip()
-        tid = task.get("id", "")
-        if desc and tid:
-            desc_to_id[desc] = tid
+    for batch_idx, batch_topics in enumerate(topic_batches):
+        # Build prompt for this batch
+        tasks_text = ""
+        for topic in batch_topics:
+            tasks = eligible_topics[topic]
+            tasks_text += f"\n## {topic}\n"
+            for t in tasks[:10]:  # cap per topic to control prompt size
+                tasks_text += f"- [{t['owner']}] {t['description']}\n"
 
-    for epic_data in suggested_epics:
-        title = epic_data.get("title", "").strip()
-        if not title or title.lower() in existing_titles:
-            continue
-
-        epic_result = create_epic(
-            title=title,
-            description=epic_data.get("description", ""),
-            owner=epic_data.get("owner", ""),
-            priority=epic_data.get("priority", "medium"),
-            quarter=epic_data.get("quarter", ""),
+        prompt = _EPIC_PROMPT.format(
+            tasks_by_topic=tasks_text,
+            existing_epics=existing_titles_str,
+            historical_context=historical_context or "(no historical context available)",
+            best_practices=best_practices_text or "(no external best practices available yet)",
         )
 
-        epic_id = epic_result.get("epic", {}).get("id", "")
-        if not epic_id:
+        from llm import llm_call
+        raw = await llm_call("epic_generation", prompt, max_tokens=4096)
+        if not raw:
+            errors.append(f"Batch {batch_idx + 1}: LLM unavailable")
+            logger.warning("Epic generation batch %d: LLM unavailable", batch_idx + 1)
             continue
 
-        epics_created += 1
-        existing_titles.add(title.lower())
-
-        for story_data in epic_data.get("stories", []):
-            story_title = story_data.get("title", "").strip()
-            if not story_title:
+        try:
+            suggested_epics = json.loads(raw)
+        except json.JSONDecodeError:
+            # Try to salvage truncated JSON by finding the last complete object
+            try:
+                # Find last complete '}]' or '}' and try to parse up to there
+                last_bracket = raw.rfind('}]')
+                if last_bracket > 0:
+                    suggested_epics = json.loads(raw[:last_bracket + 2])
+                else:
+                    raise json.JSONDecodeError("", "", 0)
+            except json.JSONDecodeError:
+                errors.append(f"Batch {batch_idx + 1}: LLM returned invalid JSON (len={len(raw)})")
+                logger.warning(
+                    "Epic generation batch %d: LLM returned invalid JSON (%d chars). First 200: %s",
+                    batch_idx + 1, len(raw), raw[:200],
+                )
                 continue
 
-            story_result = create_story(
-                epic_id=epic_id,
-                title=story_title,
-                description=story_data.get("description", ""),
-                owner=story_data.get("owner", ""),
-                size=story_data.get("size", "M"),
-                priority=story_data.get("priority", "medium"),
+        # Create the epics and stories from this batch
+        for epic_data in suggested_epics:
+            title = epic_data.get("title", "").strip()
+            if not title or title.lower() in existing_titles:
+                continue
+
+            epic_result = create_epic(
+                title=title,
+                description=epic_data.get("description", ""),
+                owner=epic_data.get("owner", ""),
+                priority=epic_data.get("priority", "medium"),
+                quarter=epic_data.get("quarter", ""),
             )
 
-            story_id = story_result.get("story", {}).get("id", "")
-            if story_id:
-                stories_created += 1
+            epic_id = epic_result.get("epic", {}).get("id", "")
+            if not epic_id:
+                continue
 
-                # Try to link original tasks to the story
-                for linked_desc in story_data.get("linked_task_descriptions", []):
-                    linked_lower = linked_desc.lower().strip()
-                    # Fuzzy match against task descriptions
-                    for desc_key, task_id in desc_to_id.items():
-                        if linked_lower in desc_key or desc_key in linked_lower:
-                            try:
-                                link_task_to_story(story_id, task_id)
-                            except Exception:
-                                pass
-                            break
+            epics_created += 1
+            existing_titles.add(title.lower())
 
-        results.append({"title": title, "stories": len(epic_data.get("stories", []))})
+            for story_data in epic_data.get("stories", []):
+                story_title = story_data.get("title", "").strip()
+                if not story_title:
+                    continue
+
+                story_result = create_story(
+                    epic_id=epic_id,
+                    title=story_title,
+                    description=story_data.get("description", ""),
+                    owner=story_data.get("owner", ""),
+                    size=story_data.get("size", "M"),
+                    priority=story_data.get("priority", "medium"),
+                )
+
+                story_id = story_result.get("story", {}).get("id", "")
+                if story_id:
+                    stories_created += 1
+
+                    # Try to link original tasks to the story
+                    for linked_desc in story_data.get("linked_task_descriptions", []):
+                        linked_lower = linked_desc.lower().strip()
+                        for desc_key, task_id in desc_to_id.items():
+                            if linked_lower in desc_key or desc_key in linked_lower:
+                                try:
+                                    link_task_to_story(story_id, task_id)
+                                except Exception:
+                                    pass
+                                break
+
+            results.append({"title": title, "stories": len(epic_data.get("stories", []))})
 
     return {
-        "message": f"Created {epics_created} epics with {stories_created} stories",
+        "message": f"Created {epics_created} epics with {stories_created} stories" + (f" ({len(errors)} batch errors)" if errors else ""),
         "epics_created": epics_created,
         "stories_created": stories_created,
         "epics": results,
+        "errors": errors,
     }
 
 
