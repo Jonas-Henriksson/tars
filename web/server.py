@@ -1836,6 +1836,40 @@ async def get_related_context_api(topics: str = "", people: str = "", max_result
     return JSONResponse({"context": result})
 
 
+# ── Notifications ────────────────────────────────────────────────────
+
+@app.get("/api/notifications/status")
+async def notification_status():
+    """Get notification configuration status."""
+    from integrations.notifications import get_owner_chat_id, is_enabled
+    return JSONResponse({
+        "chat_id_configured": get_owner_chat_id() is not None,
+        "enabled": is_enabled(),
+    })
+
+
+class NotificationConfig(BaseModel):
+    enabled: bool = True
+
+
+@app.post("/api/notifications/config")
+async def configure_notifications(body: NotificationConfig):
+    """Enable or disable Telegram notifications."""
+    from integrations.notifications import set_enabled
+    set_enabled(body.enabled)
+    return JSONResponse({"enabled": body.enabled})
+
+
+@app.post("/api/notifications/test")
+async def test_notification():
+    """Send a test notification to verify setup."""
+    from integrations.notifications import send_telegram
+    ok = await send_telegram("*TARS Test*\nNotifications are working.")
+    if ok:
+        return JSONResponse({"status": "sent"})
+    return JSONResponse({"error": "Failed to send. Make sure you've messaged @your_bot on Telegram first."}, status_code=400)
+
+
 # ── Notion Webhook Push ──────────────────────────────────────────────
 
 @app.get("/api/webhook/status")
@@ -1915,7 +1949,16 @@ async def notion_webhook(request: Request):
 
     # Trigger incremental scan in background for content events
     if event_type in ("page.content_updated", "page.created", "page.properties_updated"):
+        page_title = payload.get("data", {}).get("title", "") or payload.get("entity", {}).get("title", "")
+        page_url = payload.get("data", {}).get("url", "") or payload.get("entity", {}).get("url", "")
+
         async def _background_scan():
+            try:
+                # Notify about the incoming Notion update
+                from integrations.notifications import notify_webhook_push
+                await notify_webhook_push(page_title or "Notion page updated", page_url)
+            except Exception:
+                pass
             try:
                 from integrations.intel import scan_notion
                 await scan_notion(max_pages=10, full_scan=False)

@@ -981,6 +981,13 @@ async def scan_notion(
         enrichment = await _post_scan_enrich(on_progress)
         scan_result["enrichment"] = enrichment
 
+    # Send Telegram notification on scan completion
+    try:
+        from integrations.notifications import notify_scan_complete
+        await notify_scan_complete(scan_result)
+    except Exception as exc:
+        logger.debug("Scan notification failed: %s", exc)
+
     return scan_result
 
 

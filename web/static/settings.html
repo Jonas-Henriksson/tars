@@ -106,6 +106,20 @@
         .scan-info-text { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
         .scan-actions { display: flex; gap: 8px; align-items: center; }
         .scan-result { font-size: 12px; color: var(--text-muted); margin-left: 12px; }
+        .scan-progress { display: none; margin-top: 16px; }
+        .scan-progress.visible { display: block; }
+        .scan-progress-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+        .scan-progress-info { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+        .scan-progress-spinner { width: 12px; height: 12px; border: 2px solid var(--border-subtle); border-top-color: var(--accent, #646cff); border-radius: 50%; animation: scan-spin 0.8s linear infinite; flex-shrink: 0; }
+        .scan-progress-bar-track { width: 100%; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+        .scan-progress-bar-fill { height: 100%; background: var(--accent, #646cff); border-radius: 3px; transition: width 0.3s ease; width: 0%; }
+        .scan-progress-bar-fill.success { background: var(--green, #22c55e); }
+        .scan-progress-bar-fill.error { background: var(--red, #ef4444); }
+        .scan-progress-bar-fill.cancelled { background: var(--yellow, #e6a817); }
+        .scan-progress-detail { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--text-muted); }
+        .scan-stop-btn { background: none; border: 1px solid var(--border-subtle); color: var(--text-muted); font-size: 11px; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+        .scan-stop-btn:hover { border-color: var(--red, #ef4444); color: var(--red, #ef4444); }
+        @keyframes scan-spin { to { transform: rotate(360deg); } }
 
         /* Memory section */
         .memory-section { margin-top: 40px; }
@@ -489,32 +503,156 @@
                     '<button class="webhook-btn primary" id="scan-inc">Incremental Scan</button>' +
                     '<button class="webhook-btn" id="scan-full">Full Scan</button>' +
                     '<span class="scan-result" id="scan-result"></span>' +
-                '</div></div></div>';
+                '</div>' +
+                '<div class="scan-progress" id="scan-progress">' +
+                    '<div class="scan-progress-header">' +
+                        '<div class="scan-progress-info">' +
+                            '<div class="scan-progress-spinner" id="scan-spinner"></div>' +
+                            '<span id="scan-progress-msg">Preparing scan...</span>' +
+                        '</div>' +
+                        '<button class="scan-stop-btn" id="scan-stop">Stop</button>' +
+                    '</div>' +
+                    '<div class="scan-progress-bar-track">' +
+                        '<div class="scan-progress-bar-fill" id="scan-bar"></div>' +
+                    '</div>' +
+                    '<div class="scan-progress-detail">' +
+                        '<span id="scan-page-count">0 / 0 pages</span>' +
+                        '<span id="scan-task-count">0 new tasks</span>' +
+                    '</div>' +
+                '</div>' +
+                '</div></div>';
             document.getElementById('scan-content').innerHTML = html;
 
             document.getElementById('scan-inc').onclick = function() { doScan(false); };
             document.getElementById('scan-full').onclick = function() { doScan(true); };
+            document.getElementById('scan-stop').onclick = function() { cancelScan(); };
         }
 
-        function doScan(full) {
-            var btn = full ? document.getElementById('scan-full') : document.getElementById('scan-inc');
-            var result = document.getElementById('scan-result');
+        var _scanId = null;
+        var _scanReader = null;
+
+        function cancelScan() {
+            if (!_scanId) return;
+            var btn = document.getElementById('scan-stop');
             btn.disabled = true;
-            btn.textContent = 'Scanning...';
+            btn.textContent = 'Stopping...';
+            fetch('/api/intel/scan/cancel?scan_id=' + _scanId, { method: 'POST' }).catch(function() {});
+        }
+
+        async function doScan(full) {
+            var incBtn = document.getElementById('scan-inc');
+            var fullBtn = document.getElementById('scan-full');
+            var result = document.getElementById('scan-result');
+            var progress = document.getElementById('scan-progress');
+            var bar = document.getElementById('scan-bar');
+            var msg = document.getElementById('scan-progress-msg');
+            var pageCount = document.getElementById('scan-page-count');
+            var taskCount = document.getElementById('scan-task-count');
+            var spinner = document.getElementById('scan-spinner');
+            var stopBtn = document.getElementById('scan-stop');
+            var label = full ? 'Full scan' : 'Incremental scan';
+
+            // Reset UI
+            incBtn.disabled = true;
+            fullBtn.disabled = true;
+            (full ? fullBtn : incBtn).textContent = 'Scanning...';
             result.textContent = '';
-            fetch('/api/intel/scan?full_scan=' + full, { method: 'POST' })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    btn.disabled = false;
-                    btn.textContent = full ? 'Full Scan' : 'Incremental Scan';
-                    if (data.error) { result.textContent = 'Error: ' + data.error; result.style.color = 'var(--red)'; }
-                    else { result.textContent = 'Done — ' + (data.pages_scanned || 0) + ' pages, ' + (data.new_tasks || 0) + ' new tasks'; result.style.color = 'var(--green-text)'; }
-                })
-                .catch(function(err) {
-                    btn.disabled = false;
-                    btn.textContent = full ? 'Full Scan' : 'Incremental Scan';
-                    result.textContent = 'Scan failed'; result.style.color = 'var(--red)';
-                });
+            progress.classList.add('visible');
+            bar.className = 'scan-progress-bar-fill';
+            bar.style.width = '0%';
+            msg.textContent = label + ': fetching pages from Notion...';
+            pageCount.textContent = '0 / 0 pages';
+            taskCount.textContent = '0 new tasks';
+            spinner.style.display = 'block';
+            stopBtn.style.display = 'inline-block';
+            stopBtn.disabled = false;
+            stopBtn.textContent = 'Stop';
+            _scanId = null;
+
+            try {
+                var url = '/api/intel/scan/stream' + (full ? '?full_scan=true' : '');
+                var resp = await fetch(url, { method: 'POST' });
+                if (!resp.ok) throw new Error('Scan failed: ' + resp.status);
+
+                var reader = resp.body.getReader();
+                _scanReader = reader;
+                var decoder = new TextDecoder();
+                var buffer = '';
+
+                while (true) {
+                    var chunk = await reader.read();
+                    if (chunk.done) break;
+
+                    buffer += decoder.decode(chunk.value, { stream: true });
+                    var lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (var i = 0; i < lines.length; i++) {
+                        var line = lines[i];
+                        if (line.indexOf('data: ') !== 0) continue;
+                        try {
+                            var data = JSON.parse(line.slice(6));
+                            if (data.scan_id) _scanId = data.scan_id;
+
+                            // Update progress bar
+                            if (data.total > 0) {
+                                var pct = Math.round((data.current / data.total) * 100);
+                                bar.style.width = pct + '%';
+                                pageCount.textContent = data.current + ' / ' + data.total + ' pages';
+                            }
+                            if (data.page_title && data.status === 'processing') {
+                                msg.textContent = 'Processing: ' + data.page_title;
+                            }
+                            if (data.status === 'started') {
+                                msg.textContent = 'Fetched ' + (data.total || 0) + ' pages, starting scan...';
+                            }
+                            if (data.status === 'enriching') {
+                                bar.style.width = '100%';
+                                msg.textContent = data.page_title || 'Enriching...';
+                            }
+                            if (data.status === 'complete') {
+                                bar.style.width = '100%';
+                                bar.className = 'scan-progress-bar-fill success';
+                                spinner.style.display = 'none';
+                                stopBtn.style.display = 'none';
+                                msg.textContent = 'Scan complete — ' + (data.pages_scanned || 0) + ' pages, ' + (data.new_tasks_added || 0) + ' new tasks';
+                                result.textContent = 'Done — ' + (data.pages_scanned || 0) + ' pages, ' + (data.new_tasks_added || 0) + ' new tasks';
+                                result.style.color = 'var(--green-text, #22c55e)';
+                            }
+                            if (data.status === 'cancelled') {
+                                bar.className = 'scan-progress-bar-fill cancelled';
+                                spinner.style.display = 'none';
+                                stopBtn.style.display = 'none';
+                                msg.textContent = 'Scan cancelled';
+                            }
+                            if (data.status === 'error') {
+                                bar.className = 'scan-progress-bar-fill error';
+                                spinner.style.display = 'none';
+                                stopBtn.style.display = 'none';
+                                msg.textContent = 'Error: ' + (data.error || 'Unknown error');
+                                result.textContent = 'Error'; result.style.color = 'var(--red, #ef4444)';
+                            }
+                            taskCount.textContent = (data.new_tasks || data.new_tasks_added || 0) + ' new tasks';
+                        } catch(e) {}
+                    }
+                }
+            } catch(err) {
+                bar.className = 'scan-progress-bar-fill error';
+                bar.style.width = '100%';
+                spinner.style.display = 'none';
+                stopBtn.style.display = 'none';
+                msg.textContent = 'Scan failed: ' + err.message;
+                result.textContent = 'Scan failed'; result.style.color = 'var(--red, #ef4444)';
+            }
+
+            incBtn.disabled = false;
+            fullBtn.disabled = false;
+            incBtn.textContent = 'Incremental Scan';
+            fullBtn.textContent = 'Full Scan';
+            _scanReader = null;
+
+            // Auto-hide progress after 8 seconds
+            setTimeout(function() { progress.classList.remove('visible'); }, 8000);
         }
 
         renderScan();

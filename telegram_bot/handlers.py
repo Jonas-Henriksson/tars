@@ -53,6 +53,12 @@ async def _send_long_message(update: Update, text: str) -> None:
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start — welcome message."""
+    # Store the owner's chat ID for proactive notifications
+    try:
+        from integrations.notifications import set_owner_chat_id
+        set_owner_chat_id(update.effective_chat.id)
+    except Exception:
+        pass
     await update.message.reply_text(
         "Hey. I'm TARS, your executive assistant.\n\n"
         "I can help you manage your calendar, email, tasks, and documents "
@@ -253,6 +259,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """Handle all regular text messages — route to TARS agent."""
     if not update.message or not update.message.text:
         return
+
+    # Ensure owner chat ID is stored for proactive notifications
+    try:
+        from integrations.notifications import get_owner_chat_id, set_owner_chat_id
+        if not get_owner_chat_id():
+            set_owner_chat_id(update.effective_chat.id)
+    except Exception:
+        pass
 
     chat_id = update.effective_chat.id
     user_text = update.message.text
