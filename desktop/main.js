@@ -1,16 +1,41 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, screen, session } = require('electron');
 const path = require('path');
+const http = require('http');
+const fs = require('fs');
 
 // Disable GPU acceleration to avoid chunked_data_pipe errors on Windows
 app.disableHardwareAcceleration();
 
 let mainWindow;
 let tray;
+let localServer;
 
 const BUBBLE_SIZE = { width: 72, height: 72 };
 const CHAT_SIZE = { width: 420, height: 640 };
 
-function createWindow() {
+// Serve renderer files via HTTP so webkitSpeechRecognition works (needs HTTP origin)
+function startLocalServer() {
+  return new Promise((resolve) => {
+    const MIME = {
+      '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript',
+      '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json',
+    };
+    localServer = http.createServer((req, res) => {
+      let filePath = path.join(__dirname, 'renderer', req.url === '/' ? 'index.html' : req.url);
+      const ext = path.extname(filePath);
+      fs.readFile(filePath, (err, data) => {
+        if (err) { res.writeHead(404); res.end('Not found'); return; }
+        res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+        res.end(data);
+      });
+    });
+    localServer.listen(0, '127.0.0.1', () => {
+      resolve(localServer.address().port);
+    });
+  });
+}
+
+function createWindow(port) {
   mainWindow = new BrowserWindow({
     width: BUBBLE_SIZE.width,
     height: BUBBLE_SIZE.height,
@@ -27,7 +52,7 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  mainWindow.loadURL(`http://127.0.0.1:${port}/`);
   mainWindow.setVisibleOnAllWorkspaces(true);
 
   // Position bottom-right
@@ -40,7 +65,6 @@ function createWindow() {
 // IPC: expand to chat mode
 ipcMain.on('expand', () => {
   const [x, y] = mainWindow.getPosition();
-  // Expand upward and to the left from current position
   const newX = x - (CHAT_SIZE.width - BUBBLE_SIZE.width);
   const newY = y - (CHAT_SIZE.height - BUBBLE_SIZE.height);
   mainWindow.setBounds({
@@ -54,7 +78,6 @@ ipcMain.on('expand', () => {
 // IPC: collapse back to bubble
 ipcMain.on('collapse', () => {
   const bounds = mainWindow.getBounds();
-  // Collapse to bottom-right corner of current position
   mainWindow.setBounds({
     x: bounds.x + (CHAT_SIZE.width - BUBBLE_SIZE.width),
     y: bounds.y + (CHAT_SIZE.height - BUBBLE_SIZE.height),
@@ -74,17 +97,17 @@ ipcMain.on('drag-move', (_event, { deltaX, deltaY }) => {
   mainWindow.setPosition(x + deltaX, y + deltaY);
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Auto-grant microphone permission for wake word and voice
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    if (permission === 'media' || permission === 'microphone') {
-      callback(true);
-    } else {
-      callback(true);
-    }
+    callback(true);
   });
+  // Also handle permission checks (Chromium checks before requesting)
+  session.defaultSession.setPermissionCheckHandler(() => true);
 
-  createWindow();
+  const port = await startLocalServer();
+  console.log(`TARS renderer serving on http://127.0.0.1:${port}`);
+  createWindow(port);
 
   // System tray
   const trayIcon = path.join(__dirname, 'renderer', 'icons', 'tars-tray.png');
@@ -98,9 +121,11 @@ app.whenReady().then(() => {
     ]));
     tray.on('click', () => mainWindow.show());
   } catch (e) {
-    // Tray icon may not exist yet during development
     console.log('Tray icon not found, skipping:', e.message);
   }
 });
 
-app.on('window-all-closed', () => app.quit());
+app.on('window-all-closed', () => {
+  if (localServer) localServer.close();
+  app.quit();
+});
