@@ -48,7 +48,7 @@
         .flagged-toggle.collapsed { transform: rotate(-90deg); }
         .flagged-items { margin-top: 12px; overflow: hidden; transition: max-height 0.25s ease; }
         .flagged-items.collapsed { max-height: 0 !important; margin-top: 0; }
-        .flagged-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; }
+        .flagged-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; cursor: pointer; }
         .flagged-item:last-child { border-bottom: none; }
         .flagged-item-desc { flex: 1; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .flagged-item-owner { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
@@ -144,6 +144,45 @@
         .epic-row { cursor: pointer; }
         .epic-row:hover { background: var(--surface-raised); border-radius: 4px; }
 
+        /* Row actions */
+        .row-actions { display: inline-flex; gap: 2px; margin-left: auto; flex-shrink: 0; }
+        .row-actions button { background: none; border: 1px solid var(--border); color: var(--text-muted); font-size: 11px; padding: 1px 6px; border-radius: 4px; cursor: pointer; line-height: 1; font-family: inherit; }
+        .row-actions button:hover { border-color: var(--text-secondary); color: var(--text); }
+        .row-actions .btn-done:hover { border-color: var(--green); color: var(--green-text); }
+        .row-actions .btn-dismiss:hover { border-color: var(--red); color: var(--red); }
+        .story-row { cursor: pointer; }
+        .story-row:hover { background: var(--surface-raised); border-radius: 3px; }
+        .needs-epic-item { cursor: pointer; }
+        .needs-epic-item:hover { background: rgba(245,158,11,0.06); }
+        .ops-item { cursor: pointer; }
+        .ops-item:hover { background: var(--surface-raised); border-radius: 3px; }
+        .clickable-owner { cursor: pointer; text-decoration: underline dotted; }
+        .clickable-owner:hover { color: var(--text-secondary); }
+
+        /* Story edit modal */
+        .story-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 110; align-items: center; justify-content: center; }
+        .story-modal-overlay.open { display: flex; }
+        .story-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 480px; max-width: 90vw; padding: 22px 24px; }
+        .story-modal h3 { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+        .story-modal label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 3px; margin-top: 10px; }
+        .story-modal input, .story-modal select, .story-modal textarea { width: 100%; font-size: 13px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: inherit; }
+        .story-modal textarea { resize: vertical; min-height: 50px; }
+        .story-modal-btns { display: flex; gap: 8px; margin-top: 16px; justify-content: space-between; }
+        .story-modal-btns button { font-size: 12px; padding: 6px 16px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; font-family: inherit; }
+        .story-modal-btns .btn-save { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .story-modal-btns .btn-cancel { background: var(--surface-raised); color: var(--text-secondary); }
+        .story-modal-btns .btn-delete { background: var(--red-dim); color: var(--red-text); border-color: rgba(239,68,68,0.3); }
+
+        /* Person picker */
+        .person-picker { display: none; position: absolute; z-index: 200; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); width: 100%; max-height: 250px; overflow: hidden; flex-direction: column; }
+        .person-picker.open { display: flex; }
+        .person-picker-search { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+        .person-picker-search input { width: 100%; font-size: 12px; padding: 5px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: inherit; outline: none; }
+        .person-picker-list { overflow-y: auto; max-height: 200px; }
+        .person-picker-item { display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; font-size: 12px; cursor: pointer; color: var(--text); }
+        .person-picker-item:hover { background: var(--surface-raised); }
+        .person-picker-item .pp-count { font-size: 10px; color: var(--text-muted); }
+
         /* Loading */
         .loading { text-align: center; padding: 60px 20px; color: var(--text-muted); font-size: 13px; }
         .loading-spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
@@ -221,7 +260,17 @@
                 <label>Description</label>
                 <textarea id="epic-field-description"></textarea>
                 <label>Owner</label>
-                <input type="text" id="epic-field-owner">
+                <div style="position:relative">
+                    <div id="epic-field-owner" onclick="toggleEpicOwnerPicker()" style="width:100%;font-size:13px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+                        <span id="epic-owner-text"></span>
+                        <span style="font-size:10px;color:var(--text-muted)">&#9660;</span>
+                    </div>
+                    <div class="person-picker" id="epicOwnerPicker">
+                        <div class="person-picker-search"><input type="text" id="epicOwnerSearch" placeholder="Filter people..." oninput="_filterEpicOwnerPP()"></div>
+                        <div class="person-picker-list" id="epicOwnerList"></div>
+                    </div>
+                </div>
+                <input type="hidden" id="epic-owner-value">
                 <div style="display:flex;gap:12px">
                     <div style="flex:1"><label>Status</label>
                         <select id="epic-field-status">
@@ -248,6 +297,56 @@
                     <div style="display:flex;gap:8px">
                         <button class="btn-cancel" onclick="closeEpicModal()">Cancel</button>
                         <button class="btn-save" onclick="saveEpic()">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Story/Task edit modal -->
+        <div class="story-modal-overlay" id="storyModalOverlay" onclick="if(event.target===this)closeStoryModal()">
+            <div class="story-modal">
+                <h3 id="storyModalTitle">Edit Story</h3>
+                <input type="hidden" id="storyModalId">
+                <input type="hidden" id="storyModalType">
+                <label id="storyModalDescLabel">Title</label>
+                <textarea id="storyModalDesc"></textarea>
+                <label>Owner</label>
+                <div style="position:relative">
+                    <div id="storyModalOwnerBox" onclick="toggleStoryOwnerPicker()" style="width:100%;font-size:13px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+                        <span id="storyOwnerText"></span>
+                        <span style="font-size:10px;color:var(--text-muted)">&#9660;</span>
+                    </div>
+                    <div class="person-picker" id="storyOwnerPicker">
+                        <div class="person-picker-search"><input type="text" id="storyOwnerSearch" placeholder="Filter people..." oninput="_filterStoryOwnerPP()"></div>
+                        <div class="person-picker-list" id="storyOwnerList"></div>
+                    </div>
+                </div>
+                <input type="hidden" id="storyOwnerValue">
+                <div id="storyEpicRow" style="display:none">
+                    <label>Epic</label>
+                    <select id="storyModalEpic" style="width:100%;font-size:13px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;cursor:pointer"></select>
+                </div>
+                <div id="storyFieldsRow" style="display:none">
+                    <div style="display:flex;gap:12px;margin-top:4px">
+                        <div style="flex:1"><label>Status</label>
+                            <select id="storyModalStatus">
+                                <option value="backlog">Backlog</option><option value="ready">Ready</option>
+                                <option value="in_progress">In Progress</option><option value="in_review">In Review</option>
+                                <option value="done">Done</option><option value="blocked">Blocked</option>
+                            </select>
+                        </div>
+                        <div style="flex:1"><label>Size</label>
+                            <select id="storyModalSize">
+                                <option value="">—</option><option value="XS">XS</option><option value="S">S</option>
+                                <option value="M">M</option><option value="L">L</option><option value="XL">XL</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="story-modal-btns">
+                    <button class="btn-delete" id="storyDeleteBtn" onclick="deleteFromStoryModal()">Delete</button>
+                    <div style="display:flex;gap:8px">
+                        <button class="btn-cancel" onclick="closeStoryModal()">Cancel</button>
+                        <button class="btn-save" onclick="saveStoryModal()">Save</button>
                     </div>
                 </div>
             </div>
@@ -316,6 +415,11 @@
             return d.innerHTML;
         }
 
+        function capitalize(s) {
+            if (!s) return '';
+            return s.charAt(0).toUpperCase() + s.slice(1);
+        }
+
         function render(data) {
             const content = document.getElementById('content');
             const portfolio = data.portfolio || {};
@@ -350,11 +454,15 @@
                 banner.classList.remove('hidden');
                 const itemsEl = document.getElementById('flagged-items');
                 itemsEl.innerHTML = visibleNE.map(t => `
-                    <div class="flagged-item">
+                    <div class="flagged-item" onclick="openTaskModal('${esc(t.id)}','${capitalize(esc(t.description)).replace(/'/g,"\\'")}','${esc(t.owner||'').replace(/'/g,"\\'")}')">
                         <span class="pill pill-amber">Needs Epic</span>
-                        <span class="flagged-item-desc">${esc(t.description)}</span>
+                        <span class="flagged-item-desc">${capitalize(esc(t.description))}</span>
                         <span class="flagged-item-owner">${esc(t.owner)}</span>
                         ${(t.topics || []).map(tp => `<span class="topic-pill">${esc(tp)}</span>`).join('')}
+                        <span class="row-actions">
+                            <button class="btn-done" onclick="event.stopPropagation();markTaskDone('${esc(t.id)}',this)" title="Done">&#10003;</button>
+                            <button class="btn-dismiss" onclick="event.stopPropagation();dismissTask('${esc(t.id)}',this)" title="Dismiss">&times;</button>
+                        </span>
                     </div>
                 `).join('');
             }
@@ -432,10 +540,15 @@
                         if (stories.length > 0) {
                             html += `<div class="story-list">`;
                             stories.forEach(s => {
-                                html += `<div class="story-row">
+                                html += `<div class="story-row" onclick="openStoryModal('${esc(s.id)}','${esc(s.title).replace(/'/g,"\\'")}','${esc(s.owner||'').replace(/'/g,"\\'")}','${esc(s.status||'')}','${esc(s.size||'')}','${esc(e.id)}')">
                                     ${statusPill(s.status)}
                                     <span class="story-title">${esc(s.title)}</span>
                                     ${s.size ? `<span class="size-badge">${esc(s.size)}</span>` : ''}
+                                    ${s.owner ? `<span style="font-size:10px;color:var(--text-muted)">${esc(s.owner)}</span>` : ''}
+                                    <span class="row-actions">
+                                        <button class="btn-done" onclick="event.stopPropagation();markStoryDone('${esc(s.id)}',this)" title="Mark done">&#10003;</button>
+                                        <button class="btn-dismiss" onclick="event.stopPropagation();dismissStory('${esc(s.id)}',this)" title="Delete">&times;</button>
+                                    </span>
                                 </div>`;
                             });
                             html += `</div>`;
@@ -457,10 +570,14 @@
                             <span>NEEDS EPIC</span><span class="count">${memberNE.length}</span>
                         </div>`;
                     memberNE.forEach(t => {
-                        html += `<div class="needs-epic-item">
-                            <span class="needs-epic-desc">${esc(t.description)}</span>
+                        html += `<div class="needs-epic-item" onclick="openTaskModal('${esc(t.id)}','${capitalize(esc(t.description)).replace(/'/g,"\\'")}','${esc(t.owner||'').replace(/'/g,"\\'")}')">
+                            <span class="needs-epic-desc">${capitalize(esc(t.description))}</span>
                             <span class="pill pill-amber">Needs Epic</span>
                             ${(t.topics || []).map(tp => `<span class="topic-pill">${esc(tp)}</span>`).join('')}
+                            <span class="row-actions">
+                                <button class="btn-done" onclick="event.stopPropagation();markTaskDone('${esc(t.id)}',this)" title="Done">&#10003;</button>
+                                <button class="btn-dismiss" onclick="event.stopPropagation();dismissTask('${esc(t.id)}',this)" title="Dismiss">&times;</button>
+                            </span>
                         </div>`;
                     });
                     html += `</div>`;
@@ -476,10 +593,14 @@
                         </div>
                         <div class="section-body collapsed" id="body-${oid}">`;
                     opsTasks.forEach(t => {
-                        html += `<div class="ops-item">
+                        html += `<div class="ops-item" onclick="openTaskModal('${esc(t.id)}','${capitalize(esc(t.description)).replace(/'/g,"\\'")}','${esc(t.owner||m.name).replace(/'/g,"\\'")}')">
                             <span class="pill pill-gray">${esc(t.status || 'open')}</span>
-                            <span class="ops-desc">${esc(t.description)}</span>
+                            <span class="ops-desc">${capitalize(esc(t.description))}</span>
                             ${t.source_title ? `<span class="ops-source">${esc(t.source_title)}</span>` : ''}
+                            <span class="row-actions">
+                                <button class="btn-done" onclick="event.stopPropagation();markTaskDone('${esc(t.id)}',this)" title="Done">&#10003;</button>
+                                <button class="btn-dismiss" onclick="event.stopPropagation();dismissTask('${esc(t.id)}',this)" title="Dismiss">&times;</button>
+                            </span>
                         </div>`;
                     });
                     html += `</div></div>`;
@@ -650,17 +771,105 @@
                 btn.style.opacity = '1';
             }
         };
+        // --- People cache for pickers ---
+        let _ppPeopleCache = null;
+        async function _loadPeople() {
+            if (_ppPeopleCache) return _ppPeopleCache;
+            try {
+                const r = await fetch('/api/people');
+                const d = await r.json();
+                const entries = Object.entries(d.people || d).filter(kv => typeof kv[1] === 'object' && kv[0] !== 'count');
+                entries.sort((a, b) => (b[1].mentions || 0) - (a[1].mentions || 0));
+                _ppPeopleCache = entries;
+                return entries;
+            } catch (e) { return []; }
+        }
+
+        function _renderPeopleList(listEl, people, onSelect) {
+            listEl.innerHTML = people.map(([name, info]) =>
+                `<div class="person-picker-item" onclick="${onSelect}('${name.replace(/'/g, "\\'")}')">
+                    <span style="font-weight:500">${esc(name)}</span>
+                    <span style="font-size:10px;color:var(--text-muted)">${esc(info.role || '')} · ${info.mentions || 0} mentions</span>
+                </div>`
+            ).join('') || '<div style="padding:8px;color:var(--text-muted);font-size:12px">No people found</div>';
+        }
+
+        // --- Epic owner picker ---
+        window.toggleEpicOwnerPicker = async function() {
+            const picker = document.getElementById('epicOwnerPicker');
+            if (picker.style.display === 'block') { picker.style.display = 'none'; return; }
+            picker.style.display = 'block';
+            const people = await _loadPeople();
+            _renderPeopleList(document.getElementById('epicOwnerList'), people, '_selectEpicOwner');
+            document.getElementById('epicOwnerSearch').value = '';
+            document.getElementById('epicOwnerSearch').focus();
+        };
+
+        window._selectEpicOwner = function(name) {
+            document.getElementById('epic-owner-text').textContent = name;
+            document.getElementById('epic-owner-value').value = name;
+            document.getElementById('epicOwnerPicker').style.display = 'none';
+        };
+
+        window._filterEpicOwnerPP = function() {
+            const q = document.getElementById('epicOwnerSearch').value.toLowerCase();
+            const filtered = (_ppPeopleCache || []).filter(([n]) => n.toLowerCase().includes(q));
+            _renderPeopleList(document.getElementById('epicOwnerList'), filtered, '_selectEpicOwner');
+        };
+
+        // --- Story/Task owner picker ---
+        window.toggleStoryOwnerPicker = async function() {
+            const picker = document.getElementById('storyOwnerPicker');
+            if (picker.style.display === 'block') { picker.style.display = 'none'; return; }
+            picker.style.display = 'block';
+            const people = await _loadPeople();
+            _renderPeopleList(document.getElementById('storyOwnerList'), people, '_selectStoryOwner');
+            document.getElementById('storyOwnerSearch').value = '';
+            document.getElementById('storyOwnerSearch').focus();
+        };
+
+        window._selectStoryOwner = function(name) {
+            document.getElementById('storyOwnerText').textContent = name;
+            document.getElementById('storyOwnerValue').value = name;
+            document.getElementById('storyOwnerPicker').style.display = 'none';
+        };
+
+        window._filterStoryOwnerPP = function() {
+            const q = document.getElementById('storyOwnerSearch').value.toLowerCase();
+            const filtered = (_ppPeopleCache || []).filter(([n]) => n.toLowerCase().includes(q));
+            _renderPeopleList(document.getElementById('storyOwnerList'), filtered, '_selectStoryOwner');
+        };
+
+        // --- Epics cache for dropdowns ---
+        let _epicsCache = [];
+        async function _loadEpicsCache() {
+            try {
+                const r = await fetch('/api/epics');
+                const d = await r.json();
+                _epicsCache = d.epics || [];
+            } catch (e) { _epicsCache = []; }
+        }
+
+        function _populateEpicDropdown(selectEl, selectedId) {
+            selectEl.innerHTML = '<option value="">— None —</option>' +
+                _epicsCache.map(e => `<option value="${esc(e.id)}" ${e.id === selectedId ? 'selected' : ''}>${esc(e.title)}</option>`).join('');
+        }
+
+        // --- Epic modal ---
         window.openEpicModal = function(id) {
             const e = window._epicData[id];
             if (!e) return;
             document.getElementById('epic-modal-id').value = id;
             document.getElementById('epic-field-title').value = e.title || '';
             document.getElementById('epic-field-description').value = e.description || '';
-            document.getElementById('epic-field-owner').value = e.owner || '';
+            document.getElementById('epic-owner-text').textContent = e.owner || 'Unassigned';
+            document.getElementById('epic-owner-value').value = e.owner || '';
             document.getElementById('epic-field-status').value = e.status || 'backlog';
             document.getElementById('epic-field-priority').value = e.priority || '';
             document.getElementById('epic-field-quarter').value = e.quarter || '';
+            document.getElementById('epicOwnerPicker').style.display = 'none';
             document.getElementById('epic-modal-overlay').classList.add('open');
+            _loadPeople();
         };
 
         window.closeEpicModal = function() {
@@ -672,7 +881,7 @@
             const body = {
                 title: document.getElementById('epic-field-title').value,
                 description: document.getElementById('epic-field-description').value,
-                owner: document.getElementById('epic-field-owner').value,
+                owner: document.getElementById('epic-owner-value').value,
                 status: document.getElementById('epic-field-status').value,
                 priority: document.getElementById('epic-field-priority').value || null,
                 quarter: document.getElementById('epic-field-quarter').value || null,
@@ -684,8 +893,20 @@
                     body: JSON.stringify(body),
                 });
                 if (resp.ok) {
+                    const result = await resp.json();
+                    const updated = result.epic || {};
+                    window._epicData[id] = updated;
+                    // Update epic row in-place
+                    const rows = document.querySelectorAll('.epic-row');
+                    rows.forEach(row => {
+                        if (row.getAttribute('onclick') && row.getAttribute('onclick').includes(id)) {
+                            const titleEl = row.querySelector('.epic-title');
+                            if (titleEl) titleEl.textContent = updated.title || '';
+                            const pills = row.querySelectorAll('.pill');
+                            if (pills.length > 0) pills[0].outerHTML = statusPill(updated.status || 'backlog');
+                        }
+                    });
                     closeEpicModal();
-                    location.reload();
                 } else {
                     const err = await resp.json();
                     alert('Save failed: ' + (err.error || resp.status));
@@ -703,7 +924,22 @@
                 const resp = await fetch('/api/epics/' + id, { method: 'DELETE' });
                 if (resp.ok) {
                     closeEpicModal();
-                    location.reload();
+                    // Remove epic row and its story list from DOM
+                    const rows = document.querySelectorAll('.epic-row');
+                    rows.forEach(row => {
+                        if (row.getAttribute('onclick') && row.getAttribute('onclick').includes(id)) {
+                            const next = row.nextElementSibling;
+                            if (next && (next.classList.contains('story-list') || next.querySelector && next.querySelector('.story-list'))) {
+                                next.remove();
+                            }
+                            // Also remove "No stories yet" div
+                            const nextAfter = row.nextElementSibling;
+                            if (nextAfter && !nextAfter.classList.contains('epic-row') && !nextAfter.classList.contains('section-head')) {
+                                nextAfter.remove();
+                            }
+                            row.remove();
+                        }
+                    });
                 } else {
                     const err = await resp.json();
                     alert('Delete failed: ' + (err.error || resp.status));
@@ -711,6 +947,224 @@
             } catch (e) {
                 alert('Delete failed: ' + e.message);
             }
+        };
+
+        // --- Story modal ---
+        let _storyModalType = ''; // 'story' or 'task'
+
+        window.openStoryModal = async function(id, title, owner, status, size, epicId) {
+            _storyModalType = 'story';
+            document.getElementById('storyModalId').value = id;
+            document.getElementById('storyModalType').value = 'story';
+            document.getElementById('storyModalTitle').textContent = 'Edit Story';
+            document.getElementById('storyModalDescLabel').textContent = 'Title';
+            document.getElementById('storyModalDesc').value = title || '';
+            document.getElementById('storyOwnerText').textContent = owner || 'Unassigned';
+            document.getElementById('storyOwnerValue').value = owner || '';
+            document.getElementById('storyOwnerPicker').style.display = 'none';
+            document.getElementById('storyFieldsRow').style.display = 'block';
+            document.getElementById('storyEpicRow').style.display = 'block';
+            document.getElementById('storyModalStatus').value = status || 'backlog';
+            document.getElementById('storyModalSize').value = size || '';
+            document.getElementById('storyDeleteBtn').style.display = '';
+            // Populate epic dropdown
+            await _loadEpicsCache();
+            _populateEpicDropdown(document.getElementById('storyModalEpic'), epicId || '');
+            document.getElementById('storyModalOverlay').style.display = 'flex';
+            _loadPeople();
+        };
+
+        window.openTaskModal = async function(id, desc, owner) {
+            _storyModalType = 'task';
+            document.getElementById('storyModalId').value = id;
+            document.getElementById('storyModalType').value = 'task';
+            document.getElementById('storyModalTitle').textContent = 'Edit Task';
+            document.getElementById('storyModalDescLabel').textContent = 'Description';
+            document.getElementById('storyModalDesc').value = desc || '';
+            document.getElementById('storyOwnerText').textContent = owner || 'Unassigned';
+            document.getElementById('storyOwnerValue').value = owner || '';
+            document.getElementById('storyOwnerPicker').style.display = 'none';
+            document.getElementById('storyFieldsRow').style.display = 'none';
+            document.getElementById('storyEpicRow').style.display = 'none';
+            document.getElementById('storyDeleteBtn').style.display = '';
+            document.getElementById('storyModalOverlay').style.display = 'flex';
+            _loadPeople();
+        };
+
+        window.closeStoryModal = function() {
+            document.getElementById('storyModalOverlay').style.display = 'none';
+        };
+
+        window.saveStoryModal = async function() {
+            const id = document.getElementById('storyModalId').value;
+            const type = document.getElementById('storyModalType').value;
+            const desc = document.getElementById('storyModalDesc').value;
+            const owner = document.getElementById('storyOwnerValue').value;
+
+            try {
+                let resp;
+                if (type === 'story') {
+                    const body = {
+                        title: desc,
+                        owner: owner || null,
+                        status: document.getElementById('storyModalStatus').value || null,
+                        size: document.getElementById('storyModalSize').value || null,
+                        epic_id: document.getElementById('storyModalEpic').value || null,
+                    };
+                    resp = await fetch('/api/stories/' + id, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    });
+                } else {
+                    // Try smart task first, fall back to tracked task
+                    const body = { description: desc, owner: owner || null };
+                    resp = await fetch('/api/intel/tasks/' + id, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    });
+                    if (!resp.ok) {
+                        resp = await fetch('/api/tasks/' + id, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body),
+                        });
+                    }
+                }
+
+                if (resp.ok) {
+                    // Update DOM in-place: find the row and update text
+                    const rows = document.querySelectorAll('.story-row, .needs-epic-item, .ops-item');
+                    rows.forEach(row => {
+                        const onclick = row.getAttribute('onclick') || '';
+                        if (onclick.includes("'" + id + "'")) {
+                            if (type === 'story') {
+                                const titleEl = row.querySelector('.story-title');
+                                if (titleEl) titleEl.textContent = desc;
+                                const pills = row.querySelectorAll('.pill');
+                                if (pills.length > 0) pills[0].outerHTML = statusPill(document.getElementById('storyModalStatus').value);
+                                const sizeEl = row.querySelector('.size-badge');
+                                const newSize = document.getElementById('storyModalSize').value;
+                                if (sizeEl && newSize) sizeEl.textContent = newSize;
+                            } else {
+                                const descEl = row.querySelector('.needs-epic-desc, .ops-desc');
+                                if (descEl) descEl.textContent = capitalize(desc);
+                            }
+                        }
+                    });
+                    closeStoryModal();
+                } else {
+                    const err = await resp.json();
+                    alert('Save failed: ' + (err.error || resp.status));
+                }
+            } catch (e) {
+                alert('Save failed: ' + e.message);
+            }
+        };
+
+        window.deleteFromStoryModal = async function() {
+            const id = document.getElementById('storyModalId').value;
+            const type = document.getElementById('storyModalType').value;
+            const desc = document.getElementById('storyModalDesc').value;
+            if (!confirm('Delete "' + desc.slice(0, 60) + '"?')) return;
+
+            try {
+                let resp;
+                if (type === 'story') {
+                    resp = await fetch('/api/stories/' + id, { method: 'DELETE' });
+                } else {
+                    resp = await fetch('/api/intel/tasks/' + id, { method: 'DELETE' });
+                    if (!resp.ok) {
+                        resp = await fetch('/api/tasks/' + id + '/status', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ status: 'done' }),
+                        });
+                    }
+                }
+
+                if (resp.ok) {
+                    _removeRowById(id);
+                    closeStoryModal();
+                }
+            } catch (e) {
+                alert('Delete failed: ' + e.message);
+            }
+        };
+
+        // --- Row action helpers ---
+        function _fadeAndRemove(btn) {
+            const row = btn.closest('.story-row, .needs-epic-item, .ops-item, .flagged-item');
+            if (row) {
+                row.style.transition = 'opacity 0.3s';
+                row.style.opacity = '0';
+                setTimeout(() => row.remove(), 300);
+            }
+        }
+
+        function _removeRowById(id) {
+            const rows = document.querySelectorAll('.story-row, .needs-epic-item, .ops-item');
+            rows.forEach(row => {
+                const onclick = row.getAttribute('onclick') || '';
+                if (onclick.includes("'" + id + "'")) {
+                    row.style.transition = 'opacity 0.3s';
+                    row.style.opacity = '0';
+                    setTimeout(() => row.remove(), 300);
+                }
+            });
+        }
+
+        window.markStoryDone = async function(id, btn) {
+            try {
+                const resp = await fetch('/api/stories/' + id, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'done' }),
+                });
+                if (resp.ok) _fadeAndRemove(btn);
+            } catch (e) { /* silent */ }
+        };
+
+        window.dismissStory = async function(id, btn) {
+            if (!confirm('Delete this story?')) return;
+            try {
+                const resp = await fetch('/api/stories/' + id, { method: 'DELETE' });
+                if (resp.ok) _fadeAndRemove(btn);
+            } catch (e) { /* silent */ }
+        };
+
+        window.markTaskDone = async function(id, btn) {
+            try {
+                let resp = await fetch('/api/intel/tasks/' + id, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'done' }),
+                });
+                if (!resp.ok) {
+                    resp = await fetch('/api/tasks/' + id + '/status', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'done' }),
+                    });
+                }
+                if (resp.ok) _fadeAndRemove(btn);
+            } catch (e) { /* silent */ }
+        };
+
+        window.dismissTask = async function(id, btn) {
+            if (!confirm('Delete this task?')) return;
+            try {
+                let resp = await fetch('/api/intel/tasks/' + id, { method: 'DELETE' });
+                if (!resp.ok) {
+                    resp = await fetch('/api/tasks/' + id + '/status', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'done' }),
+                    });
+                }
+                if (resp.ok) _fadeAndRemove(btn);
+            } catch (e) { /* silent */ }
         };
     })();
     </script>
