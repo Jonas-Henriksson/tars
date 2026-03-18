@@ -572,12 +572,18 @@
                 const epicOptions = availableEpics.map(e => '<option value="' + esc(e.id) + '">' + esc(e.title) + '</option>').join('');
                 const ORP_LIMIT = 8;
                 function renderOrphan(t) {
+                    const descEsc = esc(t.description).replace(/'/g, "\\'");
+                    const ownerEsc = esc(t.owner || '').replace(/'/g, "\\'");
                     return '<div class="new-task-row">' +
-                        '<div class="new-task-desc">' + esc(t.description) + '</div>' +
+                        '<div class="new-task-desc" style="cursor:pointer" onclick="openTaskEdit(\'' + esc(t.id) + '\',\'' + descEsc + '\',\'' + ownerEsc + '\')">' + esc(t.description) + '</div>' +
                         (t.owner ? '<div class="new-task-owner">' + esc(t.owner) + '</div>' : '') +
-                        '<select class="orphan-assign" onchange="assignToEpic(\'' + esc(t.id) + '\', this.value)">' +
+                        '<select class="orphan-assign" onclick="event.stopPropagation()" onchange="assignToEpic(\'' + esc(t.id) + '\', this.value)">' +
                         '<option value="">Assign to epic...</option>' + epicOptions +
-                        '</select></div>';
+                        '</select>' +
+                        '<div class="new-task-actions">' +
+                        '<button class="btn-keep" onclick="event.stopPropagation();markTaskDone(\'' + esc(t.id) + '\')" title="Mark done">&#10003;</button>' +
+                        '<button class="btn-del" onclick="event.stopPropagation();deleteTask(\'' + esc(t.id) + '\')" title="Dismiss">&times;</button>' +
+                        '</div></div>';
                 }
                 for (const t of orphanedList.slice(0, ORP_LIMIT)) html += renderOrphan(t);
                 if (orphanedList.length > ORP_LIMIT) {
