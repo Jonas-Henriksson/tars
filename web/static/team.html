@@ -667,7 +667,7 @@
         // Fetch data
         fetch('/api/portfolio')
             .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-            .then(data => { _loadEpicsCache(); render(data); })
+            .then(async data => { await _loadEpicsCache(); render(data); })
             .catch(err => {
                 console.error('Failed to load portfolio:', err);
                 document.getElementById('content').innerHTML = `<div class="empty-state"><h2>No team data yet</h2><p>Run a Notion scan to extract tasks and team members, then create epics to organize deliverables.</p></div>`;
