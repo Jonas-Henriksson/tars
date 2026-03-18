@@ -1317,11 +1317,7 @@
                 const pct = Math.round((count / maxPeopleCount) * 100);
                 const isActive = activePeopleFilter && activePeopleFilter.toLowerCase() === name.toLowerCase();
                 ph += '<div class="filter-bar-row' + (isActive ? ' active' : '') + '" data-person="' + esc(name) + '">';
-                if (name !== 'Me' && name !== 'Unassigned') {
-                    ph += '<span class="filter-bar-label person-editable" data-person="' + esc(name) + '">' + esc(name) + '</span>';
-                } else {
-                    ph += '<span class="filter-bar-label">' + esc(name) + '</span>';
-                }
+                ph += '<span class="filter-bar-label">' + esc(name) + '</span>';
                 ph += '<div class="filter-bar-track"><div class="filter-bar-fill person" style="width:' + pct + '%"></div></div>';
                 ph += '<span class="filter-bar-count">' + count + '</span>';
                 ph += '</div>';
