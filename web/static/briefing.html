@@ -342,7 +342,17 @@
                 <label id="taskEditDescLabel">Description</label>
                 <textarea id="taskEditDesc"></textarea>
                 <label>Owner</label>
-                <input type="text" id="taskEditOwner">
+                <div style="position:relative">
+                    <div id="taskEditOwner" onclick="openModalPersonPicker()" style="width:100%;font-size:13px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;min-height:18px;display:flex;align-items:center;justify-content:space-between">
+                        <span id="taskEditOwnerText"></span>
+                        <span style="font-size:10px;color:var(--text-muted)">&#9660;</span>
+                    </div>
+                    <div class="person-picker" id="modalPersonPicker" style="position:absolute;top:100%;left:0;right:0;width:auto;margin-top:2px">
+                        <div class="person-picker-search"><input type="text" id="modalPPSearch" placeholder="Filter people..." oninput="filterModalPP()"></div>
+                        <div class="person-picker-list" id="modalPPList"></div>
+                    </div>
+                </div>
+                <input type="hidden" id="taskEditOwnerValue">
                 <div class="edit-modal-btns">
                     <button class="btn-cancel" onclick="closeTaskEdit()">Cancel</button>
                     <button class="btn-save" onclick="saveTaskEdit()">Save</button>
@@ -940,19 +950,20 @@
             document.getElementById('taskEditDescLabel').textContent = 'Description';
             document.getElementById('taskEditId').value = id;
             document.getElementById('taskEditDesc').value = desc;
-            document.getElementById('taskEditOwner').value = owner;
+            document.getElementById('taskEditOwnerValue').value = owner; document.getElementById('taskEditOwnerText').textContent = owner || 'Select owner...';
             document.getElementById('taskEditOverlay').classList.add('open');
         };
 
         window.closeTaskEdit = function() {
             document.getElementById('taskEditOverlay').classList.remove('open');
+            document.getElementById('modalPersonPicker').classList.remove('open');
         };
 
         window.saveTaskEdit = async function() {
             const id = document.getElementById('taskEditId').value;
             const body = {
                 description: document.getElementById('taskEditDesc').value,
-                owner: document.getElementById('taskEditOwner').value,
+                owner: document.getElementById('taskEditOwnerValue').value,
             };
             try {
                 const resp = await fetch('/api/intel/tasks/' + id, {
@@ -960,17 +971,20 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body),
                 });
-                if (resp.ok) {
-                    closeTaskEdit();
-                    generateBriefing();
-                }
+                if (resp.ok) closeTaskEdit();
             } catch (e) { console.error(e); }
         };
 
         window.deleteTask = async function(id) {
             try {
                 const resp = await fetch('/api/intel/tasks/' + id, { method: 'DELETE' });
-                if (resp.ok) generateBriefing();
+                if (resp.ok) {
+                    // Remove the row from DOM
+                    document.querySelectorAll('[onclick*="' + id + '"]').forEach(function(el) {
+                        const row = el.closest('.new-task-row') || el.closest('div[style*="padding:3px"]');
+                        if (row) row.remove();
+                    });
+                }
             } catch (e) { console.error(e); }
         };
 
@@ -1073,6 +1087,42 @@
             } catch (e) { console.error(e); }
         };
 
+        // --- Modal person picker (for edit modal Owner field) ---
+        window.openModalPersonPicker = async function() {
+            const picker = document.getElementById('modalPersonPicker');
+            if (picker.classList.contains('open')) {
+                picker.classList.remove('open');
+                return;
+            }
+            const people = await _loadPeople();
+            _renderModalPPList(people);
+            document.getElementById('modalPPSearch').value = '';
+            picker.classList.add('open');
+            document.getElementById('modalPPSearch').focus();
+        };
+
+        function _renderModalPPList(people) {
+            document.getElementById('modalPPList').innerHTML = people.map(function(p) {
+                return '<div class="person-picker-item" onclick="selectModalPerson(\'' + esc(p.name).replace(/'/g, "\\'") + '\')">' +
+                    '<span>' + esc(p.name) + '</span>' +
+                    '<span class="pp-count">' + p.mentions + '</span>' +
+                    '</div>';
+            }).join('');
+        }
+
+        window.filterModalPP = function() {
+            if (!_ppPeopleCache) return;
+            const q = document.getElementById('modalPPSearch').value.toLowerCase();
+            const filtered = q ? _ppPeopleCache.filter(function(p) { return p.name.toLowerCase().includes(q); }) : _ppPeopleCache;
+            _renderModalPPList(filtered);
+        };
+
+        window.selectModalPerson = function(name) {
+            document.getElementById('taskEditOwnerValue').value = name;
+            document.getElementById('taskEditOwnerText').textContent = name;
+            document.getElementById('modalPersonPicker').classList.remove('open');
+        };
+
         window.openStoryEdit = function(id, title, owner, size) {
             window._editingEpic = false;
             window._editingStory = true;
@@ -1080,7 +1130,7 @@
             document.getElementById('taskEditDescLabel').textContent = 'Title';
             document.getElementById('taskEditId').value = id;
             document.getElementById('taskEditDesc').value = title;
-            document.getElementById('taskEditOwner').value = owner;
+            document.getElementById('taskEditOwnerValue').value = owner; document.getElementById('taskEditOwnerText').textContent = owner || 'Select owner...';
             document.getElementById('taskEditOverlay').classList.add('open');
         };
 
@@ -1115,7 +1165,12 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status: 'done' }),
                 });
-                if (resp.ok) generateBriefing();
+                if (resp.ok) {
+                    document.querySelectorAll('[onclick*="' + id + '"]').forEach(function(el) {
+                        const row = el.closest('.new-task-row') || el.closest('div[style*="padding:3px"]');
+                        if (row) row.style.opacity = '0.4';
+                    });
+                }
             } catch (e) { console.error(e); }
         };
 
@@ -1190,7 +1245,7 @@
             document.getElementById('taskEditDescLabel').textContent = 'Title';
             document.getElementById('taskEditId').value = id;
             document.getElementById('taskEditDesc').value = e.title || '';
-            document.getElementById('taskEditOwner').value = e.owner || '';
+            document.getElementById('taskEditOwnerValue').value = e.owner || '';
             document.getElementById('taskEditOverlay').classList.add('open');
         };
 
@@ -1202,7 +1257,7 @@
                 window._editingEpic = false;
                 const body = {
                     title: document.getElementById('taskEditDesc').value,
-                    owner: document.getElementById('taskEditOwner').value,
+                    owner: document.getElementById('taskEditOwnerValue').value,
                 };
                 try {
                     const resp = await fetch('/api/epics/' + id, {
@@ -1210,16 +1265,13 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(body),
                     });
-                    if (resp.ok) {
-                        closeTaskEdit();
-                        generateBriefing();
-                    }
+                    if (resp.ok) closeTaskEdit();
                 } catch (e) { console.error(e); }
             } else if (window._editingStory) {
                 window._editingStory = false;
                 const body = {
                     title: document.getElementById('taskEditDesc').value,
-                    owner: document.getElementById('taskEditOwner').value,
+                    owner: document.getElementById('taskEditOwnerValue').value,
                 };
                 try {
                     const resp = await fetch('/api/stories/' + id, {
@@ -1227,10 +1279,7 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(body),
                     });
-                    if (resp.ok) {
-                        closeTaskEdit();
-                        generateBriefing();
-                    }
+                    if (resp.ok) closeTaskEdit();
                 } catch (e) { console.error(e); }
             } else {
                 return _origSaveTaskEdit();
@@ -1254,7 +1303,11 @@
                         body: JSON.stringify({ task_id: taskId }),
                     });
                 }
-                generateBriefing();
+                // Remove orphan row from DOM
+                document.querySelectorAll('[onclick*="' + taskId + '"], [onchange*="' + taskId + '"]').forEach(function(el) {
+                    const row = el.closest('.new-task-row');
+                    if (row) row.remove();
+                });
             } catch (e) { console.error(e); }
         };
 
