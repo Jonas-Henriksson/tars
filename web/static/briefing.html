@@ -1381,26 +1381,33 @@
         window.assignToEpic = async function(taskId, epicId) {
             if (!epicId) return;
             try {
-                // Get stories for this epic, pick the first or create a general one
-                const resp = await fetch('/api/epics');
-                const data = await resp.json();
-                const epic = (data.epics || []).find(e => e.id === epicId);
-                if (!epic) return;
-                const stories = epic.stories || [];
+                var sr = await fetch('/api/stories?epic_id=' + epicId);
+                var sd = await sr.json();
+                var stories = sd.stories || [];
+                var storyId;
                 if (stories.length > 0) {
-                    // Link to first story
-                    await fetch('/api/stories/' + stories[0].id + '/link-task', {
+                    storyId = stories[0].id;
+                } else {
+                    var cr = await fetch('/api/stories', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ task_id: taskId }),
+                        body: JSON.stringify({ epic_id: epicId, title: 'General', size: 'M' }),
                     });
+                    if (!cr.ok) return;
+                    var cd = await cr.json();
+                    storyId = (cd.story || {}).id;
+                    if (!storyId) return;
                 }
-                // Remove orphan row from DOM
+                await fetch('/api/stories/' + storyId + '/link-task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_id: taskId }),
+                });
                 document.querySelectorAll('[onclick*="' + taskId + '"], [onchange*="' + taskId + '"]').forEach(function(el) {
-                    const row = el.closest('.new-task-row');
+                    var row = el.closest('.new-task-row');
                     if (row) row.remove();
                 });
-            } catch (e) { console.error(e); }
+            } catch (e) { console.error('assignToEpic:', e); }
         };
 
         // Restore from cache or show empty state

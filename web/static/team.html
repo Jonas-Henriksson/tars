@@ -68,6 +68,7 @@
         .topic-pills-wrap { display: flex; flex-wrap: wrap; gap: 3px; max-width: 100%; overflow: hidden; }
         .show-more-btn { font-size: 11px; color: var(--accent); background: none; border: 1px solid rgba(59,130,246,0.3); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-family: inherit; margin-top: 6px; transition: all 0.15s; }
         .show-more-btn:hover { background: var(--blue-dim); border-color: var(--accent); }
+        .epic-assign-select { font-size: 11px; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text-secondary); cursor: pointer; font-family: inherit; max-width: 160px; flex-shrink: 0; }
 
         /* Member cards */
         .members-grid { display: flex; flex-direction: column; gap: 16px; padding-bottom: 40px; }
@@ -479,6 +480,7 @@
                         ${desc && shownTopics.length ? `<span class="flagged-item-topics">${shownTopics.map(tp => `<span class="topic-pill">${esc(tp)}</span>`).join('')}${extraTopics > 0 ? `<span class="topic-pill" title="${esc(topics.slice(maxTopics).join(', '))}">+${extraTopics}</span>` : ''}</span>` : ''}
                         ${!desc && extraTopics > 0 ? `<span class="topic-pill" title="${esc(topics.slice(maxTopics).join(', '))}">+${extraTopics} more</span>` : ''}
                         ${t.owner ? `<span class="flagged-item-owner" onclick="event.stopPropagation();openInlinePersonPicker(this,'task','${esc(t.id)}')">${esc(t.owner)}</span>` : ''}
+                        <select class="epic-assign-select" onclick="event.stopPropagation()" onchange="assignToEpic('${esc(t.id)}',this.value,this)">${_epicOptionsHtml()}</select>
                         <span class="row-actions">
                             <button class="btn-done" onclick="event.stopPropagation();markTaskDone('${esc(t.id)}',this)" title="Done">&#10003;</button>
                             <button class="btn-dismiss" onclick="event.stopPropagation();dismissTask('${esc(t.id)}',this)" title="Dismiss">&times;</button>
@@ -608,6 +610,7 @@
                             <span class="pill pill-amber">Needs Epic</span>
                             ${desc && shownTopics.length ? `<span class="needs-epic-topics">${shownTopics.map(tp => `<span class="topic-pill">${esc(tp)}</span>`).join('')}${extraTopics > 0 ? `<span class="topic-pill" title="${esc(topics.slice(maxTopics).join(', '))}">+${extraTopics}</span>` : ''}</span>` : ''}
                             ${!desc && extraTopics > 0 ? `<span class="topic-pill" title="${esc(topics.slice(maxTopics).join(', '))}">+${extraTopics}</span>` : ''}
+                            <select class="epic-assign-select" onclick="event.stopPropagation()" onchange="assignToEpic('${esc(t.id)}',this.value,this)">${_epicOptionsHtml()}</select>
                             <span class="row-actions">
                                 <button class="btn-done" onclick="event.stopPropagation();markTaskDone('${esc(t.id)}',this)" title="Done">&#10003;</button>
                                 <button class="btn-dismiss" onclick="event.stopPropagation();dismissTask('${esc(t.id)}',this)" title="Dismiss">&times;</button>
@@ -664,7 +667,7 @@
         // Fetch data
         fetch('/api/portfolio')
             .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-            .then(data => render(data))
+            .then(data => { _loadEpicsCache(); render(data); })
             .catch(err => {
                 console.error('Failed to load portfolio:', err);
                 document.getElementById('content').innerHTML = `<div class="empty-state"><h2>No team data yet</h2><p>Run a Notion scan to extract tasks and team members, then create epics to organize deliverables.</p></div>`;
@@ -905,6 +908,11 @@
         function _populateEpicDropdown(selectEl, selectedId) {
             selectEl.innerHTML = '<option value="">— None —</option>' +
                 _epicsCache.map(e => `<option value="${esc(e.id)}" ${e.id === selectedId ? 'selected' : ''}>${esc(e.title)}</option>`).join('');
+        }
+
+        function _epicOptionsHtml() {
+            return '<option value="">Assign epic...</option>' +
+                _epicsCache.map(e => '<option value="' + esc(e.id) + '">' + esc(e.title) + '</option>').join('');
         }
 
         // --- Epic modal ---
@@ -1226,6 +1234,35 @@
                 }
                 if (resp.ok) _fadeAndRemove(btn);
             } catch (e) { /* silent */ }
+        };
+
+        window.assignToEpic = async function(taskId, epicId, selectEl) {
+            if (!epicId) return;
+            try {
+                var sr = await fetch('/api/stories?epic_id=' + epicId);
+                var sd = await sr.json();
+                var stories = sd.stories || [];
+                var storyId;
+                if (stories.length > 0) {
+                    storyId = stories[0].id;
+                } else {
+                    var cr = await fetch('/api/stories', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ epic_id: epicId, title: 'General', size: 'M' }),
+                    });
+                    if (!cr.ok) return;
+                    var cd = await cr.json();
+                    storyId = (cd.story || {}).id;
+                    if (!storyId) return;
+                }
+                var lr = await fetch('/api/stories/' + storyId + '/link-task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_id: taskId }),
+                });
+                if (lr.ok) _fadeAndRemove(selectEl);
+            } catch (e) { console.error('assignToEpic:', e); }
         };
 
         // --- Show More/Less toggles ---
