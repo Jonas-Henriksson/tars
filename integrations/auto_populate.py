@@ -458,10 +458,9 @@ async def generate_stories_for_epic(epic_id: str) -> dict[str, Any]:
     if not epic:
         return {"error": f"Epic not found: {epic_id}"}
 
-    # Check if epic already has stories
+    # Check existing stories — include their titles so the LLM avoids duplicates
     existing_stories = get_stories(epic_id=epic_id)
-    if existing_stories.get("count", 0) > 0:
-        return {"error": "Epic already has stories", "story_count": existing_stories["count"]}
+    existing_story_titles = [s.get("title", "") for s in existing_stories.get("stories", [])]
 
     # Gather all open tasks
     intel = _load_intel()
@@ -522,12 +521,17 @@ async def generate_stories_for_epic(epic_id: str) -> dict[str, Any]:
     else:
         tasks_text = "(no directly related tasks found — generate stories based on the epic description)"
 
+    # Add existing story context so LLM avoids duplicates
+    existing_note = ""
+    if existing_story_titles:
+        existing_note = "\n\nEXISTING STORIES (do NOT duplicate these):\n" + "\n".join(f"- {t}" for t in existing_story_titles)
+
     prompt = _STORY_PROMPT.format(
         epic_title=epic.get("title", ""),
         epic_description=epic.get("description", ""),
         epic_owner=epic.get("owner", "Unassigned"),
         epic_priority=epic.get("priority", "medium"),
-        related_tasks=tasks_text,
+        related_tasks=tasks_text + existing_note,
     )
 
     from llm import llm_call

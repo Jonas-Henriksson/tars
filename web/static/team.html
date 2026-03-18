@@ -426,7 +426,6 @@
                                 ${doneCount}/${totalStories} stories
                                 <span class="progress-bar-mini"><span class="progress-fill-mini" style="width:${progressPct}%"></span></span>
                             </span>
-                            ${totalStories === 0 ? `<button onclick="event.stopPropagation();generateStories('${esc(e.id)}', this)" style="background:var(--accent);color:#fff;border:none;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer;white-space:nowrap">Generate Stories</button>` : ''}
                         </div>`;
 
                         // Stories under this epic
@@ -440,6 +439,11 @@
                                 </div>`;
                             });
                             html += `</div>`;
+                        } else {
+                            html += `<div style="padding:6px 0 4px;display:flex;align-items:center;gap:10px">
+                                <span style="font-size:12px;color:var(--text-muted)">No stories yet</span>
+                                <button onclick="event.stopPropagation();generateStories('${esc(e.id)}', this)" style="background:var(--accent);color:#fff;border:none;font-size:11px;font-family:inherit;font-weight:500;padding:4px 12px;border-radius:4px;cursor:pointer;white-space:nowrap">Generate Stories</button>
+                            </div>`;
                         }
                     });
                     html += `</div>`;

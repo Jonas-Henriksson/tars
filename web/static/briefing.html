@@ -264,6 +264,18 @@
         .empty { padding: 48px 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
         .loading { text-align: center; padding: 48px; color: var(--text-muted); font-size: 13px; }
 
+        /* Compilation progress */
+        .compile-progress { max-width: 480px; margin: 40px auto; padding: 0 24px; }
+        .compile-steps { display: flex; flex-direction: column; gap: 6px; }
+        .compile-step { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-muted); transition: color 0.3s; }
+        .compile-step.active { color: var(--text); }
+        .compile-step.done { color: var(--green-text, #22c55e); }
+        .compile-step-icon { width: 18px; text-align: center; font-size: 12px; flex-shrink: 0; }
+        .compile-step.active .compile-step-icon { animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .compile-bar { height: 3px; border-radius: 2px; background: var(--border); margin-top: 16px; overflow: hidden; }
+        .compile-bar-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width 0.6s ease; width: 0%; }
+
         /* Two column layout for side-by-side sections */
         .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
 
@@ -343,14 +355,70 @@
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
         });
 
+        const _compileSteps = [
+            { label: 'Fetching calendar events', delay: 0 },
+            { label: 'Scanning Notion activity', delay: 1200 },
+            { label: 'Analyzing tracked tasks', delay: 2400 },
+            { label: 'Checking email', delay: 3600 },
+            { label: 'Loading strategic context', delay: 4800 },
+            { label: 'Finding new tasks & epics', delay: 5800 },
+            { label: 'Identifying orphaned work', delay: 6800 },
+            { label: 'Generating recommendations', delay: 7800 },
+        ];
+
+        function _renderCompileProgress() {
+            let html = '<div class="compile-progress">';
+            html += '<div class="compile-steps">';
+            _compileSteps.forEach(function(s, i) {
+                html += '<div class="compile-step" id="cstep-' + i + '">';
+                html += '<span class="compile-step-icon" id="cicon-' + i + '">&#9679;</span>';
+                html += '<span>' + s.label + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+            html += '<div class="compile-bar"><div class="compile-bar-fill" id="compileBarFill"></div></div>';
+            html += '</div>';
+            return html;
+        }
+
+        function _animateCompileSteps() {
+            const timers = [];
+            _compileSteps.forEach(function(s, i) {
+                const t = setTimeout(function() {
+                    // Mark previous as done
+                    if (i > 0) {
+                        const prev = document.getElementById('cstep-' + (i - 1));
+                        const prevIcon = document.getElementById('cicon-' + (i - 1));
+                        if (prev) { prev.classList.remove('active'); prev.classList.add('done'); }
+                        if (prevIcon) prevIcon.innerHTML = '&#10003;';
+                    }
+                    // Mark current as active
+                    const cur = document.getElementById('cstep-' + i);
+                    if (cur) cur.classList.add('active');
+                    // Update progress bar
+                    const bar = document.getElementById('compileBarFill');
+                    if (bar) bar.style.width = Math.round(((i + 1) / _compileSteps.length) * 90) + '%';
+                    // Update status label
+                    statusLabel.textContent = s.label + '...';
+                }, s.delay);
+                timers.push(t);
+            });
+            return timers;
+        }
+
         window.generateBriefing = async function() {
             generateBtn.disabled = true;
             generateBtn.textContent = 'Compiling...';
-            statusLabel.textContent = 'Gathering data from calendar, Notion, tasks, and email...';
-            content.innerHTML = '<div class="loading">Compiling your evening briefing...</div>';
+            statusLabel.textContent = 'Starting compilation...';
+            content.innerHTML = _renderCompileProgress();
+
+            const timers = _animateCompileSteps();
 
             try {
                 const resp = await fetch('/api/briefing');
+                // Cancel pending timers
+                timers.forEach(clearTimeout);
+
                 if (!resp.ok) throw new Error('Server returned ' + resp.status);
                 let data = await resp.json();
                 // Use mock data for preview when ?mock is in URL and sources are empty
@@ -358,10 +426,26 @@
                     !data.task_analysis?.open_count && !data.calendar?.count && !data.notion_activity?.count) {
                     data = getMockData();
                 }
+
+                // Mark all steps done and fill bar before rendering
+                _compileSteps.forEach(function(s, i) {
+                    const el = document.getElementById('cstep-' + i);
+                    const icon = document.getElementById('cicon-' + i);
+                    if (el) { el.classList.remove('active'); el.classList.add('done'); }
+                    if (icon) icon.innerHTML = '&#10003;';
+                });
+                const bar = document.getElementById('compileBarFill');
+                if (bar) bar.style.width = '100%';
+                statusLabel.textContent = 'Rendering briefing...';
+
+                // Brief pause to show completed state, then render
+                await new Promise(r => setTimeout(r, 400));
+
                 renderBriefing(data);
                 statusLabel.textContent = 'Generated at ' + new Date().toLocaleTimeString();
                 generateBtn.textContent = 'Refresh';
             } catch (err) {
+                timers.forEach(clearTimeout);
                 content.innerHTML = '<div class="empty">Failed to generate briefing: ' + esc(err.message) + '</div>';
                 statusLabel.textContent = 'Generation failed.';
                 generateBtn.textContent = 'Retry';
@@ -510,9 +594,6 @@
                     html += '<div class="new-task-desc" style="font-weight:500">' + esc(e.title) + '</div>';
                     if (e.owner) html += '<div class="new-task-owner">' + esc(e.owner) + '</div>';
                     html += '<span style="font-size:11px;color:var(--text-muted)">' + (e.story_count || 0) + ' stories</span>';
-                    if ((e.story_count || 0) === 0) {
-                        html += '<button onclick="event.stopPropagation();generateStories(\'' + esc(e.id) + '\', this)" style="background:var(--accent);color:#fff;border:none;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">Generate Stories</button>';
-                    }
                     html += '<button onclick="event.stopPropagation();openBriefingEpicEdit(\'' + esc(e.id) + '\')" style="background:none;border:1px solid var(--border);color:var(--text-muted);font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">Edit</button>';
                     html += '<span style="font-size:10px;color:var(--text-muted)">&#9660;</span>';
                     html += '</div>';
@@ -523,7 +604,7 @@
                     }
                     const stories = e.stories || [];
                     if (stories.length === 0) {
-                        html += '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;display:flex;align-items:center;gap:10px">No stories yet <button onclick="event.stopPropagation();generateStories(\'' + esc(e.id) + '\', this)" style="background:var(--accent);color:#fff;border:none;font-size:11px;padding:3px 10px;border-radius:4px;cursor:pointer">Generate Stories</button></div>';
+                        html += '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;display:flex;align-items:center;gap:10px">No stories yet <button onclick="event.stopPropagation();generateStories(\'' + esc(e.id) + '\', this)" style="background:var(--accent);color:#fff;border:none;font-size:11px;font-family:inherit;font-weight:500;padding:4px 12px;border-radius:4px;cursor:pointer">Generate Stories</button></div>';
                     }
                     stories.forEach(function(s) {
                         html += '<div style="padding:6px 0;border-bottom:1px solid var(--border-subtle)">';
