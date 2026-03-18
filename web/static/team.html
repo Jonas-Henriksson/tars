@@ -48,8 +48,9 @@
         .flagged-toggle.collapsed { transform: rotate(-90deg); }
         .flagged-items { margin-top: 12px; overflow: hidden; transition: max-height 0.25s ease; }
         .flagged-items.collapsed { max-height: 0 !important; margin-top: 0; }
-        .flagged-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; cursor: pointer; }
+        .flagged-item { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--border-subtle); font-size: 13px; cursor: pointer; border-radius: 4px; }
         .flagged-item:last-child { border-bottom: none; }
+        .flagged-item:hover { background: rgba(245,158,11,0.06); }
         .flagged-item-desc { flex: 1; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .flagged-item-owner { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 
@@ -753,10 +754,15 @@
                         if (container && stories.length > 0) {
                             let shtml = '<div class="story-list">';
                             stories.forEach(function(s) {
-                                shtml += '<div class="story-row">';
+                                shtml += '<div class="story-row" onclick="openStoryModal(\'' + esc(s.id) + '\',\'' + esc(s.title).replace(/'/g,"\\'") + '\',\'' + esc(s.owner||'').replace(/'/g,"\\'") + '\',\'' + esc(s.status||'') + '\',\'' + esc(s.size||'') + '\',\'' + esc(epicId) + '\')">';
                                 shtml += statusPill(s.status || 'backlog');
                                 shtml += '<span class="story-title">' + esc(s.title) + '</span>';
                                 if (s.size) shtml += '<span class="size-badge">' + esc(s.size) + '</span>';
+                                if (s.owner) shtml += '<span style="font-size:10px;color:var(--text-muted)">' + esc(s.owner) + '</span>';
+                                shtml += '<span class="row-actions">';
+                                shtml += '<button class="btn-done" onclick="event.stopPropagation();markStoryDone(\'' + esc(s.id) + '\',this)" title="Mark done">&#10003;</button>';
+                                shtml += '<button class="btn-dismiss" onclick="event.stopPropagation();dismissStory(\'' + esc(s.id) + '\',this)" title="Delete">&times;</button>';
+                                shtml += '</span>';
                                 shtml += '</div>';
                             });
                             shtml += '</div>';
@@ -798,7 +804,7 @@
         window.toggleEpicOwnerPicker = async function() {
             const picker = document.getElementById('epicOwnerPicker');
             if (picker.style.display === 'block') { picker.style.display = 'none'; return; }
-            picker.style.display = 'block';
+            picker.style.display = 'flex';
             const people = await _loadPeople();
             _renderPeopleList(document.getElementById('epicOwnerList'), people, '_selectEpicOwner');
             document.getElementById('epicOwnerSearch').value = '';
@@ -821,7 +827,7 @@
         window.toggleStoryOwnerPicker = async function() {
             const picker = document.getElementById('storyOwnerPicker');
             if (picker.style.display === 'block') { picker.style.display = 'none'; return; }
-            picker.style.display = 'block';
+            picker.style.display = 'flex';
             const people = await _loadPeople();
             _renderPeopleList(document.getElementById('storyOwnerList'), people, '_selectStoryOwner');
             document.getElementById('storyOwnerSearch').value = '';
@@ -902,8 +908,17 @@
                         if (row.getAttribute('onclick') && row.getAttribute('onclick').includes(id)) {
                             const titleEl = row.querySelector('.epic-title');
                             if (titleEl) titleEl.textContent = updated.title || '';
+                            // Rebuild the row pills area (status + priority + quarter)
                             const pills = row.querySelectorAll('.pill');
                             if (pills.length > 0) pills[0].outerHTML = statusPill(updated.status || 'backlog');
+                            // Update priority pill if present
+                            for (let i = 1; i < pills.length; i++) {
+                                const txt = pills[i].textContent.trim();
+                                if (['high','medium','low'].includes(txt)) {
+                                    pills[i].outerHTML = updated.priority ? priorityPill(updated.priority) : '';
+                                    break;
+                                }
+                            }
                         }
                     });
                     closeEpicModal();
@@ -970,7 +985,7 @@
             // Populate epic dropdown
             await _loadEpicsCache();
             _populateEpicDropdown(document.getElementById('storyModalEpic'), epicId || '');
-            document.getElementById('storyModalOverlay').style.display = 'flex';
+            document.getElementById('storyModalOverlay').classList.add('open');
             _loadPeople();
         };
 
@@ -987,12 +1002,12 @@
             document.getElementById('storyFieldsRow').style.display = 'none';
             document.getElementById('storyEpicRow').style.display = 'none';
             document.getElementById('storyDeleteBtn').style.display = '';
-            document.getElementById('storyModalOverlay').style.display = 'flex';
+            document.getElementById('storyModalOverlay').classList.add('open');
             _loadPeople();
         };
 
         window.closeStoryModal = function() {
-            document.getElementById('storyModalOverlay').style.display = 'none';
+            document.getElementById('storyModalOverlay').classList.remove('open');
         };
 
         window.saveStoryModal = async function() {
@@ -1104,7 +1119,7 @@
         }
 
         function _removeRowById(id) {
-            const rows = document.querySelectorAll('.story-row, .needs-epic-item, .ops-item');
+            const rows = document.querySelectorAll('.story-row, .needs-epic-item, .ops-item, .flagged-item');
             rows.forEach(row => {
                 const onclick = row.getAttribute('onclick') || '';
                 if (onclick.includes("'" + id + "'")) {
