@@ -665,7 +665,7 @@ def _sync_to_tracked_tasks(new_tasks: list[dict]) -> None:
 # -----------------------------------------------------------------------
 
 async def scan_notion(
-    max_pages: int = 500,
+    max_pages: int = 10000,
     full_scan: bool = False,
     on_progress: Optional[Callable[[dict], Any]] = None,
     cancel_event: Optional[asyncio.Event] = None,

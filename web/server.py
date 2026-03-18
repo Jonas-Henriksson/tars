@@ -1161,7 +1161,7 @@ async def get_intel():
 
 
 @app.post("/api/intel/scan")
-async def scan_intel(max_pages: int = 500, full_scan: bool = False):
+async def scan_intel(max_pages: int = 10000, full_scan: bool = False):
     """Trigger a Notion intelligence scan (incremental by default)."""
     from integrations.intel import scan_notion
 
@@ -1175,61 +1175,115 @@ async def scan_intel(max_pages: int = 500, full_scan: bool = False):
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
-# Active scan cancellation events keyed by a simple counter
-_active_scan_cancel: dict[str, asyncio.Event] = {}
+# ── Background scan state ─────────────────────────────────────────
+# The scan runs as a fire-and-forget background task.  Progress events
+# are pushed into a list (append-only) that SSE clients read from.
+# Clients can connect/disconnect/reconnect without affecting the scan.
+
+_active_scan: dict | None = None   # {id, task, cancel_event, progress, result}
 
 
-@app.post("/api/intel/scan/stream")
-async def scan_intel_stream(max_pages: int = 500, full_scan: bool = False):
-    """SSE endpoint that streams scan progress events."""
-    import json as _json
+def _get_scan_state() -> dict | None:
+    """Return the active (or recently finished) scan state."""
+    return _active_scan
+
+
+def _start_background_scan(max_pages: int, full_scan: bool) -> dict:
+    """Launch a scan as a background asyncio task. Returns scan state dict."""
+    global _active_scan
+    import uuid
     from integrations.intel import scan_notion
 
-    scan_id = str(id(asyncio.current_task()))
+    scan_id = uuid.uuid4().hex[:12]
     cancel_event = asyncio.Event()
-    _active_scan_cancel[scan_id] = cancel_event
-    progress_queue: asyncio.Queue = asyncio.Queue()
+    progress_list: list[dict] = []
+    scan_state: dict = {
+        "id": scan_id,
+        "cancel_event": cancel_event,
+        "progress": progress_list,
+        "result": None,
+        "error": None,
+        "done": False,
+    }
 
     def on_progress(msg: dict) -> None:
         msg["scan_id"] = scan_id
-        progress_queue.put_nowait(msg)
+        progress_list.append(msg)
+
+    async def _run():
+        try:
+            result = await scan_notion(
+                max_pages=max_pages,
+                full_scan=full_scan,
+                on_progress=on_progress,
+                cancel_event=cancel_event,
+            )
+            scan_state["result"] = result
+        except Exception as exc:
+            logger.exception("Background scan failed")
+            scan_state["error"] = str(exc)
+        finally:
+            scan_state["done"] = True
+
+    scan_state["task"] = asyncio.create_task(_run())
+    _active_scan = scan_state
+    return scan_state
+
+
+@app.post("/api/intel/scan/stream")
+async def scan_intel_stream(request: Request, max_pages: int = 10000, full_scan: bool = False):
+    """SSE endpoint that streams scan progress events.
+
+    If a scan is already running, attaches to it.  The scan continues
+    in the background even if the client disconnects — reconnecting
+    picks up from where it left off.
+    """
+    import json as _json
+
+    # Re-use existing scan or start a new one
+    state = _get_scan_state()
+    if state and not state["done"]:
+        # Attach to the running scan
+        pass
+    else:
+        state = _start_background_scan(max_pages, full_scan)
+
+    scan_id = state["id"]
+    progress = state["progress"]
 
     async def generate():
+        cursor = 0
         try:
-            # Start scan as background task
-            scan_task = asyncio.create_task(
-                scan_notion(
-                    max_pages=max_pages,
-                    full_scan=full_scan,
-                    on_progress=on_progress,
-                    cancel_event=cancel_event,
-                )
-            )
+            yield f"data: {_json.dumps({'status': 'started', 'scan_id': scan_id})}\n\n"
 
-            # Stream progress events
-            while not scan_task.done():
-                try:
-                    msg = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
-                    yield f"data: {_json.dumps(msg)}\n\n"
-                except asyncio.TimeoutError:
-                    # Send keepalive
-                    yield ": keepalive\n\n"
+            while not state["done"]:
+                if await request.is_disconnected():
+                    return  # Client left — scan keeps running
 
-            # Drain remaining progress messages
-            while not progress_queue.empty():
-                msg = progress_queue.get_nowait()
-                yield f"data: {_json.dumps(msg)}\n\n"
+                # Flush any new progress events since our cursor
+                while cursor < len(progress):
+                    yield f"data: {_json.dumps(progress[cursor])}\n\n"
+                    cursor += 1
 
-            # Get result or error
-            result = scan_task.result()
-            result["status"] = "complete"
-            result["scan_id"] = scan_id
-            yield f"data: {_json.dumps(result)}\n\n"
+                # Wait a bit before checking again
+                await asyncio.sleep(0.3)
+
+            # Drain remaining progress
+            while cursor < len(progress):
+                yield f"data: {_json.dumps(progress[cursor])}\n\n"
+                cursor += 1
+
+            # Send final result
+            if state["error"]:
+                yield f"data: {_json.dumps({'status': 'error', 'message': state['error'], 'scan_id': scan_id})}\n\n"
+            elif state["result"]:
+                result = state["result"]
+                result["status"] = "complete"
+                result["scan_id"] = scan_id
+                yield f"data: {_json.dumps(result)}\n\n"
 
         except Exception as exc:
             yield f"data: {_json.dumps({'status': 'error', 'message': str(exc), 'scan_id': scan_id})}\n\n"
-        finally:
-            _active_scan_cancel.pop(scan_id, None)
 
     return StreamingResponse(
         generate(),
@@ -1241,18 +1295,35 @@ async def scan_intel_stream(max_pages: int = 500, full_scan: bool = False):
     )
 
 
+@app.get("/api/intel/scan/status")
+async def scan_status():
+    """Check whether a scan is running and its current progress."""
+    state = _get_scan_state()
+    if not state:
+        return JSONResponse({"running": False})
+
+    last_progress = state["progress"][-1] if state["progress"] else {}
+    return JSONResponse({
+        "running": not state["done"],
+        "scan_id": state["id"],
+        "done": state["done"],
+        "progress_count": len(state["progress"]),
+        "last_progress": last_progress,
+        "result": state["result"] if state["done"] else None,
+        "error": state["error"],
+    })
+
+
 @app.post("/api/intel/scan/cancel")
 async def cancel_scan(scan_id: str = ""):
     """Cancel an active scan."""
-    if scan_id and scan_id in _active_scan_cancel:
-        _active_scan_cancel[scan_id].set()
-        return JSONResponse({"message": "Scan cancellation requested."})
-    # Cancel all active scans if no specific ID
-    if not scan_id and _active_scan_cancel:
-        for ev in _active_scan_cancel.values():
-            ev.set()
-        return JSONResponse({"message": f"Cancelled {len(_active_scan_cancel)} active scan(s)."})
-    return JSONResponse({"message": "No active scan found."}, status_code=404)
+    state = _get_scan_state()
+    if not state or state["done"]:
+        return JSONResponse({"message": "No active scan found."}, status_code=404)
+    if scan_id and state["id"] != scan_id:
+        return JSONResponse({"message": "No active scan found."}, status_code=404)
+    state["cancel_event"].set()
+    return JSONResponse({"message": "Scan cancellation requested."})
 
 
 @app.patch("/api/intel/tasks/{task_id}")

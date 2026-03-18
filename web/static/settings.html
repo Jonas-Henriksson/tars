@@ -526,10 +526,12 @@
             document.getElementById('scan-inc').onclick = function() { doScan(false); };
             document.getElementById('scan-full').onclick = function() { doScan(true); };
             document.getElementById('scan-stop').onclick = function() { cancelScan(); };
+
+            // On page load, check if a scan is already running and attach to it
+            checkForRunningScan();
         }
 
         var _scanId = null;
-        var _scanReader = null;
 
         function cancelScan() {
             if (!_scanId) return;
@@ -539,43 +541,93 @@
             fetch('/api/intel/scan/cancel?scan_id=' + _scanId, { method: 'POST' }).catch(function() {});
         }
 
-        async function doScan(full) {
-            var incBtn = document.getElementById('scan-inc');
-            var fullBtn = document.getElementById('scan-full');
-            var result = document.getElementById('scan-result');
-            var progress = document.getElementById('scan-progress');
-            var bar = document.getElementById('scan-bar');
-            var msg = document.getElementById('scan-progress-msg');
-            var pageCount = document.getElementById('scan-page-count');
-            var taskCount = document.getElementById('scan-task-count');
-            var spinner = document.getElementById('scan-spinner');
-            var stopBtn = document.getElementById('scan-stop');
-            var label = full ? 'Full scan' : 'Incremental scan';
+        // Helper: get all scan UI elements
+        function getScanUI() {
+            return {
+                incBtn: document.getElementById('scan-inc'),
+                fullBtn: document.getElementById('scan-full'),
+                result: document.getElementById('scan-result'),
+                progress: document.getElementById('scan-progress'),
+                bar: document.getElementById('scan-bar'),
+                msg: document.getElementById('scan-progress-msg'),
+                pageCount: document.getElementById('scan-page-count'),
+                taskCount: document.getElementById('scan-task-count'),
+                spinner: document.getElementById('scan-spinner'),
+                stopBtn: document.getElementById('scan-stop'),
+            };
+        }
 
-            // Reset UI
-            incBtn.disabled = true;
-            fullBtn.disabled = true;
-            (full ? fullBtn : incBtn).textContent = 'Scanning...';
-            result.textContent = '';
-            progress.classList.add('visible');
-            bar.className = 'scan-progress-bar-fill';
-            bar.style.width = '0%';
-            msg.textContent = label + ': fetching pages from Notion...';
-            pageCount.textContent = '0 / 0 pages';
-            taskCount.textContent = '0 new tasks';
-            spinner.style.display = 'block';
-            stopBtn.style.display = 'inline-block';
-            stopBtn.disabled = false;
-            stopBtn.textContent = 'Stop';
-            _scanId = null;
+        // Helper: process a single SSE data event and update UI
+        function handleScanEvent(data, ui) {
+            if (data.scan_id) _scanId = data.scan_id;
 
+            if (data.total > 0) {
+                var pct = Math.round((data.current / data.total) * 100);
+                ui.bar.style.width = pct + '%';
+                ui.pageCount.textContent = data.current + ' / ' + data.total + ' pages';
+            }
+            if (data.page_title && data.status === 'processing') {
+                ui.msg.textContent = 'Processing: ' + data.page_title;
+            }
+            if (data.status === 'started') {
+                ui.msg.textContent = 'Fetched ' + (data.total || 0) + ' pages, starting scan...';
+            }
+            if (data.status === 'enriching') {
+                ui.bar.style.width = '100%';
+                ui.msg.textContent = data.page_title || 'Enriching...';
+            }
+            if (data.status === 'complete') {
+                scanFinished(ui);
+                ui.bar.className = 'scan-progress-bar-fill success';
+                ui.msg.textContent = 'Scan complete — ' + (data.pages_scanned || 0) + ' pages, ' + (data.new_tasks_added || 0) + ' new tasks';
+                ui.result.textContent = 'Done — ' + (data.pages_scanned || 0) + ' pages, ' + (data.new_tasks_added || 0) + ' new tasks';
+                ui.result.style.color = 'var(--green-text, #22c55e)';
+            }
+            if (data.status === 'cancelled') {
+                scanFinished(ui);
+                ui.bar.className = 'scan-progress-bar-fill cancelled';
+                ui.msg.textContent = 'Scan cancelled';
+            }
+            if (data.status === 'error') {
+                scanFinished(ui);
+                ui.bar.className = 'scan-progress-bar-fill error';
+                ui.msg.textContent = 'Error: ' + (data.error || data.message || 'Unknown error');
+                ui.result.textContent = 'Error'; ui.result.style.color = 'var(--red, #ef4444)';
+            }
+            ui.taskCount.textContent = (data.new_tasks || data.new_tasks_added || 0) + ' new tasks';
+        }
+
+        function scanFinished(ui) {
+            ui.spinner.style.display = 'none';
+            ui.stopBtn.style.display = 'none';
+            ui.incBtn.disabled = false;
+            ui.fullBtn.disabled = false;
+            ui.incBtn.textContent = 'Incremental Scan';
+            ui.fullBtn.textContent = 'Full Scan';
+            setTimeout(function() { ui.progress.classList.remove('visible'); }, 8000);
+        }
+
+        function showScanInProgress(ui) {
+            ui.incBtn.disabled = true;
+            ui.fullBtn.disabled = true;
+            ui.fullBtn.textContent = 'Scanning...';
+            ui.result.textContent = '';
+            ui.progress.classList.add('visible');
+            ui.bar.className = 'scan-progress-bar-fill';
+            ui.spinner.style.display = 'block';
+            ui.stopBtn.style.display = 'inline-block';
+            ui.stopBtn.disabled = false;
+            ui.stopBtn.textContent = 'Stop';
+        }
+
+        // Attach to a running or just-started scan via SSE
+        async function attachToScan(full, ui) {
             try {
                 var url = '/api/intel/scan/stream' + (full ? '?full_scan=true' : '');
                 var resp = await fetch(url, { method: 'POST' });
                 if (!resp.ok) throw new Error('Scan failed: ' + resp.status);
 
                 var reader = resp.body.getReader();
-                _scanReader = reader;
                 var decoder = new TextDecoder();
                 var buffer = '';
 
@@ -592,67 +644,76 @@
                         if (line.indexOf('data: ') !== 0) continue;
                         try {
                             var data = JSON.parse(line.slice(6));
-                            if (data.scan_id) _scanId = data.scan_id;
-
-                            // Update progress bar
-                            if (data.total > 0) {
-                                var pct = Math.round((data.current / data.total) * 100);
-                                bar.style.width = pct + '%';
-                                pageCount.textContent = data.current + ' / ' + data.total + ' pages';
-                            }
-                            if (data.page_title && data.status === 'processing') {
-                                msg.textContent = 'Processing: ' + data.page_title;
-                            }
-                            if (data.status === 'started') {
-                                msg.textContent = 'Fetched ' + (data.total || 0) + ' pages, starting scan...';
-                            }
-                            if (data.status === 'enriching') {
-                                bar.style.width = '100%';
-                                msg.textContent = data.page_title || 'Enriching...';
-                            }
-                            if (data.status === 'complete') {
-                                bar.style.width = '100%';
-                                bar.className = 'scan-progress-bar-fill success';
-                                spinner.style.display = 'none';
-                                stopBtn.style.display = 'none';
-                                msg.textContent = 'Scan complete — ' + (data.pages_scanned || 0) + ' pages, ' + (data.new_tasks_added || 0) + ' new tasks';
-                                result.textContent = 'Done — ' + (data.pages_scanned || 0) + ' pages, ' + (data.new_tasks_added || 0) + ' new tasks';
-                                result.style.color = 'var(--green-text, #22c55e)';
-                            }
-                            if (data.status === 'cancelled') {
-                                bar.className = 'scan-progress-bar-fill cancelled';
-                                spinner.style.display = 'none';
-                                stopBtn.style.display = 'none';
-                                msg.textContent = 'Scan cancelled';
-                            }
-                            if (data.status === 'error') {
-                                bar.className = 'scan-progress-bar-fill error';
-                                spinner.style.display = 'none';
-                                stopBtn.style.display = 'none';
-                                msg.textContent = 'Error: ' + (data.error || 'Unknown error');
-                                result.textContent = 'Error'; result.style.color = 'var(--red, #ef4444)';
-                            }
-                            taskCount.textContent = (data.new_tasks || data.new_tasks_added || 0) + ' new tasks';
+                            handleScanEvent(data, ui);
                         } catch(e) {}
                     }
                 }
             } catch(err) {
-                bar.className = 'scan-progress-bar-fill error';
-                bar.style.width = '100%';
-                spinner.style.display = 'none';
-                stopBtn.style.display = 'none';
-                msg.textContent = 'Scan failed: ' + err.message;
-                result.textContent = 'Scan failed'; result.style.color = 'var(--red, #ef4444)';
+                // Connection lost — check if scan is still running server-side
+                try {
+                    var statusResp = await fetch('/api/intel/scan/status');
+                    var status = await statusResp.json();
+                    if (status.running) {
+                        // Scan still running, reconnect after a moment
+                        ui.msg.textContent = 'Reconnecting to scan...';
+                        setTimeout(function() { attachToScan(false, ui); }, 1000);
+                        return;
+                    }
+                    // Scan finished while we were disconnected
+                    if (status.done && status.result) {
+                        handleScanEvent(Object.assign(status.result, { status: 'complete' }), ui);
+                        return;
+                    }
+                    if (status.done && status.error) {
+                        handleScanEvent({ status: 'error', message: status.error }, ui);
+                        return;
+                    }
+                } catch(e2) {}
+
+                ui.bar.className = 'scan-progress-bar-fill error';
+                ui.bar.style.width = '100%';
+                ui.msg.textContent = 'Scan connection lost: ' + err.message;
+                scanFinished(ui);
             }
+        }
 
-            incBtn.disabled = false;
-            fullBtn.disabled = false;
-            incBtn.textContent = 'Incremental Scan';
-            fullBtn.textContent = 'Full Scan';
-            _scanReader = null;
+        async function doScan(full) {
+            var ui = getScanUI();
+            var label = full ? 'Full scan' : 'Incremental scan';
 
-            // Auto-hide progress after 8 seconds
-            setTimeout(function() { progress.classList.remove('visible'); }, 8000);
+            showScanInProgress(ui);
+            ui.bar.style.width = '0%';
+            ui.msg.textContent = label + ': fetching pages from Notion...';
+            ui.pageCount.textContent = '0 / 0 pages';
+            ui.taskCount.textContent = '0 new tasks';
+            _scanId = null;
+
+            await attachToScan(full, ui);
+        }
+
+        // Check for a running scan when the page loads (e.g. user navigated away and back)
+        async function checkForRunningScan() {
+            try {
+                var resp = await fetch('/api/intel/scan/status');
+                var status = await resp.json();
+                if (status.running) {
+                    var ui = getScanUI();
+                    showScanInProgress(ui);
+                    _scanId = status.scan_id;
+
+                    // Replay last known progress
+                    if (status.last_progress) {
+                        handleScanEvent(status.last_progress, ui);
+                    } else {
+                        ui.msg.textContent = 'Scan in progress...';
+                    }
+
+                    // Attach to SSE stream to get live updates
+                    attachToScan(false, ui);
+                }
+            } catch(e) {
+                // Backend not reachable, ignore
+            }
         }
 
         renderScan();
