@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TARS Team Board</title>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0a0a0a; --surface: #111113; --surface-raised: #18181b;
+            --border: #27272a; --border-subtle: #1e1e21;
+            --text: #fafafa; --text-secondary: #a1a1aa; --text-muted: #71717a;
+            --accent: #3b82f6; --green: #22c55e; --green-dim: rgba(34,197,94,0.12); --green-text: #4ade80;
+            --amber: #f59e0b; --amber-dim: rgba(245,158,11,0.10); --amber-text: #fbbf24;
+            --red: #ef4444; --red-dim: rgba(239,68,68,0.10); --red-text: #f87171;
+            --blue-dim: rgba(59,130,246,0.10); --purple: #a855f7; --purple-dim: rgba(168,85,247,0.10); --purple-text: #c084fc;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+        .shell { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+        header { border-bottom: 1px solid var(--border-subtle); padding: 16px 0; position: sticky; top: 0; background: var(--bg); z-index: 50; }
+        .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+        .brand span { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+        .nav-links a:hover { color: var(--text-secondary); background: var(--surface); }
+        .nav-links a.active { color: var(--text); background: var(--surface-raised); }
+
+        /* Stats strip */
+        .stats { display: flex; gap: 1px; background: var(--border-subtle); border-radius: 8px; overflow: hidden; margin: 20px 0 24px; }
+        .stat { flex: 1; background: var(--surface); padding: 14px 16px; text-align: center; position: relative; }
+        .stat-val { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+        .stat-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-top: 2px; }
+        .stat.has-accent::before { content: ''; position: absolute; left: 0; top: 20%; bottom: 20%; width: 3px; border-radius: 0 2px 2px 0; }
+        .stat.accent-amber::before { background: var(--amber); }
+        .stat.accent-blue::before { background: var(--accent); }
+        .stat.accent-green::before { background: var(--green); }
+        .stat.accent-red::before { background: var(--red); }
+
+        /* Flagged banner */
+        .flagged-banner { background: var(--surface); border: 1px solid var(--border-subtle); border-left: 3px solid var(--amber); border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; }
+        .flagged-banner.hidden { display: none; }
+        .flagged-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+        .flagged-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--amber-text); }
+        .flagged-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .flagged-toggle { font-size: 10px; color: var(--text-muted); transition: transform 0.2s; display: inline-block; }
+        .flagged-toggle.collapsed { transform: rotate(-90deg); }
+        .flagged-items { margin-top: 12px; overflow: hidden; transition: max-height 0.25s ease; }
+        .flagged-items.collapsed { max-height: 0 !important; margin-top: 0; }
+        .flagged-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; }
+        .flagged-item:last-child { border-bottom: none; }
+        .flagged-item-desc { flex: 1; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .flagged-item-owner { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+
+        /* Pills & badges */
+        .pill { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 3px; white-space: nowrap; display: inline-block; }
+        .pill-blue { background: var(--blue-dim); color: var(--accent); }
+        .pill-green { background: var(--green-dim); color: var(--green-text); }
+        .pill-amber { background: var(--amber-dim); color: var(--amber-text); }
+        .pill-red { background: var(--red-dim); color: var(--red-text); }
+        .pill-purple { background: var(--purple-dim); color: var(--purple-text); }
+        .pill-gray { background: var(--surface-raised); color: var(--text-muted); }
+        .pill-outline-blue { background: transparent; color: var(--accent); border: 1px solid rgba(59,130,246,0.3); }
+        .topic-pill { font-size: 9px; font-weight: 500; padding: 1px 6px; border-radius: 3px; background: var(--surface-raised); color: var(--text-muted); white-space: nowrap; display: inline-block; }
+
+        /* Member cards */
+        .members-grid { display: flex; flex-direction: column; gap: 16px; padding-bottom: 40px; }
+        .member-card { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px 20px; }
+        .member-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+        .member-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .member-name { font-size: 15px; font-weight: 600; white-space: nowrap; }
+        .member-role { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .member-relationship { font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 3px; background: var(--surface-raised); color: var(--text-secondary); white-space: nowrap; }
+        .workload-bar { width: 60px; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; flex-shrink: 0; }
+        .workload-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+        .workload-fill.green { background: var(--green); }
+        .workload-fill.amber { background: var(--amber); }
+        .workload-fill.red { background: var(--red); }
+
+        /* Metrics row */
+        .metrics-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+        .metric-pill { font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; }
+        .metric-pill .metric-val { font-weight: 600; }
+        .metric-pill.m-blue { background: var(--blue-dim); color: var(--accent); }
+        .metric-pill.m-purple { background: var(--purple-dim); color: var(--purple-text); }
+        .metric-pill.m-default { background: var(--surface-raised); color: var(--text-secondary); }
+        .metric-pill.m-red { background: var(--red-dim); color: var(--red-text); }
+        .metric-pill.m-amber { background: var(--amber-dim); color: var(--amber-text); }
+
+        /* Section headers */
+        .section-head { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); display: flex; align-items: center; gap: 6px; padding: 8px 0 6px; cursor: pointer; user-select: none; }
+        .section-head .count { font-weight: 400; color: var(--text-muted); }
+        .section-toggle { font-size: 10px; color: var(--text-muted); transition: transform 0.2s; display: inline-block; }
+        .section-toggle.collapsed { transform: rotate(-90deg); }
+        .section-body { overflow: hidden; transition: max-height 0.25s ease; }
+        .section-body.collapsed { max-height: 0 !important; }
+
+        /* Epic rows */
+        .epic-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; flex-wrap: wrap; }
+        .epic-row:last-child { border-bottom: none; }
+        .epic-title { font-weight: 600; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .epic-initiative { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+        .story-progress { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+        .progress-bar-mini { width: 40px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; display: inline-block; }
+        .progress-fill-mini { height: 100%; background: var(--accent); border-radius: 2px; }
+
+        /* Story rows */
+        .story-list { padding-left: 20px; }
+        .story-row { display: flex; align-items: center; gap: 7px; padding: 4px 0; font-size: 12px; color: var(--text-secondary); }
+        .story-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .size-badge { font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 3px; background: var(--surface-raised); color: var(--text-muted); white-space: nowrap; }
+
+        /* Needs epic section in member card */
+        .needs-epic-section { background: rgba(245,158,11,0.04); border: 1px solid rgba(245,158,11,0.15); border-left: 3px solid var(--amber); border-radius: 6px; padding: 10px 14px; margin-top: 10px; }
+        .needs-epic-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 12px; border-bottom: 1px solid var(--border-subtle); }
+        .needs-epic-item:last-child { border-bottom: none; }
+        .needs-epic-desc { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* Operational tasks */
+        .ops-section { margin-top: 10px; }
+        .ops-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; color: var(--text-muted); }
+        .ops-desc { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ops-source { font-size: 10px; color: var(--text-muted); opacity: 0.7; white-space: nowrap; }
+
+        /* Empty state */
+        .empty-state { text-align: center; padding: 80px 20px; }
+        .empty-state h2 { font-size: 18px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; }
+        .empty-state p { font-size: 13px; color: var(--text-muted); max-width: 420px; margin: 0 auto; }
+
+        /* Loading */
+        .loading { text-align: center; padding: 60px 20px; color: var(--text-muted); font-size: 13px; }
+        .loading-spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="shell">
+            <div class="header-row">
+                <div class="brand"><h1>TARS</h1><span>Team Board</span></div>
+                <nav class="nav-links">
+                    <a href="/">Voice</a>
+                    <a href="/tasks">Tasks</a>
+                    <a href="/briefing">Briefing</a>
+                    <a href="/executive">Executive</a>
+                    <a href="/team" class="active">Team</a>
+                    <a href="/people">People</a>
+                    <a href="/review">Review</a>
+                    <a href="/graph">Graph</a>
+                    <a href="/settings">Settings</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="shell">
+        <!-- Stats strip -->
+        <div class="stats" id="stats-strip">
+            <div class="stat"><div class="stat-val" id="stat-members">--</div><div class="stat-lbl">Team Members</div></div>
+            <div class="stat has-accent accent-blue"><div class="stat-val" id="stat-epics">--</div><div class="stat-lbl">Active Epics</div></div>
+            <div class="stat has-accent accent-green"><div class="stat-val" id="stat-stories">--</div><div class="stat-lbl">In-Progress Stories</div></div>
+            <div class="stat has-accent accent-amber"><div class="stat-val" id="stat-needs-epic">--</div><div class="stat-lbl">Needs Epic</div></div>
+        </div>
+
+        <!-- Flagged items banner -->
+        <div class="flagged-banner hidden" id="flagged-banner">
+            <div class="flagged-header" onclick="toggleFlagged()">
+                <div>
+                    <div class="flagged-title">UNLINKED DELIVERABLES</div>
+                    <div class="flagged-subtitle">These tasks look like structured deliverables and should belong to an epic</div>
+                </div>
+                <span class="flagged-toggle" id="flagged-toggle">&#9660;</span>
+            </div>
+            <div class="flagged-items" id="flagged-items"></div>
+        </div>
+
+        <!-- Content area -->
+        <div id="content">
+            <div class="loading"><div class="loading-spinner"></div>Loading team data...</div>
+        </div>
+    </main>
+
+    <script src="/static/js/person-rename.js"></script>
+    <script src="/static/js/webhook-status.js"></script>
+    <script>
+    (function() {
+        let flaggedOpen = true;
+
+        window.toggleFlagged = function() {
+            flaggedOpen = !flaggedOpen;
+            const items = document.getElementById('flagged-items');
+            const toggle = document.getElementById('flagged-toggle');
+            if (flaggedOpen) {
+                items.classList.remove('collapsed');
+                toggle.classList.remove('collapsed');
+            } else {
+                items.classList.add('collapsed');
+                toggle.classList.add('collapsed');
+            }
+        };
+
+        function toggleSection(id) {
+            const body = document.getElementById('body-' + id);
+            const tog = document.getElementById('tog-' + id);
+            if (body.classList.contains('collapsed')) {
+                body.classList.remove('collapsed');
+                body.style.maxHeight = body.scrollHeight + 'px';
+                if (tog) tog.classList.remove('collapsed');
+            } else {
+                body.style.maxHeight = body.scrollHeight + 'px';
+                requestAnimationFrame(() => { body.classList.add('collapsed'); });
+                if (tog) tog.classList.add('collapsed');
+            }
+        }
+        window.toggleSection = toggleSection;
+
+        function statusPill(status) {
+            const map = {
+                'in_progress': 'pill-blue',
+                'backlog': 'pill-gray',
+                'done': 'pill-green',
+                'cancelled': 'pill-red',
+                'ready': 'pill-outline-blue',
+                'in_review': 'pill-purple',
+                'blocked': 'pill-red'
+            };
+            const cls = map[status] || 'pill-gray';
+            const label = (status || 'unknown').replace(/_/g, ' ');
+            return `<span class="pill ${cls}">${label}</span>`;
+        }
+
+        function priorityPill(p) {
+            const map = { 'high': 'pill-red', 'medium': 'pill-amber', 'low': 'pill-gray' };
+            return `<span class="pill ${map[p] || 'pill-gray'}">${p || 'none'}</span>`;
+        }
+
+        function esc(s) {
+            if (!s) return '';
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function render(data) {
+            const content = document.getElementById('content');
+            const portfolio = data.portfolio || {};
+            const members = Object.values(portfolio);
+
+            if (members.length === 0) {
+                content.innerHTML = `<div class="empty-state"><h2>No team data yet</h2><p>Run a Notion scan to extract tasks and team members, then create epics to organize deliverables.</p></div>`;
+                document.getElementById('stats-strip').style.display = 'none';
+                return;
+            }
+
+            // Stats
+            document.getElementById('stat-members').textContent = data.member_count || members.length;
+            document.getElementById('stat-epics').textContent = data.total_epics || 0;
+
+            // Count in-progress stories
+            let ipStories = 0;
+            members.forEach(m => {
+                (m.stories || []).forEach(s => { if (s.status === 'in_progress') ipStories++; });
+                (m.epics || []).forEach(e => {
+                    (e.stories || []).forEach(s => { if (s.status === 'in_progress') ipStories++; });
+                });
+            });
+            document.getElementById('stat-stories').textContent = ipStories;
+            document.getElementById('stat-needs-epic').textContent = data.needs_epic_count || 0;
+
+            // Flagged banner
+            const needsEpic = data.needs_epic || [];
+            if (data.needs_epic_count > 0 && needsEpic.length > 0) {
+                const banner = document.getElementById('flagged-banner');
+                banner.classList.remove('hidden');
+                const itemsEl = document.getElementById('flagged-items');
+                itemsEl.innerHTML = needsEpic.map(t => `
+                    <div class="flagged-item">
+                        <span class="pill pill-amber">Needs Epic</span>
+                        <span class="flagged-item-desc">${esc(t.description)}</span>
+                        <span class="flagged-item-owner">${esc(t.owner)}</span>
+                        ${(t.topics || []).map(tp => `<span class="topic-pill">${esc(tp)}</span>`).join('')}
+                    </div>
+                `).join('');
+            }
+
+            // Sort members by total_items desc
+            members.sort((a, b) => ((b.workload || {}).total_items || 0) - ((a.workload || {}).total_items || 0));
+
+            // Render member cards
+            const grid = document.createElement('div');
+            grid.className = 'members-grid';
+
+            members.forEach((m, mi) => {
+                const w = m.workload || {};
+                const totalItems = w.total_items || 0;
+                const wColor = totalItems >= 9 ? 'red' : totalItems >= 5 ? 'amber' : 'green';
+                const wPct = Math.min(100, (totalItems / 15) * 100);
+
+                const needsEpicIds = new Set((m.needs_epic || []).map(t => t.id));
+                const smartTasks = (m.smart_tasks || []).filter(t => !needsEpicIds.has(t.id));
+                const trackedTasks = (m.tracked_tasks || []).filter(t => !needsEpicIds.has(t.id));
+                const opsTasks = [...smartTasks, ...trackedTasks];
+
+                const uid = 'member-' + mi;
+
+                let html = `<div class="member-card">`;
+
+                // Header
+                html += `<div class="member-header">
+                    <div class="member-info">
+                        <span class="member-name person-editable" data-person="${esc(m.name)}">${esc(m.name)}</span>
+                        <span class="member-role">${esc(m.role)}</span>
+                        ${m.relationship ? `<span class="member-relationship">${esc(m.relationship)}</span>` : ''}
+                    </div>
+                    <div class="workload-bar"><div class="workload-fill ${wColor}" style="width:${wPct}%"></div></div>
+                </div>`;
+
+                // Metrics row
+                html += `<div class="metrics-row">`;
+                html += `<span class="metric-pill m-blue"><span class="metric-val">${w.epics || 0}</span> Epics</span>`;
+                html += `<span class="metric-pill m-purple"><span class="metric-val">${w.stories || 0}</span> Stories</span>`;
+                html += `<span class="metric-pill m-default"><span class="metric-val">${(w.smart_tasks || 0) + (w.tracked_tasks || 0)}</span> Tasks</span>`;
+                if (w.blocked > 0) html += `<span class="metric-pill m-red"><span class="metric-val">${w.blocked}</span> Blocked</span>`;
+                if (w.overdue > 0) html += `<span class="metric-pill m-amber"><span class="metric-val">${w.overdue}</span> Overdue</span>`;
+                html += `</div>`;
+
+                // Epics section
+                const epics = m.epics || [];
+                if (epics.length > 0) {
+                    const eid = uid + '-epics';
+                    html += `<div class="section-head" onclick="toggleSection('${eid}')">
+                        <span>EPICS</span><span class="count">${epics.length}</span>
+                        <span class="section-toggle" id="tog-${eid}">&#9660;</span>
+                    </div>`;
+                    html += `<div class="section-body" id="body-${eid}" style="max-height:2000px">`;
+                    epics.forEach((e, ei) => {
+                        const stories = e.stories || [];
+                        const doneCount = stories.filter(s => s.status === 'done').length;
+                        const totalStories = e.story_count || stories.length;
+                        const progressPct = totalStories > 0 ? Math.round((doneCount / totalStories) * 100) : 0;
+
+                        html += `<div class="epic-row">
+                            ${statusPill(e.status)}
+                            <span class="epic-title">${esc(e.title)}</span>
+                            ${e.priority ? priorityPill(e.priority) : ''}
+                            ${e.quarter ? `<span class="pill pill-gray">${esc(e.quarter)}</span>` : ''}
+                            ${e.initiative ? `<span class="epic-initiative">${esc(e.initiative)}</span>` : ''}
+                            <span class="story-progress">
+                                ${doneCount}/${totalStories} stories
+                                <span class="progress-bar-mini"><span class="progress-fill-mini" style="width:${progressPct}%"></span></span>
+                            </span>
+                        </div>`;
+
+                        // Stories under this epic
+                        if (stories.length > 0) {
+                            html += `<div class="story-list">`;
+                            stories.forEach(s => {
+                                html += `<div class="story-row">
+                                    ${statusPill(s.status)}
+                                    <span class="story-title">${esc(s.title)}</span>
+                                    ${s.size ? `<span class="size-badge">${esc(s.size)}</span>` : ''}
+                                </div>`;
+                            });
+                            html += `</div>`;
+                        }
+                    });
+                    html += `</div>`;
+                }
+
+                // Needs epic section
+                const memberNE = m.needs_epic || [];
+                if (memberNE.length > 0 || (m.needs_epic_count || 0) > 0) {
+                    const neCount = m.needs_epic_count || memberNE.length;
+                    html += `<div class="needs-epic-section">
+                        <div class="section-head" style="color:var(--amber-text); padding-top:0">
+                            <span>NEEDS EPIC</span><span class="count">${neCount}</span>
+                        </div>`;
+                    memberNE.forEach(t => {
+                        html += `<div class="needs-epic-item">
+                            <span class="needs-epic-desc">${esc(t.description)}</span>
+                            <span class="pill pill-amber">Needs Epic</span>
+                            ${(t.topics || []).map(tp => `<span class="topic-pill">${esc(tp)}</span>`).join('')}
+                        </div>`;
+                    });
+                    html += `</div>`;
+                }
+
+                // Operational tasks
+                if (opsTasks.length > 0) {
+                    const oid = uid + '-ops';
+                    html += `<div class="ops-section">
+                        <div class="section-head" onclick="toggleSection('${oid}')">
+                            <span>OPERATIONAL TASKS</span><span class="count">${opsTasks.length}</span>
+                            <span class="section-toggle collapsed" id="tog-${oid}">&#9660;</span>
+                        </div>
+                        <div class="section-body collapsed" id="body-${oid}">`;
+                    opsTasks.forEach(t => {
+                        html += `<div class="ops-item">
+                            <span class="pill pill-gray">${esc(t.status || 'open')}</span>
+                            <span class="ops-desc">${esc(t.description)}</span>
+                            ${t.source_title ? `<span class="ops-source">${esc(t.source_title)}</span>` : ''}
+                        </div>`;
+                    });
+                    html += `</div></div>`;
+                }
+
+                html += `</div>`;
+                grid.innerHTML += html;
+            });
+
+            content.innerHTML = '';
+            content.appendChild(grid);
+        }
+
+        // Fetch data
+        fetch('/api/portfolio')
+            .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(data => render(data))
+            .catch(err => {
+                console.error('Failed to load portfolio:', err);
+                document.getElementById('content').innerHTML = `<div class="empty-state"><h2>No team data yet</h2><p>Run a Notion scan to extract tasks and team members, then create epics to organize deliverables.</p></div>`;
+                document.getElementById('stats-strip').style.display = 'none';
+            });
+    })();
+    </script>
+</body>
+</html>

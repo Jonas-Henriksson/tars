@@ -1061,6 +1061,12 @@ async def settings_page():
     return FileResponse(_STATIC_DIR / "settings.html")
 
 
+@app.get("/team")
+async def team_page():
+    """Serve the team board / portfolio page."""
+    return FileResponse(_STATIC_DIR / "team.html")
+
+
 @app.get("/people")
 async def people_page():
     """Serve the people / contacts page."""
