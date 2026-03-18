@@ -976,8 +976,39 @@
                 } else {
                     btn.textContent = data.stories_created + ' stories created!';
                     btn.style.background = 'var(--green-text, #22c55e)';
-                    // Refresh briefing data after short delay
-                    setTimeout(function() { location.reload(); }, 1200);
+                    // Fetch fresh stories for this epic and update DOM in-place
+                    try {
+                        const sr = await fetch('/api/stories?epic_id=' + epicId);
+                        const sd = await sr.json();
+                        const stories = sd.stories || [];
+                        // Update story count in the epic row header
+                        const row = btn.closest('.new-task-row') || btn.closest('[id^="briefing-epic-"]');
+                        if (row) {
+                            // Find the parent epic row's story count span
+                            const parent = row.closest('[style*="flex-wrap"]') || row.parentElement;
+                            const countSpans = parent ? parent.querySelectorAll('span') : [];
+                            countSpans.forEach(function(sp) {
+                                if (sp.textContent.match(/^\d+ stories$/)) {
+                                    sp.textContent = stories.length + ' stories';
+                                }
+                            });
+                        }
+                        // Replace the "No stories yet" container with rendered stories
+                        const container = btn.parentElement;
+                        if (container && stories.length > 0) {
+                            let shtml = '';
+                            stories.forEach(function(s) {
+                                shtml += '<div style="padding:6px 0;border-bottom:1px solid var(--border-subtle)">';
+                                shtml += '<div style="display:flex;align-items:center;gap:8px">';
+                                shtml += '<span class="story-pill">Story</span>';
+                                shtml += '<span style="font-size:13px;font-weight:500;flex:1">' + esc(s.title) + '</span>';
+                                if (s.size) shtml += '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--surface-raised);color:var(--text-muted)">' + esc(s.size) + '</span>';
+                                if (s.owner) shtml += '<span style="font-size:11px;color:var(--text-muted)">' + esc(s.owner) + '</span>';
+                                shtml += '</div></div>';
+                            });
+                            container.outerHTML = shtml;
+                        }
+                    } catch (e) { /* story fetch failed, that's ok */ }
                 }
             } catch (err) {
                 alert('Failed to generate stories');

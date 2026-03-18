@@ -332,20 +332,29 @@ def _get_new_tasks_today() -> dict:
 def _get_new_epics_today() -> dict:
     """Get epics and stories created today, with full story + linked task data."""
     try:
-        from integrations.epics import get_epics
+        from integrations.epics import get_epics, get_stories
         from integrations.intel import _load_intel
         data = get_epics()
+        all_stories = get_stories().get("stories", [])
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         # Build task lookup for linked tasks
         intel = _load_intel()
         task_map = {t.get("id"): t for t in intel.get("smart_tasks", []) if t.get("id")}
 
+        # Build epic_id -> stories lookup
+        stories_by_epic: dict[str, list] = {}
+        for s in all_stories:
+            eid = s.get("epic_id", "")
+            if eid:
+                stories_by_epic.setdefault(eid, []).append(s)
+
         new_epics = []
         new_stories = []
         for e in data.get("epics", []):
+            epic_stories = stories_by_epic.get(e.get("id", ""), [])
             stories_data = []
-            for s in e.get("stories", []):
+            for s in epic_stories:
                 linked_tasks = []
                 for tid in s.get("linked_task_ids", []):
                     t = task_map.get(tid)
@@ -376,7 +385,7 @@ def _get_new_epics_today() -> dict:
                     "story_count": len(stories_data),
                     "stories": stories_data,
                 })
-            for s in e.get("stories", []):
+            for s in epic_stories:
                 if (s.get("created_at", "") or "")[:10] == today:
                     new_stories.append({
                         "id": s.get("id", ""),
