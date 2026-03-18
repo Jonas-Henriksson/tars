@@ -435,6 +435,6 @@
     setInterval(checkHealth, 10000);
 
     // Welcome message
-    appendMsg('assistant', renderMarkdown('**TARS ready.** Type a message or press **Ctrl+Shift+T** to start a voice session.'));
+    appendMsg('assistant', renderMarkdown('**TARS ready.** Type a message, say **"Hey TARS"**, or press **Ctrl+Shift+T** for voice.'));
 
 })();

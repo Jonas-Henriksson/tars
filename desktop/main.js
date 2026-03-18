@@ -2,6 +2,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, screen, session, globalShortcut
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const wakeWord = require('./wake-word');
 
 // Disable GPU acceleration to avoid chunked_data_pipe errors on Windows
 app.disableHardwareAcceleration();
@@ -115,6 +116,24 @@ app.whenReady().then(async () => {
     mainWindow.webContents.send('activate-voice');
   });
 
+  // "Hey TARS" wake word via Porcupine
+  const accessKey = process.env.PICOVOICE_ACCESS_KEY || '';
+  const ppnFile = path.join(__dirname, 'Hey-TARS_en_windows_v3_0_0.ppn');
+  if (accessKey) {
+    wakeWord.start({
+      accessKey,
+      keywordPath: fs.existsSync(ppnFile) ? ppnFile : undefined,
+      builtinKeyword: fs.existsSync(ppnFile) ? undefined : 'COMPUTER',
+      sensitivity: 0.5,
+      onDetected: () => {
+        mainWindow.show();
+        mainWindow.webContents.send('activate-voice');
+      },
+    });
+  } else {
+    console.log('PICOVOICE_ACCESS_KEY not set — wake word disabled. Set it to enable "Hey TARS".');
+  }
+
   // System tray
   const trayIcon = path.join(__dirname, 'renderer', 'icons', 'tars-tray.png');
   try {
@@ -132,6 +151,8 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  wakeWord.stop();
+  globalShortcut.unregisterAll();
   if (localServer) localServer.close();
   app.quit();
 });

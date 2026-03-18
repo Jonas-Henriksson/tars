@@ -7,6 +7,10 @@
     "start": "electron .",
     "build": "electron-builder --win"
   },
+  "dependencies": {
+    "@picovoice/porcupine-node": "^3.0.0",
+    "@picovoice/pvrecorder-node": "^2.0.0"
+  },
   "devDependencies": {
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0"
