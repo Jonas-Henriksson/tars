@@ -941,7 +941,7 @@ async def scan_notion(
     if new_tasks:
         _sync_to_tracked_tasks(new_tasks)
 
-    return {
+    scan_result = {
         "pages_scanned": len(pages),
         "pages_with_content": pages_with_content,
         "pages_failed": errors,
@@ -953,6 +953,75 @@ async def scan_notion(
         "top_people": dict(people_counter.most_common(5)),
         "executive_summary": intel["executive_summary"],
     }
+
+    # Post-scan enrichment chain: epics, people, task titles
+    if not was_cancelled:
+        enrichment = await _post_scan_enrich(on_progress)
+        scan_result["enrichment"] = enrichment
+
+    return scan_result
+
+
+async def _post_scan_enrich(
+    on_progress: Optional[Callable[[dict], Any]] = None,
+) -> dict:
+    """Run post-scan enrichment: auto-generate epics, enrich people, rewrite titles.
+
+    Called automatically after every successful scan to keep the full
+    intelligence model up to date.
+    """
+    results: dict = {}
+
+    async def _emit(status: str, step: str) -> None:
+        if on_progress:
+            msg = {"status": status, "page_title": step, "current": 0, "total": 0, "new_tasks": 0, "errors": 0}
+            r = on_progress(msg)
+            if asyncio.iscoroutine(r):
+                await r
+
+    # Step 1: Auto-generate epics and user stories from tasks
+    try:
+        await _emit("enriching", "Generating epics and user stories...")
+        from integrations.auto_populate import auto_populate_epics
+        epic_result = await auto_populate_epics()
+        results["epics"] = {
+            "created": epic_result.get("epics_created", 0),
+            "stories": epic_result.get("stories_created", 0),
+            "message": epic_result.get("message", ""),
+        }
+        logger.info("Post-scan: %s", epic_result.get("message", ""))
+    except Exception as e:
+        logger.warning("Post-scan epic generation failed: %s", e)
+        results["epics"] = {"error": str(e)}
+
+    # Step 2: Enrich people profiles with inferred roles
+    try:
+        await _emit("enriching", "Enriching people profiles...")
+        from integrations.auto_populate import auto_enrich_people
+        people_result = await auto_enrich_people()
+        results["people"] = {
+            "updated": people_result.get("updated", 0),
+            "message": people_result.get("message", ""),
+        }
+        logger.info("Post-scan: %s", people_result.get("message", ""))
+    except Exception as e:
+        logger.warning("Post-scan people enrichment failed: %s", e)
+        results["people"] = {"error": str(e)}
+
+    # Step 3: Rewrite task titles with Opus for deeper insight
+    try:
+        await _emit("enriching", "Rewriting task titles...")
+        rewrite_result = await rewrite_task_titles()
+        results["titles"] = {
+            "updated": rewrite_result.get("updated", 0),
+        }
+        logger.info("Post-scan: rewrote %d task titles", rewrite_result.get("updated", 0))
+    except Exception as e:
+        logger.warning("Post-scan title rewrite failed: %s", e)
+        results["titles"] = {"error": str(e)}
+
+    await _emit("completed", "Scan and enrichment complete")
+    return results
 
 
 # Action verbs that signal a task when found at the start of a bullet/line
@@ -1470,9 +1539,15 @@ async def rewrite_task_titles() -> dict:
     Returns {"updated": count, "tasks": [...]}.
     """
     from llm import llm_call
+    from integrations.manual_changes import get_edited_task_ids
 
     intel = _load_intel()
-    open_tasks = [t for t in intel.get("smart_tasks", []) if t.get("status") != "done"]
+    manually_edited = get_edited_task_ids()
+    # Skip manually-edited tasks — respect user's title changes
+    open_tasks = [
+        t for t in intel.get("smart_tasks", [])
+        if t.get("status") != "done" and t.get("id") not in manually_edited
+    ]
     if not open_tasks:
         return {"updated": 0, "tasks": []}
 

@@ -94,13 +94,19 @@ async def auto_populate_epics() -> dict[str, Any]:
     from integrations.notion_tasks import _load_tasks
     from integrations.epics import create_epic, create_story, get_epics, link_task_to_story
 
+    from integrations.manual_changes import get_deleted_epic_ids, get_deleted_story_ids
+
     intel = _load_intel()
     tracked = _load_tasks()
     smart_tasks = intel.get("smart_tasks", [])
 
-    # Get existing epics to avoid duplicates
+    # Get existing epics and deleted IDs to avoid duplicates and re-creation
     existing = get_epics()
     existing_titles = {e["title"].lower() for e in existing.get("epics", [])}
+    deleted_epic_ids = get_deleted_epic_ids()
+    deleted_story_ids = get_deleted_story_ids()
+
+    # Include existing + manually deleted epics in the "don't recreate" list
     existing_titles_str = "\n".join(f"- {e['title']}" for e in existing.get("epics", [])) or "(none)"
 
     # Group tasks by topic
@@ -246,18 +252,25 @@ async def auto_enrich_people() -> dict[str, Any]:
     """
     from integrations.people import get_all_people, update_person
     from integrations.intel import _load_intel
+    from integrations.manual_changes import get_edited_people
 
     intel = _load_intel()
     people_intel = intel.get("people", {})
     page_index = intel.get("page_index", {})
     smart_tasks = intel.get("smart_tasks", [])
     existing_people = get_all_people()
+    manually_edited = get_edited_people()
 
-    # Find people who need enrichment (no role set)
+    # Find people who need enrichment (no role set, not manually edited)
     needs_enrichment = []
     for name, count in people_intel.items():
         person = existing_people.get(name, {})
-        if not person.get("role") and count >= 2:
+        # Skip if already has a role OR was manually edited (respect manual changes)
+        if person.get("role") and count >= 2:
+            continue
+        if name in manually_edited and person.get("role"):
+            continue
+        if count < 2:
             # Gather context for this person
             context_pages = []
             for _pid, page in page_index.items():
@@ -298,12 +311,15 @@ async def auto_enrich_people() -> dict[str, Any]:
         if not name:
             continue
         try:
+            # Only fill in EMPTY fields — never overwrite manual edits
+            existing = existing_people.get(name, {})
+            is_manual = name in manually_edited
             updates = {}
-            if person.get("role"):
+            if person.get("role") and not existing.get("role"):
                 updates["role"] = person["role"]
-            if person.get("organization"):
+            if person.get("organization") and not existing.get("organization"):
                 updates["organization"] = person["organization"]
-            if person.get("relationship"):
+            if person.get("relationship") and not existing.get("relationship"):
                 updates["relationship"] = person["relationship"]
             if updates:
                 update_person(name, **updates)

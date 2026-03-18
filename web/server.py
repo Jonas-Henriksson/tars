@@ -1251,6 +1251,12 @@ async def cancel_scan(scan_id: str = ""):
 async def update_smart_task(task_id: str, body: SmartTaskUpdate):
     """Update a smart task."""
     from integrations.intel import update_smart_task as _update
+    from integrations.manual_changes import record_task_edited, record_task_completed
+
+    if body.description:
+        record_task_edited(task_id)
+    if body.status == "done":
+        record_task_completed(task_id)
 
     result = _update(
         task_id=task_id,
@@ -1270,7 +1276,9 @@ async def update_smart_task(task_id: str, body: SmartTaskUpdate):
 async def delete_smart_task(task_id: str):
     """Delete a smart task."""
     from integrations.intel import delete_smart_task as _delete
+    from integrations.manual_changes import record_task_deleted
 
+    record_task_deleted(task_id)
     result = _delete(task_id=task_id)
     if "error" in result:
         return JSONResponse(result, status_code=404)
@@ -1523,10 +1531,12 @@ class PersonUpdate(BaseModel):
 async def update_person(name: str, body: PersonUpdate):
     """Update a person's editable profile fields."""
     from integrations.people import update_person as _update
+    from integrations.manual_changes import record_person_edited
 
     fields = {k: v for k, v in body.dict().items() if v is not None}
     if not fields:
         return JSONResponse({"error": "No fields to update"}, status_code=400)
+    record_person_edited(name)
     result = _update(name, **fields)
     return JSONResponse(result)
 
@@ -2327,11 +2337,14 @@ async def api_create_epic(body: EpicCreate):
 async def api_update_epic(epic_id: str, body: EpicUpdate):
     """Update an epic."""
     from integrations.epics import update_epic
+    from integrations.manual_changes import record_epic_edited
 
     fields = {k: v for k, v in body.dict().items() if v is not None}
     if not fields:
         return JSONResponse({"error": "No fields to update"}, status_code=400)
     result = update_epic(epic_id, **fields)
+    if "error" not in result:
+        record_epic_edited(epic_id)
     if "error" in result:
         return JSONResponse(result, status_code=404)
     return JSONResponse(result)
@@ -2341,7 +2354,9 @@ async def api_update_epic(epic_id: str, body: EpicUpdate):
 async def api_delete_epic(epic_id: str):
     """Delete an epic and its stories."""
     from integrations.epics import delete_epic
+    from integrations.manual_changes import record_epic_deleted
 
+    record_epic_deleted(epic_id)
     result = delete_epic(epic_id)
     if "error" in result:
         return JSONResponse(result, status_code=404)
@@ -2402,7 +2417,9 @@ async def api_update_story(story_id: str, body: StoryUpdate):
 async def api_delete_story(story_id: str):
     """Delete a user story."""
     from integrations.epics import delete_story
+    from integrations.manual_changes import record_story_deleted
 
+    record_story_deleted(story_id)
     result = delete_story(story_id)
     if "error" in result:
         return JSONResponse(result, status_code=404)
