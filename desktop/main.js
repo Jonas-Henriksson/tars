@@ -118,7 +118,7 @@ app.whenReady().then(async () => {
 
   // "Hey TARS" wake word via Porcupine
   const accessKey = process.env.PICOVOICE_ACCESS_KEY || '';
-  const ppnFile = path.join(__dirname, 'Hey-TARS_en_windows_v3_0_0.ppn');
+  const ppnFile = path.join(__dirname, 'Hey-TARS_en_windows_v4_0_0.ppn');
   if (accessKey) {
     wakeWord.start({
       accessKey,
