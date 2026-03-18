@@ -405,9 +405,27 @@
         }, 500);
     }
 
-    // Listen for global shortcut from main process
+    // Listen for global shortcut from main process (expands + voice)
     if (window.tarsAPI && window.tarsAPI.onActivateVoice) {
         window.tarsAPI.onActivateVoice(() => activateVoice());
+    }
+
+    // Listen for wake word (voice only, stay in bubble mode)
+    if (window.tarsAPI && window.tarsAPI.onActivateVoiceBackground) {
+        window.tarsAPI.onActivateVoiceBackground(() => {
+            // Say "What's up?" acknowledgment
+            if ('speechSynthesis' in window) {
+                const utter = new SpeechSynthesisUtterance("What's up?");
+                utter.rate = 1.1;
+                utter.pitch = 0.9;
+                utter.volume = 0.8;
+                speechSynthesis.speak(utter);
+            }
+            // Start voice without expanding — bubble pulses to show active
+            setTimeout(() => {
+                if (!isVoiceActive) startVoice();
+            }, 500);
+        });
     }
 
     // ── Backend Health Check ────────────────────────────────────────

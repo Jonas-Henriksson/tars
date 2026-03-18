@@ -126,8 +126,7 @@ app.whenReady().then(async () => {
       builtinKeyword: fs.existsSync(ppnFile) ? undefined : 'COMPUTER',
       sensitivity: 0.5,
       onDetected: () => {
-        mainWindow.show();
-        mainWindow.webContents.send('activate-voice');
+        mainWindow.webContents.send('activate-voice-background');
       },
     });
   } else {

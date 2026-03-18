@@ -7,4 +7,5 @@ contextBridge.exposeInMainWorld('tarsAPI', {
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
   getBackendUrl: () => 'http://localhost:8080',
   onActivateVoice: (callback) => ipcRenderer.on('activate-voice', callback),
+  onActivateVoiceBackground: (callback) => ipcRenderer.on('activate-voice-background', callback),
 });
