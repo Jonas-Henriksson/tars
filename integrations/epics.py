@@ -378,6 +378,7 @@ def update_story(
     status: str = "",
     priority: str = "",
     size: str = "",
+    epic_id: str = "",
     acceptance_criteria: list[str] | None = None,
 ) -> dict[str, Any]:
     """Update a user story.
@@ -390,6 +391,7 @@ def update_story(
         status: New status (backlog, ready, in_progress, in_review, done, blocked).
         priority: New priority.
         size: New size estimate.
+        epic_id: Move story to a different epic.
         acceptance_criteria: Updated acceptance criteria.
     """
     data = _load_data()
@@ -408,6 +410,10 @@ def update_story(
                 s["priority"] = priority
             if size:
                 s["size"] = size.upper() if size.upper() in STORY_SIZES else s.get("size", "M")
+            if epic_id:
+                # Verify target epic exists
+                if any(e.get("id") == epic_id for e in data["epics"]):
+                    s["epic_id"] = epic_id
             if acceptance_criteria is not None:
                 s["acceptance_criteria"] = acceptance_criteria
             s["updated_at"] = _now()

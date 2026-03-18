@@ -353,6 +353,14 @@
                     </div>
                 </div>
                 <input type="hidden" id="taskEditOwnerValue">
+                <div id="epicAssignRow" style="display:none">
+                    <label>Epic</label>
+                    <select id="taskEditEpic" style="width:100%;font-size:13px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;cursor:pointer"></select>
+                </div>
+                <div id="storyAssignRow" style="display:none">
+                    <label>User Story</label>
+                    <select id="taskEditStory" style="width:100%;font-size:13px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;cursor:pointer"></select>
+                </div>
                 <div class="edit-modal-btns">
                     <button class="btn-cancel" onclick="closeTaskEdit()">Cancel</button>
                     <button class="btn-save" onclick="saveTaskEdit()">Save</button>
@@ -518,7 +526,7 @@
                         const owner = t.owner || 'Unassigned';
                         const severity = t.age_days >= 7 ? 'critical' : 'warning';
                         html += attentionCard(
-                            esc(t.description),
+                            capitalize(esc(t.description)),
                             'Open for ' + t.age_days + ' days. Owner: ' + esc(owner),
                             severity
                         );
@@ -583,7 +591,7 @@
                 function renderNewTask(t) {
                     const topicPills = (t.topics || []).slice(0, 2).map(tp => '<span class="topic-pill-sm">' + esc(tp) + '</span>').join(' ');
                     return '<div class="new-task-row">' +
-                        '<div class="new-task-desc">' + esc(t.description) + '</div>' +
+                        '<div class="new-task-desc">' + capitalize(esc(t.description)) + '</div>' +
                         (t.owner ? '<div class="new-task-owner">' + esc(t.owner) + '</div>' : '') +
                         topicPills +
                         '<div class="new-task-actions">' +
@@ -638,7 +646,7 @@
                         html += '<div style="padding:6px 0;border-bottom:1px solid var(--border-subtle)">';
                         html += '<div style="display:flex;align-items:center;gap:8px">';
                         html += '<span class="story-pill">Story</span>';
-                        html += '<span onclick="openStoryEdit(\'' + esc(s.id) + '\',\'' + stitleEsc + '\',\'' + sownerEsc + '\',\'' + esc(s.size || '') + '\')" style="font-size:13px;font-weight:500;flex:1;cursor:pointer" title="Click to edit">' + esc(s.title) + '</span>';
+                        html += '<span onclick="openStoryEdit(\'' + esc(s.id) + '\',\'' + stitleEsc + '\',\'' + sownerEsc + '\',\'' + esc(s.size || '') + '\',\'' + esc(e.id) + '\')" style="font-size:13px;font-weight:500;flex:1;cursor:pointer" title="Click to edit">' + esc(s.title) + '</span>';
                         if (s.size) html += '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--surface-raised);color:var(--text-muted)">' + esc(s.size) + '</span>';
                         if (s.owner) html += '<span onclick="event.stopPropagation();openPersonPicker(this,\'story\',\'' + esc(s.id) + '\')" style="font-size:11px;color:var(--text-muted);cursor:pointer;text-decoration:underline dotted" title="Click to reassign">' + esc(s.owner) + '</span>';
                         html += '<button onclick="event.stopPropagation();markStoryDone(\'' + esc(s.id) + '\',this)" title="Mark done" style="background:none;border:1px solid var(--border);color:var(--text-muted);font-size:12px;padding:1px 6px;border-radius:4px;cursor:pointer;line-height:1">&#10003;</button>';
@@ -654,7 +662,7 @@
                                 const townerEsc = esc(t.owner || '').replace(/'/g, "\\'");
                                 html += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;color:var(--text-secondary)">';
                                 html += '<span style="color:' + statusColor + '">' + (t.status === 'done' ? '&#10003;' : '&#9675;') + '</span>';
-                                html += '<span onclick="openTaskEdit(\'' + esc(t.id) + '\',\'' + tdescEsc + '\',\'' + townerEsc + '\')" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Click to edit">' + esc(t.description) + '</span>';
+                                html += '<span onclick="openTaskEdit(\'' + esc(t.id) + '\',\'' + tdescEsc + '\',\'' + townerEsc + '\',\'' + esc(e.id) + '\',\'' + esc(s.id) + '\')" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Click to edit">' + capitalize(esc(t.description)) + '</span>';
                                 if (t.owner) html += '<span onclick="event.stopPropagation();openPersonPicker(this,\'task\',\'' + esc(t.id) + '\')" style="font-size:10px;color:var(--text-muted);cursor:pointer;text-decoration:underline dotted" title="Click to reassign">' + esc(t.owner) + '</span>';
                                 html += '<button onclick="event.stopPropagation();markTaskDone(\'' + esc(t.id) + '\')" title="Done" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:0 3px">&#10003;</button>';
                                 html += '<button onclick="event.stopPropagation();deleteTask(\'' + esc(t.id) + '\')" title="Dismiss" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:0 3px">&times;</button>';
@@ -693,7 +701,7 @@
                     const descEsc = esc(t.description).replace(/'/g, "\\'");
                     const ownerEsc = esc(t.owner || '').replace(/'/g, "\\'");
                     return '<div class="new-task-row">' +
-                        '<div class="new-task-desc" style="cursor:pointer" onclick="openTaskEdit(\'' + esc(t.id) + '\',\'' + descEsc + '\',\'' + ownerEsc + '\')">' + esc(t.description) + '</div>' +
+                        '<div class="new-task-desc" style="cursor:pointer" onclick="openTaskEdit(\'' + esc(t.id) + '\',\'' + descEsc + '\',\'' + ownerEsc + '\')">' + capitalize(esc(t.description)) + '</div>' +
                         (t.owner ? '<div class="new-task-owner">' + esc(t.owner) + '</div>' : '') +
                         '<select class="orphan-assign" onclick="event.stopPropagation()" onchange="assignToEpic(\'' + esc(t.id) + '\', this.value)">' +
                         '<option value="">Assign to epic...</option>' + epicOptions +
@@ -757,7 +765,7 @@
                     const ageCls = t.age_days >= 7 ? 'crit' : 'warn';
                     html += '<div class="stale-row">';
                     html += '<span class="stale-age ' + ageCls + '">' + t.age_days + 'd</span>';
-                    html += '<span class="stale-desc">' + esc(t.description) + '</span>';
+                    html += '<span class="stale-desc">' + capitalize(esc(t.description)) + '</span>';
                     const staleOwner = t.owner || 'Unassigned';
                     if (staleOwner !== 'Me' && staleOwner !== 'Unassigned') {
                         html += '<span class="stale-owner person-editable" data-person="' + esc(staleOwner) + '">' + esc(staleOwner) + '</span>';
@@ -937,13 +945,52 @@
             return el.innerHTML;
         }
 
+        function capitalize(s) {
+            if (!s) return '';
+            return s.charAt(0).toUpperCase() + s.slice(1);
+        }
+
         function stripTimestamp(title) {
             if (!title) return '';
             // Remove ISO timestamps like 2026-03-18T13:00:00.000+01:00
             return title.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[.\d]*([+-]\d{2}:\d{2}|Z)?/g, '').trim();
         }
 
-        window.openTaskEdit = function(id, desc, owner) {
+        // --- Epics/stories cache for dropdowns ---
+        let _epicsCache = null;
+        async function _loadEpicsCache() {
+            if (_epicsCache) return _epicsCache;
+            try {
+                const [er, sr] = await Promise.all([fetch('/api/epics'), fetch('/api/stories')]);
+                const ed = await er.json();
+                const sd = await sr.json();
+                _epicsCache = { epics: ed.epics || [], stories: sd.stories || [] };
+                return _epicsCache;
+            } catch (e) { return { epics: [], stories: [] }; }
+        }
+
+        function _populateEpicDropdown(selectEl, selectedEpicId) {
+            if (!_epicsCache) return;
+            let html = '<option value="">(none)</option>';
+            _epicsCache.epics.forEach(function(ep) {
+                const sel = ep.id === selectedEpicId ? ' selected' : '';
+                html += '<option value="' + esc(ep.id) + '"' + sel + '>' + esc(ep.title) + '</option>';
+            });
+            selectEl.innerHTML = html;
+        }
+
+        function _populateStoryDropdown(selectEl, epicId, selectedStoryId) {
+            if (!_epicsCache) return;
+            const stories = _epicsCache.stories.filter(function(s) { return s.epic_id === epicId; });
+            let html = '<option value="">(none)</option>';
+            stories.forEach(function(st) {
+                const sel = st.id === selectedStoryId ? ' selected' : '';
+                html += '<option value="' + esc(st.id) + '"' + sel + '>' + esc(st.title) + '</option>';
+            });
+            selectEl.innerHTML = html;
+        }
+
+        window.openTaskEdit = async function(id, desc, owner, epicId, storyId) {
             window._editingEpic = false;
             window._editingStory = false;
             document.getElementById('taskEditTitle').textContent = 'Edit Task';
@@ -951,7 +998,19 @@
             document.getElementById('taskEditId').value = id;
             document.getElementById('taskEditDesc').value = desc;
             document.getElementById('taskEditOwnerValue').value = owner; document.getElementById('taskEditOwnerText').textContent = owner || 'Select owner...';
+            // Show epic+story dropdowns for tasks
+            document.getElementById('epicAssignRow').style.display = epicId ? 'block' : 'none';
+            document.getElementById('storyAssignRow').style.display = storyId ? 'block' : 'none';
             document.getElementById('taskEditOverlay').classList.add('open');
+            if (epicId) {
+                await _loadEpicsCache();
+                _populateEpicDropdown(document.getElementById('taskEditEpic'), epicId);
+                _populateStoryDropdown(document.getElementById('taskEditStory'), epicId, storyId);
+                document.getElementById('taskEditEpic').onchange = function() {
+                    _populateStoryDropdown(document.getElementById('taskEditStory'), this.value, '');
+                    document.getElementById('storyAssignRow').style.display = 'block';
+                };
+            }
         };
 
         window.closeTaskEdit = function() {
@@ -1123,7 +1182,7 @@
             document.getElementById('modalPersonPicker').classList.remove('open');
         };
 
-        window.openStoryEdit = function(id, title, owner, size) {
+        window.openStoryEdit = async function(id, title, owner, size, epicId) {
             window._editingEpic = false;
             window._editingStory = true;
             document.getElementById('taskEditTitle').textContent = 'Edit Story';
@@ -1131,7 +1190,12 @@
             document.getElementById('taskEditId').value = id;
             document.getElementById('taskEditDesc').value = title;
             document.getElementById('taskEditOwnerValue').value = owner; document.getElementById('taskEditOwnerText').textContent = owner || 'Select owner...';
+            // Show epic dropdown, hide story dropdown
+            document.getElementById('epicAssignRow').style.display = 'block';
+            document.getElementById('storyAssignRow').style.display = 'none';
             document.getElementById('taskEditOverlay').classList.add('open');
+            await _loadEpicsCache();
+            _populateEpicDropdown(document.getElementById('taskEditEpic'), epicId || '');
         };
 
         window.markStoryDone = async function(id, btn) {
@@ -1241,11 +1305,14 @@
             const e = (window._briefingEpics || {})[id];
             if (!e) return;
             window._editingEpic = true;
+            window._editingStory = false;
             document.getElementById('taskEditTitle').textContent = 'Edit Epic';
             document.getElementById('taskEditDescLabel').textContent = 'Title';
             document.getElementById('taskEditId').value = id;
             document.getElementById('taskEditDesc').value = e.title || '';
-            document.getElementById('taskEditOwnerValue').value = e.owner || '';
+            document.getElementById('taskEditOwnerValue').value = e.owner || ''; document.getElementById('taskEditOwnerText').textContent = e.owner || 'Select owner...';
+            document.getElementById('epicAssignRow').style.display = 'none';
+            document.getElementById('storyAssignRow').style.display = 'none';
             document.getElementById('taskEditOverlay').classList.add('open');
         };
 
@@ -1273,6 +1340,8 @@
                     title: document.getElementById('taskEditDesc').value,
                     owner: document.getElementById('taskEditOwnerValue').value,
                 };
+                const newEpicId = document.getElementById('taskEditEpic').value;
+                if (newEpicId) body.epic_id = newEpicId;
                 try {
                     const resp = await fetch('/api/stories/' + id, {
                         method: 'PATCH',
@@ -1282,7 +1351,28 @@
                     if (resp.ok) closeTaskEdit();
                 } catch (e) { console.error(e); }
             } else {
-                return _origSaveTaskEdit();
+                // Task save — also handle story reassignment
+                const newStoryId = document.getElementById('taskEditStory') ? document.getElementById('taskEditStory').value : '';
+                const body = {
+                    description: document.getElementById('taskEditDesc').value,
+                    owner: document.getElementById('taskEditOwnerValue').value,
+                };
+                try {
+                    const resp = await fetch('/api/intel/tasks/' + id, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    });
+                    // Link to new story if changed
+                    if (newStoryId) {
+                        await fetch('/api/stories/' + newStoryId + '/link-task', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ task_id: id }),
+                        });
+                    }
+                    if (resp.ok) closeTaskEdit();
+                } catch (e) { console.error(e); }
             }
         };
 

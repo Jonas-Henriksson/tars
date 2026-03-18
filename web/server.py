@@ -2830,6 +2830,7 @@ class StoryUpdate(BaseModel):
     status: str = None
     priority: str = None
     size: str = None
+    epic_id: str = None
     acceptance_criteria: list[str] = None
 
 
