@@ -30,10 +30,6 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   mainWindow.setVisibleOnAllWorkspaces(true);
 
-  // Windows fix: let clicks pass through transparent regions,
-  // but the renderer will call setIgnoreMouseEvents(false) on mouseover of actual content
-  mainWindow.setIgnoreMouseEvents(true, { forward: true });
-
   // Position bottom-right
   const display = screen.getPrimaryDisplay();
   const x = display.workArea.x + display.workArea.width - BUBBLE_SIZE.width - 24;

@@ -40,7 +40,6 @@ body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    -webkit-app-region: drag;
     transition: border-color 0.2s, box-shadow 0.2s;
     position: relative;
 }

@@ -35,24 +35,30 @@
     const modelSelect = document.getElementById('modelSelect');
     const searchToggle = document.getElementById('searchToggle');
 
-    // ── Windows click-through fix ────────────────────────────────────
-    // Transparent regions ignore mouse; content regions capture mouse
-    document.body.addEventListener('mouseenter', () => {
-        if (window.tarsAPI && window.tarsAPI.setIgnoreMouse) window.tarsAPI.setIgnoreMouse(false);
+    // ── Bubble drag + click ──────────────────────────────────────────
+    // Manual drag so clicks still work (webkit-app-region: drag blocks clicks)
+    let dragState = null;
+    bubble.addEventListener('mousedown', (e) => {
+        dragState = { startX: e.screenX, startY: e.screenY, moved: false };
     });
-    document.body.addEventListener('mouseleave', () => {
-        if (window.tarsAPI && window.tarsAPI.setIgnoreMouse) window.tarsAPI.setIgnoreMouse(true);
+    window.addEventListener('mousemove', (e) => {
+        if (!dragState) return;
+        const dx = e.screenX - dragState.startX;
+        const dy = e.screenY - dragState.startY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragState.moved = true;
+        if (dragState.moved && window.tarsAPI) {
+            window.tarsAPI.dragMove(dx, dy);
+            dragState.startX = e.screenX;
+            dragState.startY = e.screenY;
+        }
     });
-    // Also handle the bubble and chat directly
-    [bubble, chat].forEach(el => {
-        el.addEventListener('mouseenter', () => {
-            if (window.tarsAPI && window.tarsAPI.setIgnoreMouse) window.tarsAPI.setIgnoreMouse(false);
-        });
+    window.addEventListener('mouseup', () => {
+        if (dragState && !dragState.moved) expand();
+        dragState = null;
     });
 
     // ── Expand / Collapse ───────────────────────────────────────────
 
-    bubble.addEventListener('click', expand);
 
     function expand() {
         if (window.tarsAPI) window.tarsAPI.expand();
