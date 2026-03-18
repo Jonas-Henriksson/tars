@@ -8,4 +8,5 @@ contextBridge.exposeInMainWorld('tarsAPI', {
   getBackendUrl: () => 'http://localhost:8080',
   onActivateVoice: (callback) => ipcRenderer.on('activate-voice', callback),
   onActivateVoiceBackground: (callback) => ipcRenderer.on('activate-voice-background', callback),
+  setVoiceBubble: (active) => ipcRenderer.send('voice-bubble', active),
 });

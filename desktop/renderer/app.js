@@ -266,7 +266,10 @@
         voiceBtn.classList.add('active');
         isVoiceActive = true;
         bubble.classList.add('voice-active');
-        // Voice session starting
+        // Expand bubble window to fit wave animation
+        if (!isExpanded && window.tarsAPI && window.tarsAPI.setVoiceBubble) {
+            window.tarsAPI.setVoiceBubble(true);
+        }
 
         try {
             // Get token
@@ -334,6 +337,10 @@
         voiceBtn.classList.remove('active');
         bubble.classList.remove('voice-active');
         isVoiceActive = false;
+        // Shrink bubble window back
+        if (!isExpanded && window.tarsAPI && window.tarsAPI.setVoiceBubble) {
+            window.tarsAPI.setVoiceBubble(false);
+        }
     }
 
     // ── Realtime Event Handling (tool calls) ────────────────────────

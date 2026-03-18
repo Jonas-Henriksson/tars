@@ -12,7 +12,9 @@ let tray;
 let localServer;
 
 const BUBBLE_SIZE = { width: 72, height: 72 };
+const BUBBLE_VOICE_SIZE = { width: 140, height: 140 }; // Larger to fit wave rings
 const CHAT_SIZE = { width: 420, height: 640 };
+let isInVoiceBubble = false;
 
 // Serve renderer files via HTTP so webkitSpeechRecognition works (needs HTTP origin)
 function startLocalServer() {
@@ -78,6 +80,7 @@ ipcMain.on('expand', () => {
 
 // IPC: collapse back to bubble
 ipcMain.on('collapse', () => {
+  isInVoiceBubble = false;
   const bounds = mainWindow.getBounds();
   mainWindow.setBounds({
     x: bounds.x + (CHAT_SIZE.width - BUBBLE_SIZE.width),
@@ -85,6 +88,33 @@ ipcMain.on('collapse', () => {
     width: BUBBLE_SIZE.width,
     height: BUBBLE_SIZE.height,
   });
+});
+
+// IPC: voice bubble mode — expand window to fit wave rings
+ipcMain.on('voice-bubble', (_event, active) => {
+  if (active && !isInVoiceBubble) {
+    isInVoiceBubble = true;
+    const [x, y] = mainWindow.getPosition();
+    const dx = (BUBBLE_VOICE_SIZE.width - BUBBLE_SIZE.width) / 2;
+    const dy = (BUBBLE_VOICE_SIZE.height - BUBBLE_SIZE.height) / 2;
+    mainWindow.setBounds({
+      x: Math.max(0, Math.round(x - dx)),
+      y: Math.max(0, Math.round(y - dy)),
+      width: BUBBLE_VOICE_SIZE.width,
+      height: BUBBLE_VOICE_SIZE.height,
+    });
+  } else if (!active && isInVoiceBubble) {
+    isInVoiceBubble = false;
+    const [x, y] = mainWindow.getPosition();
+    const dx = (BUBBLE_VOICE_SIZE.width - BUBBLE_SIZE.width) / 2;
+    const dy = (BUBBLE_VOICE_SIZE.height - BUBBLE_SIZE.height) / 2;
+    mainWindow.setBounds({
+      x: Math.round(x + dx),
+      y: Math.round(y + dy),
+      width: BUBBLE_SIZE.width,
+      height: BUBBLE_SIZE.height,
+    });
+  }
 });
 
 // IPC: toggle mouse events (for transparent click-through on Windows)
