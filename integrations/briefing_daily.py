@@ -330,21 +330,51 @@ def _get_new_tasks_today() -> dict:
 
 
 def _get_new_epics_today() -> dict:
-    """Get epics and stories created today."""
+    """Get epics and stories created today, with full story + linked task data."""
     try:
         from integrations.epics import get_epics
+        from integrations.intel import _load_intel
         data = get_epics()
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        # Build task lookup for linked tasks
+        intel = _load_intel()
+        task_map = {t.get("id"): t for t in intel.get("smart_tasks", []) if t.get("id")}
+
         new_epics = []
         new_stories = []
         for e in data.get("epics", []):
+            stories_data = []
+            for s in e.get("stories", []):
+                linked_tasks = []
+                for tid in s.get("linked_task_ids", []):
+                    t = task_map.get(tid)
+                    if t:
+                        linked_tasks.append({
+                            "id": tid,
+                            "description": t.get("description", ""),
+                            "owner": t.get("owner", ""),
+                            "status": t.get("status", "open"),
+                        })
+                stories_data.append({
+                    "id": s.get("id", ""),
+                    "title": s.get("title", ""),
+                    "owner": s.get("owner", ""),
+                    "status": s.get("status", ""),
+                    "size": s.get("size", ""),
+                    "linked_tasks": linked_tasks,
+                })
             if (e.get("created_at", "") or "")[:10] == today:
                 new_epics.append({
                     "id": e.get("id", ""),
                     "title": e.get("title", ""),
+                    "description": e.get("description", ""),
                     "owner": e.get("owner", ""),
                     "status": e.get("status", ""),
-                    "story_count": e.get("story_count", 0),
+                    "priority": e.get("priority", ""),
+                    "quarter": e.get("quarter", ""),
+                    "story_count": len(stories_data),
+                    "stories": stories_data,
                 })
             for s in e.get("stories", []):
                 if (s.get("created_at", "") or "")[:10] == today:

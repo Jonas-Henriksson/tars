@@ -315,9 +315,9 @@
         <!-- Task edit modal -->
         <div class="edit-modal-overlay" id="taskEditOverlay" onclick="if(event.target===this)closeTaskEdit()">
             <div class="edit-modal">
-                <h3>Edit Task</h3>
+                <h3 id="taskEditTitle">Edit Task</h3>
                 <input type="hidden" id="taskEditId">
-                <label>Description</label>
+                <label id="taskEditDescLabel">Description</label>
                 <textarea id="taskEditDesc"></textarea>
                 <label>Owner</label>
                 <input type="text" id="taskEditOwner">
@@ -500,16 +500,64 @@
             if (newEpicsList.length > 0 || newStoriesList.length > 0) {
                 html += '<div class="section">';
                 html += sectionHead('New Epics & Stories Today', (newEpics.epic_count || 0) + (newEpics.story_count || 0));
-                for (const e of newEpicsList) {
-                    html += '<div class="new-task-row"><span class="epic-pill">Epic</span><div class="new-task-desc" style="font-weight:500">' + esc(e.title) + '</div>';
+                newEpicsList.forEach(function(e, idx) {
+                    const eid = 'briefing-epic-' + idx;
+                    // Store for edit modal
+                    window._briefingEpics = window._briefingEpics || {};
+                    window._briefingEpics[e.id] = e;
+                    html += '<div class="new-task-row" style="cursor:pointer;flex-wrap:wrap" onclick="toggleBriefingEpic(\'' + eid + '\')">';
+                    html += '<span class="epic-pill">Epic</span>';
+                    html += '<div class="new-task-desc" style="font-weight:500">' + esc(e.title) + '</div>';
                     if (e.owner) html += '<div class="new-task-owner">' + esc(e.owner) + '</div>';
-                    html += '<span style="font-size:11px;color:var(--text-muted)">' + (e.story_count || 0) + ' stories</span></div>';
-                }
-                for (const s of newStoriesList) {
-                    html += '<div class="new-task-row"><span class="story-pill">Story</span><div class="new-task-desc">' + esc(s.title) + '</div>';
-                    if (s.epic_title) html += '<span style="font-size:10px;color:var(--text-muted)">' + esc(s.epic_title) + '</span>';
-                    if (s.owner) html += '<div class="new-task-owner">' + esc(s.owner) + '</div>';
+                    html += '<span style="font-size:11px;color:var(--text-muted)">' + (e.story_count || 0) + ' stories</span>';
+                    html += '<button onclick="event.stopPropagation();openBriefingEpicEdit(\'' + esc(e.id) + '\')" style="background:none;border:1px solid var(--border);color:var(--text-muted);font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">Edit</button>';
+                    html += '<span style="font-size:10px;color:var(--text-muted)">&#9660;</span>';
                     html += '</div>';
+                    // Expandable stories + tasks
+                    html += '<div id="' + eid + '" style="display:none;width:100%;padding-left:16px;margin-bottom:8px">';
+                    if (e.description) {
+                        html += '<div style="font-size:12px;color:var(--text-secondary);padding:6px 0 8px;border-bottom:1px solid var(--border-subtle)">' + esc(e.description) + '</div>';
+                    }
+                    const stories = e.stories || [];
+                    if (stories.length === 0) {
+                        html += '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No stories yet</div>';
+                    }
+                    stories.forEach(function(s) {
+                        html += '<div style="padding:6px 0;border-bottom:1px solid var(--border-subtle)">';
+                        html += '<div style="display:flex;align-items:center;gap:8px">';
+                        html += '<span class="story-pill">Story</span>';
+                        html += '<span style="font-size:13px;font-weight:500;flex:1">' + esc(s.title) + '</span>';
+                        if (s.size) html += '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--surface-raised);color:var(--text-muted)">' + esc(s.size) + '</span>';
+                        if (s.owner) html += '<span style="font-size:11px;color:var(--text-muted)">' + esc(s.owner) + '</span>';
+                        html += '</div>';
+                        // Linked tasks under story
+                        const tasks = s.linked_tasks || [];
+                        if (tasks.length > 0) {
+                            html += '<div style="padding-left:16px;margin-top:4px">';
+                            tasks.forEach(function(t) {
+                                const statusColor = t.status === 'done' ? 'var(--green-text)' : 'var(--text-muted)';
+                                html += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;color:var(--text-secondary)">';
+                                html += '<span style="color:' + statusColor + '">' + (t.status === 'done' ? '&#10003;' : '&#9675;') + '</span>';
+                                html += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.description) + '</span>';
+                                if (t.owner) html += '<span style="font-size:10px;color:var(--text-muted)">' + esc(t.owner) + '</span>';
+                                html += '</div>';
+                            });
+                            html += '</div>';
+                        }
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                });
+                // Standalone new stories (not part of a new epic)
+                for (const s of newStoriesList) {
+                    // Only show if the story's epic wasn't already listed above
+                    const epicAlreadyShown = newEpicsList.some(e => e.id === s.epic_id);
+                    if (!epicAlreadyShown) {
+                        html += '<div class="new-task-row"><span class="story-pill">Story</span><div class="new-task-desc">' + esc(s.title) + '</div>';
+                        if (s.epic_title) html += '<span style="font-size:10px;color:var(--text-muted)">' + esc(s.epic_title) + '</span>';
+                        if (s.owner) html += '<div class="new-task-owner">' + esc(s.owner) + '</div>';
+                        html += '</div>';
+                    }
                 }
                 html += '</div>';
             }
@@ -772,6 +820,9 @@
         }
 
         window.openTaskEdit = function(id, desc, owner) {
+            window._editingEpic = false;
+            document.getElementById('taskEditTitle').textContent = 'Edit Task';
+            document.getElementById('taskEditDescLabel').textContent = 'Description';
             document.getElementById('taskEditId').value = id;
             document.getElementById('taskEditDesc').value = desc;
             document.getElementById('taskEditOwner').value = owner;
@@ -817,6 +868,49 @@
                 });
                 if (resp.ok) generateBriefing();
             } catch (e) { console.error(e); }
+        };
+
+        window.toggleBriefingEpic = function(eid) {
+            const el = document.getElementById(eid);
+            if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        };
+
+        window.openBriefingEpicEdit = function(id) {
+            const e = (window._briefingEpics || {})[id];
+            if (!e) return;
+            window._editingEpic = true;
+            document.getElementById('taskEditTitle').textContent = 'Edit Epic';
+            document.getElementById('taskEditDescLabel').textContent = 'Title';
+            document.getElementById('taskEditId').value = id;
+            document.getElementById('taskEditDesc').value = e.title || '';
+            document.getElementById('taskEditOwner').value = e.owner || '';
+            document.getElementById('taskEditOverlay').classList.add('open');
+        };
+
+        // Override saveTaskEdit to handle both tasks and epics
+        const _origSaveTaskEdit = window.saveTaskEdit;
+        window.saveTaskEdit = async function() {
+            const id = document.getElementById('taskEditId').value;
+            if (window._editingEpic) {
+                window._editingEpic = false;
+                const body = {
+                    title: document.getElementById('taskEditDesc').value,
+                    owner: document.getElementById('taskEditOwner').value,
+                };
+                try {
+                    const resp = await fetch('/api/epics/' + id, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    });
+                    if (resp.ok) {
+                        closeTaskEdit();
+                        generateBriefing();
+                    }
+                } catch (e) { console.error(e); }
+            } else {
+                return _origSaveTaskEdit();
+            }
         };
 
         window.assignToEpic = async function(taskId, epicId) {
