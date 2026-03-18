@@ -243,11 +243,28 @@ async def auto_populate_epics() -> dict[str, Any]:
         )
 
         from llm import llm_call
-        raw = await llm_call("epic_generation", prompt, max_tokens=4096)
+        import asyncio as _aio
+
+        # Retry up to 2 times with backoff for transient failures
+        raw = None
+        for attempt in range(3):
+            raw = await llm_call("epic_generation", prompt, max_tokens=4096)
+            if raw:
+                break
+            if attempt < 2:
+                wait = 2 ** (attempt + 1)
+                logger.info("Epic batch %d/%d attempt %d failed, retrying in %ds...",
+                           batch_idx + 1, len(task_batches), attempt + 1, wait)
+                await _aio.sleep(wait)
+
         if not raw:
-            errors.append(f"Batch {batch_idx + 1}: LLM unavailable")
-            logger.warning("Epic generation batch %d/%d: LLM unavailable", batch_idx + 1, len(task_batches))
+            errors.append(f"Batch {batch_idx + 1}: LLM unavailable after 3 attempts")
+            logger.warning("Epic generation batch %d/%d: LLM unavailable after retries", batch_idx + 1, len(task_batches))
             continue
+
+        # Small delay between batches to avoid rate limits
+        if batch_idx < len(task_batches) - 1:
+            await _aio.sleep(1)
 
         try:
             suggested_epics = json.loads(raw)

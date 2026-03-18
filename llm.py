@@ -36,7 +36,7 @@ MODEL_CONFIG: dict[str, str] = {
     "topic_normalization": MODEL_OPUS,
     "knowledge_synthesis": MODEL_OPUS,
     "news_classification": MODEL_OPUS,
-    "epic_generation": MODEL_OPUS,
+    "epic_generation": MODEL_SONNET,
     "people_enrichment": MODEL_OPUS,
     "context_synthesis": MODEL_OPUS,
     "context_relevance_check": MODEL_OPUS,

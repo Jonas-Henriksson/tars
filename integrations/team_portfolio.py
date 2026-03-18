@@ -162,11 +162,17 @@ def get_team_portfolio(
             and (include_done or s.get("status") != "done")
         ]
 
-        # Smart tasks for this person
-        person_smart = [
-            t for t in smart_tasks
-            if person_l in t.get("owner", "").lower()
-        ]
+        # Smart tasks for this person (deduplicated by description)
+        _seen_desc: set[str] = set()
+        person_smart = []
+        for t in smart_tasks:
+            if person_l not in t.get("owner", "").lower():
+                continue
+            dk = t.get("description", "").lower().strip()[:80]
+            if dk in _seen_desc:
+                continue
+            _seen_desc.add(dk)
+            person_smart.append(t)
 
         # Tracked tasks for this person
         person_tracked = [
