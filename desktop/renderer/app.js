@@ -513,10 +513,84 @@
         }
     }
 
+    // ── Notification SSE Stream ────────────────────────────────────
+
+    let notifEventSource = null;
+
+    function connectNotificationStream() {
+        if (notifEventSource) {
+            notifEventSource.close();
+        }
+        try {
+            notifEventSource = new EventSource(BACKEND + '/api/notifications/stream');
+
+            notifEventSource.onmessage = (e) => {
+                try {
+                    const event = JSON.parse(e.data);
+                    if (event.type === 'connected') return;
+                    handleNotification(event);
+                } catch (err) {
+                    console.warn('Failed to parse notification:', err);
+                }
+            };
+
+            notifEventSource.onerror = () => {
+                // Reconnect after 5 seconds on error
+                notifEventSource.close();
+                notifEventSource = null;
+                setTimeout(connectNotificationStream, 5000);
+            };
+        } catch (err) {
+            console.warn('Failed to connect notification stream:', err);
+            setTimeout(connectNotificationStream, 5000);
+        }
+    }
+
+    function handleNotification(event) {
+        const title = event.title || 'TARS';
+        const body = event.body || '';
+
+        // Show native OS notification via Electron
+        if (window.tarsAPI && window.tarsAPI.showNotification) {
+            window.tarsAPI.showNotification(title, body);
+        }
+
+        // Also show in-app toast
+        showToast(title, body);
+
+        // Add to chat if expanded
+        if (isExpanded) {
+            appendMsg('system', '<strong>' + esc(title) + '</strong><br>' + esc(body));
+        }
+    }
+
+    function showToast(title, body) {
+        const toast = document.createElement('div');
+        toast.className = 'tars-toast';
+        toast.innerHTML = '<strong>' + esc(title) + '</strong><br>' + esc(body);
+        document.body.appendChild(toast);
+
+        // Trigger entrance animation
+        requestAnimationFrame(() => toast.classList.add('visible'));
+
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 300);
+        }, 5000);
+
+        // Click to dismiss and expand
+        toast.addEventListener('click', () => {
+            toast.remove();
+            if (!isExpanded) expand();
+        });
+    }
+
     // ── Init ────────────────────────────────────────────────────────
 
     checkHealth();
     setInterval(checkHealth, 10000);
+    connectNotificationStream();
 
     // Welcome message
     appendMsg('assistant', renderMarkdown('**TARS ready.** Type a message, say **"Hey TARS"**, or press **Ctrl+Shift+T** for voice.'));

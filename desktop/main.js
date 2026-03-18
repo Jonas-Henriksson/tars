@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, session, globalShortcut } = require('electron');
+const { app, BrowserWindow, Notification, Tray, Menu, ipcMain, screen, session, globalShortcut } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -120,6 +120,18 @@ ipcMain.on('voice-bubble', (_event, active) => {
 // IPC: toggle mouse events (for transparent click-through on Windows)
 ipcMain.on('set-ignore-mouse', (_event, ignore) => {
   mainWindow.setIgnoreMouseEvents(ignore, { forward: true });
+});
+
+// IPC: show native desktop notification
+ipcMain.on('show-notification', (_event, { title, body }) => {
+  if (Notification.isSupported()) {
+    const notif = new Notification({ title: title || 'TARS', body: body || '' });
+    notif.on('click', () => {
+      mainWindow.show();
+      mainWindow.webContents.send('notification-clicked', { title, body });
+    });
+    notif.show();
+  }
 });
 
 // IPC: manual drag (for transparent window regions)

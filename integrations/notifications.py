@@ -9,6 +9,7 @@ the web server is running (without the Telegram polling bot).
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -16,6 +17,35 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# ── SSE broadcast for desktop app notifications ──────────────────────
+# Subscribers are asyncio.Queues that receive notification dicts.
+
+_subscribers: list[asyncio.Queue] = []
+
+
+def subscribe() -> asyncio.Queue:
+    """Add a new SSE subscriber. Returns a Queue that receives notification events."""
+    q: asyncio.Queue = asyncio.Queue(maxsize=50)
+    _subscribers.append(q)
+    return q
+
+
+def unsubscribe(q: asyncio.Queue) -> None:
+    """Remove an SSE subscriber."""
+    try:
+        _subscribers.remove(q)
+    except ValueError:
+        pass
+
+
+async def _broadcast(event: dict) -> None:
+    """Push a notification event to all SSE subscribers."""
+    for q in list(_subscribers):
+        try:
+            q.put_nowait(event)
+        except asyncio.QueueFull:
+            pass  # Drop if consumer is too slow
 
 _STATE_FILE = Path(__file__).parent.parent / "notification_state.json"
 
@@ -128,7 +158,17 @@ async def notify_scan_complete(scan_result: dict) -> bool:
     if steps_enriched:
         lines.append(f"Tasks enriched with smart steps: {steps_enriched}")
 
-    return await send_telegram("\n".join(lines))
+    text = "\n".join(lines)
+
+    # Broadcast to desktop SSE subscribers
+    await _broadcast({
+        "type": "scan_complete",
+        "title": "Scan Complete",
+        "body": f"{pages} pages scanned" + (f", {new_tasks} new tasks" if new_tasks else ""),
+        "detail": text,
+    })
+
+    return await send_telegram(text)
 
 
 async def notify_webhook_push(page_title: str, page_url: str = "") -> bool:
@@ -136,4 +176,19 @@ async def notify_webhook_push(page_title: str, page_url: str = "") -> bool:
     msg = f"*New Notion Update*\n{page_title}"
     if page_url:
         msg += f"\n[Open in Notion]({page_url})"
+
+    # Broadcast to desktop SSE subscribers
+    await _broadcast({
+        "type": "webhook_push",
+        "title": "New Notion Update",
+        "body": page_title,
+        "url": page_url,
+    })
+
     return await send_telegram(msg)
+
+
+async def notify_generic(title: str, body: str) -> bool:
+    """Send a generic notification to all channels (Telegram + desktop)."""
+    await _broadcast({"type": "generic", "title": title, "body": body})
+    return await send_telegram(f"*{title}*\n{body}")

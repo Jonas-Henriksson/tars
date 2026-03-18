@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('tarsAPI', {
   onActivateVoice: (callback) => ipcRenderer.on('activate-voice', callback),
   onActivateVoiceBackground: (callback) => ipcRenderer.on('activate-voice-background', callback),
   setVoiceBubble: (active) => ipcRenderer.send('voice-bubble', active),
+  showNotification: (title, body) => ipcRenderer.send('show-notification', { title, body }),
 });

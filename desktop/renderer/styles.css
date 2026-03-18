@@ -399,3 +399,40 @@ body {
 
 /* Hidden file input */
 #fileInput { display: none; }
+
+/* ── Toast Notifications ─────────────────────────────────────────── */
+
+.tars-toast {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    max-width: 300px;
+    padding: 12px 16px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--green);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.4;
+    z-index: 9999;
+    cursor: pointer;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.tars-toast.visible {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.tars-toast strong {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--green);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}

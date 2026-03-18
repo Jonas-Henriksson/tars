@@ -1863,11 +1863,50 @@ async def configure_notifications(body: NotificationConfig):
 @app.post("/api/notifications/test")
 async def test_notification():
     """Send a test notification to verify setup."""
-    from integrations.notifications import send_telegram
+    from integrations.notifications import notify_generic, send_telegram
+    # Broadcast to desktop SSE subscribers too
+    await notify_generic("TARS Test", "Notifications are working.")
     ok = await send_telegram("*TARS Test*\nNotifications are working.")
     if ok:
         return JSONResponse({"status": "sent"})
     return JSONResponse({"error": "Failed to send. Make sure you've messaged @your_bot on Telegram first."}, status_code=400)
+
+
+@app.get("/api/notifications/stream")
+async def notification_stream(request: Request):
+    """SSE stream of notification events for the desktop app."""
+    import asyncio
+    from integrations.notifications import subscribe, unsubscribe
+
+    q = subscribe()
+
+    async def event_generator():
+        try:
+            # Send initial keepalive
+            yield "data: {\"type\": \"connected\"}\n\n"
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(q.get(), timeout=30.0)
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    # Send keepalive ping
+                    yield ": keepalive\n\n"
+        finally:
+            unsubscribe(q)
+
+    from starlette.responses import StreamingResponse
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ── Notion Webhook Push ──────────────────────────────────────────────
