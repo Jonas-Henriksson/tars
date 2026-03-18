@@ -57,27 +57,60 @@ def _empty_intel() -> dict:
 # -----------------------------------------------------------------------
 
 _TOPIC_KEYWORDS = {
-    "strategy": ["strategy", "roadmap", "vision", "objective", "okr", "goal", "initiative"],
-    "engineering": ["engineering", "technical", "architecture", "api", "deploy", "release", "sprint", "code", "bug", "feature"],
-    "product": ["product", "ux", "design", "user story", "prototype", "wireframe", "requirement"],
-    "finance": ["budget", "revenue", "cost", "forecast", "invoice", "financial", "p&l"],
-    "hiring": ["hiring", "interview", "candidate", "recruitment", "onboarding", "headcount"],
-    "operations": ["operations", "process", "workflow", "sop", "compliance", "audit"],
-    "sales": ["sales", "pipeline", "deal", "prospect", "customer", "contract", "pricing"],
-    "marketing": ["marketing", "campaign", "brand", "content", "launch", "event"],
-    "management": ["1:1", "performance", "feedback", "team", "leadership", "delegation"],
-    "planning": ["planning", "quarterly", "annual", "timeline", "milestone", "deadline"],
+    "engineering": ["engineering", "technical", "architecture", "api", "deploy", "release", "code", "bug", "feature", "infrastructure", "devops", "ci/cd", "microservice", "database", "backend", "frontend", "refactor", "migration"],
+    "product": ["product", "ux", "design", "user story", "prototype", "wireframe", "requirement", "user research", "a/b test", "feature request", "backlog", "product-market"],
+    "finance": ["budget", "revenue", "cost", "forecast", "invoice", "financial", "p&l", "capex", "opex", "margin", "cash flow", "profitability", "pricing model"],
+    "hiring": ["hiring", "interview", "candidate", "recruitment", "onboarding", "headcount", "talent", "job description", "offer letter"],
+    "operations": ["operations", "process", "workflow", "sop", "logistics", "supply chain", "inventory", "manufacturing", "quality", "lean", "six sigma"],
+    "sales": ["sales", "pipeline", "deal", "prospect", "customer", "contract", "pricing", "quota", "territory", "crm", "lead", "conversion", "churn", "retention"],
+    "marketing": ["marketing", "campaign", "brand", "content", "launch", "event", "seo", "social media", "awareness", "positioning", "messaging"],
+    "people": ["1:1", "performance", "feedback", "team", "leadership", "delegation", "coaching", "engagement", "culture", "well-being", "career development"],
+    "planning": ["planning", "quarterly", "annual", "timeline", "milestone", "deadline", "sprint", "capacity", "resource allocation"],
+    "compliance": ["compliance", "audit", "regulation", "policy", "gdpr", "iso", "certification", "legal", "governance", "risk management"],
+    "partnerships": ["partnership", "alliance", "joint venture", "vendor", "supplier", "outsourcing", "co-development", "ecosystem"],
+    "innovation": ["innovation", "r&d", "research", "patent", "proof of concept", "poc", "experiment", "prototype", "pilot"],
+    "customer-success": ["customer success", "nps", "csat", "support ticket", "escalation", "onboarding", "renewal", "upsell", "feedback loop"],
+    "data-analytics": ["analytics", "dashboard", "kpi", "metric", "data analysis", "data-driven", "insight", "business intelligence", "machine learning", "ai model", "automation"],
+    "sustainability": ["sustainability", "esg", "carbon", "emissions", "circular", "environmental", "climate", "renewable"],
+    "strategy": ["strategy", "roadmap", "vision", "okr", "strategic initiative", "m&a", "market entry", "competitive analysis", "long-term"],
 }
 
 
 def _detect_topics(text: str, title: str) -> list[str]:
-    """Detect topic categories from page content and title."""
-    combined = (title + " " + text).lower()
-    found = []
+    """Detect topic categories from page content and title.
+
+    Uses weighted scoring: title matches count 3x, repeated keyword
+    mentions in the body add weight.  Only topics exceeding a threshold
+    are returned, and generic "strategy" requires stronger evidence.
+    """
+    title_lower = title.lower()
+    body_lower = text.lower()
+    scores: dict[str, float] = {}
+
     for topic, keywords in _TOPIC_KEYWORDS.items():
-        if any(kw in combined for kw in keywords):
-            found.append(topic)
-    return found or ["general"]
+        score = 0.0
+        for kw in keywords:
+            if kw in title_lower:
+                score += 3.0
+            count = body_lower.count(kw)
+            if count:
+                score += min(count, 5)  # cap per-keyword to avoid single-word dominance
+        if score > 0:
+            scores[topic] = score
+
+    if not scores:
+        return ["general"]
+
+    # Strategy requires higher evidence since its keywords are very common
+    if "strategy" in scores and scores["strategy"] < 4.0:
+        # Only keep strategy if it's the sole match or has strong evidence
+        other_topics = {k: v for k, v in scores.items() if k != "strategy"}
+        if other_topics:
+            del scores["strategy"]
+
+    # Return topics sorted by relevance, cap at 3 to keep focused
+    ranked = sorted(scores.items(), key=lambda x: -x[1])
+    return [t for t, _ in ranked[:3]]
 
 
 def _extract_people(text: str, title: str) -> list[str]:
@@ -108,7 +141,7 @@ Extract:
 - people: All person names mentioned (full names preferred, no duplicates)
 - organizations: Teams, companies, departments, committees, councils mentioned
 - projects: Named projects, initiatives, programs, workstreams
-- topics: Hierarchical topic tags (use "/" for hierarchy, e.g. "supply-chain/optimization", "ai/use-cases", "budget/q3-review"). Be specific, not generic.
+- topics: 1-3 specific topic tags based on the ACTUAL CONTENT discussed, not just the title. Use "/" for hierarchy (e.g. "supply-chain/optimization", "ai/predictive-maintenance", "finance/q3-forecast", "engineering/api-migration"). IMPORTANT: Avoid generic labels like "strategy" or "management" — instead describe WHAT is being strategized or managed (e.g. "market-expansion/europe" not "strategy", "team/engineering-hiring" not "management"). Base topics on the substantive content of the page, not meeting metadata.
 - decisions: Key decisions made (each with "text" and "by" who decided, if known)
 - tags: Obsidian-style category tags for this page (e.g. "meeting/1on1", "review", "planning/quarterly", "escalation")
 - summary: 1-2 sentence summary of the page content
@@ -583,7 +616,7 @@ def _sync_to_tracked_tasks(new_tasks: list[dict]) -> None:
             "id": task["id"],
             "description": task["description"],
             "owner": task.get("owner", "Unassigned"),
-            "topic": task.get("topics", ["General"])[0] if task.get("topics") else "General",
+            "topic": ", ".join(task.get("topics", ["General"])) if task.get("topics") else "General",
             "source_title": task.get("source_title", ""),
             "source_url": task.get("source_url", ""),
             "source_page_id": task.get("source_page_id", ""),

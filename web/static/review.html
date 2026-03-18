@@ -103,6 +103,9 @@ header { border-bottom: 1px solid var(--border-subtle); padding: 16px 0; positio
 
 .loading-state { text-align: center; padding: 80px 24px; color: var(--text-muted); font-size: 14px; }
 
+.show-more-btn { font-size: 11px; color: var(--accent); cursor: pointer; padding: 6px 0; text-align: center; user-select: none; opacity: 0.8; transition: opacity 0.15s; }
+.show-more-btn:hover { opacity: 1; }
+
 @media (max-width: 768px) {
     .nav-links { flex-wrap: wrap; }
     .columns { flex-direction: column; }
@@ -244,7 +247,10 @@ function render(data) {
     if (overdueList.length === 0) {
         html += '<div class="empty-good">No overdue tasks</div>';
     } else {
-        overdueList.forEach(function(t) {
+        const OD_LIMIT = 5;
+        const odVisible = overdueList.slice(0, OD_LIMIT);
+        const odHidden = overdueList.slice(OD_LIMIT);
+        odVisible.forEach(function(t) {
             html += `
                 <div class="task-row">
                     <div class="task-row-desc">${esc(t.description)}</div>
@@ -252,6 +258,19 @@ function render(data) {
                     <span class="badge badge-red">${esc(String(t.days_overdue))}d overdue</span>
                 </div>`;
         });
+        if (odHidden.length > 0) {
+            html += '<div id="overdue-hidden" style="display:none">';
+            odHidden.forEach(function(t) {
+                html += `
+                <div class="task-row">
+                    <div class="task-row-desc">${esc(t.description)}</div>
+                    <div class="task-row-owner">${esc(t.owner)}</div>
+                    <span class="badge badge-red">${esc(String(t.days_overdue))}d overdue</span>
+                </div>`;
+            });
+            html += '</div>';
+            html += '<div class="show-more-btn" onclick="var el=document.getElementById(\'overdue-hidden\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';this.textContent=el.style.display===\'none\'?\'+' + odHidden.length + ' more\':\'Show less\'">+' + odHidden.length + ' more</div>';
+        }
     }
 
     html += '</div>';
@@ -267,7 +286,10 @@ function render(data) {
     if (staleList.length === 0) {
         html += '<div class="empty-good">No stale tasks</div>';
     } else {
-        staleList.forEach(function(t) {
+        const ST_LIMIT = 5;
+        const stVisible = staleList.slice(0, ST_LIMIT);
+        const stHidden = staleList.slice(ST_LIMIT);
+        stVisible.forEach(function(t) {
             html += `
                 <div class="task-row">
                     <div class="task-row-desc">${esc(t.description)}</div>
@@ -275,6 +297,19 @@ function render(data) {
                     <span class="badge badge-amber">${esc(String(t.age_days))}d old</span>
                 </div>`;
         });
+        if (stHidden.length > 0) {
+            html += '<div id="stale-hidden" style="display:none">';
+            stHidden.forEach(function(t) {
+                html += `
+                <div class="task-row">
+                    <div class="task-row-desc">${esc(t.description)}</div>
+                    <div class="task-row-owner">${esc(t.owner)}</div>
+                    <span class="badge badge-amber">${esc(String(t.age_days))}d old</span>
+                </div>`;
+            });
+            html += '</div>';
+            html += '<div class="show-more-btn" onclick="var el=document.getElementById(\'stale-hidden\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';this.textContent=el.style.display===\'none\'?\'+' + stHidden.length + ' more\':\'Show less\'">+' + stHidden.length + ' more</div>';
+        }
     }
 
     html += `
@@ -290,7 +325,11 @@ function render(data) {
     const delegationEntries = Object.entries(delegation).sort(function(a, b) { return b[1].count - a[1].count; });
     const maxDelegation = delegationEntries.length > 0 ? delegationEntries[0][1].count : 1;
 
-    delegationEntries.forEach(function(entry) {
+    const DELEG_LIMIT = 5;
+    const showAllDeleg = delegationEntries.length <= DELEG_LIMIT;
+    const delegVisible = showAllDeleg ? delegationEntries : delegationEntries.slice(0, DELEG_LIMIT);
+
+    function renderDelegEntry(entry) {
         const name = entry[0];
         const info = entry[1];
         const barWidth = Math.round((info.count / maxDelegation) * 100);
@@ -301,7 +340,7 @@ function render(data) {
             overdueMeta = ' <span class="overdue-flag">' + esc(String(info.overdue)) + ' overdue</span>';
         }
 
-        html += `
+        let h = `
                 <div class="person-block">
                     <div class="person-header">
                         <span class="person-name">${esc(name)}</span>
@@ -311,19 +350,51 @@ function render(data) {
                         <div class="person-bar-fill" style="width: ${barWidth}%"></div>
                     </div>`;
 
-        tasks.forEach(function(t) {
+        const TASK_LIMIT = 3;
+        const visibleTasks = tasks.slice(0, TASK_LIMIT);
+        const hiddenTasks = tasks.slice(TASK_LIMIT);
+
+        visibleTasks.forEach(function(t) {
             const qLabel = QUAD_LABELS[t.quadrant] || '';
             const qColor = t.quadrant ? colorVar(t.quadrant) : 'var(--text-muted)';
             const qDim = t.quadrant ? colorDim(t.quadrant) : 'var(--surface-raised)';
-            html += `
+            h += `
                     <div class="person-task">
                         <span class="person-task-desc">${esc(t.description)}</span>
                         ${qLabel ? '<span class="badge badge-quad" style="background:' + qDim + ';color:' + qColor + '">' + esc(qLabel) + '</span>' : ''}
                     </div>`;
         });
 
+        if (hiddenTasks.length > 0) {
+            const uid = 'dtasks-' + esc(name).replace(/\s/g, '-');
+            h += '<div id="' + uid + '" style="display:none">';
+            hiddenTasks.forEach(function(t) {
+                const qLabel = QUAD_LABELS[t.quadrant] || '';
+                const qColor = t.quadrant ? colorVar(t.quadrant) : 'var(--text-muted)';
+                const qDim = t.quadrant ? colorDim(t.quadrant) : 'var(--surface-raised)';
+                h += `
+                    <div class="person-task">
+                        <span class="person-task-desc">${esc(t.description)}</span>
+                        ${qLabel ? '<span class="badge badge-quad" style="background:' + qDim + ';color:' + qColor + '">' + esc(qLabel) + '</span>' : ''}
+                    </div>`;
+            });
+            h += '</div>';
+            h += '<div class="show-more-btn" onclick="var el=document.getElementById(\'' + uid + '\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';this.textContent=el.style.display===\'none\'?\'+' + hiddenTasks.length + ' more tasks\':\'Show less\'"">+' + hiddenTasks.length + ' more tasks</div>';
+        }
+
+        h += '</div>';
+        return h;
+    }
+
+    delegVisible.forEach(function(entry) { html += renderDelegEntry(entry); });
+
+    if (!showAllDeleg) {
+        const hiddenCount = delegationEntries.length - DELEG_LIMIT;
+        html += '<div id="deleg-hidden" style="display:none">';
+        delegationEntries.slice(DELEG_LIMIT).forEach(function(entry) { html += renderDelegEntry(entry); });
         html += '</div>';
-    });
+        html += '<div class="show-more-btn" onclick="var el=document.getElementById(\'deleg-hidden\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';this.textContent=el.style.display===\'none\'?\'+' + hiddenCount + ' more people\':\'Show less\'">+' + hiddenCount + ' more people</div>';
+    }
 
     html += '</div>';
 
@@ -335,12 +406,15 @@ function render(data) {
     const topicEntries = Object.entries(topics).sort(function(a, b) { return b[1] - a[1]; });
     const maxTopic = topicEntries.length > 0 ? topicEntries[0][1] : 1;
 
-    topicEntries.forEach(function(entry) {
+    const TOPIC_LIMIT = 8;
+    const topicVisible = topicEntries.slice(0, TOPIC_LIMIT);
+    const topicHidden = topicEntries.slice(TOPIC_LIMIT);
+
+    function renderTopicRow(entry) {
         const name = entry[0];
         const count = entry[1];
         const barWidth = Math.round((count / maxTopic) * 100);
-
-        html += `
+        return `
                 <div class="topic-row">
                     <span class="topic-name">${esc(name)}</span>
                     <span class="topic-count">${esc(String(count))}</span>
@@ -348,7 +422,16 @@ function render(data) {
                         <div class="topic-bar-fill" style="width: ${barWidth}%"></div>
                     </div>
                 </div>`;
-    });
+    }
+
+    topicVisible.forEach(function(entry) { html += renderTopicRow(entry); });
+
+    if (topicHidden.length > 0) {
+        html += '<div id="topics-hidden" style="display:none">';
+        topicHidden.forEach(function(entry) { html += renderTopicRow(entry); });
+        html += '</div>';
+        html += '<div class="show-more-btn" onclick="var el=document.getElementById(\'topics-hidden\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';this.textContent=el.style.display===\'none\'?\'+' + topicHidden.length + ' more topics\':\'Show less\'">+' + topicHidden.length + ' more topics</div>';
+    }
 
     html += '</div>';
 

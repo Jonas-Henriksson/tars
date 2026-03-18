@@ -1262,29 +1262,51 @@
             const maxT = Math.max(...Object.values(topicCounts), 1);
             const maxP = Math.max(...Object.values(ownerCounts), 1);
 
+            const SIDEBAR_LIMIT = 8;
+            const sortedTopics = Object.entries(topicCounts).sort((a,b) => b[1] - a[1]);
+
             let th = '';
-            for (const [name, count] of Object.entries(topicCounts).sort((a,b) => b[1] - a[1])) {
+            function topicRow([name, count]) {
                 const pct = Math.round((count / maxT) * 100);
                 const isActive = activeTopicFilter && activeTopicFilter.toLowerCase() === name.toLowerCase();
-                th += '<div class="filter-bar-row' + (isActive ? ' active' : '') + '" data-topic="' + esc(name) + '">';
-                th += '<span class="filter-bar-label">' + esc(name) + '</span>';
-                th += '<div class="filter-bar-track"><div class="filter-bar-fill topic" style="width:' + pct + '%"></div></div>';
-                th += '<span class="filter-bar-count">' + count + '</span></div>';
+                return '<div class="filter-bar-row' + (isActive ? ' active' : '') + '" data-topic="' + esc(name) + '">'
+                     + '<span class="filter-bar-label">' + esc(name) + '</span>'
+                     + '<div class="filter-bar-track"><div class="filter-bar-fill topic" style="width:' + pct + '%"></div></div>'
+                     + '<span class="filter-bar-count">' + count + '</span></div>';
+            }
+            for (const e of sortedTopics.slice(0, SIDEBAR_LIMIT)) th += topicRow(e);
+            if (sortedTopics.length > SIDEBAR_LIMIT) {
+                th += '<div id="topic-sidebar-hidden" style="display:none">';
+                for (const e of sortedTopics.slice(SIDEBAR_LIMIT)) th += topicRow(e);
+                th += '</div>';
+                const hiddenTopicCount = sortedTopics.length - SIDEBAR_LIMIT;
+                th += '<div class="show-more-btn" style="font-size:11px;color:var(--accent);cursor:pointer;padding:4px 0;text-align:center" onclick="var el=document.getElementById(\'topic-sidebar-hidden\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';this.textContent=el.style.display===\'none\'?\'+' + hiddenTopicCount + ' more\':\'Show less\'">+' + hiddenTopicCount + ' more</div>';
             }
             topicContainer.innerHTML = th || '<div style="font-size:12px;color:var(--text-muted);font-style:italic;">No topics yet</div>';
 
+            const sortedPeople = Object.entries(ownerCounts).sort((a,b) => b[1] - a[1]);
             let ph = '';
-            for (const [name, count] of Object.entries(ownerCounts).sort((a,b) => b[1] - a[1])) {
+            function personRow([name, count]) {
                 const pct = Math.round((count / maxP) * 100);
                 const isActive = activePeopleFilter && activePeopleFilter.toLowerCase() === name.toLowerCase();
-                ph += '<div class="filter-bar-row' + (isActive ? ' active' : '') + '" data-person="' + esc(name) + '">';
+                let label;
                 if (name !== 'Me' && name !== 'Unassigned') {
-                    ph += '<span class="filter-bar-label person-editable" data-person="' + esc(name) + '">' + esc(name) + '</span>';
+                    label = '<span class="filter-bar-label person-editable" data-person="' + esc(name) + '">' + esc(name) + '</span>';
                 } else {
-                    ph += '<span class="filter-bar-label">' + esc(name) + '</span>';
+                    label = '<span class="filter-bar-label">' + esc(name) + '</span>';
                 }
-                ph += '<div class="filter-bar-track"><div class="filter-bar-fill person" style="width:' + pct + '%"></div></div>';
-                ph += '<span class="filter-bar-count">' + count + '</span></div>';
+                return '<div class="filter-bar-row' + (isActive ? ' active' : '') + '" data-person="' + esc(name) + '">'
+                     + label
+                     + '<div class="filter-bar-track"><div class="filter-bar-fill person" style="width:' + pct + '%"></div></div>'
+                     + '<span class="filter-bar-count">' + count + '</span></div>';
+            }
+            for (const e of sortedPeople.slice(0, SIDEBAR_LIMIT)) ph += personRow(e);
+            if (sortedPeople.length > SIDEBAR_LIMIT) {
+                ph += '<div id="people-sidebar-hidden" style="display:none">';
+                for (const e of sortedPeople.slice(SIDEBAR_LIMIT)) ph += personRow(e);
+                ph += '</div>';
+                const hiddenPeopleCount = sortedPeople.length - SIDEBAR_LIMIT;
+                ph += '<div class="show-more-btn" style="font-size:11px;color:var(--accent);cursor:pointer;padding:4px 0;text-align:center" onclick="var el=document.getElementById(\'people-sidebar-hidden\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';this.textContent=el.style.display===\'none\'?\'+' + hiddenPeopleCount + ' more\':\'Show less\'">+' + hiddenPeopleCount + ' more</div>';
             }
             peopleContainer.innerHTML = ph || '<div style="font-size:12px;color:var(--text-muted);font-style:italic;">No people yet</div>';
 

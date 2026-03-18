@@ -5,28 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TARS Voice Call</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0a0a0a; --surface: #111113; --surface-raised: #18181b;
+            --border: #27272a; --border-subtle: #1e1e21;
+            --text: #fafafa; --text-secondary: #a1a1aa; --text-muted: #71717a;
+            --green: #22c55e; --green-text: #4ade80; --green-dim: rgba(34,197,94,0.12);
+            --amber: #f59e0b; --amber-text: #fbbf24; --amber-dim: rgba(245,158,11,0.10);
+            --red: #ef4444; --red-text: #f87171; --red-dim: rgba(239,68,68,0.10);
+        }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #0a0a0a;
-            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            -webkit-font-smoothing: antialiased;
         }
 
         .shell { max-width: 1120px; margin: 0 auto; padding: 0 24px; width: 100%; }
 
-        header { border-bottom: 1px solid #1e1e21; padding: 16px 0; position: sticky; top: 0; background: #0a0a0a; z-index: 50; }
+        header { border-bottom: 1px solid var(--border-subtle); padding: 16px 0; position: sticky; top: 0; background: var(--bg); z-index: 50; }
         .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
         .brand { display: flex; align-items: center; gap: 12px; }
-        .brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #fafafa; }
-        .brand span { font-size: 12px; color: #71717a; font-weight: 400; }
+        .brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+        .brand span { font-size: 12px; color: var(--text-muted); font-weight: 400; }
         .nav-links { display: flex; gap: 4px; }
-        .nav-links a { color: #71717a; text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 6px; transition: color 0.15s, background 0.15s; }
-        .nav-links a:hover { color: #a1a1aa; background: #111113; }
-        .nav-links a.active { color: #fafafa; background: #18181b; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+        .nav-links a:hover { color: var(--text-secondary); background: var(--surface); }
+        .nav-links a.active { color: var(--text); background: var(--surface-raised); }
 
         .call-content {
             flex: 1;
@@ -46,11 +55,11 @@
             font-weight: 700;
             letter-spacing: 0.3em;
             margin-bottom: 0.5rem;
-            color: #fff;
+            color: var(--text);
         }
 
         .subtitle {
-            color: #666;
+            color: var(--text-muted);
             font-size: 0.9rem;
             margin-bottom: 3rem;
         }
@@ -70,32 +79,32 @@
         }
 
         .call-btn.idle {
-            background: #1a7f37;
+            background: var(--green);
             color: white;
-            box-shadow: 0 0 40px rgba(26, 127, 55, 0.3);
+            box-shadow: 0 0 40px rgba(34, 197, 94, 0.3);
         }
 
         .call-btn.idle:hover {
-            background: #22963f;
-            box-shadow: 0 0 60px rgba(26, 127, 55, 0.5);
+            background: var(--green-text);
+            box-shadow: 0 0 60px rgba(34, 197, 94, 0.5);
             transform: scale(1.05);
         }
 
         .call-btn.connecting {
-            background: #d29922;
+            background: var(--amber);
             color: white;
             animation: pulse 1.5s infinite;
         }
 
         .call-btn.active {
-            background: #cf222e;
+            background: var(--red);
             color: white;
-            box-shadow: 0 0 40px rgba(207, 34, 46, 0.3);
+            box-shadow: 0 0 40px rgba(239, 68, 68, 0.3);
         }
 
         .call-btn.active:hover {
-            background: #e5484d;
-            box-shadow: 0 0 60px rgba(207, 34, 46, 0.5);
+            background: var(--red-text);
+            box-shadow: 0 0 60px rgba(239, 68, 68, 0.5);
         }
 
         @keyframes pulse {
@@ -109,19 +118,19 @@
             min-height: 1.5em;
         }
 
-        .status.connected { color: #3fb950; }
-        .status.connecting { color: #d29922; }
-        .status.error { color: #f85149; }
+        .status.connected, .status.active { color: var(--green-text); }
+        .status.connecting { color: var(--amber-text); }
+        .status.error { color: var(--red-text); }
 
         .timer {
             font-size: 2rem;
             font-variant-numeric: tabular-nums;
-            color: #666;
+            color: var(--text-muted);
             margin-bottom: 2rem;
             min-height: 2.5rem;
         }
 
-        .timer.active { color: #e0e0e0; }
+        .timer.active { color: var(--text); }
 
         .visualizer {
             height: 60px;
@@ -134,19 +143,20 @@
 
         .bar {
             width: 4px;
-            background: #333;
+            background: var(--border);
             border-radius: 2px;
             transition: height 0.1s ease;
             height: 4px;
         }
 
         .bar.active {
-            background: #3fb950;
+            background: var(--green-text);
         }
 
         .hint {
-            color: #444;
+            color: var(--text-muted);
             font-size: 0.8rem;
+            opacity: 0.6;
         }
     </style>
 </head>
@@ -253,7 +263,7 @@
         }
 
         function startVisualizer(stream) {
-            audioContext = new AudioContext();
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
             analyser = audioContext.createAnalyser();
             analyser.fftSize = 64;
 
@@ -396,12 +406,13 @@
                     break;
 
                 case 'response.function_call_arguments.done':
-                    // Function call complete — execute it
+                    // Function call complete — execute it, then clean up
                     handleFunctionCall(
                         event.call_id,
                         event.name,
                         event.arguments,
                     );
+                    delete pendingCalls[event.call_id];
                     break;
 
                 case 'error':

@@ -205,6 +205,9 @@
         .stale-desc { font-size: 13px; color: var(--text); flex: 1; }
         .stale-owner { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 
+        .show-more-btn { font-size: 11px; color: var(--accent); cursor: pointer; padding: 6px 0; text-align: center; user-select: none; opacity: 0.8; transition: opacity 0.15s; }
+        .show-more-btn:hover { opacity: 1; }
+
         /* Recommendation grouped sections */
         .rec-group { margin-bottom: 16px; }
         .rec-group-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 8px; }
@@ -340,6 +343,10 @@
             html += qsCard(delegatedCount, 'Delegated Tasks', Object.keys(tasks.by_owner || {}).filter(k => k !== 'Unassigned' && k !== 'Me').length + ' people', '--text-secondary');
             html += '</div>';
 
+            // --- Morning News Brief (loaded async) ---
+            html += '<div class="section" id="news-section" style="display:none"></div>';
+            fetchMorningNews();
+
             // --- Requires Your Attention ---
             const criticalRecs = recs.filter(r => r.priority === 'high');
             const stale = tasks.stale_tasks || [];
@@ -373,7 +380,15 @@
                 html += '<div class="section">';
                 html += sectionHead('Meetings', events.length);
                 if (events.length > 0) {
-                    for (const e of events) html += meetingRow(e);
+                    const MTG_LIMIT = 6;
+                    for (const e of events.slice(0, MTG_LIMIT)) html += meetingRow(e);
+                    if (events.length > MTG_LIMIT) {
+                        const hiddenMtgs = events.length - MTG_LIMIT;
+                        html += '<div id="mtg-hidden" style="display:none">';
+                        for (const e of events.slice(MTG_LIMIT)) html += meetingRow(e);
+                        html += '</div>';
+                        html += '<div class="show-more-btn" onclick="var el=document.getElementById(\'mtg-hidden\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';this.textContent=el.style.display===\'none\'?\'+' + hiddenMtgs + ' more meetings\':\'Show less\'">+' + hiddenMtgs + ' more meetings</div>';
+                    }
                 } else {
                     html += '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No meetings today</div>';
                 }
@@ -413,16 +428,26 @@
                 html += '<table class="deleg-table"><thead><tr>';
                 html += '<th>Person</th><th>Open Tasks</th><th style="width:40%">Load</th>';
                 html += '</tr></thead><tbody>';
-                for (const [owner, count] of delegEntries) {
+                const DELEG_LIMIT = 8;
+                const delegVisible = delegEntries.slice(0, DELEG_LIMIT);
+                const delegHidden = delegEntries.slice(DELEG_LIMIT);
+                function delegRow([owner, count]) {
                     const pct = Math.max(3, Math.round((count / maxCount) * 100));
                     const color = count >= 40 ? 'var(--red)' : count >= 15 ? 'var(--amber)' : 'var(--accent)';
-                    html += '<tr>';
-                    html += '<td class="deleg-name"><span class="person-editable" data-person="' + esc(owner) + '">' + esc(owner) + '</span></td>';
-                    html += '<td class="deleg-count">' + count + '</td>';
-                    html += '<td><div class="deleg-bar" style="width:' + pct + '%;background:' + color + '"></div></td>';
-                    html += '</tr>';
+                    return '<tr><td class="deleg-name"><span class="person-editable" data-person="' + esc(owner) + '">' + esc(owner) + '</span></td>'
+                         + '<td class="deleg-count">' + count + '</td>'
+                         + '<td><div class="deleg-bar" style="width:' + pct + '%;background:' + color + '"></div></td></tr>';
+                }
+                for (const e of delegVisible) html += delegRow(e);
+                if (delegHidden.length > 0) {
+                    html += '<tr id="deleg-hidden-rows" style="display:none"><td colspan="3"><table style="width:100%">';
+                    for (const e of delegHidden) html += delegRow(e);
+                    html += '</table></td></tr>';
                 }
                 html += '</tbody></table>';
+                if (delegHidden.length > 0) {
+                    html += '<div class="show-more-btn" onclick="var el=document.getElementById(\'deleg-hidden-rows\');el.style.display=el.style.display===\'none\'?\'table-row\':\'none\';this.textContent=el.style.display===\'none\'?\'+' + delegHidden.length + ' more people\':\'Show less\'">+' + delegHidden.length + ' more people</div>';
+                }
                 html += '</div>';
             }
 
@@ -677,6 +702,56 @@
                 ],
                 generated_at: new Date().toISOString()
             };
+        }
+        async function fetchMorningNews() {
+            try {
+                const resp = await fetch('/api/morning-brief');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const items = data.items || [];
+                if (items.length === 0) return;
+
+                const section = document.getElementById('news-section');
+                section.style.display = '';
+
+                const actionColors = { react: '--red-text', monitor: '--amber-text', note: '--text-muted' };
+                const actionLabels = { react: 'Action needed', monitor: 'Monitor', note: 'FYI' };
+                const relevanceColors = { high: '--red', medium: '--amber' };
+                const catIcons = { company: '\u{1F3E2}', market: '\u{1F4C8}', technology: '\u{1F4BB}', sustainability: '\u{1F33F}' };
+
+                const NEWS_LIMIT = 5;
+                let nh = '<div class="section-head" style="display:flex;align-items:center;gap:6px">' +
+                    '<span style="font-size:12px">&#x1F4F0;</span>' +
+                    '<span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted)">Morning Brief</span>' +
+                    '<span style="font-size:11px;color:var(--text-muted);font-weight:400">' + items.length + ' items</span></div>';
+
+                function newsItem(item) {
+                    const color = actionColors[item.action] || '--text-muted';
+                    const label = actionLabels[item.action] || 'Note';
+                    const icon = catIcons[item.category] || '';
+                    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 12px;background:var(--surface);border-radius:6px;margin-bottom:4px;font-size:13px">' +
+                        '<span style="flex-shrink:0;margin-top:2px">' + icon + '</span>' +
+                        '<div style="flex:1;min-width:0">' +
+                        '<div style="font-weight:500;color:var(--text)">' + esc(item.summary || item.title) + '</div>' +
+                        (item.source ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(item.source) + '</div>' : '') +
+                        '</div>' +
+                        '<span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;white-space:nowrap;background:rgba(255,255,255,0.05);color:var(' + color + ')">' + label + '</span>' +
+                        '</div>';
+                }
+
+                items.slice(0, NEWS_LIMIT).forEach(function(item) { nh += newsItem(item); });
+                if (items.length > NEWS_LIMIT) {
+                    const hiddenCount = items.length - NEWS_LIMIT;
+                    nh += '<div id="news-hidden" style="display:none">';
+                    items.slice(NEWS_LIMIT).forEach(function(item) { nh += newsItem(item); });
+                    nh += '</div>';
+                    nh += '<div class="show-more-btn" onclick="var el=document.getElementById(\'news-hidden\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';this.textContent=el.style.display===\'none\'?\'+' + hiddenCount + ' more\':\'Show less\'">+' + hiddenCount + ' more</div>';
+                }
+
+                section.innerHTML = nh;
+            } catch (e) {
+                console.log('Morning brief not available:', e.message);
+            }
         }
     })();
     </script>

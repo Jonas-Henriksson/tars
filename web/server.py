@@ -1000,6 +1000,12 @@ _TOOL_MAP = {
     # Team portfolio
     "get_team_portfolio": ("integrations.team_portfolio", "get_team_portfolio"),
     "get_member_portfolio": ("integrations.team_portfolio", "get_member_portfolio"),
+    # Auto-populate & enrichment
+    "auto_populate_epics": ("integrations.auto_populate", "auto_populate_epics"),
+    "auto_enrich_people": ("integrations.auto_populate", "auto_enrich_people"),
+    "get_best_practices": ("integrations.knowledge_enrichment", "get_best_practices"),
+    "search_best_practices": ("integrations.knowledge_enrichment", "search_best_practices"),
+    "get_morning_brief": ("integrations.morning_news", "generate_morning_brief"),
     # User memory
     "remember_preference": ("integrations.memory", "set_preference"),
     "remember_fact": ("integrations.memory", "set_fact"),
@@ -2446,6 +2452,80 @@ async def api_member_portfolio(name: str, include_done: bool = False):
     if "error" in result:
         return JSONResponse(result, status_code=404)
     return JSONResponse(result)
+
+
+# -----------------------------------------------------------------------
+# Auto-populate & enrichment endpoints
+# -----------------------------------------------------------------------
+
+@app.post("/api/auto-populate/epics")
+async def api_auto_populate_epics():
+    """Auto-generate epics and user stories from intelligence data."""
+    try:
+        from integrations.auto_populate import auto_populate_epics
+        result = await auto_populate_epics()
+        return JSONResponse(result)
+    except Exception as e:
+        logger.exception("Auto-populate epics failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/auto-populate/people")
+async def api_auto_populate_people():
+    """Auto-enrich people profiles from intelligence data."""
+    try:
+        from integrations.auto_populate import auto_enrich_people
+        result = await auto_enrich_people()
+        return JSONResponse(result)
+    except Exception as e:
+        logger.exception("Auto-populate people failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/best-practices")
+async def api_best_practices(topic: str = ""):
+    """Get best practices from the knowledge repository."""
+    from integrations.knowledge_enrichment import get_best_practices
+    return JSONResponse(get_best_practices(topic))
+
+
+@app.post("/api/best-practices/enrich")
+async def api_enrich_best_practices():
+    """Enrich knowledge base with best practices for all known topics."""
+    try:
+        from integrations.knowledge_enrichment import enrich_from_intel
+        result = await enrich_from_intel()
+        return JSONResponse(result)
+    except Exception as e:
+        logger.exception("Best practices enrichment failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/best-practices/topic")
+async def api_enrich_topic(body: dict):
+    """Enrich a specific topic with best practices."""
+    topic = body.get("topic", "")
+    if not topic:
+        return JSONResponse({"error": "topic required"}, status_code=400)
+    try:
+        from integrations.knowledge_enrichment import enrich_topic
+        result = await enrich_topic(topic)
+        return JSONResponse(result)
+    except Exception as e:
+        logger.exception("Topic enrichment failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/morning-brief")
+async def api_morning_brief():
+    """Get the morning news brief with classified business events."""
+    try:
+        from integrations.morning_news import generate_morning_brief
+        result = await generate_morning_brief()
+        return JSONResponse(result)
+    except Exception as e:
+        logger.exception("Morning brief generation failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 if __name__ == "__main__":

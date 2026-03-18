@@ -155,6 +155,12 @@
     </header>
 
     <main class="shell">
+        <!-- Action bar -->
+        <div style="display:flex;gap:8px;margin:16px 0 0;justify-content:flex-end" id="action-bar">
+            <button onclick="autoPopulateEpics()" id="btn-auto-epics" style="font-size:11px;padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);cursor:pointer;transition:all 0.15s">Auto-generate Epics</button>
+            <button onclick="autoEnrichPeople()" id="btn-auto-people" style="font-size:11px;padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);cursor:pointer;transition:all 0.15s">Enrich People</button>
+        </div>
+
         <!-- Stats strip -->
         <div class="stats" id="stats-strip">
             <div class="stat"><div class="stat-val" id="stat-members">--</div><div class="stat-lbl">Team Members</div></div>
@@ -422,6 +428,43 @@
                 document.getElementById('content').innerHTML = `<div class="empty-state"><h2>No team data yet</h2><p>Run a Notion scan to extract tasks and team members, then create epics to organize deliverables.</p></div>`;
                 document.getElementById('stats-strip').style.display = 'none';
             });
+        window.autoPopulateEpics = async function() {
+            const btn = document.getElementById('btn-auto-epics');
+            btn.textContent = 'Generating...';
+            btn.disabled = true;
+            try {
+                const resp = await fetch('/api/auto-populate/epics', { method: 'POST' });
+                const data = await resp.json();
+                btn.textContent = data.message || 'Done';
+                if (data.epics_created > 0) {
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    setTimeout(() => { btn.textContent = 'Auto-generate Epics'; btn.disabled = false; }, 3000);
+                }
+            } catch (e) {
+                btn.textContent = 'Error';
+                setTimeout(() => { btn.textContent = 'Auto-generate Epics'; btn.disabled = false; }, 3000);
+            }
+        };
+
+        window.autoEnrichPeople = async function() {
+            const btn = document.getElementById('btn-auto-people');
+            btn.textContent = 'Enriching...';
+            btn.disabled = true;
+            try {
+                const resp = await fetch('/api/auto-populate/people', { method: 'POST' });
+                const data = await resp.json();
+                btn.textContent = data.message || 'Done';
+                if (data.updated > 0) {
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    setTimeout(() => { btn.textContent = 'Enrich People'; btn.disabled = false; }, 3000);
+                }
+            } catch (e) {
+                btn.textContent = 'Error';
+                setTimeout(() => { btn.textContent = 'Enrich People'; btn.disabled = false; }, 3000);
+            }
+        };
     })();
     </script>
 </body>
