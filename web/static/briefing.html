@@ -260,6 +260,16 @@
         .edit-modal-btns .btn-save { background: var(--accent); color: #fff; border-color: var(--accent); }
         .edit-modal-btns .btn-cancel { background: var(--surface-raised); color: var(--text-secondary); }
 
+        /* Person picker */
+        .person-picker { display: none; position: fixed; z-index: 200; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); width: 220px; max-height: 300px; overflow: hidden; flex-direction: column; }
+        .person-picker.open { display: flex; }
+        .person-picker-search { padding: 8px; border-bottom: 1px solid var(--border); }
+        .person-picker-search input { width: 100%; font-size: 12px; padding: 5px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: inherit; outline: none; }
+        .person-picker-list { overflow-y: auto; max-height: 250px; }
+        .person-picker-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; font-size: 12px; cursor: pointer; color: var(--text); }
+        .person-picker-item:hover { background: var(--surface-raised); }
+        .person-picker-item .pp-count { font-size: 10px; color: var(--text-muted); }
+
         /* Empty / loading */
         .empty { padding: 48px 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
         .loading { text-align: center; padding: 48px; color: var(--text-muted); font-size: 13px; }
@@ -338,6 +348,12 @@
                     <button class="btn-save" onclick="saveTaskEdit()">Save</button>
                 </div>
             </div>
+        </div>
+
+        <!-- Person picker dropdown -->
+        <div class="person-picker" id="personPicker">
+            <div class="person-picker-search"><input type="text" id="personPickerSearch" placeholder="Filter people..." oninput="filterPersonPicker()"></div>
+            <div class="person-picker-list" id="personPickerList"></div>
         </div>
     </main>
 
@@ -614,7 +630,7 @@
                         html += '<span class="story-pill">Story</span>';
                         html += '<span onclick="openStoryEdit(\'' + esc(s.id) + '\',\'' + stitleEsc + '\',\'' + sownerEsc + '\',\'' + esc(s.size || '') + '\')" style="font-size:13px;font-weight:500;flex:1;cursor:pointer" title="Click to edit">' + esc(s.title) + '</span>';
                         if (s.size) html += '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--surface-raised);color:var(--text-muted)">' + esc(s.size) + '</span>';
-                        if (s.owner) html += '<span style="font-size:11px;color:var(--text-muted)">' + esc(s.owner) + '</span>';
+                        if (s.owner) html += '<span onclick="event.stopPropagation();openPersonPicker(this,\'story\',\'' + esc(s.id) + '\')" style="font-size:11px;color:var(--text-muted);cursor:pointer;text-decoration:underline dotted" title="Click to reassign">' + esc(s.owner) + '</span>';
                         html += '<button onclick="event.stopPropagation();markStoryDone(\'' + esc(s.id) + '\',this)" title="Mark done" style="background:none;border:1px solid var(--border);color:var(--text-muted);font-size:12px;padding:1px 6px;border-radius:4px;cursor:pointer;line-height:1">&#10003;</button>';
                         html += '<button onclick="event.stopPropagation();deleteStory(\'' + esc(s.id) + '\',this)" title="Dismiss" style="background:none;border:1px solid var(--border);color:var(--text-muted);font-size:12px;padding:1px 6px;border-radius:4px;cursor:pointer;line-height:1">&times;</button>';
                         html += '</div>';
@@ -629,7 +645,7 @@
                                 html += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;color:var(--text-secondary)">';
                                 html += '<span style="color:' + statusColor + '">' + (t.status === 'done' ? '&#10003;' : '&#9675;') + '</span>';
                                 html += '<span onclick="openTaskEdit(\'' + esc(t.id) + '\',\'' + tdescEsc + '\',\'' + townerEsc + '\')" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Click to edit">' + esc(t.description) + '</span>';
-                                if (t.owner) html += '<span style="font-size:10px;color:var(--text-muted)">' + esc(t.owner) + '</span>';
+                                if (t.owner) html += '<span onclick="event.stopPropagation();openPersonPicker(this,\'task\',\'' + esc(t.id) + '\')" style="font-size:10px;color:var(--text-muted);cursor:pointer;text-decoration:underline dotted" title="Click to reassign">' + esc(t.owner) + '</span>';
                                 html += '<button onclick="event.stopPropagation();markTaskDone(\'' + esc(t.id) + '\')" title="Done" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:0 3px">&#10003;</button>';
                                 html += '<button onclick="event.stopPropagation();deleteTask(\'' + esc(t.id) + '\')" title="Dismiss" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:0 3px">&times;</button>';
                                 html += '</div>';
@@ -955,6 +971,103 @@
             try {
                 const resp = await fetch('/api/intel/tasks/' + id, { method: 'DELETE' });
                 if (resp.ok) generateBriefing();
+            } catch (e) { console.error(e); }
+        };
+
+        // --- Person picker ---
+        let _ppPeopleCache = null;
+        let _ppContext = null; // { el, type: 'story'|'task', id }
+
+        async function _loadPeople() {
+            if (_ppPeopleCache) return _ppPeopleCache;
+            try {
+                const resp = await fetch('/api/people');
+                const data = await resp.json();
+                // Sort by mentions descending
+                const people = Object.entries(data)
+                    .map(function(kv) { return { name: kv[0], mentions: kv[1].mentions || 0 }; })
+                    .sort(function(a, b) { return b.mentions - a.mentions; });
+                _ppPeopleCache = people;
+                return people;
+            } catch (e) { return []; }
+        }
+
+        window.openPersonPicker = async function(el, type, id) {
+            const picker = document.getElementById('personPicker');
+            // Close if already open for same element
+            if (_ppContext && _ppContext.el === el && picker.classList.contains('open')) {
+                closePersonPicker();
+                return;
+            }
+            _ppContext = { el: el, type: type, id: id };
+            const people = await _loadPeople();
+            _renderPersonList(people);
+            document.getElementById('personPickerSearch').value = '';
+            // Position near the clicked element
+            const rect = el.getBoundingClientRect();
+            picker.style.top = Math.min(rect.bottom + 4, window.innerHeight - 310) + 'px';
+            picker.style.left = Math.min(rect.left, window.innerWidth - 230) + 'px';
+            picker.classList.add('open');
+            document.getElementById('personPickerSearch').focus();
+            // Close on outside click
+            setTimeout(function() {
+                document.addEventListener('click', _ppOutsideClick, { once: true });
+            }, 0);
+        };
+
+        function _ppOutsideClick(e) {
+            const picker = document.getElementById('personPicker');
+            if (!picker.contains(e.target)) {
+                closePersonPicker();
+            } else {
+                document.addEventListener('click', _ppOutsideClick, { once: true });
+            }
+        }
+
+        function closePersonPicker() {
+            document.getElementById('personPicker').classList.remove('open');
+            _ppContext = null;
+        }
+
+        function _renderPersonList(people) {
+            const list = document.getElementById('personPickerList');
+            list.innerHTML = people.map(function(p) {
+                return '<div class="person-picker-item" onclick="selectPerson(\'' + esc(p.name).replace(/'/g, "\\'") + '\')">' +
+                    '<span>' + esc(p.name) + '</span>' +
+                    '<span class="pp-count">' + p.mentions + '</span>' +
+                    '</div>';
+            }).join('');
+        }
+
+        window.filterPersonPicker = function() {
+            if (!_ppPeopleCache) return;
+            const q = document.getElementById('personPickerSearch').value.toLowerCase();
+            const filtered = q ? _ppPeopleCache.filter(function(p) { return p.name.toLowerCase().includes(q); }) : _ppPeopleCache;
+            _renderPersonList(filtered);
+        };
+
+        window.selectPerson = async function(name) {
+            if (!_ppContext) return;
+            const ctx = _ppContext;
+            closePersonPicker();
+            try {
+                let url, body;
+                if (ctx.type === 'story') {
+                    url = '/api/stories/' + ctx.id;
+                    body = { owner: name };
+                } else {
+                    url = '/api/intel/tasks/' + ctx.id;
+                    body = { owner: name };
+                }
+                const resp = await fetch(url, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                if (resp.ok) {
+                    // Update the label in-place
+                    ctx.el.textContent = name;
+                }
             } catch (e) { console.error(e); }
         };
 
