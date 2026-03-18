@@ -326,7 +326,7 @@
         <div class="briefing-header">
             <div class="briefing-date" id="dateLabel"></div>
             <div class="briefing-title">Evening Briefing</div>
-            <div class="briefing-sub" id="statusLabel">Compiling...</div>
+            <div class="briefing-sub" id="statusLabel">Ready</div>
             <div class="header-actions">
                 <button class="generate-btn" id="generateBtn" onclick="generateBriefing()">Refresh</button>
             </div>
@@ -1311,8 +1311,11 @@
             } catch (e) { console.error(e); }
         };
 
-        // Auto-generate briefing on page load
-        generateBriefing();
+        // Show landing state — user clicks Compile to generate
+        content.innerHTML = '<div style="text-align:center;padding:80px 24px">' +
+            '<div style="font-size:14px;color:var(--text-muted);margin-bottom:16px">Click below to compile your briefing</div>' +
+            '<button onclick="generateBriefing()" style="background:var(--accent);color:#fff;border:none;font-size:14px;font-family:inherit;font-weight:500;padding:10px 28px;border-radius:6px;cursor:pointer">Compile Briefing</button>' +
+            '</div>';
 
         function getMockData() {
             return {
