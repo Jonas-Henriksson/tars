@@ -48,6 +48,7 @@ interface AppState {
   // Actions
   setAuth: (token: string, user: User, teams: Team[]) => void;
   logout: () => void;
+  setTeams: (teams: Team[]) => void;
   setActiveTeam: (teamId: string) => void;
   setTheme: (themeId: string) => void;
   setDarkMode: (dark: boolean) => void;
@@ -84,6 +85,7 @@ export const useStore = create<AppState>()(
       // Auth actions
       setAuth: (token, user, teams) => set({ token, user, teams, activeTeamId: teams[0]?.id || '' }),
       logout: () => set({ token: '', user: null, teams: [], activeTeamId: '', chatMessages: [], conversationId: '' }),
+      setTeams: (teams) => set((s) => ({ teams, activeTeamId: s.activeTeamId || teams[0]?.id || '' })),
       setActiveTeam: (teamId) => set({ activeTeamId: teamId }),
 
       // Theme actions

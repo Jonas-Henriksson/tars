@@ -163,7 +163,7 @@ function IntegrationStatus() {
 }
 
 function TeamSection() {
-  const { teams, activeTeamId } = useStore();
+  const { teams, activeTeamId, setTeams } = useStore();
   const [newTeamName, setNewTeamName] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -171,9 +171,9 @@ function TeamSection() {
     if (!newTeamName.trim()) return;
     setCreating(true);
     try {
-      await api.post('/api/auth/teams', { name: newTeamName.trim() });
+      const data = await api.post<any>('/api/auth/teams', { name: newTeamName.trim() });
+      setTeams([...teams, { id: data.team.id, name: data.team.name, role: data.team.role }]);
       setNewTeamName('');
-      window.location.reload(); // Refresh to get updated teams
     } catch {
       // Handled by API client
     } finally {
