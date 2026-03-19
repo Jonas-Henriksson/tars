@@ -512,11 +512,10 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
         onMouseLeave={() => setRowHovered(false)}
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
-          padding: '6px 8px', paddingLeft: depth * 20 + 8,
+          padding: '3px 8px', paddingLeft: depth * 20 + 8,
           borderLeft: `3px ${isAuto ? 'dashed' : 'solid'} ${TYPE_COLORS[node.type] || '#666'}`,
-          backgroundColor: rowHovered ? 'var(--bg-hover)' : 'var(--bg-card)',
-          borderRadius: 'var(--radius)',
-          marginBottom: 1,
+          backgroundColor: rowHovered ? 'var(--bg-hover)' : 'transparent',
+          marginBottom: 0,
           color: isAuto ? 'var(--text-muted)' : 'var(--text-primary)',
           cursor: 'pointer',
           transition: 'background-color 0.1s',
@@ -789,12 +788,14 @@ function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', ownerOptions = [],
       onMouseLeave={() => setHovered(false)}
       style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        padding: '4px 8px', paddingLeft: depth * 20 + 28,
+        padding: '3px 8px', paddingLeft: depth * 20 + 28,
         borderLeft: `3px ${isAuto ? 'dashed' : 'solid'} ${borderColor}`,
-        marginBottom: 1,
+        marginBottom: 0,
+        backgroundColor: hovered ? 'var(--bg-hover)' : 'transparent',
         color: isAuto ? 'var(--text-muted)' : 'var(--text-secondary)',
         fontSize: 12,
         opacity: isDone ? 0.5 : 1,
+        transition: 'background-color 0.1s',
       }}
     >
       {/* Checkbox */}
