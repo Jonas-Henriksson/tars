@@ -9,11 +9,11 @@ import { Target, Scale, Users, BarChart3, CheckCircle2, Circle, GitBranch, Check
 import DetailPanel from '../components/DetailPanel';
 import type { DetailField } from '../components/DetailPanel';
 
-type TabId = 'hierarchy' | 'initiatives' | 'decisions' | 'portfolio' | 'review';
+type TabId = 'hierarchy' | 'health' | 'decisions' | 'portfolio' | 'review';
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'hierarchy', label: 'Hierarchy', icon: <GitBranch size={16} /> },
-  { id: 'initiatives', label: 'Initiatives', icon: <Target size={16} /> },
+  { id: 'health', label: 'Health', icon: <Target size={16} /> },
   { id: 'decisions', label: 'Decisions', icon: <Scale size={16} /> },
   { id: 'portfolio', label: 'Portfolio', icon: <Users size={16} /> },
   { id: 'review', label: 'Review', icon: <BarChart3 size={16} /> },
@@ -71,7 +71,7 @@ export default function Strategy() {
       </div>
 
       {tab === 'hierarchy' ? <HierarchyView /> :
-       tab === 'initiatives' ? <InitiativesView /> :
+       tab === 'health' ? <HealthDashboard /> :
        tab === 'decisions' ? <DecisionsView /> :
        tab === 'portfolio' ? <PortfolioView /> :
        <ReviewView />}
@@ -1021,125 +1021,347 @@ function AddTaskRow({ depth, parentTaskId, onAdd }: {
 
 /* ---------- Initiatives ---------- */
 
-function InitiativesView() {
-  const [initiatives, setInitiatives] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [selected, setSelected] = useState<any>(null);
+/* ---------- Health Dashboard ---------- */
+
+interface NodeMetrics { total: number; done: number; blocked: number; inProgress: number; }
+
+function aggregateMetrics(node: any): NodeMetrics {
+  // Task leaf (no type field)
+  if (!node.type) {
+    return { total: 1, done: node.status === 'done' ? 1 : 0, blocked: 0, inProgress: 0 };
+  }
+  // Story — check if blocked
+  if (node.type === 'story') {
+    const childMetrics = (node.children || []).reduce(
+      (acc: NodeMetrics, c: any) => { const m = aggregateMetrics(c); return { total: acc.total + m.total, done: acc.done + m.done, blocked: acc.blocked + m.blocked, inProgress: acc.inProgress + m.inProgress }; },
+      { total: 0, done: 0, blocked: 0, inProgress: 0 },
+    );
+    if (node.status === 'blocked') childMetrics.blocked += 1;
+    return childMetrics;
+  }
+  return (node.children || []).reduce(
+    (acc: NodeMetrics, c: any) => { const m = aggregateMetrics(c); return { total: acc.total + m.total, done: acc.done + m.done, blocked: acc.blocked + m.blocked, inProgress: acc.inProgress + m.inProgress }; },
+    { total: 0, done: 0, blocked: 0, inProgress: 0 },
+  );
+}
+
+function countByStatus(nodes: any[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const n of nodes) counts[n.status || 'unknown'] = (counts[n.status || 'unknown'] || 0) + 1;
+  return counts;
+}
+
+function HealthBar({ counts, total }: { counts: Record<string, number>; total: number }) {
+  if (total === 0) return null;
+  const segments = [
+    { key: 'on_track', color: '#22c55e' }, { key: 'completed', color: '#22c55e' },
+    { key: 'at_risk', color: '#f59e0b' }, { key: 'paused', color: '#94a3b8' },
+    { key: 'off_track', color: '#ef4444' },
+  ];
+  return (
+    <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', backgroundColor: 'var(--border)', flex: 1 }}>
+      {segments.map(({ key, color }) => {
+        const c = counts[key] || 0;
+        if (c === 0) return null;
+        return <div key={key} style={{ width: `${(c / total) * 100}%`, backgroundColor: color, transition: 'width 0.3s' }} />;
+      })}
+    </div>
+  );
+}
+
+function ProgressBar({ done, total }: { done: number; total: number }) {
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 120 }}>
+      <div style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: 'var(--border)', overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', backgroundColor: pct === 100 ? '#22c55e' : 'var(--accent)', borderRadius: 2, transition: 'width 0.3s' }} />
+      </div>
+      <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 32, textAlign: 'right' }}>{pct}%</span>
+    </div>
+  );
+}
+
+function HealthDashboard() {
+  const [tree, setTree] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
+  const [review, setReview] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [expandedThemes, setExpandedThemes] = useState<Set<string>>(new Set());
+  const [expandedInits, setExpandedInits] = useState<Set<string>>(new Set());
+  const [selectedEpic, setSelectedEpic] = useState<any>(null);
 
   useEffect(() => {
     Promise.all([
-      api.get<any>('/api/initiatives').catch(() => ({ initiatives: [] })),
+      api.get<any>('/api/hierarchy').catch(() => ({ tree: [] })),
       api.get<any>('/api/strategic-summary').catch(() => null),
-    ]).then(([initData, sumData]) => {
-      setInitiatives(initData.initiatives || []);
+      api.get<any>('/api/review/weekly').catch(() => null),
+    ]).then(([hierData, sumData, revData]) => {
+      setTree(hierData.tree || []);
       setSummary(sumData);
+      setReview(revData);
       setLoading(false);
-    }).catch((e) => { setError(e.message); setLoading(false); });
+    });
   }, []);
 
-  const handleSave = useCallback((updates: Record<string, any>) => {
-    if (!selected) return;
-    setInitiatives((prev) => prev.map((i) => i.id === selected.id ? { ...i, ...updates } : i));
-    setSelected((prev: any) => prev ? { ...prev, ...updates } : null);
-    api.patch<any>(`/api/initiatives/${selected.id}`, updates).catch(() => {});
-  }, [selected]);
-
   if (loading) return <LoadingState />;
-  if (error) return <ErrorState message={error} />;
 
-  const stats = summary?.initiatives;
+  // Compute metrics
+  const themeMetrics = new Map<string, NodeMetrics>();
+  let totalTasks = 0, totalDone = 0, totalBlocked = 0, totalOverdue = 0;
+  for (const theme of tree) {
+    const m = aggregateMetrics(theme);
+    themeMetrics.set(theme.id, m);
+    totalTasks += m.total;
+    totalDone += m.done;
+    totalBlocked += m.blocked;
+  }
+  totalOverdue = review?.smart_tasks?.overdue?.length || 0;
 
-  const fields: DetailField[] = selected ? [
-    { key: 'status', label: 'Status', value: selected.status, type: 'select', options: ['on_track', 'at_risk', 'off_track', 'completed', 'paused'], color: STATUS_COLORS[selected.status] },
-    { key: 'owner', label: 'Owner', value: selected.owner, type: 'text' },
-    { key: 'quarter', label: 'Quarter', value: selected.quarter || '', type: 'select', options: QUARTER_OPTIONS, hint: 'Target delivery quarter' },
-    { key: 'priority', label: 'Priority', value: selected.priority, type: 'select', options: ['high', 'medium', 'low'] },
-    { key: 'description', label: 'Description', value: selected.description, type: 'textarea' },
-    { key: 'milestone_progress', label: 'Milestone Progress', value: selected.milestone_progress, type: 'readonly' },
-    { key: 'linked_task_count', label: 'Linked Tasks', value: selected.linked_task_count, type: 'readonly' },
-    { key: 'created_at', label: 'Created', value: selected.created_at ? new Date(selected.created_at).toLocaleDateString() : '—', type: 'readonly' },
-    { key: 'updated_at', label: 'Last Updated', value: selected.updated_at ? new Date(selected.updated_at).toLocaleDateString() : '—', type: 'readonly' },
-  ] : [];
+  const initStats = summary?.initiatives;
+
+  // Collect attention items
+  const attentionItems: { label: string; detail: string; color: string }[] = [];
+  for (const theme of tree) {
+    for (const init of theme.children || []) {
+      if (init.status === 'off_track') attentionItems.push({ label: init.title, detail: `Off track · ${init.owner || 'No owner'}`, color: '#ef4444' });
+      if (init.status === 'at_risk') attentionItems.push({ label: init.title, detail: `At risk · ${init.owner || 'No owner'}`, color: '#f59e0b' });
+      for (const epic of init.children || []) {
+        const epicM = aggregateMetrics(epic);
+        if (epicM.blocked > 0) attentionItems.push({ label: epic.title, detail: `${epicM.blocked} blocked stories`, color: '#ef4444' });
+      }
+    }
+  }
+
+  const handleStatusChange = (type: string, id: string, newStatus: string) => {
+    const endpoint = type === 'initiative' ? '/api/initiatives' : '/api/epics';
+    setTree((prev) => {
+      const update = (nodes: any[]): any[] => nodes.map((n) => {
+        if (n.id === id) return { ...n, status: newStatus };
+        if (n.children) return { ...n, children: update(n.children) };
+        return n;
+      });
+      return update(prev);
+    });
+    api.patch<any>(`${endpoint}/${id}`, { status: newStatus }).catch(() => {});
+  };
+
+  const toggleTheme = (id: string) => setExpandedThemes((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const toggleInit = (id: string) => setExpandedInits((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
   return (
     <>
-      {/* Summary stats row */}
-      {stats && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
-          <MiniStatCard label="Total" value={stats.total || initiatives.length} />
-          <MiniStatCard label="On Track" value={stats.on_track || 0} color="#22c55e" />
-          <MiniStatCard label="At Risk" value={stats.at_risk_count || 0} color="#f59e0b" />
-          <MiniStatCard label="Off Track" value={stats.off_track_count || 0} color="#ef4444" />
+      {/* Section A: Summary Ribbon */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 20 }}>
+        <MiniStatCard label="Themes" value={tree.length} />
+        <MiniStatCard label="On Track" value={initStats?.on_track || 0} color="#22c55e" />
+        <MiniStatCard label="At Risk" value={initStats?.at_risk_count || 0} color="#f59e0b" />
+        <MiniStatCard label="Off Track" value={initStats?.off_track_count || 0} color="#ef4444" />
+        <MiniStatCard label="Tasks Done" value={totalDone} color="var(--accent)" />
+        <MiniStatCard label="Overdue" value={totalOverdue} color="#ef4444" />
+      </div>
+
+      {/* Section B: Theme Health Cards */}
+      {tree.length === 0 ? (
+        <EmptyState message="No themes yet. Run Classify Tasks from the Hierarchy tab." />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {tree.map((theme) => {
+            const m = themeMetrics.get(theme.id) || { total: 0, done: 0, blocked: 0, inProgress: 0 };
+            const initiatives = (theme.children || []).filter((c: any) => c.type === 'initiative');
+            const initStatusCounts = countByStatus(initiatives);
+            const epicsInProgress = initiatives.flatMap((i: any) => (i.children || []).filter((e: any) => e.status === 'in_progress')).length;
+            const expanded = expandedThemes.has(theme.id);
+            const pct = m.total > 0 ? Math.round((m.done / m.total) * 100) : 0;
+
+            return (
+              <div key={theme.id}>
+                {/* Theme row */}
+                <div
+                  onClick={() => toggleTheme(theme.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                    borderLeft: '3px solid #a855f7', cursor: 'pointer',
+                    transition: 'background-color 0.1s',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>{theme.title}</span>
+                  <HealthBar counts={initStatusCounts} total={initiatives.length} />
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    {initiatives.length} init · {epicsInProgress} epics active · {pct}% done
+                  </span>
+                </div>
+
+                {/* Expanded initiatives */}
+                {expanded && initiatives.map((init: any) => {
+                  const initM = aggregateMetrics(init);
+                  const epics = (init.children || []).filter((c: any) => c.type === 'epic');
+                  const initExpanded = expandedInits.has(init.id);
+
+                  return (
+                    <div key={init.id}>
+                      <div
+                        onClick={() => toggleInit(init.id)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', paddingLeft: 36,
+                          borderLeft: `3px solid ${STATUS_COLORS[init.status] || '#64748b'}`,
+                          cursor: 'pointer', transition: 'background-color 0.1s',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        {initExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        <span style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>{init.title}</span>
+                        <span style={{ flex: 1, borderBottom: '1px dotted var(--border)', marginBottom: 2, opacity: 0.25 }} />
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{init.owner || ''}</span>
+                        {init.quarter && <span style={{ fontSize: 10, color: 'var(--text-muted)', padding: '1px 5px', backgroundColor: 'var(--bg-tertiary)', borderRadius: 4 }}>{init.quarter}</span>}
+                        <ProgressBar done={initM.done} total={initM.total} />
+                        <HealthStatusPill status={init.status} type="initiative" id={init.id} onChange={handleStatusChange} />
+                      </div>
+
+                      {/* Expanded epics */}
+                      {initExpanded && epics.map((epic: any) => {
+                        const epicM = aggregateMetrics(epic);
+                        const storiesDone = (epic.children || []).filter((s: any) => s.type === 'story' && s.status === 'done').length;
+                        const storyCount = (epic.children || []).filter((s: any) => s.type === 'story').length;
+                        return (
+                          <div
+                            key={epic.id}
+                            onClick={() => setSelectedEpic(epic)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 8, padding: '3px 12px', paddingLeft: 56,
+                              borderLeft: `3px solid ${STATUS_COLORS[epic.status] || '#64748b'}`,
+                              cursor: 'pointer', transition: 'background-color 0.1s', fontSize: 12,
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                          >
+                            <span style={{ color: 'var(--text-secondary)' }}>{epic.title}</span>
+                            <span style={{ flex: 1, borderBottom: '1px dotted var(--border)', marginBottom: 2, opacity: 0.25 }} />
+                            {epicM.blocked > 0 && <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 600 }}>{epicM.blocked} blocked</span>}
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{storiesDone}/{storyCount} stories</span>
+                            <ProgressBar done={epicM.done} total={epicM.total} />
+                            <HealthStatusPill status={epic.status} type="epic" id={epic.id} onChange={handleStatusChange} />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {initiatives.length === 0 ? (
-          <EmptyState message="No initiatives yet. Use TARS chat to create one." />
-        ) : (
-          initiatives.map((init) => (
-            <div
-              key={init.id}
-              onClick={() => setSelected(init)}
-              style={{
-                ...cardStyle, cursor: 'pointer', transition: 'all 0.15s',
-                borderLeft: `3px solid ${STATUS_COLORS[init.status] || '#94a3b8'}`,
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                e.currentTarget.style.boxShadow = 'var(--shadow)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--bg-card)';
-                e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{init.title}</h3>
-                <StatusBadge status={init.status} />
+      {/* Section C: Attention Required */}
+      {attentionItems.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 500, color: '#ef4444', marginBottom: 8 }}>Attention Required ({attentionItems.length})</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {attentionItems.slice(0, 10).map((item, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px',
+                borderLeft: `3px solid ${item.color}`, fontSize: 12,
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: item.color, flexShrink: 0 }} />
+                <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{item.label}</span>
+                <span style={{ flex: 1, borderBottom: '1px dotted var(--border)', marginBottom: 2, opacity: 0.25 }} />
+                <span style={{ color: 'var(--text-muted)' }}>{item.detail}</span>
               </div>
-              {init.description && <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8, lineHeight: 1.5 }}>{init.description}</p>}
+            ))}
+            {attentionItems.length > 10 && (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', padding: '4px 12px' }}>+ {attentionItems.length - 10} more</span>
+            )}
+          </div>
+        </div>
+      )}
 
-              {/* Milestones progress bar */}
-              {init.milestones?.length > 0 && (
-                <div style={{ marginBottom: 8 }}>
-                  <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
-                    {init.milestones.map((m: any, i: number) => (
-                      <div key={i} style={{
-                        flex: 1, height: 4, borderRadius: 2,
-                        backgroundColor: m.completed ? '#22c55e' : 'var(--border)',
-                      }} />
-                    ))}
-                  </div>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    {init.milestones.filter((m: any) => m.completed).length}/{init.milestones.length} milestones
-                  </span>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)' }}>
-                {init.owner && <span>Owner: {init.owner}</span>}
-                {init.quarter && <span>{init.quarter}</span>}
-                {init.priority && <span style={{ textTransform: 'capitalize' }}>{init.priority} priority</span>}
-                {init.linked_task_count > 0 && <span>{init.linked_task_count} tasks</span>}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      <DetailPanel
-        open={!!selected}
-        onClose={() => setSelected(null)}
-        title={selected?.title || ''}
-        subtitle={selected?.description}
-        badge={selected ? { label: (selected.status || '').replace(/_/g, ' '), color: STATUS_COLORS[selected.status] || '#94a3b8' } : undefined}
-        fields={fields}
-        onSave={handleSave}
-      />
+      {/* Epic detail panel */}
+      {selectedEpic && (
+        <DetailPanel
+          open={!!selectedEpic}
+          onClose={() => setSelectedEpic(null)}
+          title={selectedEpic.title}
+          subtitle={`Epic · ${selectedEpic.owner || 'Unassigned'}`}
+          fields={[
+            { key: 'description', label: 'Description', value: selectedEpic.description, type: 'textarea' },
+            { key: 'status', label: 'Status', value: selectedEpic.status || 'backlog', type: 'select', options: ['backlog', 'in_progress', 'done', 'cancelled'] },
+            { key: 'owner', label: 'Owner', value: selectedEpic.owner, type: 'text' },
+            { key: 'priority', label: 'Priority', value: selectedEpic.priority || 'high', type: 'select', options: ['high', 'medium', 'low'] },
+            { key: 'quarter', label: 'Quarter', value: selectedEpic.quarter || '', type: 'select', options: QUARTER_OPTIONS, hint: 'Target delivery quarter' },
+            { key: 'acceptance_criteria', label: 'Acceptance Criteria', value: selectedEpic.acceptance_criteria || [], type: 'tags' },
+          ]}
+          onFieldChange={(key, value) => {
+            setSelectedEpic((prev: any) => prev ? { ...prev, [key]: value } : null);
+            api.patch<any>(`/api/epics/${selectedEpic.id}`, { [key]: value }).catch(() => {});
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/* Inline status pill with dropdown for health dashboard */
+function HealthStatusPill({ status, type, id, onChange }: {
+  status: string; type: string; id: string;
+  onChange: (type: string, id: string, newStatus: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const options = type === 'initiative'
+    ? ['on_track', 'at_risk', 'off_track', 'completed', 'paused']
+    : ['backlog', 'in_progress', 'done', 'cancelled'];
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <span
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        style={{
+          fontSize: 10, padding: '1px 6px', borderRadius: 4, cursor: 'pointer',
+          backgroundColor: (STATUS_COLORS[status] || '#666') + '20',
+          color: STATUS_COLORS[status] || '#666',
+        }}
+      >
+        {(status || '').replace(/_/g, ' ')}
+      </span>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, zIndex: 100, marginTop: 4,
+          backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: 6, overflow: 'hidden', minWidth: 120,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        }}>
+          {options.map((s) => (
+            <div
+              key={s}
+              onClick={(e) => { e.stopPropagation(); onChange(type, id, s); setOpen(false); }}
+              style={{
+                padding: '4px 10px', fontSize: 11, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontWeight: s === status ? 600 : 400,
+                color: s === status ? 'var(--text-primary)' : 'var(--text-secondary)',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: STATUS_COLORS[s] || '#666' }} />
+              {s.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

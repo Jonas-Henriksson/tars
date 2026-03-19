@@ -5,7 +5,7 @@
 export interface ThemeLayout {
   commandCenter: string[];
   defaultWorkTab: 'matrix' | 'board' | 'list' | 'timeline';
-  defaultStrategyTab: 'initiatives' | 'portfolio' | 'decisions';
+  defaultStrategyTab: 'health' | 'portfolio' | 'decisions';
   density: 'compact' | 'comfortable' | 'spacious';
   chatPanel: 'expanded' | 'collapsed';
 }
@@ -28,7 +28,7 @@ export const themes: Record<string, Theme> = {
     layout: {
       commandCenter: ['calendar', 'alerts', 'email-summary', 'chat'],
       defaultWorkTab: 'matrix',
-      defaultStrategyTab: 'initiatives',
+      defaultStrategyTab: 'health',
       density: 'comfortable',
       chatPanel: 'expanded',
     },
@@ -73,7 +73,7 @@ export const themes: Record<string, Theme> = {
     layout: {
       commandCenter: ['top-3-tasks', 'calendar', 'personal-alerts'],
       defaultWorkTab: 'list',
-      defaultStrategyTab: 'initiatives',
+      defaultStrategyTab: 'health',
       density: 'spacious',
       chatPanel: 'expanded',
     },
