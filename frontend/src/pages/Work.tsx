@@ -182,7 +182,21 @@ export default function Work() {
     { key: 'source_context', label: 'Context', value: selectedTask.source_context, type: 'expandable',
       lines: parseContextLines(selectedTask.source_context) },
     { key: 'steps', label: 'Next Steps', value: selectedTask.steps, type: 'expandable',
-      lines: parseStepLines(selectedTask.steps) },
+      lines: parseStepLines(selectedTask.steps),
+      lineAction: {
+        label: 'Create as task',
+        icon: 'plus',
+        onAction: (line: string) => {
+          if (!selectedTask) return;
+          api.post<any>(`/api/intel/tasks/${selectedTask.id}/create-from-step`, { step_description: line })
+            .then((res) => {
+              if (res.task) {
+                setTasks((prev) => [...prev, res.task]);
+              }
+            })
+            .catch(() => {});
+        },
+      } },
     { key: 'age_days', label: 'Age (days)', value: selectedTask.age_days, type: 'readonly' },
     { key: 'delegated', label: 'Delegated', value: selectedTask.delegated ? 'Yes' : 'No', type: 'readonly' },
   ] : [];

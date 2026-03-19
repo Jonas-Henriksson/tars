@@ -33,6 +33,10 @@ class SmartTaskUpdate(BaseModel):
     steps: str = ""
 
 
+class StepToTask(BaseModel):
+    step_description: str
+
+
 class TrackedTaskUpdate(BaseModel):
     owner: str | None = None
     topic: str | None = None
@@ -294,6 +298,16 @@ async def rewrite_task_titles():
     result = await _rewrite()
     if "error" in result:
         return JSONResponse(result, status_code=500)
+    return JSONResponse(result)
+
+
+@router.post("/intel/tasks/{task_id}/create-from-step", status_code=201)
+async def create_task_from_step(task_id: str, body: StepToTask):
+    """Create a new task from a next-step line, inheriting the parent's agile group."""
+    from integrations.intel import create_task_from_step as _create
+    result = _create(parent_task_id=task_id, step_description=body.step_description)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
     return JSONResponse(result)
 
 

@@ -5,7 +5,7 @@
  * 'expandable' fields show a truncated preview that expands on click.
  */
 import { useEffect, useRef, useState } from 'react';
-import { X, Save, Edit3, Calendar, User, Tag, Flag, ExternalLink, ChevronDown, ChevronRight, Clock } from 'lucide-react';
+import { X, Save, Edit3, Calendar, User, Tag, Flag, ExternalLink, ChevronDown, ChevronRight, Clock, Plus, Check } from 'lucide-react';
 
 export interface DetailField {
   key: string;
@@ -18,6 +18,8 @@ export interface DetailField {
   hint?: string;
   /** For 'expandable' type: formatted content lines */
   lines?: string[];
+  /** For 'expandable' type: action button on each line (e.g. "Convert to task") */
+  lineAction?: { label: string; icon?: 'plus'; onAction: (line: string) => void };
 }
 
 interface DetailPanelProps {
@@ -191,6 +193,7 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [convertedLines, setConvertedLines] = useState<Set<number>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -248,22 +251,48 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
             {lines.map((line, i) => {
               const trimmed = line.trim();
               if (!trimmed) return null;
-              // Detect numbered items
               const numMatch = trimmed.match(/^(\d+)[.)]\s*(.*)/);
+              const displayText = numMatch ? numMatch[2] : trimmed;
+              const isConverted = convertedLines.has(i);
               return (
                 <div key={i} style={{
                   fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5,
                   padding: '6px 10px',
-                  backgroundColor: 'var(--bg-secondary)',
+                  backgroundColor: isConverted ? 'var(--accent-light)' : 'var(--bg-secondary)',
                   borderRadius: 'var(--radius)',
-                  borderLeft: '2px solid var(--border)',
+                  borderLeft: `2px solid ${isConverted ? 'var(--success)' : 'var(--border)'}`,
+                  display: 'flex', alignItems: 'center', gap: 8,
                 }}>
-                  {numMatch ? (
-                    <span>
+                  <span style={{ flex: 1 }}>
+                    {numMatch && (
                       <span style={{ fontWeight: 600, color: 'var(--accent)', marginRight: 6 }}>{numMatch[1]}.</span>
-                      {numMatch[2]}
-                    </span>
-                  ) : trimmed}
+                    )}
+                    {displayText}
+                  </span>
+                  {field.lineAction && (
+                    isConverted ? (
+                      <Check size={14} style={{ color: 'var(--success)', flexShrink: 0 }} />
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          field.lineAction!.onAction(displayText);
+                          setConvertedLines(prev => new Set(prev).add(i));
+                        }}
+                        title={field.lineAction.label}
+                        style={{
+                          border: 'none', background: 'none', cursor: 'pointer',
+                          color: 'var(--text-muted)', padding: 2, borderRadius: 4,
+                          display: 'flex', alignItems: 'center', flexShrink: 0,
+                          transition: 'color 0.1s',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+                        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                      >
+                        <Plus size={14} />
+                      </button>
+                    )
+                  )}
                 </div>
               );
             })}

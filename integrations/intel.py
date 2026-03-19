@@ -1500,6 +1500,53 @@ def approve_task(task_id: str) -> dict:
     return {"error": f"Task not found: {task_id}"}
 
 
+def create_task_from_step(
+    parent_task_id: str,
+    step_description: str,
+) -> dict:
+    """Create a new task from a next-step of an existing task.
+
+    Inherits the parent task's agile group (story_id, classification),
+    owner, topics, and meeting source.
+    """
+    intel = _load_intel()
+    parent = None
+    for task in intel.get("smart_tasks", []):
+        if task["id"] == parent_task_id:
+            parent = task
+            break
+    if parent is None:
+        return {"error": f"Parent task not found: {parent_task_id}"}
+
+    now = datetime.now(timezone.utc).isoformat()
+    new_task = {
+        "id": uuid.uuid4().hex[:8],
+        "description": step_description.strip(),
+        "owner": parent.get("owner", ""),
+        "delegated": parent.get("delegated", False),
+        "status": "open",
+        "priority": parent.get("priority", {"urgent": False, "important": True, "quadrant": 2, "quadrant_label": "Schedule"}),
+        "follow_up_date": parent.get("follow_up_date", ""),
+        "topics": parent.get("topics", []),
+        "source_title": parent.get("source_title", ""),
+        "source_url": parent.get("source_url", ""),
+        "source_context": f"Created from next step of: {parent.get('description', '')}",
+        "story_id": parent.get("story_id", ""),
+        "classification": parent.get("classification", "unclassified"),
+        "confidence": parent.get("confidence", 0.0),
+        "source": "confirmed",
+        "manual_override": bool(parent.get("story_id")),
+        "override_at": now if parent.get("story_id") else "",
+        "parent_task_id": parent_task_id,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    intel.setdefault("smart_tasks", []).append(new_task)
+    _save_intel(intel)
+    return {"message": "Task created from step.", "task": _summarize_task(new_task)}
+
+
 def get_intel_voice() -> dict:
     """Get intelligence data optimized for voice — excludes page_index, adds guidance."""
     intel = get_intel()
