@@ -993,11 +993,14 @@ async def get_hierarchy():
         eid = s.get("epic_id", "")
         stories_by_epic.setdefault(eid, []).append(s)
 
+    # Collect all valid story IDs so we can detect dangling references
+    all_story_ids = {s["id"] for s in stories_data}
+
     tasks_by_story: dict[str, list] = {}
     orphan_tasks = []
     for t in tasks_data:
         sid = t.get("story_id", "")
-        if sid:
+        if sid and sid in all_story_ids:
             tasks_by_story.setdefault(sid, []).append(t)
         else:
             orphan_tasks.append(t)
@@ -1031,6 +1034,10 @@ async def get_hierarchy():
     unclassified = [t for t in orphan_tasks if t.get("classification") != "operational"]
 
     linked_count = sum(len(v) for v in tasks_by_story.values())
+    # Count tasks that had a story_id but it didn't match any story
+    dangling_count = sum(
+        1 for t in orphan_tasks if t.get("story_id", "")
+    )
 
     return JSONResponse({
         "tree": tree,
@@ -1043,6 +1050,7 @@ async def get_hierarchy():
             "stories": len(stories_data),
             "tasks": len(tasks_data),
             "linked": linked_count,
+            "dangling": dangling_count,
             "operational": len(operational),
             "unclassified": len(unclassified),
         },

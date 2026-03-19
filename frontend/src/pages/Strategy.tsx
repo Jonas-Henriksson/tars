@@ -417,6 +417,11 @@ function HierarchyView() {
           <span>{counts.epics || 0} epics</span>
           <span>{counts.stories || 0} stories</span>
           <span>{counts.tasks || 0} tasks</span>
+          {(counts.linked > 0 || counts.dangling > 0) && (
+            <span style={{ fontSize: 11, color: counts.linked > 0 ? '#22c55e' : '#ef4444' }}>
+              ({counts.linked || 0} linked{counts.dangling > 0 ? `, ${counts.dangling} orphaned` : ''})
+            </span>
+          )}
           <span style={{ color: 'var(--border)' }}>|</span>
           <button onClick={expandAll} style={linkBtnStyle}>Expand all</button>
           <button onClick={collapseAll} style={linkBtnStyle}>Collapse all</button>
