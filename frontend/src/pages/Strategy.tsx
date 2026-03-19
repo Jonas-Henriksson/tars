@@ -258,9 +258,14 @@ function HierarchyView() {
       {/* Operational tasks */}
       {operational.length > 0 && (
         <div style={{ marginTop: 24 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 8 }}>
-            Operational tasks ({operational.length})
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 500, color: '#f59e0b' }}>
+              Operational tasks ({operational.length})
+            </h3>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              Day-to-day work not tied to a strategic initiative
+            </span>
+          </div>
           {operational.map((t: any) => (
             <TaskLeaf key={t.id} task={t} onApprove={handleApprove} onDismiss={handleDismiss} />
           ))}
@@ -270,9 +275,14 @@ function HierarchyView() {
       {/* Unclassified */}
       {unclassified.length > 0 && (
         <div style={{ marginTop: 24 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 8 }}>
-            Unclassified tasks ({unclassified.length})
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-muted)' }}>
+              Unclassified tasks ({unclassified.length})
+            </h3>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              Needs review — could be strategic or operational
+            </span>
+          </div>
           {unclassified.map((t: any) => (
             <TaskLeaf key={t.id} task={t} onApprove={handleApprove} onDismiss={handleDismiss} />
           ))}

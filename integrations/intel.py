@@ -1080,6 +1080,11 @@ def _summarize_task(task: dict) -> dict:
         "topics": task.get("topics", []),
         "status": task.get("status", "open"),
         "steps": steps,
+        "classification": task.get("classification", "unclassified"),
+        "story_id": task.get("story_id", ""),
+        "source": task.get("source", "confirmed"),
+        "confidence": task.get("confidence", 0.0),
+        "manual_override": task.get("manual_override", False),
     }
 
 
