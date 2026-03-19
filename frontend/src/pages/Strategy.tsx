@@ -545,8 +545,6 @@ function HierarchyView() {
           { key: 'requested_by', label: 'Requested By', value: selectedDecision.requested_by || '', type: 'readonly' as const },
           { key: 'requested_from', label: 'Decision Needed From', value: selectedDecision.requested_from || '', type: 'text' as const },
           { key: 'request_reason', label: 'Reason', value: selectedDecision.request_reason || '', type: 'textarea' as const },
-          { key: 'from_workstream', label: 'From Workstream', value: selectedDecision.from_workstream || '', type: 'readonly' as const },
-          { key: 'linked_title', label: 'Linked Item', value: selectedDecision.linked_title ? `[${selectedDecision.linked_type}] ${selectedDecision.linked_title}` : '', type: 'readonly' as const },
           { key: 'rationale', label: 'Rationale', value: selectedDecision.rationale || '', type: 'textarea' as const },
           { key: 'outcome_notes', label: 'Outcome Notes', value: selectedDecision.outcome_notes || '', type: 'textarea' as const },
           { key: 'created_at', label: 'Created', value: selectedDecision.created_at ? new Date(selectedDecision.created_at).toLocaleDateString() : '—', type: 'readonly' as const },
@@ -557,7 +555,9 @@ function HierarchyView() {
           setSelectedDecision((prev: any) => prev ? { ...prev, ...updates } : null);
           api.patch<any>(`/api/decisions/${selectedDecision.id}`, updates).catch(() => {});
         }}
-      />
+      >
+        <HierarchyBreadcrumb linkedId={selectedDecision?.linked_id} tree={tree} />
+      </DetailPanel>
     </div>
   );
 }
@@ -1697,12 +1697,17 @@ function DecisionsView() {
   const [notionSelected, setNotionSelected] = useState<Set<number>>(new Set());
   const [notionLoading, setNotionLoading] = useState(false);
 
+  // Load hierarchy tree for breadcrumb context
+  const [hierTree, setHierTree] = useState<any[]>([]);
+
   useEffect(() => {
     api.get<any>('/api/decisions').then((data) => {
       setDecisions(data.decisions || []);
       setLoading(false);
     }).catch((e) => { setError(e.message); setLoading(false); });
+    api.get<any>('/api/hierarchy').then((data) => setHierTree(data.tree || [])).catch(() => {});
   }, []);
+
 
   React.useEffect(() => {
     if (adding && addRef.current) addRef.current.focus();
@@ -1784,19 +1789,39 @@ function DecisionsView() {
 
   const filtered = filter === 'all' ? decisions : decisions.filter((d) => d.status === filter);
 
+  // Handle inline field changes for decisions
+  const handleDecisionFieldChange = useCallback((key: string, value: any) => {
+    if (!selected) return;
+    setDecisions((prev) => prev.map((d) => d.id === selected.id ? { ...d, [key]: value } : d));
+    setSelected((prev: any) => prev ? { ...prev, [key]: value } : null);
+    api.patch<any>(`/api/decisions/${selected.id}`, { [key]: value }).catch(() => {});
+  }, [selected]);
+
+  // Link decision to a hierarchy item
+  const handleLinkToHierarchy = useCallback((node: { type: string; title: string; id: string }) => {
+    if (!selected) return;
+    const updates = { linked_type: node.type, linked_id: node.id, linked_title: node.title };
+    setDecisions((prev) => prev.map((d) => d.id === selected.id ? { ...d, ...updates } : d));
+    setSelected((prev: any) => prev ? { ...prev, ...updates } : null);
+    api.patch<any>(`/api/decisions/${selected.id}`, updates).catch(() => {});
+  }, [selected]);
+
+  const handleUnlinkHierarchy = useCallback(() => {
+    if (!selected) return;
+    const updates = { linked_type: '', linked_id: '', linked_title: '' };
+    setDecisions((prev) => prev.map((d) => d.id === selected.id ? { ...d, ...updates } : d));
+    setSelected((prev: any) => prev ? { ...prev, ...updates } : null);
+    api.patch<any>(`/api/decisions/${selected.id}`, updates).catch(() => {});
+  }, [selected]);
+
   const fields: DetailField[] = selected ? [
     { key: 'status', label: 'Status', value: selected.status, type: 'select', options: ['pending', 'decided', 'revisit', 'request'], color: STATUS_COLORS[selected.status] },
     { key: 'decided_by', label: 'Decided By', value: selected.decided_by, type: 'text' },
     { key: 'stakeholders', label: 'Stakeholders', value: selected.stakeholders || [], type: 'tags' },
     { key: 'rationale', label: 'Rationale', value: selected.rationale, type: 'textarea' },
     { key: 'context', label: 'Context', value: selected.context, type: 'textarea' },
-    { key: 'initiative', label: 'Linked Initiative', value: selected.initiative, type: 'text' },
-    { key: 'linked_type', label: 'Link Type', value: selected.linked_type || '', type: 'select', options: ['', 'initiative', 'epic', 'story', 'task'] },
-    { key: 'linked_title', label: 'Linked Item', value: selected.linked_title || '', type: 'text' },
-    { key: 'linked_id', label: 'Linked ID', value: selected.linked_id || '', type: 'text' },
     { key: 'requested_from', label: 'Decision Needed From', value: selected.requested_from || '', type: 'text' },
     { key: 'request_reason', label: 'Request Reason', value: selected.request_reason || '', type: 'textarea' },
-    { key: 'from_workstream', label: 'From Workstream', value: selected.from_workstream || '', type: 'text' },
     { key: 'outcome_notes', label: 'Outcome Notes', value: selected.outcome_notes, type: 'textarea' },
     { key: 'source', label: 'Source', value: selected.source || 'manual', type: 'readonly' },
     { key: 'created_at', label: 'Created', value: selected.created_at ? new Date(selected.created_at).toLocaleDateString() : '—', type: 'readonly' },
@@ -2030,9 +2055,243 @@ function DecisionsView() {
         subtitle={selected?.rationale}
         badge={selected ? { label: (selected.status || '').replace(/_/g, ' '), color: STATUS_COLORS[selected.status] || '#94a3b8' } : undefined}
         fields={fields}
+        onFieldChange={handleDecisionFieldChange}
         onSave={handleSave}
-      />
+      >
+        {/* Hierarchy link — breadcrumb + picker */}
+        {selected && (
+          <HierarchyLinker
+            linkedId={selected.linked_id}
+            tree={hierTree}
+            onLink={handleLinkToHierarchy}
+            onUnlink={handleUnlinkHierarchy}
+          />
+        )}
+      </DetailPanel>
     </>
+  );
+}
+
+/* ---------- Hierarchy Breadcrumb (shows path to linked item) ---------- */
+
+function HierarchyBreadcrumb({ linkedId, tree }: { linkedId?: string; tree: any[] }) {
+  const path = useMemo(() => {
+    if (!linkedId) return null;
+    function find(nodes: any[], trail: { type: string; title: string; id: string }[]): { type: string; title: string; id: string }[] | null {
+      for (const n of nodes) {
+        const current = [...trail, { type: n.type, title: n.title || n.description || '', id: n.id }];
+        if (n.id === linkedId) return current;
+        if (n.children) {
+          const found = find(n.children, current);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+    return find(tree, []);
+  }, [linkedId, tree]);
+
+  if (!path) return null;
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <GitBranch size={14} style={{ color: 'var(--text-muted)' }} />
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>From Hierarchy</span>
+      </div>
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 0,
+        borderLeft: '2px solid var(--border)', marginLeft: 6, paddingLeft: 12,
+      }}>
+        {path.map((seg, i) => {
+          const isLast = i === path.length - 1;
+          const typeColor = TYPE_COLORS[seg.type] || '#666';
+          return (
+            <div key={seg.id} style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0',
+              position: 'relative',
+            }}>
+              <span style={{
+                position: 'absolute', left: -17, width: 8, height: 8,
+                borderRadius: '50%', backgroundColor: isLast ? typeColor : 'var(--border)',
+                border: isLast ? `2px solid ${typeColor}` : '2px solid var(--bg-primary)',
+              }} />
+              <span style={{
+                fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+                color: typeColor, minWidth: 48,
+              }}>
+                {seg.type}
+              </span>
+              <span style={{
+                fontSize: 12, color: isLast ? 'var(--text-primary)' : 'var(--text-secondary)',
+                fontWeight: isLast ? 600 : 400,
+              }}>
+                {seg.title}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Hierarchy Linker (breadcrumb + tree picker for decisions) ---------- */
+
+function HierarchyLinker({ linkedId, tree, onLink, onUnlink }: {
+  linkedId?: string;
+  tree: any[];
+  onLink: (node: { type: string; title: string; id: string }) => void;
+  onUnlink: () => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Find path for current linked item
+  const path = useMemo(() => {
+    if (!linkedId) return null;
+    function find(nodes: any[], trail: { type: string; title: string; id: string }[]): { type: string; title: string; id: string }[] | null {
+      for (const n of nodes) {
+        const current = [...trail, { type: n.type, title: n.title || n.description || '', id: n.id }];
+        if (n.id === linkedId) return current;
+        if (n.children) {
+          const found = find(n.children, current);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+    return find(tree, []);
+  }, [linkedId, tree]);
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <GitBranch size={14} style={{ color: 'var(--text-muted)' }} />
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Linked Hierarchy Item</span>
+      </div>
+
+      {/* Show current link as breadcrumb */}
+      {path && (
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: 0,
+          borderLeft: '2px solid var(--border)', marginLeft: 6, paddingLeft: 12, marginBottom: 8,
+        }}>
+          {path.map((seg, i) => {
+            const isLast = i === path.length - 1;
+            const typeColor = TYPE_COLORS[seg.type] || '#666';
+            return (
+              <div key={seg.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', position: 'relative' }}>
+                <span style={{
+                  position: 'absolute', left: -17, width: 8, height: 8, borderRadius: '50%',
+                  backgroundColor: isLast ? typeColor : 'var(--border)',
+                  border: isLast ? `2px solid ${typeColor}` : '2px solid var(--bg-primary)',
+                }} />
+                <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: typeColor, minWidth: 48 }}>
+                  {seg.type}
+                </span>
+                <span style={{ fontSize: 12, color: isLast ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: isLast ? 600 : 400 }}>
+                  {seg.title}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setPickerOpen(!pickerOpen)}
+          style={{
+            fontSize: 11, padding: '3px 8px', borderRadius: 8,
+            border: '1px dashed var(--border)', background: 'none',
+            color: 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+        >
+          {path ? 'Change' : '+ Link to hierarchy'}
+        </button>
+        {path && (
+          <button
+            onClick={onUnlink}
+            style={{
+              fontSize: 11, padding: '3px 8px', borderRadius: 8,
+              border: '1px dashed var(--border)', background: 'none',
+              color: 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+          >
+            Unlink
+          </button>
+        )}
+      </div>
+
+      {/* Expandable tree picker */}
+      {pickerOpen && (
+        <div style={{
+          marginTop: 8, maxHeight: 280, overflowY: 'auto',
+          border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+          backgroundColor: 'var(--bg-secondary)', padding: 4,
+        }}>
+          {tree.map((node) => (
+            <PickerNode key={node.id} node={node} depth={0} selectedId={linkedId} onSelect={(n) => {
+              onLink(n);
+              setPickerOpen(false);
+            }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PickerNode({ node, depth, selectedId, onSelect }: {
+  node: any; depth: number; selectedId?: string;
+  onSelect: (n: { type: string; title: string; id: string }) => void;
+}) {
+  const [expanded, setExpanded] = useState(depth < 1);
+  const children = (node.children || []).filter((c: any) => c.type);
+  const isSelected = node.id === selectedId;
+  const typeColor = TYPE_COLORS[node.type] || '#666';
+
+  return (
+    <div>
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px',
+          paddingLeft: depth * 14 + 6, cursor: 'pointer', borderRadius: 4,
+          backgroundColor: isSelected ? (typeColor + '20') : 'transparent',
+          transition: 'background-color 0.1s',
+        }}
+        onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
+        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
+      >
+        {children.length > 0 ? (
+          <span onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }} style={{ display: 'flex', padding: 1 }}>
+            {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+          </span>
+        ) : <span style={{ width: 12 }} />}
+        <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: typeColor, minWidth: 36 }}>
+          {(node.type || '').slice(0, 4)}
+        </span>
+        <span
+          onClick={() => onSelect({ type: node.type, title: node.title || node.description || '', id: node.id })}
+          style={{
+            fontSize: 11, color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
+            fontWeight: isSelected ? 600 : 400, flex: 1,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}
+        >
+          {node.title || node.description || '(untitled)'}
+        </span>
+        {isSelected && <Check size={12} style={{ color: typeColor, flexShrink: 0 }} />}
+      </div>
+      {expanded && children.map((child: any) => (
+        <PickerNode key={child.id} node={child} depth={depth + 1} selectedId={selectedId} onSelect={onSelect} />
+      ))}
+    </div>
   );
 }
 
