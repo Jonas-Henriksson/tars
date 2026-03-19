@@ -43,7 +43,7 @@
   --bg-tertiary: #334155;
   --bg-sidebar: #0f172a;
   --bg-card: #1e293b;
-  --bg-hover: #334155;
+  --bg-hover: rgba(59, 130, 246, 0.12);
   --bg-active: #475569;
   --bg-chat: #1e293b;
   --text-primary: #f1f5f9;
@@ -68,7 +68,7 @@
   --bg-tertiary: #1f1f1f;
   --bg-sidebar: #0a0a0a;
   --bg-card: #141414;
-  --bg-hover: #1f1f1f;
+  --bg-hover: rgba(59, 130, 246, 0.10);
   --bg-active: #2a2a2a;
   --bg-chat: #0a0a0a;
   --text-primary: #e5e5e5;
