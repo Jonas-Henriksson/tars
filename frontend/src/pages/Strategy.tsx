@@ -25,6 +25,15 @@ const linkBtnStyle: React.CSSProperties = {
   textDecoration: 'none',
 };
 
+// Generate quarter options: current year ± 1 year, Q1–Q4
+const _currentYear = new Date().getFullYear();
+const QUARTER_OPTIONS = [
+  '', // allow clearing
+  ...[_currentYear - 1, _currentYear, _currentYear + 1].flatMap(y =>
+    ['Q1', 'Q2', 'Q3', 'Q4'].map(q => `${q} ${y}`)
+  ),
+];
+
 const STATUS_COLORS: Record<string, string> = {
   on_track: '#22c55e', at_risk: '#f59e0b', off_track: '#ef4444',
   completed: '#6b7280', paused: '#94a3b8',
@@ -194,7 +203,7 @@ function HierarchyView() {
       { key: 'title', label: 'Title', value: node.title, type: 'text' },
       { key: 'description', label: 'Description', value: node.description, type: 'textarea' },
       { key: 'owner', label: 'Owner', value: node.owner, type: 'select', options: ownerOptions },
-      { key: 'quarter', label: 'Quarter', value: node.quarter, type: 'text' },
+      { key: 'quarter', label: 'Quarter', value: node.quarter || '', type: 'select', options: QUARTER_OPTIONS, hint: 'Target delivery quarter — the fiscal quarter by which this should be completed' },
       { key: 'status', label: 'Status', value: node.status || 'on_track', type: 'select', options: ['on_track', 'at_risk', 'off_track', 'completed', 'paused'] },
       { key: 'priority', label: 'Priority', value: node.priority || 'high', type: 'select', options: ['high', 'medium', 'low'] },
     ];
@@ -204,8 +213,8 @@ function HierarchyView() {
       { key: 'owner', label: 'Owner', value: node.owner, type: 'select', options: ownerOptions },
       { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'in_progress', 'done', 'cancelled'] },
       { key: 'priority', label: 'Priority', value: node.priority || 'high', type: 'select', options: ['high', 'medium', 'low'] },
-      { key: 'quarter', label: 'Quarter', value: node.quarter, type: 'text' },
-      { key: 'acceptance_criteria', label: 'Acceptance Criteria', value: node.acceptance_criteria || [], type: 'tags' },
+      { key: 'quarter', label: 'Quarter', value: node.quarter || '', type: 'select', options: QUARTER_OPTIONS, hint: 'Target delivery quarter — the fiscal quarter by which this epic should be completed' },
+      { key: 'acceptance_criteria', label: 'Acceptance Criteria', value: node.acceptance_criteria || [], type: 'tags', hint: 'Definition of done — conditions that must be met for this epic to be considered complete' },
     ];
     if (t === 'story') return [
       { key: 'title', label: 'Title', value: node.title, type: 'text' },
@@ -214,7 +223,7 @@ function HierarchyView() {
       { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'ready', 'in_progress', 'in_review', 'done', 'blocked'] },
       { key: 'priority', label: 'Priority', value: node.priority || 'medium', type: 'select', options: ['high', 'medium', 'low'] },
       { key: 'size', label: 'Size', value: node.size || 'M', type: 'select', options: ['XS', 'S', 'M', 'L', 'XL'] },
-      { key: 'acceptance_criteria', label: 'Acceptance Criteria', value: node.acceptance_criteria || [], type: 'tags' },
+      { key: 'acceptance_criteria', label: 'Acceptance Criteria', value: node.acceptance_criteria || [], type: 'tags', hint: 'Definition of done — specific conditions that must be met for this story to be accepted' },
     ];
     return [];
   }, [ownerOptions]);
@@ -365,7 +374,7 @@ function HierarchyView() {
       {/* Tree */}
       <div key={treeKey} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {tree.map((node) => (
-          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} onTaskUpdate={handleTaskUpdate} onTaskRemove={handleTaskRemove} onTaskAdd={handleTaskAdd} />
+          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} onTaskUpdate={handleTaskUpdate} onTaskRemove={handleTaskRemove} onTaskAdd={handleTaskAdd} />
         ))}
       </div>
 
@@ -381,7 +390,7 @@ function HierarchyView() {
             </span>
           </div>
           {operational.map((t: any) => (
-            <TaskLeaf key={t.id} task={t} borderColor="#f59e0b" onApprove={handleApprove} onDismiss={handleDismiss} onUpdate={handleTaskUpdate} onRemove={handleTaskRemove} />
+            <TaskLeaf key={t.id} task={t} borderColor="#f59e0b" ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onUpdate={handleTaskUpdate} onRemove={handleTaskRemove} />
           ))}
         </div>
       )}
@@ -398,7 +407,7 @@ function HierarchyView() {
             </span>
           </div>
           {unclassified.map((t: any) => (
-            <TaskLeaf key={t.id} task={t} borderColor="#64748b" onApprove={handleApprove} onDismiss={handleDismiss} onUpdate={handleTaskUpdate} onRemove={handleTaskRemove} />
+            <TaskLeaf key={t.id} task={t} borderColor="#64748b" ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onUpdate={handleTaskUpdate} onRemove={handleTaskRemove} />
           ))}
         </div>
       )}
@@ -444,9 +453,10 @@ const TYPE_LABELS: Record<string, string> = {
   theme: 'Theme', initiative: 'Initiative', epic: 'Epic', story: 'Story',
 };
 
-function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismiss, onNodeClick, onTaskUpdate, onTaskRemove, onTaskAdd }: {
+function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [], onApprove, onDismiss, onNodeClick, onTaskUpdate, onTaskRemove, onTaskAdd }: {
   node: any; depth: number;
   expandMode?: 'default' | 'all' | 'none';
+  ownerOptions?: string[];
   onApprove: (type: string, id: string) => void;
   onDismiss: (type: string, id: string) => void;
   onNodeClick?: (node: any) => void;
@@ -544,9 +554,9 @@ function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismi
         <>
           {children.map((child: any) => (
             child.type ? (
-              <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} onTaskUpdate={onTaskUpdate} onTaskRemove={onTaskRemove} onTaskAdd={onTaskAdd} />
+              <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} onTaskUpdate={onTaskUpdate} onTaskRemove={onTaskRemove} onTaskAdd={onTaskAdd} />
             ) : (
-              <TaskLeaf key={child.id} task={child} depth={depth + 1} onApprove={onApprove} onDismiss={onDismiss} onUpdate={onTaskUpdate} onRemove={onTaskRemove} />
+              <TaskLeaf key={child.id} task={child} depth={depth + 1} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onUpdate={onTaskUpdate} onRemove={onTaskRemove} />
             )
           ))}
           {/* Add task row for story nodes that have task children */}
@@ -568,8 +578,8 @@ const TASK_STATUS_COLORS: Record<string, string> = {
   done: '#22c55e', in_progress: '#3b82f6', review: '#f59e0b', open: '#64748b',
 };
 
-function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', onApprove, onDismiss, onRemove, onUpdate }: {
-  task: any; depth?: number; borderColor?: string;
+function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', ownerOptions = [], onApprove, onDismiss, onRemove, onUpdate }: {
+  task: any; depth?: number; borderColor?: string; ownerOptions?: string[];
   onApprove: (type: string, id: string) => void;
   onDismiss: (type: string, id: string) => void;
   onRemove?: (id: string) => void;
@@ -579,27 +589,58 @@ function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', onApprove, onDismi
   const isDone = task.status === 'done';
   const [editingField, setEditingField] = useState<'description' | 'owner' | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [ownerSearch, setOwnerSearch] = useState('');
   const [hovered, setHovered] = useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const ownerInputRef = React.useRef<HTMLInputElement>(null);
+  const ownerDropRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
-    if (editingField && inputRef.current) inputRef.current.focus();
+    if (editingField === 'description' && inputRef.current) inputRef.current.focus();
+    if (editingField === 'owner' && ownerInputRef.current) ownerInputRef.current.focus();
+  }, [editingField]);
+
+  // Close owner picker on outside click
+  React.useEffect(() => {
+    if (editingField !== 'owner') return;
+    const handler = (e: MouseEvent) => {
+      if (ownerDropRef.current && !ownerDropRef.current.contains(e.target as Node)) {
+        setEditingField(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, [editingField]);
 
   const startEdit = (field: 'description' | 'owner') => {
     setEditingField(field);
-    setEditValue(field === 'description' ? (task.description || '') : (task.owner || ''));
+    if (field === 'description') setEditValue(task.description || '');
+    if (field === 'owner') setOwnerSearch('');
   };
 
   const saveEdit = () => {
     if (!editingField) return;
-    const val = editValue.trim();
-    if (val && val !== (editingField === 'description' ? task.description : task.owner)) {
-      task[editingField] = val;
-      onUpdate?.(task.id, { [editingField]: val });
+    if (editingField === 'description') {
+      const val = editValue.trim();
+      if (val && val !== task.description) {
+        task.description = val;
+        onUpdate?.(task.id, { description: val });
+      }
     }
     setEditingField(null);
   };
+
+  const selectOwner = (name: string) => {
+    if (name !== task.owner) {
+      task.owner = name;
+      onUpdate?.(task.id, { owner: name });
+    }
+    setEditingField(null);
+  };
+
+  const filteredOwners = ownerOptions.filter(o =>
+    o.toLowerCase().includes(ownerSearch.toLowerCase())
+  );
 
   const toggleDone = () => {
     const newStatus = isDone ? 'open' : 'done';
@@ -673,25 +714,62 @@ function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', onApprove, onDismi
         </span>
       )}
 
-      {/* Owner badge */}
+      {/* Owner badge / picker */}
       {editingField === 'owner' ? (
-        <input
-          ref={inputRef}
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onBlur={saveEdit}
-          onKeyDown={handleKeyDown}
-          style={{
-            width: 80, fontSize: 11, padding: '2px 6px', border: '1px solid var(--accent)',
-            borderRadius: 4, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)',
-            outline: 'none', textAlign: 'right',
-          }}
-        />
+        <div ref={ownerDropRef} style={{ position: 'relative', flexShrink: 0 }}>
+          <input
+            ref={ownerInputRef}
+            value={ownerSearch}
+            onChange={(e) => setOwnerSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && filteredOwners.length > 0) selectOwner(filteredOwners[0]);
+              if (e.key === 'Enter' && ownerSearch.trim() && filteredOwners.length === 0) selectOwner(ownerSearch.trim());
+              if (e.key === 'Escape') setEditingField(null);
+            }}
+            placeholder="Search..."
+            style={{
+              width: 110, fontSize: 11, padding: '2px 6px', border: '1px solid var(--accent)',
+              borderRadius: 4, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)',
+              outline: 'none',
+            }}
+          />
+          <div style={{
+            position: 'absolute', top: '100%', right: 0, zIndex: 100,
+            backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 6, marginTop: 2, maxHeight: 150, overflowY: 'auto',
+            minWidth: 120, boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          }}>
+            {filteredOwners.map(o => (
+              <div
+                key={o}
+                onClick={() => selectOwner(o)}
+                style={{
+                  padding: '4px 10px', fontSize: 11, cursor: 'pointer',
+                  color: o === task.owner ? 'var(--accent)' : 'var(--text-secondary)',
+                  fontWeight: o === task.owner ? 600 : 400,
+                  transition: 'background-color 0.1s',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                {o}
+              </div>
+            ))}
+            {filteredOwners.length === 0 && ownerSearch.trim() && (
+              <div
+                onClick={() => selectOwner(ownerSearch.trim())}
+                style={{ padding: '4px 10px', fontSize: 11, cursor: 'pointer', color: 'var(--accent)', fontStyle: 'italic' }}
+              >
+                Add "{ownerSearch.trim()}"
+              </div>
+            )}
+          </div>
+        </div>
       ) : (
         <span
           onClick={() => startEdit('owner')}
           style={{
-            fontSize: 10, color: 'var(--text-muted)', cursor: 'text',
+            fontSize: 10, color: 'var(--text-muted)', cursor: 'pointer',
             padding: '2px 8px', borderRadius: 10,
             backgroundColor: 'var(--bg-tertiary)',
             transition: 'background-color 0.1s', flexShrink: 0,
@@ -844,7 +922,7 @@ function InitiativesView() {
   const fields: DetailField[] = selected ? [
     { key: 'status', label: 'Status', value: selected.status, type: 'select', options: ['on_track', 'at_risk', 'off_track', 'completed', 'paused'], color: STATUS_COLORS[selected.status] },
     { key: 'owner', label: 'Owner', value: selected.owner, type: 'text' },
-    { key: 'quarter', label: 'Quarter', value: selected.quarter, type: 'text' },
+    { key: 'quarter', label: 'Quarter', value: selected.quarter || '', type: 'select', options: QUARTER_OPTIONS, hint: 'Target delivery quarter' },
     { key: 'priority', label: 'Priority', value: selected.priority, type: 'select', options: ['high', 'medium', 'low'] },
     { key: 'description', label: 'Description', value: selected.description, type: 'textarea' },
     { key: 'milestone_progress', label: 'Milestone Progress', value: selected.milestone_progress, type: 'readonly' },

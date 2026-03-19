@@ -192,6 +192,99 @@ export default function DetailPanel({ open, onClose, title, subtitle, badge, fie
   );
 }
 
+/** Editable tag list — click X to remove, type to add new items */
+function EditableTagList({ field, tags, onInlineChange }: {
+  field: DetailField; tags: string[];
+  onInlineChange: (value: any) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [newTag, setNewTag] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (adding && inputRef.current) inputRef.current.focus();
+  }, [adding]);
+
+  const addTag = () => {
+    const val = newTag.trim();
+    if (val && !tags.includes(val)) {
+      onInlineChange([...tags, val]);
+    }
+    setNewTag('');
+    setAdding(false);
+  };
+
+  const removeTag = (idx: number) => {
+    onInlineChange(tags.filter((_, i) => i !== idx));
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{field.label}</span>
+        {field.hint && <span title={field.hint} style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'help' }}>ⓘ</span>}
+      </div>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+        {tags.length === 0 && !adding && (
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>
+        )}
+        {tags.map((t, i) => (
+          <span key={`${t}-${i}`} style={{
+            fontSize: 11, padding: '3px 6px 3px 8px', borderRadius: 8,
+            backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)',
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+          }}>
+            {t}
+            <button
+              onClick={() => removeTag(i)}
+              style={{
+                border: 'none', background: 'none', cursor: 'pointer',
+                color: 'var(--text-muted)', padding: 0, display: 'flex',
+                alignItems: 'center', fontSize: 13, lineHeight: 1,
+              }}
+              title="Remove"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        {adding ? (
+          <input
+            ref={inputRef}
+            value={newTag}
+            onChange={(e) => setNewTag(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') addTag();
+              if (e.key === 'Escape') { setAdding(false); setNewTag(''); }
+            }}
+            onBlur={addTag}
+            placeholder="Type and press Enter"
+            style={{
+              fontSize: 11, padding: '3px 8px', borderRadius: 8,
+              border: '1px solid var(--accent)', backgroundColor: 'var(--bg-secondary)',
+              color: 'var(--text-primary)', outline: 'none', width: 160,
+            }}
+          />
+        ) : (
+          <button
+            onClick={() => setAdding(true)}
+            style={{
+              fontSize: 11, padding: '3px 8px', borderRadius: 8,
+              border: '1px dashed var(--border)', background: 'none',
+              color: 'var(--text-muted)', cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+          >
+            + Add
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FieldRow({ field, editing, value, onChange, onInlineChange }: {
   field: DetailField;
   editing: boolean;
@@ -394,32 +487,17 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
 
   if (field.type === 'tags') {
     const tags = Array.isArray(value) ? value : [];
-    return (
-      <div>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>{field.label}</span>
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {tags.length === 0 ? (
-            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>
-          ) : tags.map((t: string) => (
-            <span key={t} style={{
-              fontSize: 11, padding: '3px 8px', borderRadius: 8,
-              backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)',
-            }}>
-              {t}
-            </span>
-          ))}
-        </div>
-      </div>
-    );
+    return <EditableTagList field={field} tags={tags} onInlineChange={onInlineChange} />;
   }
 
-  // Inline-clickable select (Status, Owner, Priority)
+  // Inline-clickable select (Status, Owner, Priority, Quarter)
   if (field.type === 'select' && field.options && !editing) {
     return (
       <div style={{ position: 'relative' }} ref={dropdownRef}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
           {iconMap[field.key]}
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{field.label}</span>
+          {field.hint && <span title={field.hint} style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'help' }}>ⓘ</span>}
         </div>
         <div
           onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -448,17 +526,18 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
           <div style={dropdownStyle}>
             {field.options.map((o) => (
               <div
-                key={o}
+                key={o || '__empty__'}
                 onClick={() => { onInlineChange(o); setDropdownOpen(false); }}
                 style={{
                   ...dropdownItemStyle,
                   fontWeight: String(value) === o ? 600 : 400,
                   backgroundColor: String(value) === o ? 'var(--bg-hover)' : 'transparent',
+                  fontStyle: o === '' ? 'italic' : 'normal',
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = String(value) === o ? 'var(--bg-hover)' : 'transparent'}
               >
-                {displayValue(o)}
+                {o === '' ? 'Not set' : displayValue(o)}
               </div>
             ))}
           </div>
