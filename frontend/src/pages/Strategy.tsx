@@ -74,6 +74,7 @@ function HierarchyView() {
   const [loading, setLoading] = useState(true);
   const [classifying, setClassifying] = useState(false);
   const [classifyStatus, setClassifyStatus] = useState('');
+  const [classifyProgress, setClassifyProgress] = useState(0); // 0-100
 
   const loadHierarchy = useCallback(() => {
     setLoading(true);
@@ -91,6 +92,7 @@ function HierarchyView() {
   const runClassification = useCallback(() => {
     setClassifying(true);
     setClassifyStatus('Starting classification...');
+    setClassifyProgress(0);
 
     // Use fetch with POST since EventSource only supports GET
     fetch('/api/classify/stream', { method: 'POST' }).then(async (response) => {
@@ -111,7 +113,15 @@ function HierarchyView() {
             try {
               const msg = JSON.parse(line.slice(6));
               if (msg.message) setClassifyStatus(msg.message);
+              // Update progress based on phase
+              if (msg.phase === 'context') setClassifyProgress(5);
+              else if (msg.phase === 'phase1') setClassifyProgress(15);
+              else if (msg.phase === 'phase2' && msg.current && msg.total) {
+                setClassifyProgress(20 + Math.round((msg.current / msg.total) * 65));
+              }
+              else if (msg.phase === 'grammar') setClassifyProgress(90);
               if (msg.status === 'complete') {
+                setClassifyProgress(100);
                 setClassifying(false);
                 setClassifyStatus(`Done: ${msg.themes_created || 0} themes, ${msg.initiatives_created || 0} initiatives, ${msg.epics_created || 0} epics, ${msg.stories_created || 0} stories`);
                 loadHierarchy();
@@ -165,10 +175,30 @@ function HierarchyView() {
 
       {classifyStatus && (
         <div style={{
-          padding: '8px 12px', marginBottom: 12, borderRadius: 'var(--radius)',
-          backgroundColor: 'var(--accent-light)', color: 'var(--accent)', fontSize: 12,
+          marginBottom: 12, borderRadius: 'var(--radius)', overflow: 'hidden',
+          backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
         }}>
-          {classifyStatus}
+          {classifying && (
+            <div style={{
+              height: 4, backgroundColor: 'var(--bg-secondary)', borderRadius: 2,
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                height: '100%', borderRadius: 2,
+                backgroundColor: 'var(--accent)',
+                width: `${classifyProgress}%`,
+                transition: 'width 0.5s ease',
+              }} />
+            </div>
+          )}
+          <div style={{
+            padding: '8px 12px', fontSize: 12,
+            color: classifying ? 'var(--accent)' : 'var(--text-secondary)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <span>{classifyStatus}</span>
+            {classifying && <span style={{ color: 'var(--text-muted)' }}>{classifyProgress}%</span>}
+          </div>
         </div>
       )}
 
