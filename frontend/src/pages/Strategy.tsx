@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useStore } from '../store';
 import { getTheme } from '../themes';
 import { api } from '../api/client';
-import { Target, Scale, Users, BarChart3, CheckCircle2, Circle, GitBranch, Check, X, Sparkles, ChevronRight, ChevronDown } from 'lucide-react';
+import { Target, Scale, Users, BarChart3, CheckCircle2, Circle, GitBranch, Check, X, Sparkles, ChevronRight, ChevronDown, Plus } from 'lucide-react';
 import DetailPanel from '../components/DetailPanel';
 import type { DetailField } from '../components/DetailPanel';
 
@@ -268,6 +268,25 @@ function HierarchyView() {
     api.post(`/api/dismiss/${type}/${id}`, {}).catch(() => loadHierarchy());
   }, [removeNodeFromTree, loadHierarchy]);
 
+  // Task-level updates
+  const handleTaskUpdate = useCallback((taskId: string, updates: Record<string, any>) => {
+    api.patch<any>(`/api/intel/tasks/${taskId}`, updates).catch(() => {});
+  }, []);
+
+  const handleTaskRemove = useCallback((taskId: string) => {
+    setTree((prev) => removeNodeFromTree(prev, taskId));
+    setOperational((prev) => prev.filter((t) => t.id !== taskId));
+    setUnclassified((prev) => prev.filter((t) => t.id !== taskId));
+    api.delete<any>(`/api/intel/tasks/${taskId}`).catch(() => {});
+  }, [removeNodeFromTree]);
+
+  const handleTaskAdd = useCallback((parentNode: any, newTask: any) => {
+    // Add the new task as a child of the parent story node
+    setTree((prev) => updateNodeInTree(prev, parentNode.id, (n) => ({
+      ...n, children: [...(n.children || []), newTask],
+    })));
+  }, [updateNodeInTree]);
+
   // Collapse/expand all: bump key to force re-mount with different default
   const [expandMode, setExpandMode] = useState<'default' | 'all' | 'none'>('default');
   const [treeKey, setTreeKey] = useState(0);
@@ -346,7 +365,7 @@ function HierarchyView() {
       {/* Tree */}
       <div key={treeKey} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {tree.map((node) => (
-          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} />
+          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} onTaskUpdate={handleTaskUpdate} onTaskRemove={handleTaskRemove} onTaskAdd={handleTaskAdd} />
         ))}
       </div>
 
@@ -362,7 +381,7 @@ function HierarchyView() {
             </span>
           </div>
           {operational.map((t: any) => (
-            <TaskLeaf key={t.id} task={t} borderColor="#f59e0b" onApprove={handleApprove} onDismiss={handleDismiss} />
+            <TaskLeaf key={t.id} task={t} borderColor="#f59e0b" onApprove={handleApprove} onDismiss={handleDismiss} onUpdate={handleTaskUpdate} onRemove={handleTaskRemove} />
           ))}
         </div>
       )}
@@ -379,7 +398,7 @@ function HierarchyView() {
             </span>
           </div>
           {unclassified.map((t: any) => (
-            <TaskLeaf key={t.id} task={t} borderColor="#64748b" onApprove={handleApprove} onDismiss={handleDismiss} />
+            <TaskLeaf key={t.id} task={t} borderColor="#64748b" onApprove={handleApprove} onDismiss={handleDismiss} onUpdate={handleTaskUpdate} onRemove={handleTaskRemove} />
           ))}
         </div>
       )}
@@ -425,12 +444,15 @@ const TYPE_LABELS: Record<string, string> = {
   theme: 'Theme', initiative: 'Initiative', epic: 'Epic', story: 'Story',
 };
 
-function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismiss, onNodeClick }: {
+function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismiss, onNodeClick, onTaskUpdate, onTaskRemove, onTaskAdd }: {
   node: any; depth: number;
   expandMode?: 'default' | 'all' | 'none';
   onApprove: (type: string, id: string) => void;
   onDismiss: (type: string, id: string) => void;
   onNodeClick?: (node: any) => void;
+  onTaskUpdate?: (id: string, updates: Record<string, any>) => void;
+  onTaskRemove?: (id: string) => void;
+  onTaskAdd?: (parentNode: any, newTask: any) => void;
 }) {
   const defaultExpanded = expandMode === 'all' ? true : expandMode === 'none' ? false : depth < 2;
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -518,26 +540,46 @@ function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismi
         )}
       </div>
 
-      {expanded && children.map((child: any) => (
-        child.type ? (
-          <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} />
-        ) : (
-          <TaskLeaf key={child.id} task={child} depth={depth + 1} onApprove={onApprove} onDismiss={onDismiss} />
-        )
-      ))}
+      {expanded && (
+        <>
+          {children.map((child: any) => (
+            child.type ? (
+              <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} onTaskUpdate={onTaskUpdate} onTaskRemove={onTaskRemove} onTaskAdd={onTaskAdd} />
+            ) : (
+              <TaskLeaf key={child.id} task={child} depth={depth + 1} onApprove={onApprove} onDismiss={onDismiss} onUpdate={onTaskUpdate} onRemove={onTaskRemove} />
+            )
+          ))}
+          {/* Add task row for story nodes that have task children */}
+          {(node.type === 'story' || node.type === 'epic') && children.some((c: any) => !c.type) && (
+            <AddTaskRow
+              depth={depth + 1}
+              parentTaskId={children.find((c: any) => !c.type)?.id || ''}
+              onAdd={(newTask) => onTaskAdd?.(node, newTask)}
+            />
+          )}
+        </>
+      )}
     </div>
   );
 }
 
 /* Task leaf node */
-function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', onApprove, onDismiss }: {
+const TASK_STATUS_COLORS: Record<string, string> = {
+  done: '#22c55e', in_progress: '#3b82f6', review: '#f59e0b', open: '#64748b',
+};
+
+function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', onApprove, onDismiss, onRemove, onUpdate }: {
   task: any; depth?: number; borderColor?: string;
   onApprove: (type: string, id: string) => void;
   onDismiss: (type: string, id: string) => void;
+  onRemove?: (id: string) => void;
+  onUpdate?: (id: string, updates: Record<string, any>) => void;
 }) {
   const isAuto = task.source === 'auto';
+  const isDone = task.status === 'done';
   const [editingField, setEditingField] = useState<'description' | 'owner' | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [hovered, setHovered] = useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
@@ -554,9 +596,15 @@ function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', onApprove, onDismi
     const val = editValue.trim();
     if (val && val !== (editingField === 'description' ? task.description : task.owner)) {
       task[editingField] = val;
-      api.patch<any>(`/api/intel/tasks/${task.id}`, { [editingField]: val }).catch(() => {});
+      onUpdate?.(task.id, { [editingField]: val });
     }
     setEditingField(null);
+  };
+
+  const toggleDone = () => {
+    const newStatus = isDone ? 'open' : 'done';
+    task.status = newStatus;
+    onUpdate?.(task.id, { status: newStatus });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -564,16 +612,39 @@ function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', onApprove, onDismi
     if (e.key === 'Escape') setEditingField(null);
   };
 
+  const status = task.status || 'open';
+  const statusColor = TASK_STATUS_COLORS[status] || '#64748b';
+
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 6,
-      padding: '4px 8px', paddingLeft: depth * 20 + 28,
-      borderLeft: `3px ${isAuto ? 'dashed' : 'solid'} ${borderColor}`,
-      marginBottom: 1,
-      color: isAuto ? 'var(--text-muted)' : 'var(--text-secondary)',
-      fontSize: 12,
-    }}>
-      <Circle size={8} style={{ flexShrink: 0, color: borderColor }} />
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '4px 8px', paddingLeft: depth * 20 + 28,
+        borderLeft: `3px ${isAuto ? 'dashed' : 'solid'} ${borderColor}`,
+        marginBottom: 1,
+        color: isAuto ? 'var(--text-muted)' : 'var(--text-secondary)',
+        fontSize: 12,
+        opacity: isDone ? 0.5 : 1,
+      }}
+    >
+      {/* Checkbox */}
+      <button
+        onClick={toggleDone}
+        title={isDone ? 'Mark open' : 'Mark done'}
+        style={{
+          flexShrink: 0, width: 16, height: 16, borderRadius: 4, cursor: 'pointer',
+          border: `1.5px solid ${isDone ? '#22c55e' : 'var(--border)'}`,
+          backgroundColor: isDone ? '#22c55e' : 'transparent',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 0, transition: 'all 0.15s',
+        }}
+      >
+        {isDone && <Check size={10} style={{ color: '#fff' }} />}
+      </button>
+
+      {/* Description */}
       {editingField === 'description' ? (
         <input
           ref={inputRef}
@@ -590,13 +661,19 @@ function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', onApprove, onDismi
       ) : (
         <span
           onClick={() => startEdit('description')}
-          style={{ flex: 1, cursor: 'text', borderRadius: 4, padding: '1px 4px', transition: 'background-color 0.1s' }}
+          style={{
+            flex: 1, cursor: 'text', borderRadius: 4, padding: '1px 4px',
+            textDecoration: isDone ? 'line-through' : 'none',
+            transition: 'background-color 0.1s',
+          }}
           onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
           onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
         >
           {task.description || '(no description)'}
         </span>
       )}
+
+      {/* Owner badge */}
       {editingField === 'owner' ? (
         <input
           ref={inputRef}
@@ -613,37 +690,121 @@ function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', onApprove, onDismi
       ) : (
         <span
           onClick={() => startEdit('owner')}
-          style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'text', borderRadius: 4, padding: '1px 4px', transition: 'background-color 0.1s', minWidth: 30 }}
+          style={{
+            fontSize: 10, color: 'var(--text-muted)', cursor: 'text',
+            padding: '2px 8px', borderRadius: 10,
+            backgroundColor: 'var(--bg-tertiary)',
+            transition: 'background-color 0.1s', flexShrink: 0,
+          }}
           onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
         >
           {task.owner || '—'}
         </span>
       )}
+
+      {/* Status pill */}
+      <span style={{
+        fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 10, flexShrink: 0,
+        backgroundColor: statusColor + '20', color: statusColor,
+      }}>
+        {status.replace(/_/g, ' ')}
+      </span>
+
+      {/* AI actions */}
       {isAuto && (
         <>
-          <button
-            onClick={() => onApprove('tasks', task.id)}
-            title="Approve"
-            style={{
-              display: 'flex', alignItems: 'center', padding: 2,
-              border: 'none', background: 'none', cursor: 'pointer', color: '#22c55e',
-            }}
-          >
+          <button onClick={() => onApprove('tasks', task.id)} title="Approve"
+            style={{ display: 'flex', alignItems: 'center', padding: 2, border: 'none', background: 'none', cursor: 'pointer', color: '#22c55e' }}>
             <Check size={14} />
           </button>
-          <button
-            onClick={() => onDismiss('tasks', task.id)}
-            title="Dismiss"
-            style={{
-              display: 'flex', alignItems: 'center', padding: 2,
-              border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444',
-            }}
-          >
+          <button onClick={() => onDismiss('tasks', task.id)} title="Dismiss"
+            style={{ display: 'flex', alignItems: 'center', padding: 2, border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444' }}>
             <X size={14} />
           </button>
         </>
       )}
+
+      {/* Remove button (on hover) */}
+      {!isAuto && onRemove && (
+        <button
+          onClick={() => onRemove(task.id)}
+          title="Remove task"
+          style={{
+            display: 'flex', alignItems: 'center', padding: 2, border: 'none', background: 'none',
+            cursor: 'pointer', color: 'var(--text-muted)',
+            opacity: hovered ? 0.7 : 0, transition: 'opacity 0.15s',
+          }}
+        >
+          <X size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* Inline add task input */
+function AddTaskRow({ depth, parentTaskId, onAdd }: {
+  depth: number; parentTaskId: string;
+  onAdd: (task: any) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [value, setValue] = useState('');
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (adding && inputRef.current) inputRef.current.focus();
+  }, [adding]);
+
+  const save = () => {
+    const desc = value.trim();
+    if (!desc) { setAdding(false); return; }
+    api.post<any>(`/api/intel/tasks/${parentTaskId}/create-from-step`, { step_description: desc })
+      .then((res) => { if (res.task) onAdd(res.task); })
+      .catch(() => {});
+    setValue('');
+    setAdding(false);
+  };
+
+  if (!adding) {
+    return (
+      <div
+        onClick={() => setAdding(true)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '4px 8px', paddingLeft: depth * 20 + 28,
+          marginBottom: 1, fontSize: 12, color: 'var(--text-muted)',
+          cursor: 'pointer', transition: 'color 0.1s',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+      >
+        <Plus size={12} />
+        <span>Add task</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '4px 8px', paddingLeft: depth * 20 + 28,
+      marginBottom: 1,
+    }}>
+      <Plus size={12} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setValue(''); setAdding(false); } }}
+        placeholder="New task description..."
+        style={{
+          flex: 1, fontSize: 12, padding: '3px 8px', border: '1px solid var(--accent)',
+          borderRadius: 4, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)',
+          outline: 'none',
+        }}
+      />
     </div>
   );
 }
