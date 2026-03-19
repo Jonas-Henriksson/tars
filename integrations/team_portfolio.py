@@ -20,6 +20,44 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Filter out group/team names from portfolio — keep only real people
+# ---------------------------------------------------------------------------
+
+_GROUP_NAMES = {
+    "all", "everyone", "managers", "leadership", "team", "unassigned",
+    "nobody", "none", "tbd", "tbc", "n/a", "na", "admin", "system",
+    "dataclass", "unknown", "other", "general", "various", "multiple",
+    "shared", "common", "default", "test", "example",
+}
+
+_GROUP_PREFIXES = ("group ", "team ", "dept ", "department ")
+
+
+def _is_likely_person(name: str) -> bool:
+    """Return True if the name looks like a real person, not a group/team/artifact."""
+    if not name or not name.strip():
+        return False
+    name_stripped = name.strip()
+    # Too short
+    if len(name_stripped) < 2:
+        return False
+    # Purely numeric
+    if name_stripped.replace(" ", "").isdigit():
+        return False
+    # Known group names (case-insensitive)
+    if name_stripped.lower() in _GROUP_NAMES:
+        return False
+    # Group prefixes
+    if name_stripped.lower().startswith(_GROUP_PREFIXES):
+        return False
+    # All lowercase single word that's >8 chars (likely code artifact: "dataclass", "unassigned")
+    if " " not in name_stripped and name_stripped.islower() and len(name_stripped) > 8:
+        return False
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Heuristics to classify unlinked tasks as deliverable vs operational
 # ---------------------------------------------------------------------------
@@ -142,8 +180,10 @@ def get_team_portfolio(
         for tid in s.get("linked_task_ids", []):
             linked_task_ids.add(tid)
 
+    filtered_count = 0
     for person in sorted(all_owners):
-        if person == "Unassigned":
+        if not _is_likely_person(person):
+            filtered_count += 1
             continue
 
         person_l = person.lower()
@@ -334,6 +374,7 @@ def get_team_portfolio(
     return {
         "portfolio": portfolio,
         "member_count": len(portfolio),
+        "filtered_count": filtered_count,
         "total_epics": len(epics),
         "total_stories": len(stories),
         "needs_epic": all_needs_epic,
