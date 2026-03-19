@@ -2763,26 +2763,29 @@ function PortfolioView() {
 
   const TASK_PREVIEW_COUNT = 5;
 
-  const getTaskField = (t: any, field: string) => localTaskUpdates[t.id]?.[field] ?? t[field];
+  // Use composite key (source_id) to avoid collisions between smart and tracked tasks
+  const taskKey = (t: any) => `${t.source || 'unknown'}_${t.id}`;
+  const getTaskField = (t: any, field: string) => localTaskUpdates[taskKey(t)]?.[field] ?? t[field];
 
-  const handlePortfolioTaskUpdate = (taskId: string, source: string, updates: Record<string, any>) => {
-    setLocalTaskUpdates(prev => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), ...updates } }));
-    const endpoint = source === 'smart' ? `/api/intel/tasks/${taskId}` : `/api/tasks/${taskId}`;
+  const handlePortfolioTaskUpdate = (t: any, updates: Record<string, any>) => {
+    const key = taskKey(t);
+    setLocalTaskUpdates(prev => ({ ...prev, [key]: { ...(prev[key] || {}), ...updates } }));
+    const endpoint = t.source === 'smart' ? `/api/intel/tasks/${t.id}` : `/api/tasks/${t.id}`;
     api.patch<any>(endpoint, updates).catch(() => {
-      // Revert on failure
-      setLocalTaskUpdates(prev => { const next = { ...prev }; delete next[taskId]; return next; });
+      setLocalTaskUpdates(prev => { const next = { ...prev }; delete next[key]; return next; });
     });
   };
 
-  const handlePortfolioTaskRemove = (taskId: string, source: string) => {
-    setRemovedTaskIds(prev => new Set(prev).add(taskId));
-    if (source === 'smart') {
-      api.delete<any>(`/api/intel/tasks/${taskId}`).catch(() => {
-        setRemovedTaskIds(prev => { const next = new Set(prev); next.delete(taskId); return next; });
+  const handlePortfolioTaskRemove = (t: any) => {
+    const key = taskKey(t);
+    setRemovedTaskIds(prev => new Set(prev).add(key));
+    if (t.source === 'smart') {
+      api.delete<any>(`/api/intel/tasks/${t.id}`).catch(() => {
+        setRemovedTaskIds(prev => { const next = new Set(prev); next.delete(key); return next; });
       });
     } else {
-      api.patch<any>(`/api/tasks/${taskId}`, { status: 'discarded' }).catch(() => {
-        setRemovedTaskIds(prev => { const next = new Set(prev); next.delete(taskId); return next; });
+      api.patch<any>(`/api/tasks/${t.id}`, { status: 'discarded' }).catch(() => {
+        setRemovedTaskIds(prev => { const next = new Set(prev); next.delete(key); return next; });
       });
     }
   };
@@ -2922,19 +2925,19 @@ function PortfolioView() {
               }}>
                 {wl.epics > 0 && <span style={{ color: '#10b981', fontWeight: 500 }}>{wl.epics} epics</span>}
                 {totalVisibleStories > 0 && <span style={{ color: '#f59e0b', fontWeight: 500 }}>{totalVisibleStories} stories</span>}
-                {allTasks.filter(t => !removedTaskIds.has(t.id)).length > 0 && (
-                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{allTasks.filter(t => !removedTaskIds.has(t.id)).length} tasks</span>
+                {allTasks.filter(t => !removedTaskIds.has(taskKey(t))).length > 0 && (
+                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{allTasks.filter(t => !removedTaskIds.has(taskKey(t))).length} tasks</span>
                 )}
                 {wl.blocked > 0 && <span style={{ color: '#ef4444', fontWeight: 600 }}>{wl.blocked} blocked</span>}
                 {(() => {
-                  const overdueCount = allTasks.filter(t => !removedTaskIds.has(t.id) && isTaskOverdue(t)).length;
+                  const overdueCount = allTasks.filter(t => !removedTaskIds.has(taskKey(t)) && isTaskOverdue(t)).length;
                   return overdueCount > 0 ? <span style={{ color: '#ef4444', fontWeight: 600 }}>{overdueCount} overdue</span> : null;
                 })()}
               </div>
             </div>
 
             {/* Body — scrollable */}
-            <div onClick={() => { if (statusPickerTaskId) setStatusPickerTaskId(null); }} style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
+            <div onClick={() => setStatusPickerTaskId(null)} style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
               {/* Epics section */}
               {selectedEpics.length > 0 && (
                 <PortfolioEpicsSection epics={selectedEpics} storiesByEpic={memberStoriesByEpic}
@@ -2999,8 +3002,8 @@ function PortfolioView() {
               })()}
 
               {/* Deliverable Tasks section */}
-              {deliverableTasks.filter(t => !removedTaskIds.has(t.id)).length > 0 && (() => {
-                const visibleTasks = deliverableTasks.filter(t => !removedTaskIds.has(t.id));
+              {deliverableTasks.filter(t => !removedTaskIds.has(taskKey(t))).length > 0 && (() => {
+                const visibleTasks = deliverableTasks.filter(t => !removedTaskIds.has(taskKey(t)));
                 const overdueFirst = [...visibleTasks].sort((a, b) => {
                   const aOd = isTaskOverdue(a) ? 0 : 1;
                   const bOd = isTaskOverdue(b) ? 0 : 1;
@@ -3026,10 +3029,10 @@ function PortfolioView() {
                         const status = getTaskField(t, 'status');
                         const desc = getTaskField(t, 'description');
                         const tColor = status === 'done' ? '#10b981' : isTaskOverdue(t) ? '#ef4444' : STATUS_COLORS[status] || '#94a3b8';
-                        const isEditing = editingTaskId === t.id;
-                        const isStatusOpen = statusPickerTaskId === t.id;
+                        const isEditing = editingTaskId === taskKey(t);
+                        const isStatusOpen = statusPickerTaskId === taskKey(t);
                         return (
-                          <div key={t.id} style={{
+                          <div key={taskKey(t)} style={{
                             display: 'flex', alignItems: 'center', gap: 4, padding: '5px 8px',
                             borderLeft: `2px solid ${isTaskOverdue(t) ? '#ef4444' : 'var(--border)'}`,
                             borderRadius: 'var(--radius)',
@@ -3038,7 +3041,7 @@ function PortfolioView() {
                           }}>
                             {/* Complete checkbox */}
                             <button
-                              onClick={() => handlePortfolioTaskUpdate(t.id, t.source || 'smart', { status: 'done' })}
+                              onClick={() => handlePortfolioTaskUpdate(t, { status: 'done' })}
                               title="Mark complete"
                               style={{
                                 border: '1.5px solid var(--border)', background: 'none', cursor: 'pointer',
@@ -3058,7 +3061,7 @@ function PortfolioView() {
                                 onChange={(e) => setEditingTaskDesc(e.target.value)}
                                 onBlur={() => {
                                   if (editingTaskDesc.trim() && editingTaskDesc !== desc) {
-                                    handlePortfolioTaskUpdate(t.id, t.source || 'smart', { description: editingTaskDesc.trim() });
+                                    handlePortfolioTaskUpdate(t, { description: editingTaskDesc.trim() });
                                   }
                                   setEditingTaskId(null);
                                 }}
@@ -3074,7 +3077,7 @@ function PortfolioView() {
                               />
                             ) : (
                               <span
-                                onClick={() => { setEditingTaskId(t.id); setEditingTaskDesc(desc); }}
+                                onClick={() => { setEditingTaskId(taskKey(t)); setEditingTaskDesc(desc); }}
                                 title="Click to edit"
                                 style={{
                                   color: status === 'done' ? 'var(--text-muted)' : 'var(--text-secondary)',
@@ -3097,7 +3100,7 @@ function PortfolioView() {
                             )}
                             {/* Clickable status badge */}
                             <span
-                              onClick={(e) => { e.stopPropagation(); setStatusPickerTaskId(isStatusOpen ? null : t.id); }}
+                              onClick={(e) => { e.stopPropagation(); setStatusPickerTaskId(isStatusOpen ? null : taskKey(t)); }}
                               title="Change status"
                               style={{
                                 fontSize: 10, padding: '1px 5px', borderRadius: 3,
@@ -3121,7 +3124,7 @@ function PortfolioView() {
                                     <div key={s}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        handlePortfolioTaskUpdate(t.id, t.source || 'smart', { status: s });
+                                        handlePortfolioTaskUpdate(t, { status: s });
                                         setStatusPickerTaskId(null);
                                       }}
                                       style={{
@@ -3140,7 +3143,7 @@ function PortfolioView() {
                             )}
                             {/* Discard button */}
                             <button
-                              onClick={() => handlePortfolioTaskRemove(t.id, t.source || 'smart')}
+                              onClick={() => handlePortfolioTaskRemove(t)}
                               title="Discard task"
                               style={{
                                 border: 'none', background: 'none', cursor: 'pointer', padding: 2,
@@ -3171,8 +3174,8 @@ function PortfolioView() {
               })()}
 
               {/* Operational Tasks section */}
-              {operationalTasks.filter(t => !removedTaskIds.has(t.id)).length > 0 && (() => {
-                const visibleOps = operationalTasks.filter(t => !removedTaskIds.has(t.id));
+              {operationalTasks.filter(t => !removedTaskIds.has(taskKey(t))).length > 0 && (() => {
+                const visibleOps = operationalTasks.filter(t => !removedTaskIds.has(taskKey(t)));
                 const overdueFirstOps = [...visibleOps].sort((a, b) => {
                   const aOd = isTaskOverdue(a) ? 0 : 1;
                   const bOd = isTaskOverdue(b) ? 0 : 1;
@@ -3198,10 +3201,10 @@ function PortfolioView() {
                         const status = getTaskField(t, 'status');
                         const desc = getTaskField(t, 'description');
                         const tColor = status === 'done' ? '#10b981' : isTaskOverdue(t) ? '#ef4444' : STATUS_COLORS[status] || '#94a3b8';
-                        const isEditing = editingTaskId === t.id;
-                        const isStatusOpen = statusPickerTaskId === t.id;
+                        const isEditing = editingTaskId === taskKey(t);
+                        const isStatusOpen = statusPickerTaskId === taskKey(t);
                         return (
-                          <div key={t.id} style={{
+                          <div key={taskKey(t)} style={{
                             display: 'flex', alignItems: 'center', gap: 4, padding: '5px 8px',
                             borderLeft: `2px solid ${isTaskOverdue(t) ? '#ef4444' : 'var(--border)'}`,
                             borderRadius: 'var(--radius)',
@@ -3209,7 +3212,7 @@ function PortfolioView() {
                             fontSize: 12, position: 'relative',
                           }}>
                             <button
-                              onClick={() => handlePortfolioTaskUpdate(t.id, t.source || 'tracked', { status: 'done' })}
+                              onClick={() => handlePortfolioTaskUpdate(t, { status: 'done' })}
                               title="Mark complete"
                               style={{
                                 border: '1.5px solid var(--border)', background: 'none', cursor: 'pointer',
@@ -3228,7 +3231,7 @@ function PortfolioView() {
                                 onChange={(e) => setEditingTaskDesc(e.target.value)}
                                 onBlur={() => {
                                   if (editingTaskDesc.trim() && editingTaskDesc !== desc) {
-                                    handlePortfolioTaskUpdate(t.id, t.source || 'tracked', { description: editingTaskDesc.trim() });
+                                    handlePortfolioTaskUpdate(t, { description: editingTaskDesc.trim() });
                                   }
                                   setEditingTaskId(null);
                                 }}
@@ -3244,7 +3247,7 @@ function PortfolioView() {
                               />
                             ) : (
                               <span
-                                onClick={() => { setEditingTaskId(t.id); setEditingTaskDesc(desc); }}
+                                onClick={() => { setEditingTaskId(taskKey(t)); setEditingTaskDesc(desc); }}
                                 title="Click to edit"
                                 style={{
                                   color: status === 'done' ? 'var(--text-muted)' : 'var(--text-secondary)',
@@ -3265,7 +3268,7 @@ function PortfolioView() {
                               </span>
                             )}
                             <span
-                              onClick={(e) => { e.stopPropagation(); setStatusPickerTaskId(isStatusOpen ? null : t.id); }}
+                              onClick={(e) => { e.stopPropagation(); setStatusPickerTaskId(isStatusOpen ? null : taskKey(t)); }}
                               title="Change status"
                               style={{
                                 fontSize: 10, padding: '1px 5px', borderRadius: 3,
@@ -3288,7 +3291,7 @@ function PortfolioView() {
                                     <div key={s}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        handlePortfolioTaskUpdate(t.id, t.source || 'tracked', { status: s });
+                                        handlePortfolioTaskUpdate(t, { status: s });
                                         setStatusPickerTaskId(null);
                                       }}
                                       style={{
@@ -3306,7 +3309,7 @@ function PortfolioView() {
                               </div>
                             )}
                             <button
-                              onClick={() => handlePortfolioTaskRemove(t.id, t.source || 'tracked')}
+                              onClick={() => handlePortfolioTaskRemove(t)}
                               title="Discard task"
                               style={{
                                 border: 'none', background: 'none', cursor: 'pointer', padding: 2,
@@ -3446,12 +3449,72 @@ function PortfolioView() {
                 api.patch<any>(`${endpoint}/${detailItem.node.id}`, updates).catch(() => {});
                 setDetailItem(null);
               }}
-            />
+            >
+              {/* Hierarchy breadcrumb — full tree path for context */}
+              {detailItem && (() => {
+                const path = findAncestorPath(hierTree, detailItem.node.id);
+                if (path.length <= 1) return null;
+                return (
+                  <div style={{
+                    padding: '8px 0', marginBottom: 8, borderBottom: '1px solid var(--border)',
+                  }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Hierarchy
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {path.map((ancestor, i) => {
+                        const isLast = i === path.length - 1;
+                        const typeColor = TYPE_COLORS[ancestor.type] || '#666';
+                        return (
+                          <div key={ancestor.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            paddingLeft: i * 14, fontSize: 12,
+                          }}>
+                            {i > 0 && (
+                              <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>└</span>
+                            )}
+                            <span style={{
+                              fontSize: 9, fontWeight: 600, textTransform: 'uppercase',
+                              color: typeColor, minWidth: 28,
+                            }}>
+                              {(TYPE_LABELS[ancestor.type] || ancestor.type || '').slice(0, 4)}
+                            </span>
+                            <span style={{
+                              color: isLast ? 'var(--text-primary)' : 'var(--text-secondary)',
+                              fontWeight: isLast ? 600 : 400,
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}>
+                              {ancestor.title || ancestor.description || '(untitled)'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </DetailPanel>
           </div>
         </>
       )}
     </>
   );
+}
+
+/** Find ancestor path from root to target node in hierarchy tree */
+function findAncestorPath(tree: any[], targetId: string): any[] {
+  function walk(nodes: any[], path: any[]): any[] | null {
+    for (const n of nodes) {
+      const current = [...path, n];
+      if (n.id === targetId) return current;
+      if (n.children) {
+        const found = walk(n.children, current);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+  return walk(tree, []) || [];
 }
 
 /** Get fields for detail panel based on item type */
