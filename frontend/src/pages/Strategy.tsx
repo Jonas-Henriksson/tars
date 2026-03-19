@@ -2002,6 +2002,74 @@ function DecisionsView() {
     backgroundColor: 'transparent', color: 'var(--text-secondary)', transition: 'all 0.15s',
   };
 
+  const renderDecisionCard = (d: any) => (
+    <div
+      key={d.id}
+      onClick={() => setSelected(d)}
+      onMouseEnter={(e) => { setHoveredId(d.id); e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; e.currentTarget.style.boxShadow = 'var(--shadow)'; }}
+      onMouseLeave={(e) => { setHoveredId(null); e.currentTarget.style.backgroundColor = 'var(--bg-card)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
+      style={{
+        ...cardStyle, cursor: 'pointer', transition: 'all 0.15s', position: 'relative',
+        borderLeft: `3px solid ${STATUS_COLORS[d.status] || '#94a3b8'}`,
+      }}
+    >
+      {hoveredId === d.id && (
+        <button
+          onClick={(e) => { e.stopPropagation(); handleDelete(d.id); }}
+          title="Delete decision"
+          style={{
+            position: 'absolute', top: 8, right: 8, background: 'none', border: 'none',
+            cursor: 'pointer', color: 'var(--text-muted)', padding: 2, borderRadius: 4,
+            display: 'flex', alignItems: 'center',
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+        >
+          <X size={14} />
+        </button>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, paddingRight: 24 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{d.title}</h3>
+        {filter !== 'all' && (
+          <span onClick={(e) => handleStatusCycle(d, e)} title="Click to cycle status" style={{ cursor: 'pointer' }}>
+            <StatusBadge status={d.status} />
+          </span>
+        )}
+      </div>
+
+      {d.rationale && <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6, lineHeight: 1.5 }}>{d.rationale}</p>}
+
+      {d.status === 'request' && (d.requested_from || d.request_reason || d.from_workstream) && (
+        <div style={{ fontSize: 12, color: '#8b5cf6', marginBottom: 6, padding: '4px 8px', backgroundColor: '#8b5cf620', borderRadius: 4 }}>
+          {d.requested_from && <span>Requested from: <strong>{d.requested_from}</strong></span>}
+          {d.request_reason && <span> · Reason: {d.request_reason}</span>}
+          {d.from_workstream && <span> · From: {d.from_workstream}</span>}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+        <span>By: {d.decided_by || 'Unknown'}</span>
+        {d.stakeholders?.length > 0 && <span>Stakeholders: {d.stakeholders.join(', ')}</span>}
+        {d.initiative && <span>Initiative: {d.initiative}</span>}
+        {d.linked_title && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+            <span style={{
+              fontSize: 10, padding: '1px 5px', borderRadius: 3, fontWeight: 500, textTransform: 'capitalize',
+              backgroundColor: (STATUS_COLORS[d.linked_type] || '#64748b') + '20',
+              color: STATUS_COLORS[d.linked_type] || '#64748b',
+            }}>{d.linked_type}</span>
+            {d.linked_title}
+          </span>
+        )}
+        {d.source && d.source !== 'manual' && (
+          <span style={{ fontStyle: 'italic' }}>via {d.source}</span>
+        )}
+        <span>{d.created_at ? new Date(d.created_at).toLocaleDateString() : ''}</span>
+      </div>
+    </div>
+  );
+
   return (
     <>
       {/* Action buttons */}
@@ -2145,74 +2213,36 @@ function DecisionsView() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {filtered.length === 0 ? (
           <EmptyState message={filter === 'all' ? 'No decisions logged yet. Click "+ Add Decision" to get started.' : `No ${filter} decisions.`} />
+        ) : filter !== 'all' ? (
+          filtered.map((d) => renderDecisionCard(d))
         ) : (
-          filtered.map((d) => (
-            <div
-              key={d.id}
-              onClick={() => setSelected(d)}
-              onMouseEnter={(e) => { setHoveredId(d.id); e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; e.currentTarget.style.boxShadow = 'var(--shadow)'; }}
-              onMouseLeave={(e) => { setHoveredId(null); e.currentTarget.style.backgroundColor = 'var(--bg-card)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
-              style={{
-                ...cardStyle, cursor: 'pointer', transition: 'all 0.15s', position: 'relative',
-                borderLeft: `3px solid ${STATUS_COLORS[d.status] || '#94a3b8'}`,
-              }}
-            >
-              {/* Delete button on hover */}
-              {hoveredId === d.id && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDelete(d.id); }}
-                  title="Delete decision"
-                  style={{
-                    position: 'absolute', top: 8, right: 8, background: 'none', border: 'none',
-                    cursor: 'pointer', color: 'var(--text-muted)', padding: 2, borderRadius: 4,
-                    display: 'flex', alignItems: 'center',
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
-                >
-                  <X size={14} />
-                </button>
-              )}
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, paddingRight: 24 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{d.title}</h3>
-                <span onClick={(e) => handleStatusCycle(d, e)} title="Click to cycle status" style={{ cursor: 'pointer' }}>
-                  <StatusBadge status={d.status} />
-                </span>
-              </div>
-
-              {d.rationale && <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6, lineHeight: 1.5 }}>{d.rationale}</p>}
-
-              {/* Request metadata */}
-              {d.status === 'request' && (d.requested_from || d.request_reason || d.from_workstream) && (
-                <div style={{ fontSize: 12, color: '#8b5cf6', marginBottom: 6, padding: '4px 8px', backgroundColor: '#8b5cf620', borderRadius: 4 }}>
-                  {d.requested_from && <span>Requested from: <strong>{d.requested_from}</strong></span>}
-                  {d.request_reason && <span> · Reason: {d.request_reason}</span>}
-                  {d.from_workstream && <span> · From: {d.from_workstream}</span>}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-                <span>By: {d.decided_by || 'Unknown'}</span>
-                {d.stakeholders?.length > 0 && <span>Stakeholders: {d.stakeholders.join(', ')}</span>}
-                {d.initiative && <span>Initiative: {d.initiative}</span>}
-                {d.linked_title && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          /* Grouped view for "All" */
+          (['pending', 'request', 'decided', 'revisit'] as const).map((status) => {
+            const group = filtered.filter((d) => d.status === status);
+            if (group.length === 0) return null;
+            const color = STATUS_COLORS[status] || '#94a3b8';
+            return (
+              <div key={status} style={{ marginBottom: 8 }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, marginTop: 4,
+                }}>
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
+                    color, display: 'inline-flex', alignItems: 'center', gap: 6,
+                  }}>
                     <span style={{
-                      fontSize: 10, padding: '1px 5px', borderRadius: 3, fontWeight: 500, textTransform: 'capitalize',
-                      backgroundColor: (STATUS_COLORS[d.linked_type] || '#64748b') + '20',
-                      color: STATUS_COLORS[d.linked_type] || '#64748b',
-                    }}>{d.linked_type}</span>
-                    {d.linked_title}
+                      width: 8, height: 8, borderRadius: '50%', backgroundColor: color, flexShrink: 0,
+                    }} />
+                    {status} ({group.length})
                   </span>
-                )}
-                {d.source && d.source !== 'manual' && (
-                  <span style={{ fontStyle: 'italic' }}>via {d.source}</span>
-                )}
-                <span>{d.created_at ? new Date(d.created_at).toLocaleDateString() : ''}</span>
+                  <span style={{ flex: 1, height: 1, backgroundColor: 'var(--border)', opacity: 0.5 }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {group.map((d) => renderDecisionCard(d))}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
