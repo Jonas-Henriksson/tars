@@ -41,6 +41,15 @@ def log_decision(
     context: str = "",
     initiative: str = "",
     status: str = "decided",
+    linked_type: str = "",
+    linked_id: str = "",
+    linked_title: str = "",
+    source: str = "manual",
+    source_page_id: str = "",
+    requested_by: str = "",
+    requested_from: str = "",
+    request_reason: str = "",
+    from_workstream: str = "",
 ) -> dict[str, Any]:
     """Log a new decision.
 
@@ -51,7 +60,16 @@ def log_decision(
         stakeholders: Who is affected or needs to know.
         context: Background or alternatives considered.
         initiative: Link to a strategic initiative (by name or ID).
-        status: decided | pending | revisit.
+        status: decided | pending | revisit | request.
+        linked_type: Hierarchy entity type (initiative/epic/story/task).
+        linked_id: ID of the linked hierarchy item.
+        linked_title: Title of the linked hierarchy item.
+        source: How this decision was created (manual/voice/notion/request).
+        source_page_id: Notion page ID if imported.
+        requested_by: Who needs this decision made.
+        requested_from: Who should make it.
+        request_reason: Why it's needed / what's blocked.
+        from_workstream: Which workstream/task triggered this.
     """
     decisions = _load_decisions()
 
@@ -67,6 +85,15 @@ def log_decision(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "outcome_notes": "",
+        "linked_type": linked_type,
+        "linked_id": linked_id,
+        "linked_title": linked_title,
+        "source": source,
+        "source_page_id": source_page_id,
+        "requested_by": requested_by,
+        "requested_from": requested_from,
+        "request_reason": request_reason,
+        "from_workstream": from_workstream,
     }
 
     decisions.append(decision)
@@ -76,6 +103,7 @@ def log_decision(
         "decided": "Decision logged",
         "pending": "Pending decision tracked",
         "revisit": "Decision flagged for revisit",
+        "request": "Decision requested",
     }.get(status, "Decision logged")
 
     return {
@@ -127,8 +155,11 @@ def get_decisions(
     pending = sum(1 for d in decisions if d.get("status") == "pending")
     decided = sum(1 for d in decisions if d.get("status") == "decided")
     revisit = sum(1 for d in decisions if d.get("status") == "revisit")
+    request = sum(1 for d in decisions if d.get("status") == "request")
 
     parts = [f"You have {len(decisions)} decisions on record"]
+    if request:
+        parts.append(f"{request} decision requests pending")
     if pending:
         parts.append(f"{pending} pending")
     if revisit:
@@ -140,6 +171,7 @@ def get_decisions(
         "pending_count": pending,
         "decided_count": decided,
         "revisit_count": revisit,
+        "request_count": request,
         "voice_summary": ". ".join(parts) + ".",
     }
 
@@ -152,17 +184,35 @@ def update_decision(
     stakeholders: list[str] | None = None,
     initiative: str = "",
     title: str = "",
+    linked_type: str = "",
+    linked_id: str = "",
+    linked_title: str = "",
+    source: str = "",
+    source_page_id: str = "",
+    requested_by: str = "",
+    requested_from: str = "",
+    request_reason: str = "",
+    from_workstream: str = "",
 ) -> dict[str, Any]:
     """Update an existing decision.
 
     Args:
         decision_id: The decision ID.
-        status: New status (pending, decided, revisit).
+        status: New status (pending, decided, revisit, request).
         rationale: Updated rationale.
         outcome_notes: Notes on how the decision played out.
         stakeholders: Updated stakeholder list.
         initiative: Link to initiative.
         title: Updated title.
+        linked_type: Hierarchy entity type.
+        linked_id: ID of linked hierarchy item.
+        linked_title: Title of linked hierarchy item.
+        source: How this decision was created.
+        source_page_id: Notion page ID if imported.
+        requested_by: Who needs this decision.
+        requested_from: Who should make it.
+        request_reason: Why it's needed / what's blocked.
+        from_workstream: Which workstream/task triggered this.
     """
     decisions = _load_decisions()
 
@@ -180,6 +230,12 @@ def update_decision(
                 d["initiative"] = initiative
             if title:
                 d["title"] = title
+            for field in ("linked_type", "linked_id", "linked_title", "source",
+                          "source_page_id", "requested_by", "requested_from",
+                          "request_reason", "from_workstream"):
+                val = locals()[field]
+                if val:
+                    d[field] = val
             d["updated_at"] = datetime.now(timezone.utc).isoformat()
             _save_decisions(decisions)
 
@@ -187,6 +243,7 @@ def update_decision(
                 "decided": "decided",
                 "pending": "pending",
                 "revisit": "flagged for revisit",
+                "request": "requested",
             }.get(d.get("status", ""), d.get("status", ""))
 
             parts = [f"Updated decision: {d.get('title', '')}"]
@@ -244,4 +301,62 @@ def get_decision_summary() -> dict[str, Any]:
         "recent": recent,
         "total": len(decisions),
         "voice_summary": ". ".join(parts) + ".",
+    }
+
+
+def import_notion_decisions() -> dict[str, Any]:
+    """Preview decisions from the Notion knowledge graph for import.
+
+    Reads scanned Notion page data and returns decisions not yet in the register.
+    """
+    from integrations.intel import _load_intel
+
+    intel = _load_intel()
+    page_index = intel.get("page_index", {})
+    existing = _load_decisions()
+    existing_titles = {d.get("title", "").strip().lower() for d in existing}
+
+    candidates: list[dict] = []
+    for page_id, page in page_index.items():
+        page_title = page.get("title", "")
+        for dec in page.get("decisions", []):
+            if not isinstance(dec, dict):
+                continue
+            text = dec.get("text", "").strip()
+            if not text:
+                continue
+            already = text.lower() in existing_titles
+            candidates.append({
+                "text": text,
+                "by": dec.get("by", ""),
+                "page_id": page_id,
+                "page_title": page_title,
+                "already_imported": already,
+            })
+
+    return {"decisions": candidates, "count": len(candidates)}
+
+
+def commit_notion_import(items: list[dict]) -> dict[str, Any]:
+    """Import selected Notion decisions into the decision register.
+
+    Args:
+        items: List of dicts with keys: text, by, page_id, page_title.
+    """
+    imported: list[dict] = []
+    for item in items:
+        result = log_decision(
+            title=item.get("text", ""),
+            decided_by=item.get("by", ""),
+            source="notion",
+            source_page_id=item.get("page_id", ""),
+            status="decided",
+        )
+        if "decision" in result:
+            imported.append(result["decision"])
+
+    return {
+        "imported": len(imported),
+        "decisions": imported,
+        "message": f"Imported {len(imported)} decisions from Notion.",
     }

@@ -53,6 +53,15 @@ class DecisionCreate(BaseModel):
     context: str = ""
     initiative: str = ""
     status: str = "decided"
+    linked_type: str = ""
+    linked_id: str = ""
+    linked_title: str = ""
+    source: str = "manual"
+    source_page_id: str = ""
+    requested_by: str = ""
+    requested_from: str = ""
+    request_reason: str = ""
+    from_workstream: str = ""
 
 
 class DecisionUpdate(BaseModel):
@@ -62,6 +71,19 @@ class DecisionUpdate(BaseModel):
     stakeholders: list[str] | None = None
     initiative: str | None = None
     title: str | None = None
+    linked_type: str | None = None
+    linked_id: str | None = None
+    linked_title: str | None = None
+    source: str | None = None
+    source_page_id: str | None = None
+    requested_by: str | None = None
+    requested_from: str | None = None
+    request_reason: str | None = None
+    from_workstream: str | None = None
+
+
+class NotionDecisionImport(BaseModel):
+    decisions: list[dict] = []
 
 
 class InitiativeCreate(BaseModel):
@@ -471,7 +493,23 @@ async def create_decision(body: DecisionCreate):
     return JSONResponse(log_decision(
         title=body.title, rationale=body.rationale, decided_by=body.decided_by,
         stakeholders=body.stakeholders, context=body.context, initiative=body.initiative, status=body.status,
+        linked_type=body.linked_type, linked_id=body.linked_id, linked_title=body.linked_title,
+        source=body.source, source_page_id=body.source_page_id,
+        requested_by=body.requested_by, requested_from=body.requested_from,
+        request_reason=body.request_reason, from_workstream=body.from_workstream,
     ))
+
+
+@router.get("/decisions/notion-preview")
+async def notion_decision_preview():
+    from integrations.decisions import import_notion_decisions
+    return JSONResponse(import_notion_decisions())
+
+
+@router.post("/decisions/notion-import")
+async def notion_decision_import(body: NotionDecisionImport):
+    from integrations.decisions import commit_notion_import
+    return JSONResponse(commit_notion_import(body.decisions))
 
 
 @router.patch("/decisions/{decision_id}")

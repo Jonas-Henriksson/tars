@@ -37,7 +37,7 @@ const QUARTER_OPTIONS = [
 const STATUS_COLORS: Record<string, string> = {
   on_track: '#22c55e', at_risk: '#f59e0b', off_track: '#ef4444',
   completed: '#6b7280', paused: '#94a3b8',
-  decided: '#3b82f6', pending: '#f59e0b', revisit: '#ef4444',
+  decided: '#3b82f6', pending: '#f59e0b', revisit: '#ef4444', request: '#8b5cf6',
   in_progress: '#3b82f6', active: '#3b82f6',
 };
 
@@ -1527,6 +1527,20 @@ function DecisionsView() {
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<any>(null);
   const [filter, setFilter] = useState<string>('all');
+  // Inline add
+  const [adding, setAdding] = useState(false);
+  const [addValue, setAddValue] = useState('');
+  const addRef = React.useRef<HTMLInputElement>(null);
+  // Decision request form
+  const [requesting, setRequesting] = useState(false);
+  const [requestForm, setRequestForm] = useState({ title: '', requested_from: '', request_reason: '', from_workstream: '' });
+  // Hover delete
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  // Notion import
+  const [notionOpen, setNotionOpen] = useState(false);
+  const [notionDecisions, setNotionDecisions] = useState<any[]>([]);
+  const [notionSelected, setNotionSelected] = useState<Set<number>>(new Set());
+  const [notionLoading, setNotionLoading] = useState(false);
 
   useEffect(() => {
     api.get<any>('/api/decisions').then((data) => {
@@ -1535,6 +1549,10 @@ function DecisionsView() {
     }).catch((e) => { setError(e.message); setLoading(false); });
   }, []);
 
+  React.useEffect(() => {
+    if (adding && addRef.current) addRef.current.focus();
+  }, [adding]);
+
   const handleSave = useCallback((updates: Record<string, any>) => {
     if (!selected) return;
     setDecisions((prev) => prev.map((d) => d.id === selected.id ? { ...d, ...updates } : d));
@@ -1542,28 +1560,221 @@ function DecisionsView() {
     api.patch<any>(`/api/decisions/${selected.id}`, updates).catch(() => {});
   }, [selected]);
 
+  const handleAdd = () => {
+    const title = addValue.trim();
+    if (!title) { setAdding(false); return; }
+    api.post<any>('/api/decisions', { title, status: 'pending', source: 'manual' })
+      .then((res) => { if (res.decision) setDecisions((prev) => [res.decision, ...prev]); })
+      .catch(() => {});
+    setAddValue('');
+    setAdding(false);
+  };
+
+  const handleRequest = () => {
+    const title = requestForm.title.trim();
+    if (!title) { setRequesting(false); return; }
+    api.post<any>('/api/decisions', {
+      title, status: 'request', source: 'request', requested_by: 'Me',
+      requested_from: requestForm.requested_from, request_reason: requestForm.request_reason,
+      from_workstream: requestForm.from_workstream,
+    }).then((res) => { if (res.decision) setDecisions((prev) => [res.decision, ...prev]); })
+      .catch(() => {});
+    setRequestForm({ title: '', requested_from: '', request_reason: '', from_workstream: '' });
+    setRequesting(false);
+  };
+
+  const handleDelete = (id: string) => {
+    setDecisions((prev) => prev.filter((d) => d.id !== id));
+    api.delete<any>(`/api/decisions/${id}`).catch(() => {});
+  };
+
+  const handleStatusCycle = (d: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const order = ['pending', 'decided', 'request', 'revisit'];
+    const idx = order.indexOf(d.status);
+    const next = order[(idx + 1) % order.length];
+    setDecisions((prev) => prev.map((dec) => dec.id === d.id ? { ...dec, status: next } : dec));
+    api.patch<any>(`/api/decisions/${d.id}`, { status: next }).catch(() => {});
+  };
+
+  const openNotionImport = () => {
+    setNotionOpen(true);
+    setNotionLoading(true);
+    api.get<any>('/api/decisions/notion-preview').then((data) => {
+      setNotionDecisions(data.decisions || []);
+      setNotionLoading(false);
+    }).catch(() => { setNotionLoading(false); });
+  };
+
+  const toggleNotionSelect = (idx: number) => {
+    setNotionSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
+  };
+
+  const handleNotionImport = () => {
+    const items = Array.from(notionSelected).map((i) => notionDecisions[i]).filter((d) => !d.already_imported);
+    if (!items.length) return;
+    api.post<any>('/api/decisions/notion-import', { decisions: items }).then((res) => {
+      if (res.decisions) setDecisions((prev) => [...res.decisions, ...prev]);
+      setNotionOpen(false);
+      setNotionSelected(new Set());
+    }).catch(() => {});
+  };
+
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
 
   const filtered = filter === 'all' ? decisions : decisions.filter((d) => d.status === filter);
 
   const fields: DetailField[] = selected ? [
-    { key: 'status', label: 'Status', value: selected.status, type: 'select', options: ['pending', 'decided', 'revisit'], color: STATUS_COLORS[selected.status] },
+    { key: 'status', label: 'Status', value: selected.status, type: 'select', options: ['pending', 'decided', 'revisit', 'request'], color: STATUS_COLORS[selected.status] },
     { key: 'decided_by', label: 'Decided By', value: selected.decided_by, type: 'text' },
     { key: 'stakeholders', label: 'Stakeholders', value: selected.stakeholders || [], type: 'tags' },
     { key: 'rationale', label: 'Rationale', value: selected.rationale, type: 'textarea' },
     { key: 'context', label: 'Context', value: selected.context, type: 'textarea' },
     { key: 'initiative', label: 'Linked Initiative', value: selected.initiative, type: 'text' },
+    { key: 'linked_type', label: 'Link Type', value: selected.linked_type || '', type: 'select', options: ['', 'initiative', 'epic', 'story', 'task'] },
+    { key: 'linked_title', label: 'Linked Item', value: selected.linked_title || '', type: 'text' },
+    { key: 'linked_id', label: 'Linked ID', value: selected.linked_id || '', type: 'text' },
+    { key: 'requested_from', label: 'Requested From', value: selected.requested_from || '', type: 'text' },
+    { key: 'request_reason', label: 'Request Reason', value: selected.request_reason || '', type: 'textarea' },
+    { key: 'from_workstream', label: 'From Workstream', value: selected.from_workstream || '', type: 'text' },
     { key: 'outcome_notes', label: 'Outcome Notes', value: selected.outcome_notes, type: 'textarea' },
+    { key: 'source', label: 'Source', value: selected.source || 'manual', type: 'readonly' },
     { key: 'created_at', label: 'Created', value: selected.created_at ? new Date(selected.created_at).toLocaleDateString() : '—', type: 'readonly' },
     { key: 'updated_at', label: 'Last Updated', value: selected.updated_at ? new Date(selected.updated_at).toLocaleDateString() : '—', type: 'readonly' },
   ] : [];
 
+  const btnStyle: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 12px',
+    fontSize: 12, borderRadius: 6, cursor: 'pointer', border: '1px solid var(--border)',
+    backgroundColor: 'transparent', color: 'var(--text-secondary)', transition: 'all 0.15s',
+  };
+
   return (
     <>
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <button style={btnStyle} onClick={() => { setAdding(!adding); setRequesting(false); }}>
+          <Plus size={12} /> Add Decision
+        </button>
+        <button style={btnStyle} onClick={() => { setRequesting(!requesting); setAdding(false); }}>
+          <Plus size={12} /> Request Decision
+        </button>
+        <button style={btnStyle} onClick={openNotionImport}>
+          <Sparkles size={12} /> Import from Notion
+        </button>
+      </div>
+
+      {/* Inline add input */}
+      {adding && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+          <Plus size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+          <input
+            ref={addRef}
+            value={addValue}
+            onChange={(e) => setAddValue(e.target.value)}
+            onBlur={handleAdd}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') { setAddValue(''); setAdding(false); } }}
+            placeholder="Decision title..."
+            style={{
+              flex: 1, fontSize: 13, padding: '6px 10px', border: '1px solid var(--accent)',
+              borderRadius: 6, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none',
+            }}
+          />
+        </div>
+      )}
+
+      {/* Decision request form */}
+      {requesting && (
+        <div style={{ ...cardStyle, marginBottom: 12, borderLeft: '3px solid #8b5cf6' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--text-primary)' }}>Request a Decision</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {([
+              ['title', 'What decision is needed?'],
+              ['requested_from', 'Who should decide?'],
+              ['request_reason', 'Why? What\'s blocked?'],
+              ['from_workstream', 'From which workstream/task?'],
+            ] as [string, string][]).map(([key, placeholder]) => (
+              <input
+                key={key}
+                value={(requestForm as any)[key]}
+                onChange={(e) => setRequestForm((prev) => ({ ...prev, [key]: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter' && key === 'from_workstream') handleRequest(); if (e.key === 'Escape') setRequesting(false); }}
+                placeholder={placeholder}
+                style={{
+                  fontSize: 12, padding: '5px 10px', border: '1px solid var(--border)',
+                  borderRadius: 4, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none',
+                }}
+              />
+            ))}
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={handleRequest} style={{ ...btnStyle, backgroundColor: '#8b5cf6', color: '#fff', border: 'none' }}>
+                <Check size={12} /> Submit Request
+              </button>
+              <button onClick={() => setRequesting(false)} style={btnStyle}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notion import section */}
+      {notionOpen && (
+        <div style={{ ...cardStyle, marginBottom: 12, borderLeft: '3px solid var(--accent)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Import from Notion Knowledge Graph</div>
+            <button onClick={() => setNotionOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={14} /></button>
+          </div>
+          {notionLoading ? (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: 12 }}>Loading Notion decisions...</div>
+          ) : notionDecisions.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: 12 }}>No decisions found in Notion pages. Run a Notion scan first.</div>
+          ) : (
+            <>
+              <div style={{ maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {notionDecisions.map((nd, i) => (
+                  <label key={i} style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', borderRadius: 4,
+                    fontSize: 12, cursor: nd.already_imported ? 'default' : 'pointer',
+                    opacity: nd.already_imported ? 0.5 : 1,
+                    backgroundColor: notionSelected.has(i) ? 'var(--accent-light)' : 'transparent',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={notionSelected.has(i)}
+                      disabled={nd.already_imported}
+                      onChange={() => toggleNotionSelect(i)}
+                      style={{ marginTop: 2 }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{nd.text}</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                        {nd.by && `By: ${nd.by} · `}From: {nd.page_title || 'Unknown page'}
+                        {nd.already_imported && ' · Already imported'}
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              <div style={{ marginTop: 10, display: 'flex', gap: 6 }}>
+                <button onClick={handleNotionImport} disabled={notionSelected.size === 0} style={{
+                  ...btnStyle, backgroundColor: notionSelected.size > 0 ? 'var(--accent)' : 'var(--bg-secondary)',
+                  color: notionSelected.size > 0 ? '#fff' : 'var(--text-muted)', border: 'none',
+                }}>
+                  <Check size={12} /> Import Selected ({notionSelected.size})
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Filter chips */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {['all', 'pending', 'decided', 'revisit'].map((f) => (
+        {['all', 'pending', 'decided', 'request', 'revisit'].map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -1581,36 +1792,74 @@ function DecisionsView() {
         ))}
       </div>
 
+      {/* Decision cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {filtered.length === 0 ? (
-          <EmptyState message={filter === 'all' ? 'No decisions logged yet.' : `No ${filter} decisions.`} />
+          <EmptyState message={filter === 'all' ? 'No decisions logged yet. Click "+ Add Decision" to get started.' : `No ${filter} decisions.`} />
         ) : (
           filtered.map((d) => (
             <div
               key={d.id}
               onClick={() => setSelected(d)}
+              onMouseEnter={(e) => { setHoveredId(d.id); e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; e.currentTarget.style.boxShadow = 'var(--shadow)'; }}
+              onMouseLeave={(e) => { setHoveredId(null); e.currentTarget.style.backgroundColor = 'var(--bg-card)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
               style={{
-                ...cardStyle, cursor: 'pointer', transition: 'all 0.15s',
+                ...cardStyle, cursor: 'pointer', transition: 'all 0.15s', position: 'relative',
                 borderLeft: `3px solid ${STATUS_COLORS[d.status] || '#94a3b8'}`,
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                e.currentTarget.style.boxShadow = 'var(--shadow)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--bg-card)';
-                e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-              }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              {/* Delete button on hover */}
+              {hoveredId === d.id && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDelete(d.id); }}
+                  title="Delete decision"
+                  style={{
+                    position: 'absolute', top: 8, right: 8, background: 'none', border: 'none',
+                    cursor: 'pointer', color: 'var(--text-muted)', padding: 2, borderRadius: 4,
+                    display: 'flex', alignItems: 'center',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                >
+                  <X size={14} />
+                </button>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, paddingRight: 24 }}>
                 <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{d.title}</h3>
-                <StatusBadge status={d.status} />
+                <span onClick={(e) => handleStatusCycle(d, e)} title="Click to cycle status" style={{ cursor: 'pointer' }}>
+                  <StatusBadge status={d.status} />
+                </span>
               </div>
+
               {d.rationale && <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6, lineHeight: 1.5 }}>{d.rationale}</p>}
+
+              {/* Request metadata */}
+              {d.status === 'request' && (d.requested_from || d.request_reason || d.from_workstream) && (
+                <div style={{ fontSize: 12, color: '#8b5cf6', marginBottom: 6, padding: '4px 8px', backgroundColor: '#8b5cf620', borderRadius: 4 }}>
+                  {d.requested_from && <span>Requested from: <strong>{d.requested_from}</strong></span>}
+                  {d.request_reason && <span> · Reason: {d.request_reason}</span>}
+                  {d.from_workstream && <span> · From: {d.from_workstream}</span>}
+                </div>
+              )}
+
               <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
                 <span>By: {d.decided_by || 'Unknown'}</span>
                 {d.stakeholders?.length > 0 && <span>Stakeholders: {d.stakeholders.join(', ')}</span>}
                 {d.initiative && <span>Initiative: {d.initiative}</span>}
+                {d.linked_title && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                    <span style={{
+                      fontSize: 10, padding: '1px 5px', borderRadius: 3, fontWeight: 500, textTransform: 'capitalize',
+                      backgroundColor: (STATUS_COLORS[d.linked_type] || '#64748b') + '20',
+                      color: STATUS_COLORS[d.linked_type] || '#64748b',
+                    }}>{d.linked_type}</span>
+                    {d.linked_title}
+                  </span>
+                )}
+                {d.source && d.source !== 'manual' && (
+                  <span style={{ fontStyle: 'italic' }}>via {d.source}</span>
+                )}
                 <span>{d.created_at ? new Date(d.created_at).toLocaleDateString() : ''}</span>
               </div>
             </div>
