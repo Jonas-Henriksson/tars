@@ -1059,7 +1059,7 @@ function HealthBar({ counts, total }: { counts: Record<string, number>; total: n
     { key: 'off_track', color: '#ef4444' },
   ];
   return (
-    <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', backgroundColor: 'var(--border)', flex: 1 }}>
+    <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', backgroundColor: 'var(--border)', width: 80, flexShrink: 0 }}>
       {segments.map(({ key, color }) => {
         const c = counts[key] || 0;
         if (c === 0) return null;
@@ -1104,6 +1104,17 @@ function HealthDashboard() {
   }, []);
 
   if (loading) return <LoadingState />;
+
+  // Collect owners for dropdowns
+  const collectOwnersFn = (nodes: any[]): Record<string, number> => {
+    const counts: Record<string, number> = {};
+    for (const n of nodes) {
+      if (n.owner) counts[n.owner] = (counts[n.owner] || 0) + 1;
+      if (n.children) { const sub = collectOwnersFn(n.children); for (const [k, v] of Object.entries(sub)) counts[k] = (counts[k] || 0) + v; }
+    }
+    return counts;
+  };
+  const ownerOptions = Object.entries(collectOwnersFn(tree)).sort((a, b) => b[1] - a[1]).map(([name]) => name);
 
   // Compute metrics
   const themeMetrics = new Map<string, NodeMetrics>();
@@ -1181,13 +1192,15 @@ function HealthDashboard() {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
                     borderLeft: '3px solid #a855f7', cursor: 'pointer',
+                    color: 'var(--text-primary)',
                     transition: 'background-color 0.1s',
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
                   {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>{theme.title}</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{theme.title}</span>
+                  <span style={{ flex: 1, borderBottom: '1px dotted var(--border)', marginBottom: 2, opacity: 0.25 }} />
                   <HealthBar counts={initStatusCounts} total={initiatives.length} />
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                     {initiatives.length} init · {epicsInProgress} epics active · {pct}% done
@@ -1207,13 +1220,13 @@ function HealthDashboard() {
                         style={{
                           display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', paddingLeft: 36,
                           borderLeft: `3px solid ${STATUS_COLORS[init.status] || '#64748b'}`,
-                          cursor: 'pointer', transition: 'background-color 0.1s',
+                          cursor: 'pointer', color: 'var(--text-primary)', transition: 'background-color 0.1s',
                         }}
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                       >
                         {initExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                        <span style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>{init.title}</span>
+                        <span style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{init.title}</span>
                         <span style={{ flex: 1, borderBottom: '1px dotted var(--border)', marginBottom: 2, opacity: 0.25 }} />
                         <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{init.owner || ''}</span>
                         {init.quarter && <span style={{ fontSize: 10, color: 'var(--text-muted)', padding: '1px 5px', backgroundColor: 'var(--bg-tertiary)', borderRadius: 4 }}>{init.quarter}</span>}
@@ -1233,7 +1246,7 @@ function HealthDashboard() {
                             style={{
                               display: 'flex', alignItems: 'center', gap: 8, padding: '3px 12px', paddingLeft: 56,
                               borderLeft: `3px solid ${STATUS_COLORS[epic.status] || '#64748b'}`,
-                              cursor: 'pointer', transition: 'background-color 0.1s', fontSize: 12,
+                              cursor: 'pointer', color: 'var(--text-primary)', transition: 'background-color 0.1s', fontSize: 12,
                             }}
                             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
                             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -1289,7 +1302,7 @@ function HealthDashboard() {
           fields={[
             { key: 'description', label: 'Description', value: selectedEpic.description, type: 'textarea' },
             { key: 'status', label: 'Status', value: selectedEpic.status || 'backlog', type: 'select', options: ['backlog', 'in_progress', 'done', 'cancelled'] },
-            { key: 'owner', label: 'Owner', value: selectedEpic.owner, type: 'text' },
+            { key: 'owner', label: 'Owner', value: selectedEpic.owner, type: 'select', options: ownerOptions },
             { key: 'priority', label: 'Priority', value: selectedEpic.priority || 'high', type: 'select', options: ['high', 'medium', 'low'] },
             { key: 'quarter', label: 'Quarter', value: selectedEpic.quarter || '', type: 'select', options: QUARTER_OPTIONS, hint: 'Target delivery quarter' },
             { key: 'acceptance_criteria', label: 'Acceptance Criteria', value: selectedEpic.acceptance_criteria || [], type: 'tags' },
