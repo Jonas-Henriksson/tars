@@ -40,9 +40,10 @@ interface DetailPanelProps {
   onSave?: (updates: Record<string, any>) => void;
   onFieldChange?: (key: string, value: any) => void;
   actions?: { label: string; onClick: () => void; variant?: 'primary' | 'danger' | 'ghost' }[];
+  children?: React.ReactNode;
 }
 
-export default function DetailPanel({ open, onClose, title, subtitle, badge, fields, onSave, onFieldChange, actions }: DetailPanelProps) {
+export default function DetailPanel({ open, onClose, title, subtitle, badge, fields, onSave, onFieldChange, actions, children }: DetailPanelProps) {
   const [editing, setEditing] = useState(false);
   const [edits, setEdits] = useState<Record<string, any>>({});
   const panelRef = useRef<HTMLDivElement>(null);
@@ -149,6 +150,7 @@ export default function DetailPanel({ open, onClose, title, subtitle, badge, fie
               />
             ))}
           </div>
+          {children}
         </div>
 
         {/* Footer */}

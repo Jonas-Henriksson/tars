@@ -488,102 +488,30 @@ function HierarchyView() {
           setTree((prev) => updateNodeInTree(prev, selectedNode.id, (n) => ({ ...n, ...updates })));
           setSelectedNode(null);
         }}
-        actions={[
-          ...(selectedNode?.source === 'auto' ? [
-            { label: 'Approve', variant: 'primary' as const, onClick: () => {
-              handleApprove(selectedNode.type + 's', selectedNode.id);
-              setSelectedNode((prev: any) => prev ? { ...prev, source: 'confirmed' } : null);
-            }},
-            { label: 'Dismiss', variant: 'danger' as const, onClick: () => {
-              handleDismiss(selectedNode.type + 's', selectedNode.id);
-              setSelectedNode(null);
-            }},
-          ] : []),
-          { label: 'Request Decision', variant: 'ghost' as const, onClick: () => setRequestingDecision(true) },
-        ]}
-      />
-
-      {/* Decision request form overlay */}
-      {requestingDecision && selectedNode && (
-        <>
-          <div
-            onClick={() => { setRequestingDecision(false); setDecisionForm({ title: '', requested_from: '' }); }}
-            style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 999, animation: 'fadeIn 0.15s ease' }}
+        actions={selectedNode?.source === 'auto' ? [
+          { label: 'Approve', variant: 'primary' as const, onClick: () => {
+            handleApprove(selectedNode.type + 's', selectedNode.id);
+            setSelectedNode((prev: any) => prev ? { ...prev, source: 'confirmed' } : null);
+          }},
+          { label: 'Dismiss', variant: 'danger' as const, onClick: () => {
+            handleDismiss(selectedNode.type + 's', selectedNode.id);
+            setSelectedNode(null);
+          }},
+        ] : undefined}
+      >
+        {/* Inline decision request section — like Acceptance Criteria */}
+        {selectedNode && (
+          <DecisionRequestSection
+            nodeDecisions={decisionsByNode[selectedNode.id] || []}
+            adding={requestingDecision}
+            form={decisionForm}
+            onToggleAdding={(v) => { setRequestingDecision(v); if (!v) setDecisionForm({ title: '', requested_from: '' }); }}
+            onFormChange={setDecisionForm}
+            onSubmit={handleRequestDecision}
+            onDecisionClick={setSelectedDecision}
           />
-          <div style={{
-            position: 'fixed', top: 0, right: 0, bottom: 0, width: 420, maxWidth: '85vw',
-            backgroundColor: 'var(--bg-primary)', borderLeft: '1px solid var(--border)',
-            zIndex: 1000, display: 'flex', flexDirection: 'column',
-            boxShadow: '-4px 0 24px rgba(0,0,0,0.15)', animation: 'slideIn 0.2s ease',
-          }}>
-            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>Request a Decision</h2>
-                <button onClick={() => { setRequestingDecision(false); setDecisionForm({ title: '', requested_from: '' }); }}
-                  style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
-                  <X size={16} />
-                </button>
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                {TYPE_LABELS[selectedNode.type] || selectedNode.type}: {selectedNode.title}
-              </p>
-            </div>
-            <div style={{ flex: 1, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
-                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>What decision is needed?</label>
-                <input
-                  autoFocus
-                  value={decisionForm.title}
-                  onChange={(e) => setDecisionForm((f) => ({ ...f, title: e.target.value }))}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && decisionForm.title.trim()) handleRequestDecision(); if (e.key === 'Escape') { setRequestingDecision(false); setDecisionForm({ title: '', requested_from: '' }); } }}
-                  placeholder="e.g. Which vendor to select for the integration?"
-                  style={{
-                    width: '100%', padding: '8px 10px', fontSize: 13,
-                    border: '1px solid var(--border)', borderRadius: 'var(--radius)',
-                    backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none',
-                  }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Decision needed from</label>
-                <input
-                  value={decisionForm.requested_from}
-                  onChange={(e) => setDecisionForm((f) => ({ ...f, requested_from: e.target.value }))}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && decisionForm.title.trim()) handleRequestDecision(); if (e.key === 'Escape') { setRequestingDecision(false); setDecisionForm({ title: '', requested_from: '' }); } }}
-                  placeholder="e.g. Steering Committee, CTO, Product Owner"
-                  style={{
-                    width: '100%', padding: '8px 10px', fontSize: 13,
-                    border: '1px solid var(--border)', borderRadius: 'var(--radius)',
-                    backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none',
-                  }}
-                />
-              </div>
-            </div>
-            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => { setRequestingDecision(false); setDecisionForm({ title: '', requested_from: '' }); }}
-                style={{
-                  padding: '8px 16px', border: '1px solid var(--border)', borderRadius: 'var(--radius)',
-                  backgroundColor: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer',
-                }}
-              >Cancel</button>
-              <button
-                onClick={handleRequestDecision}
-                disabled={!decisionForm.title.trim()}
-                style={{
-                  padding: '8px 16px', border: 'none', borderRadius: 'var(--radius)',
-                  backgroundColor: decisionForm.title.trim() ? '#8b5cf6' : 'var(--bg-secondary)',
-                  color: decisionForm.title.trim() ? '#fff' : 'var(--text-muted)',
-                  fontSize: 13, fontWeight: 500, cursor: decisionForm.title.trim() ? 'pointer' : 'default',
-                  display: 'flex', alignItems: 'center', gap: 6,
-                }}
-              >
-                <Scale size={14} /> Submit Request
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+        )}
+      </DetailPanel>
 
       {/* Detail panel for viewing a decision from hierarchy indicator */}
       <DetailPanel
@@ -2070,6 +1998,121 @@ function DecisionsView() {
         onSave={handleSave}
       />
     </>
+  );
+}
+
+/* ---------- Decision Request Section (inline in DetailPanel) ---------- */
+
+function DecisionRequestSection({ nodeDecisions, adding, form, onToggleAdding, onFormChange, onSubmit, onDecisionClick }: {
+  nodeDecisions: any[];
+  adding: boolean;
+  form: { title: string; requested_from: string };
+  onToggleAdding: (v: boolean) => void;
+  onFormChange: (f: { title: string; requested_from: string }) => void;
+  onSubmit: () => void;
+  onDecisionClick: (d: any) => void;
+}) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  React.useEffect(() => { if (adding && inputRef.current) inputRef.current.focus(); }, [adding]);
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <Scale size={14} style={{ color: 'var(--text-muted)' }} />
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Decisions</span>
+      </div>
+
+      {/* Existing decisions linked to this node */}
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+        {nodeDecisions.length === 0 && !adding && (
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>
+        )}
+        {nodeDecisions.map((d: any) => (
+          <span
+            key={d.id}
+            onClick={() => onDecisionClick(d)}
+            style={{
+              fontSize: 11, padding: '3px 8px', borderRadius: 8, cursor: 'pointer',
+              backgroundColor: (STATUS_COLORS[d.status] || '#94a3b8') + '20',
+              color: STATUS_COLORS[d.status] || '#94a3b8',
+              display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%',
+            }}
+            title={d.title}
+          >
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</span>
+            <span style={{ fontSize: 9, opacity: 0.7 }}>({d.status})</span>
+          </span>
+        ))}
+
+        {/* + Request button / inline form */}
+        {adding ? (
+          <div style={{ width: '100%', marginTop: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <input
+              ref={inputRef}
+              value={form.title}
+              onChange={(e) => onFormChange({ ...form, title: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && form.title.trim()) onSubmit();
+                if (e.key === 'Escape') { onToggleAdding(false); }
+              }}
+              placeholder="What decision is needed?"
+              style={{
+                fontSize: 11, padding: '4px 8px', borderRadius: 8,
+                border: '1px solid var(--accent)', backgroundColor: 'var(--bg-secondary)',
+                color: 'var(--text-primary)', outline: 'none', width: '100%',
+              }}
+            />
+            <input
+              value={form.requested_from}
+              onChange={(e) => onFormChange({ ...form, requested_from: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && form.title.trim()) onSubmit();
+                if (e.key === 'Escape') { onToggleAdding(false); }
+              }}
+              placeholder="Decision needed from (e.g. CTO, Steering Committee)"
+              style={{
+                fontSize: 11, padding: '4px 8px', borderRadius: 8,
+                border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)',
+                color: 'var(--text-primary)', outline: 'none', width: '100%',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                onClick={() => { if (form.title.trim()) onSubmit(); }}
+                disabled={!form.title.trim()}
+                style={{
+                  fontSize: 11, padding: '3px 8px', borderRadius: 8, border: 'none',
+                  backgroundColor: form.title.trim() ? '#8b5cf6' : 'var(--bg-secondary)',
+                  color: form.title.trim() ? '#fff' : 'var(--text-muted)',
+                  cursor: form.title.trim() ? 'pointer' : 'default',
+                }}
+              >Submit</button>
+              <button
+                onClick={() => onToggleAdding(false)}
+                style={{
+                  fontSize: 11, padding: '3px 8px', borderRadius: 8,
+                  border: '1px solid var(--border)', background: 'none',
+                  color: 'var(--text-muted)', cursor: 'pointer',
+                }}
+              >Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => onToggleAdding(true)}
+            style={{
+              fontSize: 11, padding: '3px 8px', borderRadius: 8,
+              border: '1px dashed var(--border)', background: 'none',
+              color: 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.color = '#8b5cf6'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+          >
+            + Request
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
