@@ -2627,28 +2627,7 @@ function PortfolioView() {
     api.get<any>('/api/hierarchy').then((data) => setHierTree(data.tree || [])).catch(() => {});
   }, []);
 
-  if (loading) return <LoadingState />;
-
-  // Classify members: people have roles or capitalized first-letter names
-  const allMembers = Object.entries(portfolio);
-  const active = allMembers
-    .filter(([, data]) => (data.workload?.total_items || 0) > 0)
-    .sort(([, a], [, b]) => (b.workload?.total_items || 0) - (a.workload?.total_items || 0));
-  const hiddenCount = allMembers.length - active.length;
-
-  // Heuristic: entries with a role, or whose name starts with uppercase and has no space/special suggesting a group
-  const knownGroups = new Set(['team', 'all', 'everyone', 'hr', 'finance', 'managers', 'leadership', 'group finance']);
-  const people: [string, any][] = [];
-  const groups: [string, any][] = [];
-  for (const [name, data] of active) {
-    const isGroup = knownGroups.has(name.toLowerCase())
-      || (!data.role && !data.relationship && /^[a-z]/.test(name))
-      || (!data.role && !data.relationship && name.split(/\s+/).length > 2);
-    if (isGroup) groups.push([name, data]);
-    else people.push([name, data]);
-  }
-
-  // Collect all epics from hierarchy for the epic picker
+  // Collect all epics from hierarchy for the epic picker (must be before early return)
   const allEpics = useMemo(() => {
     const result: { id: string; title: string; status: string; initiative: string }[] = [];
     function walk(nodes: any[], parentInit = '') {
@@ -2690,6 +2669,27 @@ function PortfolioView() {
     }
     return map;
   }, [allStories]);
+
+  if (loading) return <LoadingState />;
+
+  // Classify members: people have roles or capitalized first-letter names
+  const allMembers = Object.entries(portfolio);
+  const active = allMembers
+    .filter(([, data]) => (data.workload?.total_items || 0) > 0)
+    .sort(([, a], [, b]) => (b.workload?.total_items || 0) - (a.workload?.total_items || 0));
+  const hiddenCount = allMembers.length - active.length;
+
+  // Heuristic: entries with a role, or whose name starts with uppercase and has no space/special suggesting a group
+  const knownGroups = new Set(['team', 'all', 'everyone', 'hr', 'finance', 'managers', 'leadership', 'group finance']);
+  const people: [string, any][] = [];
+  const groups: [string, any][] = [];
+  for (const [name, data] of active) {
+    const isGroup = knownGroups.has(name.toLowerCase())
+      || (!data.role && !data.relationship && /^[a-z]/.test(name))
+      || (!data.role && !data.relationship && name.split(/\s+/).length > 2);
+    if (isGroup) groups.push([name, data]);
+    else people.push([name, data]);
+  }
 
   const handleLinkToStory = (taskId: string, storyId: string) => {
     api.post<any>(`/api/stories/${storyId}/link-task`, { task_id: taskId }).then(() => {
