@@ -719,17 +719,26 @@ async def _run_classify_background(force: bool = False) -> None:
 
     def on_progress(msg: dict) -> None:
         _classify_job["progress"] = msg
+        logger.info("classify progress: %s", msg.get("message", msg.get("phase", "")))
 
     try:
+        logger.info("Background classification started (force=%s)", force)
         result = await classify_tasks(force_reclassify=force, on_progress=on_progress)
+        logger.info("Classification result: %s", result)
+
         if "error" in result:
             _classify_job["progress"] = {"status": "error", "message": result["error"]}
             _classify_job["status"] = "error"
+        elif "message" in result and "status" not in result:
+            # Early return like "No tasks to classify" — not an error but nothing happened
+            _classify_job["progress"] = {"status": "complete", "message": result["message"]}
+            _classify_job["status"] = "complete"
         else:
             result["status"] = "complete"
             _classify_job["progress"] = result
             _classify_job["status"] = "complete"
     except Exception as exc:
+        logger.exception("Classification background task failed")
         _classify_job["progress"] = {"status": "error", "message": str(exc)}
         _classify_job["status"] = "error"
     finally:

@@ -108,12 +108,18 @@ function HierarchyView() {
     if (msg.status === 'complete') {
       setClassifyProgress(100);
       setClassifying(false);
-      setClassifyStatus(`Done: ${msg.themes_created || 0} themes, ${msg.initiatives_created || 0} initiatives, ${msg.epics_created || 0} epics, ${msg.stories_created || 0} stories`);
+      // If we have counts, show them; otherwise show the message from the classifier
+      if (msg.themes_created !== undefined) {
+        setClassifyStatus(`Done: ${msg.themes_created || 0} themes, ${msg.initiatives_created || 0} initiatives, ${msg.epics_created || 0} epics, ${msg.stories_created || 0} stories`);
+      } else if (msg.message) {
+        setClassifyStatus(msg.message);
+      }
       loadHierarchy();
       stopPolling();
     } else if (msg.status === 'error') {
       setClassifying(false);
       setClassifyStatus(`Classification failed: ${msg.message || 'unknown error'}`);
+      loadHierarchy();
       stopPolling();
     }
   }, [loadHierarchy, stopPolling]);
@@ -132,8 +138,8 @@ function HierarchyView() {
         setClassifying(true);
         handleStatusUpdate(msg);
         startPolling();
-      } else if (msg.status === 'complete' && msg.themes_created !== undefined) {
-        // Show last completed result
+      } else if (msg.status === 'complete' || msg.status === 'error') {
+        // Show last result (success or error) from a previous run
         handleStatusUpdate(msg);
       }
     }).catch(() => {});
