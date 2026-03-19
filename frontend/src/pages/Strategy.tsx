@@ -2771,6 +2771,15 @@ function PortfolioView() {
   const wl = selected?.data?.workload || {};
   const selectedEpics: any[] = selected?.data?.epics || [];
   const selectedNeedsEpic: any[] = selected?.data?.needs_epic || [];
+  const selectedStories: any[] = selected?.data?.stories || [];
+
+  // Build member-specific stories-by-epic using their owned stories (not global hierarchy)
+  const memberStoriesByEpic: Record<string, any[]> = {};
+  for (const ep of selectedEpics) {
+    // Match stories from the member's portfolio that reference this epic
+    const epStories = ep.stories || selectedStories.filter((s: any) => s.epic_title === ep.title);
+    memberStoriesByEpic[ep.id] = epStories;
+  }
 
   // Filter epics for the picker
   const filteredEpics = epicSearch
@@ -2878,7 +2887,7 @@ function PortfolioView() {
             <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
               {/* Epics section */}
               {selectedEpics.length > 0 && (
-                <PortfolioEpicsSection epics={selectedEpics} storiesByEpic={storiesByEpic} />
+                <PortfolioEpicsSection epics={selectedEpics} storiesByEpic={memberStoriesByEpic} />
               )}
 
               {/* Needs Epic section */}
