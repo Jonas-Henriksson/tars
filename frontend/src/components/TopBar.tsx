@@ -1,15 +1,31 @@
 /**
  * Top bar — search, quick actions, notifications, chat toggle.
  */
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store';
 import {
   Search, Plus, Bell, MessageSquare, Sun, Moon,
 } from 'lucide-react';
+import CommandPalette from './CommandPalette';
 
 export default function TopBar() {
   const { darkMode, setDarkMode, toggleChat, chatOpen } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Global Cmd+K / Ctrl+K keyboard shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setPaletteOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  const closePalette = useCallback(() => setPaletteOpen(false), []);
 
   return (
     <header
@@ -71,6 +87,7 @@ export default function TopBar() {
 
       {/* Quick actions */}
       <button
+        onClick={() => setPaletteOpen(true)}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -86,6 +103,9 @@ export default function TopBar() {
       >
         <Plus size={14} />
         Quick action
+        <kbd style={{ fontSize: 10, padding: '1px 4px', borderRadius: 3, border: '1px solid var(--border)', color: 'var(--text-muted)', marginLeft: 2 }}>
+          ⌘K
+        </kbd>
       </button>
 
       {/* Dark mode toggle */}
@@ -151,6 +171,8 @@ export default function TopBar() {
         <MessageSquare size={16} />
         TARS
       </button>
+
+      <CommandPalette open={paletteOpen} onClose={closePalette} />
     </header>
   );
 }

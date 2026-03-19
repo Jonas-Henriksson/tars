@@ -16,6 +16,19 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Alert sensitivity multiplier: "low" = 1.5x thresholds (fewer alerts),
+# "medium" = 1.0x (default), "high" = 0.7x (more alerts)
+SENSITIVITY_MULTIPLIERS = {"low": 1.5, "medium": 1.0, "high": 0.7}
+_sensitivity = "medium"  # Default
+
+def set_alert_sensitivity(level: str) -> None:
+    global _sensitivity
+    if level in SENSITIVITY_MULTIPLIERS:
+        _sensitivity = level
+
+def _threshold(base: int) -> int:
+    return max(1, int(base * SENSITIVITY_MULTIPLIERS.get(_sensitivity, 1.0)))
+
 
 async def get_alerts() -> dict[str, Any]:
     """Run all proactive alert checks and return prioritized findings.
@@ -32,6 +45,10 @@ async def get_alerts() -> dict[str, Any]:
     alerts.extend(_check_initiative_risks())
     alerts.extend(_check_stale_decisions())
     alerts.extend(_check_orphaned_deliverables())
+
+    # Group related alerts by type
+    grouped = _group_alerts(alerts)
+    alerts = grouped
 
     # Sort by severity
     severity_order = {"critical": 0, "warning": 1, "info": 2}
@@ -64,6 +81,36 @@ async def get_alerts() -> dict[str, Any]:
     }
 
 
+def _group_alerts(alerts: list[dict]) -> list[dict]:
+    """Collapse multiple alerts of the same type into summary alerts."""
+    from collections import defaultdict
+    by_type = defaultdict(list)
+    for a in alerts:
+        by_type[a.get("type", "other")].append(a)
+
+    result = []
+    for alert_type, group in by_type.items():
+        if len(group) <= 2:
+            result.extend(group)
+        else:
+            # Pick the highest severity from the group
+            sev_order = {"critical": 0, "warning": 1, "info": 2}
+            best_sev = min(group, key=lambda a: sev_order.get(a.get("severity", "info"), 3))["severity"]
+
+            # Build summary
+            summary = {
+                "type": alert_type,
+                "severity": best_sev,
+                "title": f"{len(group)} {alert_type.replace('_', ' ')} alerts",
+                "detail": "; ".join(a["title"] for a in group[:3]) + (f" and {len(group)-3} more" if len(group) > 3 else ""),
+                "children": group,
+                "suggested_action": group[0].get("suggested_action", ""),
+                "is_group": True,
+            }
+            result.append(summary)
+    return result
+
+
 def _check_bottlenecks() -> list[dict]:
     """Detect people who are overloaded with tasks."""
     try:
@@ -87,7 +134,7 @@ def _check_bottlenecks() -> list[dict]:
     for owner, tasks in owner_counts.items():
         q1_count = sum(1 for t in tasks if t.get("priority", {}).get("quadrant") == 1)
 
-        if len(tasks) >= 7:
+        if len(tasks) >= _threshold(10):
             alerts.append({
                 "type": "bottleneck",
                 "severity": "critical",
@@ -99,7 +146,7 @@ def _check_bottlenecks() -> list[dict]:
                 "task_count": len(tasks),
                 "suggested_action": "redistribute_tasks",
             })
-        elif len(tasks) >= 5:
+        elif len(tasks) >= _threshold(7):
             alerts.append({
                 "type": "bottleneck",
                 "severity": "warning",
@@ -149,7 +196,7 @@ def _check_overdue_escalations() -> list[dict]:
                     "task_id": task.get("id"),
                     "suggested_action": "escalate",
                 })
-            elif days_overdue >= 7:
+            elif days_overdue >= _threshold(10):
                 alerts.append({
                     "type": "escalation",
                     "severity": "warning",
@@ -271,10 +318,10 @@ def _check_relationship_health() -> list[dict]:
                     last_dt = last_dt.replace(tzinfo=timezone.utc)
                 days_since = (now - last_dt).days
 
-                if days_since >= 14:
+                if days_since >= _threshold(21):
                     alerts.append({
                         "type": "relationship",
-                        "severity": "warning" if days_since >= 21 else "info",
+                        "severity": "warning" if days_since >= _threshold(30) else "info",
                         "title": f"No recent interaction with {name} ({days_since}d)",
                         "detail": f"Last documented interaction with {name} was {days_since} days ago. "
                                   f"{'They have 1:1s scheduled. ' if has_1on1s else ''}"
@@ -350,10 +397,10 @@ def _check_stale_decisions() -> list[dict]:
                 created_dt = created_dt.replace(tzinfo=timezone.utc)
             days_pending = (now - created_dt).days
 
-            if days_pending >= 7:
+            if days_pending >= _threshold(10):
                 alerts.append({
                     "type": "stale_decision",
-                    "severity": "warning" if days_pending >= 14 else "info",
+                    "severity": "warning" if days_pending >= _threshold(21) else "info",
                     "title": f"Decision pending {days_pending}d: {d.get('title', '')}",
                     "detail": f"'{d.get('title', '')}' has been pending for {days_pending} days. "
                               f"{'Stakeholders: ' + ', '.join(d.get('stakeholders', [])) + '. ' if d.get('stakeholders') else ''}"

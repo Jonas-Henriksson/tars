@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useStore } from '../store';
 import { getTheme } from '../themes';
 import { api } from '../api/client';
-import { Grid3x3, Columns3, List, GanttChart, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { Grid3x3, Columns3, List, GanttChart, ChevronDown, ChevronUp, Search, Play, Check } from 'lucide-react';
 import DetailPanel from '../components/DetailPanel';
 import type { DetailField } from '../components/DetailPanel';
 
@@ -440,17 +440,55 @@ function BoardView({ tasks, onTaskClick, onDragDrop }: {
                     Drop tasks here
                   </div>
                 ) : (
-                  colTasks.slice(0, 25).map((t) => (
-                    <div
-                      key={t.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, t.id)}
-                      onDragEnd={handleDragEnd}
-                      style={{ opacity: draggedId === t.id ? 0.4 : 1, cursor: 'grab' }}
-                    >
-                      <TaskCard task={t} onClick={() => onTaskClick(t)} />
-                    </div>
-                  ))
+                  colTasks.slice(0, 25).map((t) => {
+                    const phase = getTaskPhase(t);
+                    return (
+                      <div
+                        key={t.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, t.id)}
+                        onDragEnd={handleDragEnd}
+                        style={{ opacity: draggedId === t.id ? 0.4 : 1, cursor: 'grab', position: 'relative' }}
+                        className="board-card-wrapper"
+                      >
+                        <TaskCard task={t} onClick={() => onTaskClick(t)} />
+                        {phase === 'backlog' && (
+                          <button
+                            title="Start task"
+                            onClick={(e) => { e.stopPropagation(); onDragDrop(t.id, 'in_progress'); }}
+                            style={{
+                              position: 'absolute', top: 6, right: 6,
+                              width: 24, height: 24, borderRadius: '50%',
+                              border: '1px solid var(--border)', backgroundColor: 'var(--bg-card)',
+                              color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              cursor: 'pointer', opacity: 0, transition: 'opacity 0.15s',
+                              padding: 0,
+                            }}
+                            className="board-card-action"
+                          >
+                            <Play size={12} fill="#3b82f6" />
+                          </button>
+                        )}
+                        {phase === 'in_progress' && (
+                          <button
+                            title="Mark done"
+                            onClick={(e) => { e.stopPropagation(); onDragDrop(t.id, 'done'); }}
+                            style={{
+                              position: 'absolute', top: 6, right: 6,
+                              width: 24, height: 24, borderRadius: '50%',
+                              border: '1px solid var(--border)', backgroundColor: 'var(--bg-card)',
+                              color: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              cursor: 'pointer', opacity: 0, transition: 'opacity 0.15s',
+                              padding: 0,
+                            }}
+                            className="board-card-action"
+                          >
+                            <Check size={12} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
                 )}
                 {colTasks.length > 25 && (
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: 4 }}>

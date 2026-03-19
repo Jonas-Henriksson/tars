@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import {
   Calendar, AlertTriangle, Mail, TrendingUp, CheckCircle2, ChevronRight,
-  Target, Scale, Users,
+  Target, Scale, Users, CalendarCheck, Clock,
 } from 'lucide-react';
 import DetailPanel from '../components/DetailPanel';
 import type { DetailField } from '../components/DetailPanel';
@@ -30,16 +30,19 @@ export default function CommandCenter() {
   const [taskStats, setTaskStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedAlert, setSelectedAlert] = useState<AlertData | null>(null);
+  const [meetingPrep, setMeetingPrep] = useState<any>(null);
 
   useEffect(() => {
     Promise.all([
       api.get<any>('/api/alerts').catch(() => ({ alerts: [] })),
       api.get<any>('/api/strategic-summary').catch(() => ({})),
       api.get<any>('/api/review/weekly').catch(() => ({})),
-    ]).then(([alertsData, summaryData, reviewData]) => {
+      api.get<any>('/api/meeting-prep').catch(() => null),
+    ]).then(([alertsData, summaryData, reviewData, meetingData]) => {
       setAlerts(alertsData.alerts || []);
       setSummary(summaryData);
       setTaskStats(reviewData.smart_tasks || {});
+      setMeetingPrep(meetingData?.available ? meetingData : null);
       setLoading(false);
     });
   }, []);
@@ -248,6 +251,75 @@ export default function CommandCenter() {
           </div>
         </div>
       </div>
+
+      {/* Next Meeting card */}
+      {meetingPrep && (
+        <div
+          onClick={() => navigate('/people?tab=meeting-prep')}
+          style={{
+            ...cardStyle,
+            marginTop: 20,
+            borderLeft: `4px solid var(--accent)`,
+            cursor: 'pointer',
+            transition: 'all 0.15s',
+            ...((() => {
+              const t = meetingPrep.time_until as string | undefined;
+              const isUrgent = t && (
+                t.toLowerCase().includes('now') ||
+                (t.toLowerCase().includes('minute') && parseInt(t) < 30)
+              );
+              return isUrgent ? { animation: 'meetingPulse 2s ease-in-out infinite', borderLeftColor: 'var(--warning)' } : {};
+            })()),
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+            e.currentTarget.style.boxShadow = 'var(--shadow)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--bg-card)';
+            e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+          }}
+        >
+          <style>{`
+            @keyframes meetingPulse {
+              0%, 100% { border-left-color: var(--warning); }
+              50% { border-left-color: var(--accent); }
+            }
+          `}</style>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+              <CalendarCheck size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {meetingPrep.event?.subject || 'Upcoming Meeting'}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
+                    <Clock size={12} />
+                    {meetingPrep.time_until}
+                  </span>
+                  {meetingPrep.event?.attendees?.length != null && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
+                      <Users size={12} />
+                      {meetingPrep.event.attendees.length} attendee{meetingPrep.event.attendees.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            {meetingPrep.talking_points?.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginLeft: 20, flexShrink: 0, maxWidth: 300 }}>
+                {meetingPrep.talking_points.slice(0, 2).map((point: string, i: number) => (
+                  <div key={i} style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    &bull; {point}
+                  </div>
+                ))}
+              </div>
+            )}
+            <ChevronRight size={16} style={{ color: 'var(--text-muted)', flexShrink: 0, marginLeft: 12 }} />
+          </div>
+        </div>
+      )}
 
       {/* Alert detail panel */}
       <DetailPanel

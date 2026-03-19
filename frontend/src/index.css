@@ -127,3 +127,7 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* Board card quick-action buttons: visible on hover */
+.board-card-wrapper:hover .board-card-action { opacity: 1 !important; }
+.board-card-action:hover { background-color: var(--bg-hover) !important; }

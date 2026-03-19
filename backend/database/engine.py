@@ -444,9 +444,67 @@ def _migration_v4(cur: sqlite3.Cursor) -> None:
             pass  # Column already exists
 
 
+def _migration_v5(cur: sqlite3.Cursor) -> None:
+    """v5: Add 'in_progress' to smart_tasks status CHECK constraint.
+
+    SQLite does not support ALTER COLUMN to modify CHECK constraints, so we
+    recreate the table with the updated constraint and copy data over.
+    """
+
+    # 1. Create new table with updated CHECK constraint
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS smart_tasks_new (
+            id TEXT PRIMARY KEY,
+            team_id TEXT DEFAULT NULL REFERENCES teams(id) ON DELETE CASCADE,
+            description TEXT NOT NULL,
+            owner TEXT DEFAULT '',
+            status TEXT DEFAULT 'open' CHECK(status IN ('open', 'in_progress', 'done')),
+            quadrant INTEGER DEFAULT 4 CHECK(quadrant BETWEEN 1 AND 4),
+            topic TEXT DEFAULT '',
+            follow_up_date TEXT DEFAULT '',
+            source_page_id TEXT DEFAULT '',
+            source_context TEXT DEFAULT '',
+            steps TEXT DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            story_id TEXT DEFAULT '',
+            classification TEXT DEFAULT 'unclassified',
+            manual_override TEXT DEFAULT '0',
+            override_at TEXT DEFAULT '',
+            confidence TEXT DEFAULT '0.0',
+            source TEXT DEFAULT 'confirmed'
+        )
+    """)
+
+    # 2. Copy existing data
+    cur.execute("""
+        INSERT OR IGNORE INTO smart_tasks_new
+            (id, team_id, description, owner, status, quadrant, topic,
+             follow_up_date, source_page_id, source_context, steps,
+             created_at, updated_at, story_id, classification,
+             manual_override, override_at, confidence, source)
+        SELECT
+            id, team_id, description, owner, status, quadrant, topic,
+            follow_up_date, source_page_id, source_context, steps,
+            created_at, updated_at, story_id, classification,
+            manual_override, override_at, confidence, source
+        FROM smart_tasks
+    """)
+
+    # 3. Drop old table and rename
+    cur.execute("DROP TABLE smart_tasks")
+    cur.execute("ALTER TABLE smart_tasks_new RENAME TO smart_tasks")
+
+    # 4. Recreate indexes
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_smart_tasks_owner ON smart_tasks(owner)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_smart_tasks_status ON smart_tasks(status)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_smart_tasks_team ON smart_tasks(team_id)")
+
+
 _MIGRATIONS = {
     1: _migration_v1,
     2: _migration_v2,
     3: _migration_v3,
     4: _migration_v4,
+    5: _migration_v5,
 }

@@ -1,7 +1,7 @@
 /**
  * People page — directory, relationship graph, meeting prep.
  */
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 import { Users, Network, CalendarCheck, Search, Clock } from 'lucide-react';
 import DetailPanel from '../components/DetailPanel';
@@ -267,81 +267,320 @@ function DirectoryView() {
   );
 }
 
-/* ---------- Graph ---------- */
+/* ---------- Graph (D3 Force-Directed) ---------- */
 
 function GraphView() {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [graphData, setGraphData] = useState<any>(null);
   const [people, setPeople] = useState<Record<string, Person>>({});
   const [loading, setLoading] = useState(true);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; name: string; role: string; mentions: number; org: string } | null>(null);
 
   useEffect(() => {
-    api.get<any>('/api/people').then((data) => {
-      setPeople(data.people || {});
+    Promise.all([
+      api.get<any>('/api/intel/graph?min_edge_weight=1').catch(() => ({ nodes: [], edges: [] })),
+      api.get<any>('/api/people').catch(() => ({ people: {} })),
+    ]).then(([graph, peopleData]) => {
+      setGraphData(graph);
+      setPeople(peopleData.people || {});
       setLoading(false);
-    }).catch(() => setLoading(false));
+    });
   }, []);
 
-  if (loading) return <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>Loading...</div>;
+  useEffect(() => {
+    if (!graphData || !svgRef.current) return;
 
-  const entries = Object.values(people);
-  const maxMentions = Math.max(...entries.map((p) => p.mentions || 1), 1);
+    // Filter to person nodes only for the main visualization
+    const personNodes = graphData.nodes
+      ?.filter((n: any) => n.type === 'person')
+      ?.map((n: any) => {
+        const name = n.label || n.id.replace('person:', '');
+        const p = people[name];
+        return { ...n, name, org: p?.organization || '', role: p?.role || '', mentions: p?.mentions || n.weight || 1 };
+      }) || [];
 
-  // Group by organization
-  const orgs: Record<string, Person[]> = {};
-  entries.forEach((p) => {
-    const org = p.organization || 'Unknown';
-    if (!orgs[org]) orgs[org] = [];
-    orgs[org].push(p);
-  });
+    if (personNodes.length === 0) return;
+
+    // Build person-to-person edges (people connected via shared pages/topics)
+    const personIds = new Set(personNodes.map((n: any) => n.id));
+    const pageConnections: Record<string, Set<string>> = {};
+
+    // Find indirect connections: person → page → person
+    const edges = graphData.edges || [];
+    const personToPages: Record<string, string[]> = {};
+    edges.forEach((e: any) => {
+      const src = e.source || e.src;
+      const tgt = e.target || e.tgt;
+      if (personIds.has(src) && !personIds.has(tgt)) {
+        if (!personToPages[src]) personToPages[src] = [];
+        personToPages[src].push(tgt);
+      }
+      if (personIds.has(tgt) && !personIds.has(src)) {
+        if (!personToPages[tgt]) personToPages[tgt] = [];
+        personToPages[tgt].push(src);
+      }
+    });
+
+    // Build person↔person links from shared intermediaries
+    const linkMap: Record<string, number> = {};
+    Object.entries(personToPages).forEach(([personId, pages]) => {
+      pages.forEach(pageId => {
+        if (!pageConnections[pageId]) pageConnections[pageId] = new Set();
+        pageConnections[pageId].add(personId);
+      });
+    });
+    Object.values(pageConnections).forEach(connectedPersons => {
+      const arr = Array.from(connectedPersons);
+      for (let i = 0; i < arr.length; i++) {
+        for (let j = i + 1; j < arr.length; j++) {
+          const key = arr[i] < arr[j] ? `${arr[i]}|${arr[j]}` : `${arr[j]}|${arr[i]}`;
+          linkMap[key] = (linkMap[key] || 0) + 1;
+        }
+      }
+    });
+
+    // Also add direct person↔person edges
+    edges.forEach((e: any) => {
+      const src = e.source || e.src;
+      const tgt = e.target || e.tgt;
+      if (personIds.has(src) && personIds.has(tgt)) {
+        const key = src < tgt ? `${src}|${tgt}` : `${tgt}|${src}`;
+        linkMap[key] = (linkMap[key] || 0) + (e.weight || 1);
+      }
+    });
+
+    const links = Object.entries(linkMap).map(([key, weight]) => {
+      const [source, target] = key.split('|');
+      return { source, target, weight };
+    });
+
+    // D3 force simulation (inline to avoid import issues)
+    const svg = svgRef.current;
+    const width = svg.clientWidth || 800;
+    const height = 500;
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+    // Clear previous
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    const maxMentions = Math.max(...personNodes.map((n: any) => n.mentions), 1);
+    const nodeRadius = (n: { mentions: number }) => 16 + (n.mentions / maxMentions) * 16;
+
+    // Simple force simulation without D3 import (use requestAnimationFrame)
+    const nodes = personNodes.map((n: any) => ({
+      ...n,
+      x: width / 2 + (Math.random() - 0.5) * 300,
+      y: height / 2 + (Math.random() - 0.5) * 200,
+      vx: 0, vy: 0,
+      r: nodeRadius(n),
+    }));
+
+    const nodeMap: Record<string, any> = {};
+    nodes.forEach((n: any) => { nodeMap[n.id] = n; });
+
+    const simLinks = links.filter(l => nodeMap[l.source] && nodeMap[l.target]);
+
+    // Create SVG elements
+    const ns = 'http://www.w3.org/2000/svg';
+
+    // Link lines
+    const linkEls = simLinks.map(l => {
+      const line = document.createElementNS(ns, 'line');
+      line.setAttribute('stroke', 'var(--border)');
+      line.setAttribute('stroke-opacity', '0.4');
+      line.setAttribute('stroke-width', String(Math.min(3, Math.max(1, l.weight * 0.5))));
+      svg.appendChild(line);
+      return line;
+    });
+
+    // Node groups
+    const nodeEls = nodes.map((n: any) => {
+      const g = document.createElementNS(ns, 'g');
+      g.style.cursor = 'grab';
+
+      const circle = document.createElementNS(ns, 'circle');
+      circle.setAttribute('r', String(n.r));
+      circle.setAttribute('fill', orgColor(n.org));
+      circle.setAttribute('stroke', '#fff');
+      circle.setAttribute('stroke-width', '2');
+      g.appendChild(circle);
+
+      const text = document.createElementNS(ns, 'text');
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('dy', '0.35em');
+      text.setAttribute('fill', '#fff');
+      text.setAttribute('font-size', String(Math.max(10, n.r / 2)));
+      text.setAttribute('font-weight', '600');
+      text.setAttribute('pointer-events', 'none');
+      text.textContent = n.name.charAt(0);
+      g.appendChild(text);
+
+      // Name label below
+      if (n.r > 20) {
+        const label = document.createElementNS(ns, 'text');
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('dy', String(n.r + 14));
+        label.setAttribute('fill', 'var(--text-muted)');
+        label.setAttribute('font-size', '10');
+        label.setAttribute('pointer-events', 'none');
+        label.textContent = n.name.split(' ')[0];
+        g.appendChild(label);
+      }
+
+      // Hover events
+      g.addEventListener('mouseenter', () => {
+        circle.setAttribute('stroke', 'var(--accent)');
+        circle.setAttribute('stroke-width', '3');
+        const rect = svg.getBoundingClientRect();
+        setTooltip({ x: n.x + rect.left, y: n.y + rect.top - n.r - 10, name: n.name, role: n.role, mentions: n.mentions, org: n.org });
+      });
+      g.addEventListener('mouseleave', () => {
+        circle.setAttribute('stroke', '#fff');
+        circle.setAttribute('stroke-width', '2');
+        setTooltip(null);
+      });
+
+      // Drag
+      let dragging = false;
+      g.addEventListener('mousedown', (e) => {
+        dragging = true;
+        g.style.cursor = 'grabbing';
+        e.preventDefault();
+      });
+      const onMove = (e: MouseEvent) => {
+        if (!dragging) return;
+        const rect = svg.getBoundingClientRect();
+        n.x = e.clientX - rect.left;
+        n.y = e.clientY - rect.top;
+        n.vx = 0; n.vy = 0;
+      };
+      const onUp = () => { dragging = false; g.style.cursor = 'grab'; };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+
+      svg.appendChild(g);
+      return { g, circle, node: n, cleanup: () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); } };
+    });
+
+    // Simple force simulation (no D3 needed — basic physics)
+    let running = true;
+    const alpha = { value: 1.0 };
+
+    function tick() {
+      if (!running) return;
+      alpha.value *= 0.99;
+      if (alpha.value < 0.001) { alpha.value = 0; }
+
+      // Center force
+      nodes.forEach((n: any) => {
+        n.vx += (width / 2 - n.x) * 0.005 * alpha.value;
+        n.vy += (height / 2 - n.y) * 0.005 * alpha.value;
+      });
+
+      // Repulsion (charge)
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[j].x - nodes[i].x;
+          const dy = nodes[j].y - nodes[i].y;
+          const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+          const force = -200 * alpha.value / (dist * dist);
+          const fx = force * dx / dist;
+          const fy = force * dy / dist;
+          nodes[i].vx -= fx; nodes[i].vy -= fy;
+          nodes[j].vx += fx; nodes[j].vy += fy;
+        }
+      }
+
+      // Link attraction
+      simLinks.forEach((l) => {
+        const s = nodeMap[l.source];
+        const t = nodeMap[l.target];
+        if (!s || !t) return;
+        const dx = t.x - s.x;
+        const dy = t.y - s.y;
+        const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+        const desired = 100 + s.r + t.r;
+        const force = (dist - desired) * 0.01 * alpha.value;
+        const fx = force * dx / dist;
+        const fy = force * dy / dist;
+        s.vx += fx; s.vy += fy;
+        t.vx -= fx; t.vy -= fy;
+      });
+
+      // Collision
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[j].x - nodes[i].x;
+          const dy = nodes[j].y - nodes[i].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const minDist = nodes[i].r + nodes[j].r + 4;
+          if (dist < minDist && dist > 0) {
+            const overlap = (minDist - dist) / 2;
+            const nx = dx / dist;
+            const ny = dy / dist;
+            nodes[i].x -= nx * overlap;
+            nodes[i].y -= ny * overlap;
+            nodes[j].x += nx * overlap;
+            nodes[j].y += ny * overlap;
+          }
+        }
+      }
+
+      // Apply velocity + boundary
+      nodes.forEach((n: any) => {
+        n.vx *= 0.8; n.vy *= 0.8;
+        n.x += n.vx; n.y += n.vy;
+        n.x = Math.max(n.r + 5, Math.min(width - n.r - 5, n.x));
+        n.y = Math.max(n.r + 5, Math.min(height - n.r - 5, n.y));
+      });
+
+      // Update positions
+      simLinks.forEach((l, idx) => {
+        const s = nodeMap[l.source];
+        const t = nodeMap[l.target];
+        if (!s || !t) return;
+        linkEls[idx]?.setAttribute('x1', String(s.x));
+        linkEls[idx]?.setAttribute('y1', String(s.y));
+        linkEls[idx]?.setAttribute('x2', String(t.x));
+        linkEls[idx]?.setAttribute('y2', String(t.y));
+      });
+
+      nodeEls.forEach((ne: { g: SVGGElement; node: any; cleanup: () => void }) => {
+        ne.g.setAttribute('transform', `translate(${ne.node.x},${ne.node.y})`);
+      });
+
+      if (alpha.value > 0) requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
+
+    return () => {
+      running = false;
+      nodeEls.forEach((ne: { cleanup: () => void }) => ne.cleanup());
+    };
+  }, [graphData, people]);
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>Loading graph...</div>;
 
   return (
-    <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 24 }}>
+    <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 24, position: 'relative' }}>
       <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
         Relationship Network
       </h3>
-      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 20 }}>
-        Circle size reflects mention frequency
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+        Circle size reflects mention frequency · Lines show shared pages and topics · Drag to rearrange
       </p>
-      {entries.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
-          No people data available yet.
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {Object.entries(orgs).sort(([, a], [, b]) => b.length - a.length).map(([org, orgPeople]) => (
-            <div key={org}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{org}</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {orgPeople.sort((a, b) => (b.mentions || 0) - (a.mentions || 0)).map((p) => {
-                  const size = 32 + Math.round(((p.mentions || 0) / maxMentions) * 24);
-                  const firstName = p.name.split(' ')[0];
-                  const showName = size > 40;
-                  const bg = orgColor(p.organization);
-                  return (
-                    <div key={p.name} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                      <div
-                        title={`${p.name} — ${p.role || 'No role'} — ${p.mentions || 0} mentions`}
-                        style={{
-                          width: size, height: size, borderRadius: '50%',
-                          background: bg, display: 'flex', alignItems: 'center',
-                          justifyContent: 'center', color: '#fff', fontSize: Math.max(10, size / 3.5),
-                          fontWeight: 600, cursor: 'default', transition: 'transform 0.15s',
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.15)'}
-                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                      >
-                        {p.name.charAt(0)}
-                      </div>
-                      {showName && (
-                        <span style={{ fontSize: 10, color: 'var(--text-muted)', maxWidth: size + 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                          {firstName}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+      <svg ref={svgRef} style={{ width: '100%', height: 500, borderRadius: 'var(--radius)' }} />
+      {tooltip && (
+        <div style={{
+          position: 'fixed', left: tooltip.x, top: tooltip.y, transform: 'translate(-50%, -100%)',
+          backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+          padding: '6px 10px', boxShadow: 'var(--shadow)', pointerEvents: 'none', zIndex: 100,
+          fontSize: 12,
+        }}>
+          <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{tooltip.name}</div>
+          <div style={{ color: 'var(--text-muted)' }}>{tooltip.role} · {tooltip.org}</div>
+          <div style={{ color: 'var(--text-muted)' }}>{tooltip.mentions} mentions</div>
         </div>
       )}
     </div>
