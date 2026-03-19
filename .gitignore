@@ -11,3 +11,7 @@ reminders.json
 notion_tracked_tasks.json
 notion_review_state.json
 notion_intel.json
+frontend/node_modules/
+frontend/dist/
+*.db
+.jwt_secret
