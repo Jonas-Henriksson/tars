@@ -1767,7 +1767,7 @@ function HealthDashboard() {
             { key: 'owner', label: 'Owner', value: selectedEpic.owner, type: 'select', options: ownerOptions },
             { key: 'priority', label: 'Priority', value: selectedEpic.priority || 'high', type: 'select', options: ['high', 'medium', 'low'] },
             { key: 'quarter', label: 'Quarter', value: selectedEpic.quarter || '', type: 'select', options: QUARTER_OPTIONS, hint: 'Target delivery quarter' },
-            { key: 'acceptance_criteria', label: 'Acceptance Criteria', value: selectedEpic.acceptance_criteria || [], type: 'tags' },
+            { key: 'acceptance_criteria', label: 'Acceptance Criteria', value: selectedEpic.acceptance_criteria || [], type: 'tags', hint: 'Definition of done — conditions that must be met for this epic to be considered complete' },
           ]}
           onFieldChange={(key, value) => {
             setSelectedEpic((prev: any) => prev ? { ...prev, [key]: value } : null);
