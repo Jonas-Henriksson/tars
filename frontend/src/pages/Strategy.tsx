@@ -394,36 +394,34 @@ function HierarchyView() {
 
       {/* Operational tasks */}
       {operational.length > 0 && (
-        <div style={{ marginTop: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 500, color: '#f59e0b' }}>
-              Operational tasks ({operational.length})
-            </h3>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              Day-to-day work not tied to a strategic initiative
-            </span>
-          </div>
-          {operational.map((t: any) => (
-            <TaskLeaf key={t.id} task={t} borderColor="#f59e0b" ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onUpdate={handleTaskUpdate} onRemove={handleTaskRemove} />
-          ))}
-        </div>
+        <CollapsibleTaskSection
+          title="Operational tasks"
+          count={operational.length}
+          subtitle="Day-to-day work not tied to a strategic initiative"
+          color="#f59e0b"
+          tasks={operational}
+          ownerOptions={ownerOptions}
+          onApprove={handleApprove}
+          onDismiss={handleDismiss}
+          onUpdate={handleTaskUpdate}
+          onRemove={handleTaskRemove}
+        />
       )}
 
       {/* Unclassified */}
       {unclassified.length > 0 && (
-        <div style={{ marginTop: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-muted)' }}>
-              Unclassified tasks ({unclassified.length})
-            </h3>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              Needs review — could be strategic or operational
-            </span>
-          </div>
-          {unclassified.map((t: any) => (
-            <TaskLeaf key={t.id} task={t} borderColor="#64748b" ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onUpdate={handleTaskUpdate} onRemove={handleTaskRemove} />
-          ))}
-        </div>
+        <CollapsibleTaskSection
+          title="Unclassified tasks"
+          count={unclassified.length}
+          subtitle="Needs review — could be strategic or operational"
+          color="var(--text-muted)"
+          tasks={unclassified}
+          ownerOptions={ownerOptions}
+          onApprove={handleApprove}
+          onDismiss={handleDismiss}
+          onUpdate={handleTaskUpdate}
+          onRemove={handleTaskRemove}
+        />
       )}
 
       {/* Detail panel for editing hierarchy nodes */}
@@ -665,6 +663,47 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
 const TASK_STATUS_COLORS: Record<string, string> = {
   done: '#22c55e', in_progress: '#3b82f6', review: '#f59e0b', open: '#64748b',
 };
+
+const PREVIEW_COUNT = 10;
+
+function CollapsibleTaskSection({ title, count, subtitle, color, tasks, ownerOptions, onApprove, onDismiss, onUpdate, onRemove }: {
+  title: string; count: number; subtitle: string; color: string;
+  tasks: any[]; ownerOptions: string[];
+  onApprove: (type: string, id: string) => void;
+  onDismiss: (type: string, id: string) => void;
+  onUpdate: (id: string, updates: Record<string, any>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? tasks : tasks.slice(0, PREVIEW_COUNT);
+  const hasMore = tasks.length > PREVIEW_COUNT;
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 500, color }}>
+          {title} ({count})
+        </h3>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{subtitle}</span>
+      </div>
+      {visible.map((t: any) => (
+        <TaskLeaf key={t.id} task={t} borderColor={color} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onUpdate={onUpdate} onRemove={onRemove} />
+      ))}
+      {hasMore && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          style={{
+            border: 'none', background: 'none', cursor: 'pointer',
+            fontSize: 12, color: 'var(--accent)', padding: '6px 8px',
+            marginTop: 2,
+          }}
+        >
+          {expanded ? 'Show less' : `Show all ${count} tasks`}
+        </button>
+      )}
+    </div>
+  );
+}
 
 function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', ownerOptions = [], onApprove, onDismiss, onRemove, onUpdate }: {
   task: any; depth?: number; borderColor?: string; ownerOptions?: string[];
