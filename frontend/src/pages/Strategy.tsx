@@ -272,9 +272,6 @@ function HierarchyView() {
   };
 
   const handleNodeFieldChange = useCallback((key: string, value: any) => {
-    // Route decision request form fields
-    if (key === '_decision_title') { setDecisionForm((f) => ({ ...f, title: value })); return; }
-    if (key === '_decision_from') { setDecisionForm((f) => ({ ...f, requested_from: value })); return; }
     if (!selectedNode) return;
     const endpoint = nodeEndpointMap[selectedNode.type];
     if (!endpoint) return;
@@ -480,14 +477,7 @@ function HierarchyView() {
         title={selectedNode?.title || selectedNode?.description || ''}
         subtitle={selectedNode ? `${TYPE_LABELS[selectedNode.type] || selectedNode.type}${selectedNode.owner ? ` · ${selectedNode.owner}` : ''}` : undefined}
         badge={selectedNode?.source === 'auto' ? { label: 'AI proposed', color: '#8b5cf6' } : undefined}
-        fields={[
-          ...(selectedNode ? getNodeFields(selectedNode) : []),
-          ...(requestingDecision && selectedNode ? [
-            { key: '_decision_divider', label: '── Request a Decision ──', value: `From: ${TYPE_LABELS[selectedNode.type] || selectedNode.type} "${selectedNode.title}"`, type: 'readonly' as const },
-            { key: '_decision_title', label: 'What decision is needed?', value: decisionForm.title, type: 'text' as const },
-            { key: '_decision_from', label: 'Request from (who should decide?)', value: decisionForm.requested_from, type: 'text' as const },
-          ] : []),
-        ]}
+        fields={selectedNode ? getNodeFields(selectedNode) : []}
         onFieldChange={handleNodeFieldChange}
         onSave={(updates) => {
           if (!selectedNode) return;
@@ -498,10 +488,7 @@ function HierarchyView() {
           setTree((prev) => updateNodeInTree(prev, selectedNode.id, (n) => ({ ...n, ...updates })));
           setSelectedNode(null);
         }}
-        actions={requestingDecision ? [
-          { label: 'Submit Request', variant: 'primary' as const, onClick: handleRequestDecision },
-          { label: 'Cancel', variant: 'ghost' as const, onClick: () => { setRequestingDecision(false); setDecisionForm({ title: '', requested_from: '' }); } },
-        ] : [
+        actions={[
           ...(selectedNode?.source === 'auto' ? [
             { label: 'Approve', variant: 'primary' as const, onClick: () => {
               handleApprove(selectedNode.type + 's', selectedNode.id);
@@ -516,6 +503,88 @@ function HierarchyView() {
         ]}
       />
 
+      {/* Decision request form overlay */}
+      {requestingDecision && selectedNode && (
+        <>
+          <div
+            onClick={() => { setRequestingDecision(false); setDecisionForm({ title: '', requested_from: '' }); }}
+            style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 999, animation: 'fadeIn 0.15s ease' }}
+          />
+          <div style={{
+            position: 'fixed', top: 0, right: 0, bottom: 0, width: 420, maxWidth: '85vw',
+            backgroundColor: 'var(--bg-primary)', borderLeft: '1px solid var(--border)',
+            zIndex: 1000, display: 'flex', flexDirection: 'column',
+            boxShadow: '-4px 0 24px rgba(0,0,0,0.15)', animation: 'slideIn 0.2s ease',
+          }}>
+            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>Request a Decision</h2>
+                <button onClick={() => { setRequestingDecision(false); setDecisionForm({ title: '', requested_from: '' }); }}
+                  style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+                  <X size={16} />
+                </button>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                {TYPE_LABELS[selectedNode.type] || selectedNode.type}: {selectedNode.title}
+              </p>
+            </div>
+            <div style={{ flex: 1, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>What decision is needed?</label>
+                <input
+                  autoFocus
+                  value={decisionForm.title}
+                  onChange={(e) => setDecisionForm((f) => ({ ...f, title: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && decisionForm.title.trim()) handleRequestDecision(); if (e.key === 'Escape') { setRequestingDecision(false); setDecisionForm({ title: '', requested_from: '' }); } }}
+                  placeholder="e.g. Which vendor to select for the integration?"
+                  style={{
+                    width: '100%', padding: '8px 10px', fontSize: 13,
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+                    backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none',
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Decision needed from</label>
+                <input
+                  value={decisionForm.requested_from}
+                  onChange={(e) => setDecisionForm((f) => ({ ...f, requested_from: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && decisionForm.title.trim()) handleRequestDecision(); if (e.key === 'Escape') { setRequestingDecision(false); setDecisionForm({ title: '', requested_from: '' }); } }}
+                  placeholder="e.g. Steering Committee, CTO, Product Owner"
+                  style={{
+                    width: '100%', padding: '8px 10px', fontSize: 13,
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+                    backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none',
+                  }}
+                />
+              </div>
+            </div>
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => { setRequestingDecision(false); setDecisionForm({ title: '', requested_from: '' }); }}
+                style={{
+                  padding: '8px 16px', border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+                  backgroundColor: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer',
+                }}
+              >Cancel</button>
+              <button
+                onClick={handleRequestDecision}
+                disabled={!decisionForm.title.trim()}
+                style={{
+                  padding: '8px 16px', border: 'none', borderRadius: 'var(--radius)',
+                  backgroundColor: decisionForm.title.trim() ? '#8b5cf6' : 'var(--bg-secondary)',
+                  color: decisionForm.title.trim() ? '#fff' : 'var(--text-muted)',
+                  fontSize: 13, fontWeight: 500, cursor: decisionForm.title.trim() ? 'pointer' : 'default',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                <Scale size={14} /> Submit Request
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Detail panel for viewing a decision from hierarchy indicator */}
       <DetailPanel
         open={!!selectedDecision}
@@ -527,7 +596,7 @@ function HierarchyView() {
           { key: 'status', label: 'Status', value: selectedDecision.status, type: 'select' as const, options: ['pending', 'decided', 'revisit', 'request'], color: STATUS_COLORS[selectedDecision.status] },
           { key: 'decided_by', label: 'Decided By', value: selectedDecision.decided_by, type: 'text' as const },
           { key: 'requested_by', label: 'Requested By', value: selectedDecision.requested_by || '', type: 'readonly' as const },
-          { key: 'requested_from', label: 'Requested From', value: selectedDecision.requested_from || '', type: 'text' as const },
+          { key: 'requested_from', label: 'Decision Needed From', value: selectedDecision.requested_from || '', type: 'text' as const },
           { key: 'request_reason', label: 'Reason', value: selectedDecision.request_reason || '', type: 'textarea' as const },
           { key: 'from_workstream', label: 'From Workstream', value: selectedDecision.from_workstream || '', type: 'readonly' as const },
           { key: 'linked_title', label: 'Linked Item', value: selectedDecision.linked_title ? `[${selectedDecision.linked_type}] ${selectedDecision.linked_title}` : '', type: 'readonly' as const },
@@ -1762,7 +1831,7 @@ function DecisionsView() {
     { key: 'linked_type', label: 'Link Type', value: selected.linked_type || '', type: 'select', options: ['', 'initiative', 'epic', 'story', 'task'] },
     { key: 'linked_title', label: 'Linked Item', value: selected.linked_title || '', type: 'text' },
     { key: 'linked_id', label: 'Linked ID', value: selected.linked_id || '', type: 'text' },
-    { key: 'requested_from', label: 'Requested From', value: selected.requested_from || '', type: 'text' },
+    { key: 'requested_from', label: 'Decision Needed From', value: selected.requested_from || '', type: 'text' },
     { key: 'request_reason', label: 'Request Reason', value: selected.request_reason || '', type: 'textarea' },
     { key: 'from_workstream', label: 'From Workstream', value: selected.from_workstream || '', type: 'text' },
     { key: 'outcome_notes', label: 'Outcome Notes', value: selected.outcome_notes, type: 'textarea' },
@@ -1818,7 +1887,7 @@ function DecisionsView() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {([
               ['title', 'What decision is needed?'],
-              ['requested_from', 'Who should decide?'],
+              ['requested_from', 'Decision needed from (e.g. Steering Committee, CTO)'],
               ['request_reason', 'Why? What\'s blocked?'],
               ['from_workstream', 'From which workstream/task?'],
             ] as [string, string][]).map(([key, placeholder]) => (
