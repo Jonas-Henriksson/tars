@@ -339,6 +339,7 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
           )}
           {iconMap[field.key]}
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{field.label}</span>
+          {field.hint && <span title={field.hint} style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'help' }}>ⓘ</span>}
           {hasContent && !expanded && (
             <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
               {lines.length} item{lines.length !== 1 ? 's' : ''}
@@ -434,6 +435,7 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
       <div style={{ position: 'relative' }} ref={dropdownRef}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 100 }}>{field.label}</span>
+          {field.hint && <span title={field.hint} style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'help', marginRight: -4 }}>ⓘ</span>}
           <span
             onClick={() => hasOptions && setDropdownOpen(!dropdownOpen)}
             style={{
@@ -476,7 +478,7 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
   if (field.type === 'link') {
     return (
       <div>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>{field.label}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>{field.label}{field.hint && <span title={field.hint} style={{ fontSize: 11, cursor: 'help' }}>ⓘ</span>}</span>
         {value ? (
           <a href={String(value)} target="_blank" rel="noreferrer"
             style={{ fontSize: 13, color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}>
@@ -555,6 +557,7 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
           {iconMap[field.key]}
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{field.label}</span>
+          {field.hint && <span title={field.hint} style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'help' }}>ⓘ</span>}
         </div>
         <input
           type="date"
@@ -585,6 +588,7 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
         {iconMap[field.key]}
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{field.label}</span>
+        {field.hint && <span title={field.hint} style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'help' }}>ⓘ</span>}
       </div>
       {editing ? (
         field.type === 'select' && field.options ? (

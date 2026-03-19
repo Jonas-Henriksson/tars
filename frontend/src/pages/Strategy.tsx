@@ -267,33 +267,33 @@ function HierarchyView() {
   const getNodeFields = useCallback((node: any): DetailField[] => {
     const t = node.type;
     if (t === 'theme') return [
-      { key: 'title', label: 'Title', value: node.title, type: 'text' },
-      { key: 'description', label: 'Description', value: node.description, type: 'textarea' },
-      { key: 'status', label: 'Status', value: node.status || 'active', type: 'select', options: ['active', 'completed', 'paused'] },
+      { key: 'title', label: 'Title', value: node.title, type: 'text', hint: 'The name of this strategic theme' },
+      { key: 'description', label: 'Description', value: node.description, type: 'textarea', hint: 'High-level description of what this theme covers' },
+      { key: 'status', label: 'Status', value: node.status || 'active', type: 'select', options: ['active', 'completed', 'paused'], hint: 'Active: currently being worked on · Completed: all initiatives done · Paused: temporarily on hold' },
     ];
     if (t === 'initiative') return [
-      { key: 'title', label: 'Title', value: node.title, type: 'text' },
-      { key: 'description', label: 'Description', value: node.description, type: 'textarea' },
-      { key: 'owner', label: 'Owner', value: node.owner, type: 'select', options: ownerOptions },
+      { key: 'title', label: 'Title', value: node.title, type: 'text', hint: 'Name of this strategic initiative or project' },
+      { key: 'description', label: 'Description', value: node.description, type: 'textarea', hint: 'What this initiative aims to achieve and why it matters' },
+      { key: 'owner', label: 'Owner', value: node.owner, type: 'select', options: ownerOptions, hint: 'The person accountable for driving this initiative forward' },
       { key: 'quarter', label: 'Quarter', value: node.quarter || '', type: 'select', options: QUARTER_OPTIONS, hint: 'Target delivery quarter — the fiscal quarter by which this should be completed' },
-      { key: 'status', label: 'Status', value: node.status || 'on_track', type: 'select', options: ['on_track', 'at_risk', 'off_track', 'completed', 'paused'] },
-      { key: 'priority', label: 'Priority', value: node.priority || 'high', type: 'select', options: ['high', 'medium', 'low'] },
+      { key: 'status', label: 'Status', value: node.status || 'on_track', type: 'select', options: ['on_track', 'at_risk', 'off_track', 'completed', 'paused'], hint: 'On track: progressing well · At risk: may miss targets · Off track: behind schedule' },
+      { key: 'priority', label: 'Priority', value: node.priority || 'high', type: 'select', options: ['high', 'medium', 'low'], hint: 'High: critical to strategy · Medium: important but not urgent · Low: nice to have' },
     ];
     if (t === 'epic') return [
-      { key: 'title', label: 'Title', value: node.title, type: 'text' },
-      { key: 'description', label: 'Description', value: node.description, type: 'textarea' },
-      { key: 'owner', label: 'Owner', value: node.owner, type: 'select', options: ownerOptions },
-      { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'in_progress', 'done', 'cancelled'] },
-      { key: 'priority', label: 'Priority', value: node.priority || 'high', type: 'select', options: ['high', 'medium', 'low'] },
+      { key: 'title', label: 'Title', value: node.title, type: 'text', hint: 'Name of this epic — a large body of work' },
+      { key: 'description', label: 'Description', value: node.description, type: 'textarea', hint: 'What this epic delivers and the scope of work involved' },
+      { key: 'owner', label: 'Owner', value: node.owner, type: 'select', options: ownerOptions, hint: 'The person responsible for delivering this epic' },
+      { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'in_progress', 'done', 'cancelled'], hint: 'Backlog: not started · In progress: actively being worked on · Done: completed · Cancelled: no longer needed' },
+      { key: 'priority', label: 'Priority', value: node.priority || 'high', type: 'select', options: ['high', 'medium', 'low'], hint: 'High: do first · Medium: do soon · Low: do later' },
       { key: 'quarter', label: 'Quarter', value: node.quarter || '', type: 'select', options: QUARTER_OPTIONS, hint: 'Target delivery quarter — the fiscal quarter by which this epic should be completed' },
       { key: 'acceptance_criteria', label: 'Acceptance Criteria', value: node.acceptance_criteria || [], type: 'tags', hint: 'Definition of done — conditions that must be met for this epic to be considered complete' },
     ];
     if (t === 'story') return [
-      { key: 'title', label: 'Title', value: node.title, type: 'text' },
-      { key: 'description', label: 'Description', value: node.description, type: 'textarea' },
-      { key: 'owner', label: 'Owner', value: node.owner, type: 'select', options: ownerOptions },
-      { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'ready', 'in_progress', 'in_review', 'done', 'blocked'] },
-      { key: 'priority', label: 'Priority', value: node.priority || 'medium', type: 'select', options: ['high', 'medium', 'low'] },
+      { key: 'title', label: 'Title', value: node.title, type: 'text', hint: 'User story title — ideally in "As a [role], I want [goal]" format' },
+      { key: 'description', label: 'Description', value: node.description, type: 'textarea', hint: 'Additional details, context, or technical notes for this story' },
+      { key: 'owner', label: 'Owner', value: node.owner, type: 'select', options: ownerOptions, hint: 'The person who will deliver this story' },
+      { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'in_progress', 'ready', 'in_review', 'done', 'blocked'], hint: 'Backlog: not started · In progress: being worked on · Ready: prepared for work · In review: awaiting approval · Done: completed · Blocked: waiting on dependency' },
+      { key: 'priority', label: 'Priority', value: node.priority || 'medium', type: 'select', options: ['high', 'medium', 'low'], hint: 'High: must have · Medium: should have · Low: could have' },
       { key: 'size', label: 'Size', value: node.size || 'M', type: 'select', options: ['XS', 'S', 'M', 'L', 'XL'], hint: 'XS: a few hours · S: 1–2 days · M: 3–5 days · L: 1–2 weeks · XL: 2+ weeks' },
       { key: 'acceptance_criteria', label: 'Acceptance Criteria', value: node.acceptance_criteria || [], type: 'tags', hint: 'Definition of done — specific conditions that must be met for this story to be accepted' },
     ];
