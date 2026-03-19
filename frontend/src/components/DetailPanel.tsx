@@ -7,6 +7,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, Save, Edit3, Calendar, User, Tag, Flag, ExternalLink, ChevronDown, ChevronRight, Clock, Plus, Check } from 'lucide-react';
 
+/** Capitalize first letter and replace underscores with spaces */
+function displayValue(v: string): string {
+  const s = v.replace(/_/g, ' ');
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 export interface DetailField {
   key: string;
   label: string;
@@ -344,7 +350,7 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
             onMouseEnter={(e) => { if (hasOptions) e.currentTarget.style.filter = 'brightness(1.2)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.filter = 'none'; }}
           >
-            {String(value || '—').replace(/_/g, ' ')}
+            {displayValue(String(value || '—'))}
             {hasOptions && <ChevronDown size={10} style={{ marginLeft: 4, verticalAlign: 'middle' }} />}
           </span>
           {field.hint && <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>{field.hint}</span>}
@@ -363,7 +369,7 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = String(value) === o ? 'var(--bg-hover)' : 'transparent'}
               >
-                {o.replace(/_/g, ' ')}
+                {displayValue(o)}
               </div>
             ))}
           </div>
@@ -435,7 +441,7 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
             }
           }}
         >
-          <span>{String(value || '—').replace(/_/g, ' ')}</span>
+          <span>{displayValue(String(value || '—'))}</span>
           <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
         </div>
         {dropdownOpen && (
@@ -452,7 +458,7 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = String(value) === o ? 'var(--bg-hover)' : 'transparent'}
               >
-                {o.replace(/_/g, ' ')}
+                {displayValue(o)}
               </div>
             ))}
           </div>
@@ -506,7 +512,7 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
             onChange={(e) => onChange(e.target.value)}
             style={inputStyle}
           >
-            {field.options.map((o) => <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>)}
+            {field.options.map((o) => <option key={o} value={o}>{displayValue(o)}</option>)}
           </select>
         ) : field.type === 'textarea' ? (
           <textarea
@@ -532,7 +538,7 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
         )
       ) : (
         <div style={{ fontSize: 14, color: value ? 'var(--text-primary)' : 'var(--text-muted)', lineHeight: 1.5 }}>
-          {String(value || '—').replace(/_/g, ' ')}
+          {displayValue(String(value || '—'))}
         </div>
       )}
     </div>
