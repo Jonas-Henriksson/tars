@@ -112,6 +112,7 @@ function HierarchyView() {
   useEffect(() => { loadHierarchy(); }, [loadHierarchy]);
 
   // Lookup map: node ID → linked decisions
+  // Direct decisions per node
   const decisionsByNode = useMemo(() => {
     const map: Record<string, any[]> = {};
     for (const d of hierDecisions) {
@@ -122,6 +123,24 @@ function HierarchyView() {
     }
     return map;
   }, [hierDecisions]);
+
+  // Bubble up: count pending decisions in all descendants for each node
+  const descendantPendingCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    function walk(nodes: any[]): number {
+      let total = 0;
+      for (const n of nodes) {
+        const own = (decisionsByNode[n.id] || []).filter((d: any) => d.status === 'request' || d.status === 'pending').length;
+        const childCount = n.children ? walk(n.children) : 0;
+        const subtreeCount = own + childCount;
+        if (subtreeCount > 0) counts[n.id] = subtreeCount;
+        total += subtreeCount;
+      }
+      return total;
+    }
+    walk(tree);
+    return counts;
+  }, [tree, decisionsByNode]);
 
   // Poll classification status — works even after navigating away and back
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
@@ -434,7 +453,7 @@ function HierarchyView() {
       {/* Tree */}
       <div key={treeKey} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {tree.map((node) => (
-          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} onNodeUpdate={handleNodeUpdate} onTaskUpdate={handleTaskUpdate} onTaskRemove={handleTaskRemove} onTaskAdd={handleTaskAdd} onChildAdd={handleChildAdd} nodeDecisions={decisionsByNode} onDecisionClick={setSelectedDecision} />
+          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} onNodeUpdate={handleNodeUpdate} onTaskUpdate={handleTaskUpdate} onTaskRemove={handleTaskRemove} onTaskAdd={handleTaskAdd} onChildAdd={handleChildAdd} nodeDecisions={decisionsByNode} descendantPendingCounts={descendantPendingCounts} onDecisionClick={setSelectedDecision} />
         ))}
       </div>
 
@@ -558,7 +577,7 @@ const NODE_STATUS_OPTIONS: Record<string, string[]> = {
   story: ['backlog', 'ready', 'in_progress', 'in_review', 'done', 'blocked'],
 };
 
-function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [], onApprove, onDismiss, onNodeClick, onNodeUpdate, onTaskUpdate, onTaskRemove, onTaskAdd, onChildAdd, nodeDecisions, onDecisionClick }: {
+function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [], onApprove, onDismiss, onNodeClick, onNodeUpdate, onTaskUpdate, onTaskRemove, onTaskAdd, onChildAdd, nodeDecisions, descendantPendingCounts, onDecisionClick }: {
   node: any; depth: number;
   expandMode?: 'default' | 'all' | 'none';
   ownerOptions?: string[];
@@ -571,6 +590,7 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
   onTaskAdd?: (parentNode: any, newTask: any) => void;
   onChildAdd?: (parentNode: any, child: any) => void;
   nodeDecisions?: Record<string, any[]>;
+  descendantPendingCounts?: Record<string, number>;
   onDecisionClick?: (decision: any) => void;
 }) {
   const defaultExpanded = expandMode === 'all' ? true : expandMode === 'none' ? false : depth < 2;
@@ -723,12 +743,13 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
           </div>
         )}
 
-        {/* Decision indicators */}
+        {/* Decision indicators — direct + bubble-up from descendants */}
         {(() => {
           const decs = nodeDecisions?.[node.id] || [];
-          if (!decs.length) return null;
           const pending = decs.filter((d: any) => d.status === 'request' || d.status === 'pending');
           const decided = decs.filter((d: any) => d.status === 'decided');
+          const descendantCount = (descendantPendingCounts?.[node.id] || 0) - pending.length;
+          if (!decs.length && descendantCount <= 0) return null;
           return (
             <>
               {pending.length > 0 && (
@@ -744,7 +765,7 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
                   {pending.length} decision{pending.length > 1 ? 's' : ''} needed
                 </span>
               )}
-              {decided.length > 0 && pending.length === 0 && (
+              {decided.length > 0 && pending.length === 0 && descendantCount <= 0 && (
                 <span
                   onClick={(e) => { e.stopPropagation(); onDecisionClick?.(decided[0]); }}
                   title={decided.map((d: any) => d.title).join(', ')}
@@ -757,6 +778,20 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
                   {decided.length} decided
                 </span>
               )}
+              {/* Bubble-up: pending decisions in children not directly on this node */}
+              {descendantCount > 0 && pending.length === 0 && (
+                <span
+                  onClick={(e) => { e.stopPropagation(); }}
+                  title={`${descendantCount} pending decision${descendantCount > 1 ? 's' : ''} in child items`}
+                  style={{
+                    fontSize: 10, padding: '1px 6px', borderRadius: 4,
+                    backgroundColor: '#8b5cf610', color: '#8b5cf6', fontWeight: 400,
+                    whiteSpace: 'nowrap', flexShrink: 0, fontStyle: 'italic', opacity: 0.8,
+                  }}
+                >
+                  {descendantCount} decision{descendantCount > 1 ? 's' : ''} pending below
+                </span>
+              )}
             </>
           );
         })()}
@@ -766,7 +801,7 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
         <>
           {children.map((child: any) => (
             child.type ? (
-              <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} onNodeUpdate={onNodeUpdate} onTaskUpdate={onTaskUpdate} onTaskRemove={onTaskRemove} onTaskAdd={onTaskAdd} onChildAdd={onChildAdd} nodeDecisions={nodeDecisions} onDecisionClick={onDecisionClick} />
+              <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} onNodeUpdate={onNodeUpdate} onTaskUpdate={onTaskUpdate} onTaskRemove={onTaskRemove} onTaskAdd={onTaskAdd} onChildAdd={onChildAdd} nodeDecisions={nodeDecisions} descendantPendingCounts={descendantPendingCounts} onDecisionClick={onDecisionClick} />
             ) : (
               <TaskLeaf key={child.id} task={child} depth={depth + 1} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onUpdate={onTaskUpdate} onRemove={onTaskRemove} />
             )
