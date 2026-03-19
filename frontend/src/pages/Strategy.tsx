@@ -2627,49 +2627,6 @@ function PortfolioView() {
     api.get<any>('/api/hierarchy').then((data) => setHierTree(data.tree || [])).catch(() => {});
   }, []);
 
-  // Collect all epics from hierarchy for the epic picker (must be before early return)
-  const allEpics = useMemo(() => {
-    const result: { id: string; title: string; status: string; initiative: string }[] = [];
-    function walk(nodes: any[], parentInit = '') {
-      for (const n of nodes) {
-        const initTitle = n.type === 'initiative' ? (n.title || '') : parentInit;
-        if (n.type === 'epic') {
-          result.push({ id: n.id, title: n.title || n.description || '', status: n.status || 'backlog', initiative: initTitle });
-        }
-        if (n.children) walk(n.children, initTitle);
-      }
-    }
-    walk(hierTree);
-    return result;
-  }, [hierTree]);
-
-  // Collect all stories from hierarchy for linking tasks
-  const allStories = useMemo(() => {
-    const result: { id: string; title: string; epicTitle: string; epicId: string }[] = [];
-    function walk(nodes: any[], parentEpic = '', parentEpicId = '') {
-      for (const n of nodes) {
-        const eTitle = n.type === 'epic' ? (n.title || '') : parentEpic;
-        const eId = n.type === 'epic' ? n.id : parentEpicId;
-        if (n.type === 'story') {
-          result.push({ id: n.id, title: n.title || n.description || '', epicTitle: eTitle, epicId: eId });
-        }
-        if (n.children) walk(n.children, eTitle, eId);
-      }
-    }
-    walk(hierTree);
-    return result;
-  }, [hierTree]);
-
-  // Group stories by epic for the picker
-  const storiesByEpic = useMemo(() => {
-    const map: Record<string, typeof allStories> = {};
-    for (const s of allStories) {
-      const key = s.epicId || '__none__';
-      (map[key] ||= []).push(s);
-    }
-    return map;
-  }, [allStories]);
-
   if (loading) return <LoadingState />;
 
   // Classify members: people have roles or capitalized first-letter names
@@ -2772,6 +2729,9 @@ function PortfolioView() {
   const selectedEpics: any[] = selected?.data?.epics || [];
   const selectedNeedsEpic: any[] = selected?.data?.needs_epic || [];
   const selectedStories: any[] = selected?.data?.stories || [];
+  const selectedSmartTasks: any[] = selected?.data?.smart_tasks || [];
+  const selectedTrackedTasks: any[] = selected?.data?.tracked_tasks || [];
+  const allTasks = [...selectedSmartTasks, ...selectedTrackedTasks];
 
   // Build member-specific stories-by-epic using their owned stories (not global hierarchy)
   const memberStoriesByEpic: Record<string, any[]> = {};
@@ -2780,11 +2740,6 @@ function PortfolioView() {
     const epStories = ep.stories || selectedStories.filter((s: any) => s.epic_title === ep.title);
     memberStoriesByEpic[ep.id] = epStories;
   }
-
-  // Filter epics for the picker
-  const filteredEpics = epicSearch
-    ? allEpics.filter(e => e.title.toLowerCase().includes(epicSearch.toLowerCase()) || e.initiative.toLowerCase().includes(epicSearch.toLowerCase()))
-    : allEpics;
 
   return (
     <>
@@ -2890,6 +2845,87 @@ function PortfolioView() {
                 <PortfolioEpicsSection epics={selectedEpics} storiesByEpic={memberStoriesByEpic} />
               )}
 
+              {/* Stories not under an owned epic */}
+              {(() => {
+                const epicTitles = new Set(selectedEpics.map((e: any) => e.title));
+                const orphanStories = selectedStories.filter((s: any) => !epicTitles.has(s.epic_title));
+                if (orphanStories.length === 0) return null;
+                return (
+                  <div style={{ marginTop: selectedEpics.length > 0 ? 20 : 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <GitBranch size={14} style={{ color: '#f59e0b' }} />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#f59e0b' }}>
+                        Stories ({orphanStories.length})
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      {orphanStories.map((s: any) => {
+                        const sColor = STATUS_COLORS[s.status] || '#94a3b8';
+                        return (
+                          <div key={s.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
+                            borderLeft: '2px solid #f59e0b', borderRadius: 'var(--radius)',
+                            backgroundColor: 'var(--bg-secondary)', fontSize: 12,
+                          }}>
+                            <span style={{ color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {s.title}
+                            </span>
+                            {s.epic_title && (
+                              <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {s.epic_title}
+                              </span>
+                            )}
+                            {s.status && (
+                              <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 3, backgroundColor: sColor + '20', color: sColor, flexShrink: 0 }}>
+                                {s.status.replace(/_/g, ' ')}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Tasks section */}
+              {allTasks.length > 0 && (
+                <div style={{ marginTop: 20 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <CheckCircle2 size={14} style={{ color: 'var(--text-secondary)' }} />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      Tasks ({allTasks.length})
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {allTasks.map((t: any) => {
+                      const tColor = STATUS_COLORS[t.status] || '#94a3b8';
+                      return (
+                        <div key={t.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
+                          borderLeft: '2px solid var(--border)', borderRadius: 'var(--radius)',
+                          backgroundColor: 'var(--bg-secondary)', fontSize: 12,
+                        }}>
+                          <span style={{ color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {t.description}
+                          </span>
+                          {t.source_title && (
+                            <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {t.source_title}
+                            </span>
+                          )}
+                          {t.status && (
+                            <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 3, backgroundColor: tColor + '20', color: tColor, flexShrink: 0 }}>
+                              {(t.status || '').replace(/_/g, ' ')}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Needs Epic section */}
               {selectedNeedsEpic.length > 0 && (
                 <div style={{ marginTop: selectedEpics.length > 0 ? 20 : 0 }}>
@@ -2941,23 +2977,24 @@ function PortfolioView() {
                                   autoFocus
                                   value={epicSearch}
                                   onChange={(e) => setEpicSearch(e.target.value)}
-                                  placeholder="Search epics..."
+                                  placeholder="Search hierarchy..."
                                   style={{
                                     flex: 1, border: 'none', background: 'none', outline: 'none',
                                     fontSize: 12, color: 'var(--text-primary)',
                                   }}
                                 />
                               </div>
-                              {/* Epic → Story tree */}
-                              <div style={{ maxHeight: 240, overflowY: 'auto', padding: 4 }}>
-                                {filteredEpics.length === 0 ? (
-                                  <div style={{ padding: 12, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>No epics found</div>
+                              {/* Full hierarchy tree: Theme → Initiative → Epic → Story */}
+                              <div style={{ maxHeight: 300, overflowY: 'auto', padding: 4 }}>
+                                {hierTree.length === 0 ? (
+                                  <div style={{ padding: 12, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>No hierarchy data</div>
                                 ) : (
-                                  filteredEpics.map((ep) => (
-                                    <EpicPickerNode
-                                      key={ep.id}
-                                      epic={ep}
-                                      stories={storiesByEpic[ep.id] || []}
+                                  hierTree.map((node: any) => (
+                                    <HierarchyPickerNode
+                                      key={node.id}
+                                      node={node}
+                                      depth={0}
+                                      search={epicSearch}
                                       onSelectStory={(storyId) => handleLinkToStory(t.id, storyId)}
                                     />
                                   ))
@@ -2973,9 +3010,9 @@ function PortfolioView() {
               )}
 
               {/* Empty state */}
-              {selectedEpics.length === 0 && selectedNeedsEpic.length === 0 && (
+              {selectedEpics.length === 0 && selectedStories.length === 0 && allTasks.length === 0 && selectedNeedsEpic.length === 0 && (
                 <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
-                  No epics or unlinked tasks for this member.
+                  No work items for this member.
                 </div>
               )}
             </div>
@@ -3082,69 +3119,96 @@ function PortfolioEpicRow({ epic, stories }: { epic: any; stories: any[] }) {
   );
 }
 
-/** Epic picker node — shows an epic with expandable stories for linking */
-function EpicPickerNode({ epic, stories, onSelectStory }: {
-  epic: { id: string; title: string; status: string; initiative: string };
-  stories: { id: string; title: string }[];
+/** Full hierarchy picker node — recursive Theme → Initiative → Epic → Story */
+function HierarchyPickerNode({ node, depth, search, onSelectStory }: {
+  node: any; depth: number; search: string;
   onSelectStory: (storyId: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const statusColor = STATUS_COLORS[epic.status] || '#94a3b8';
+  const [expanded, setExpanded] = useState(depth < 1);
+  const children: any[] = (node.children || []).filter((c: any) => c.type);
+  const typeColor = TYPE_COLORS[node.type] || '#666';
+  const typeLabel = TYPE_LABELS[node.type] || node.type;
+  const isStory = node.type === 'story';
+  const hasChildren = children.length > 0;
+
+  // When searching, check if this node or any descendant matches
+  const matchesSelf = search && (node.title || node.description || '').toLowerCase().includes(search.toLowerCase());
+  const hasMatchingDescendant = search ? checkDescendantMatch(node, search) : true;
+  if (search && !matchesSelf && !hasMatchingDescendant) return null;
+
+  // Auto-expand when search matches a descendant
+  const effectiveExpanded = (search && hasMatchingDescendant && !matchesSelf) ? true : expanded;
+
   return (
     <div>
       <div
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => {
+          if (isStory) { onSelectStory(node.id); return; }
+          if (hasChildren) setExpanded(!expanded);
+        }}
         style={{
-          display: 'flex', alignItems: 'center', gap: 4, padding: '4px 6px',
-          cursor: 'pointer', borderRadius: 4, transition: 'background-color 0.1s',
+          display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px',
+          paddingLeft: depth * 14 + 6,
+          cursor: isStory || hasChildren ? 'pointer' : 'default',
+          borderRadius: 4, transition: 'background-color 0.1s',
         }}
         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
       >
-        <span style={{ display: 'flex', padding: 1 }}>
-          {stories.length > 0 ? (
-            expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />
-          ) : <span style={{ width: 12 }} />}
-        </span>
+        {hasChildren ? (
+          <span
+            onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+            style={{ display: 'flex', padding: 1 }}
+          >
+            {effectiveExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+          </span>
+        ) : <span style={{ width: 12 }} />}
         <span style={{
           fontSize: 9, fontWeight: 600, textTransform: 'uppercase',
-          color: '#10b981', minWidth: 28,
-        }}>EPIC</span>
+          color: typeColor, minWidth: 28,
+        }}>
+          {(typeLabel || '').slice(0, 4)}
+        </span>
         <span style={{
           fontSize: 11, color: 'var(--text-secondary)', flex: 1,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>{epic.title}</span>
-        <span style={{
-          fontSize: 9, padding: '1px 4px', borderRadius: 3,
-          backgroundColor: statusColor + '20', color: statusColor,
-        }}>{(epic.status || 'backlog').replace(/_/g, ' ')}</span>
+          fontWeight: matchesSelf ? 600 : 400,
+        }}>
+          {node.title || node.description || '(untitled)'}
+        </span>
+        {node.status && (
+          <span style={{
+            fontSize: 9, padding: '1px 4px', borderRadius: 3,
+            backgroundColor: (STATUS_COLORS[node.status] || '#94a3b8') + '20',
+            color: STATUS_COLORS[node.status] || '#94a3b8',
+            flexShrink: 0,
+          }}>
+            {(node.status || '').replace(/_/g, ' ')}
+          </span>
+        )}
+        {isStory && <Link2 size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />}
       </div>
-      {expanded && stories.length > 0 && (
-        <div style={{ marginLeft: 16 }}>
-          {stories.map((s) => (
-            <div
-              key={s.id}
-              onClick={(e) => { e.stopPropagation(); onSelectStory(s.id); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px',
-                cursor: 'pointer', borderRadius: 4, transition: 'background-color 0.1s',
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-            >
-              <span style={{ width: 12 }} />
-              <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: '#f59e0b', minWidth: 28 }}>STORY</span>
-              <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</span>
-              <Link2 size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-            </div>
-          ))}
-        </div>
-      )}
-      {expanded && stories.length === 0 && (
-        <div style={{ marginLeft: 28, padding: '3px 6px', fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>No stories in this epic</div>
-      )}
+      {effectiveExpanded && hasChildren && children.map((child: any) => (
+        <HierarchyPickerNode
+          key={child.id}
+          node={child}
+          depth={depth + 1}
+          search={search}
+          onSelectStory={onSelectStory}
+        />
+      ))}
     </div>
   );
+}
+
+/** Check if any descendant node title matches the search */
+function checkDescendantMatch(node: any, search: string): boolean {
+  const children = (node.children || []).filter((c: any) => c.type);
+  for (const c of children) {
+    if ((c.title || c.description || '').toLowerCase().includes(search.toLowerCase())) return true;
+    if (checkDescendantMatch(c, search)) return true;
+  }
+  return false;
 }
 
 /* ---------- Review ---------- */
