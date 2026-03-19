@@ -1784,11 +1784,6 @@ function DecisionsView() {
     }).catch(() => {});
   };
 
-  if (loading) return <LoadingState />;
-  if (error) return <ErrorState message={error} />;
-
-  const filtered = filter === 'all' ? decisions : decisions.filter((d) => d.status === filter);
-
   // Handle inline field changes for decisions
   const handleDecisionFieldChange = useCallback((key: string, value: any) => {
     if (!selected) return;
@@ -1813,6 +1808,11 @@ function DecisionsView() {
     setSelected((prev: any) => prev ? { ...prev, ...updates } : null);
     api.patch<any>(`/api/decisions/${selected.id}`, updates).catch(() => {});
   }, [selected]);
+
+  if (loading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
+
+  const filtered = filter === 'all' ? decisions : decisions.filter((d) => d.status === filter);
 
   const fields: DetailField[] = selected ? [
     { key: 'status', label: 'Status', value: selected.status, type: 'select', options: ['pending', 'decided', 'revisit', 'request'], color: STATUS_COLORS[selected.status] },
