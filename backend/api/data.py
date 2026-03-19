@@ -996,12 +996,23 @@ async def get_hierarchy():
     # Collect all valid story IDs so we can detect dangling references
     all_story_ids = {s["id"] for s in stories_data}
 
+    # Build reverse index: task_id -> story_id from stories' linked_task_ids
+    task_to_story_via_linked: dict[str, str] = {}
+    for s in stories_data:
+        for tid in s.get("linked_task_ids", []):
+            task_to_story_via_linked[tid] = s["id"]
+
     tasks_by_story: dict[str, list] = {}
     orphan_tasks = []
     for t in tasks_data:
         sid = t.get("story_id", "")
+        # Primary: task's own story_id matching an existing story
         if sid and sid in all_story_ids:
             tasks_by_story.setdefault(sid, []).append(t)
+        # Fallback: story claims this task via linked_task_ids
+        elif t.get("id") in task_to_story_via_linked:
+            fallback_sid = task_to_story_via_linked[t["id"]]
+            tasks_by_story.setdefault(fallback_sid, []).append(t)
         else:
             orphan_tasks.append(t)
 

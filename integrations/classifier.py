@@ -440,7 +440,7 @@ async def classify_tasks(
         )
         initiatives_created.append(result.get("initiative", {}))
 
-    # Update task classifications
+    # Update task classifications and clear stale story_ids so Phase 2 can re-link
     task_id_set = {t["id"] for t in tasks_to_classify}
     operational_ids = set(phase1_data.get("operational_task_ids", []))
     unclassified_ids = set(phase1_data.get("unclassified_task_ids", []))
@@ -451,6 +451,9 @@ async def classify_tasks(
             continue
         if task.get("manual_override") and not force_reclassify:
             continue
+
+        # Clear stale story_id so Phase 2 can set fresh links
+        task["story_id"] = ""
 
         if tid in operational_ids:
             task["classification"] = "operational"
@@ -556,13 +559,25 @@ async def classify_tasks(
                 story_id = story.get("id", "")
                 stories_created += 1
 
-                # Link tasks to this story
+                # Link tasks to this story (bidirectional)
+                linked_ids = []
                 for tid in s_data.get("task_ids", []):
                     for task in all_tasks:
                         if task["id"] == tid:
                             task["story_id"] = story_id
                             task["confidence"] = 0.8
+                            linked_ids.append(tid)
                             break
+
+                # Update story's linked_task_ids in epics data
+                if linked_ids:
+                    from integrations.epics import _load_data as _load_epics, _save_data as _save_epics
+                    epics_db = _load_epics()
+                    for s in epics_db.get("stories", []):
+                        if s["id"] == story_id:
+                            s["linked_task_ids"] = linked_ids
+                            break
+                    _save_epics(epics_db)
 
             # Handle unlinked tasks — link directly to epic (no story)
             for tid in e_data.get("unlinked_task_ids", []):
