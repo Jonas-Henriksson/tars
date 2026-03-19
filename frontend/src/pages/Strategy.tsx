@@ -660,7 +660,7 @@ const NODE_STATUS_OPTIONS: Record<string, string[]> = {
   theme: ['active', 'completed', 'paused'],
   initiative: ['on_track', 'at_risk', 'off_track', 'completed', 'paused'],
   epic: ['backlog', 'in_progress', 'done', 'cancelled'],
-  story: ['backlog', 'ready', 'in_progress', 'in_review', 'done', 'blocked'],
+  story: ['backlog', 'in_progress', 'ready', 'in_review', 'done', 'blocked'],
 };
 
 function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [], onApprove, onDismiss, onNodeClick, onNodeUpdate, onNodeDelete, onTaskUpdate, onTaskRemove, onTaskAdd, onChildAdd, nodeDecisions, descendantPendingCounts, onDecisionClick }: {
