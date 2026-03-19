@@ -31,7 +31,12 @@ export default function ChatPanel() {
     ws.onopen = () => { wsRef.current = ws; };
 
     ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+      let data: any;
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        return; // Ignore malformed messages
+      }
 
       switch (data.type) {
         case 'token':
@@ -88,14 +93,19 @@ export default function ChatPanel() {
     const content = input.trim();
     setInput('');
     addChatMessage({ role: 'user', content });
-    addChatMessage({ role: 'assistant', content: '' }); // Placeholder for streaming
+    addChatMessage({ role: 'assistant', content: '' });
     setIsStreaming(true);
 
-    wsRef.current.send(JSON.stringify({
-      type: 'message',
-      content,
-      conversation_id: conversationId,
-    }));
+    try {
+      wsRef.current.send(JSON.stringify({
+        type: 'message',
+        content,
+        conversation_id: conversationId,
+      }));
+    } catch {
+      setIsStreaming(false);
+      addChatMessage({ role: 'system', content: 'Connection lost. Reconnecting...' });
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

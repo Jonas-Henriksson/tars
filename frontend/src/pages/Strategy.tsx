@@ -61,15 +61,17 @@ export default function Strategy() {
 function InitiativesView() {
   const [initiatives, setInitiatives] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     api.get<any>('/api/initiatives').then((data) => {
       setInitiatives(data.initiatives || []);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch((e) => { setError(e.message); setLoading(false); });
   }, []);
 
   if (loading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -98,15 +100,17 @@ function InitiativesView() {
 function DecisionsView() {
   const [decisions, setDecisions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     api.get<any>('/api/decisions').then((data) => {
       setDecisions(data.decisions || []);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch((e) => { setError(e.message); setLoading(false); });
   }, []);
 
   if (loading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -240,6 +244,14 @@ function MiniStatCard({ label, value, color }: { label: string; value: number; c
 
 function LoadingState() {
   return <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 13 }}>Loading...</div>;
+}
+
+function ErrorState({ message }: { message: string }) {
+  return (
+    <div style={{ textAlign: 'center', padding: 40, color: 'var(--danger)', fontSize: 13, backgroundColor: 'var(--danger-light)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--danger)' }}>
+      Failed to load: {message}
+    </div>
+  );
 }
 
 function EmptyState({ message }: { message: string }) {

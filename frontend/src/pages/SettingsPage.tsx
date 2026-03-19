@@ -7,6 +7,7 @@ import { themes } from '../themes';
 import { api } from '../api/client';
 import { Palette, Plug, Users } from 'lucide-react';
 
+
 export default function SettingsPage() {
   return (
     <div>
@@ -163,6 +164,22 @@ function IntegrationStatus() {
 
 function TeamSection() {
   const { teams, activeTeamId } = useStore();
+  const [newTeamName, setNewTeamName] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const handleCreateTeam = async () => {
+    if (!newTeamName.trim()) return;
+    setCreating(true);
+    try {
+      await api.post('/api/auth/teams', { name: newTeamName.trim() });
+      setNewTeamName('');
+      window.location.reload(); // Refresh to get updated teams
+    } catch {
+      // Handled by API client
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <div style={sectionStyle}>
@@ -170,9 +187,37 @@ function TeamSection() {
         <Users size={18} />
         Team
       </h2>
+
+      {/* Create team */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <input
+          type="text"
+          placeholder="New team name..."
+          value={newTeamName}
+          onChange={(e) => setNewTeamName(e.target.value)}
+          style={{
+            flex: 1, padding: '8px 12px', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)', backgroundColor: 'var(--bg-secondary)',
+            color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+          }}
+        />
+        <button
+          onClick={handleCreateTeam}
+          disabled={!newTeamName.trim() || creating}
+          style={{
+            padding: '8px 16px', border: 'none', borderRadius: 'var(--radius)',
+            backgroundColor: 'var(--accent)', color: '#fff', fontSize: 13,
+            fontWeight: 500, cursor: newTeamName.trim() ? 'pointer' : 'default',
+            opacity: newTeamName.trim() ? 1 : 0.5,
+          }}
+        >
+          {creating ? 'Creating...' : 'Create Team'}
+        </button>
+      </div>
+
       {teams.length === 0 ? (
         <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-          No teams yet. Create one to collaborate with others.
+          No teams yet. Enter a name above to create one.
         </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

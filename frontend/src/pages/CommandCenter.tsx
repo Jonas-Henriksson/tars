@@ -82,7 +82,7 @@ export default function CommandCenter() {
       </div>
 
       {/* Two column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 20 }}>
         {/* Alerts list */}
         <div style={cardStyle}>
           <h2 style={cardHeaderStyle}>
