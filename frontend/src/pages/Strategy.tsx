@@ -310,6 +310,12 @@ function HierarchyView() {
     })));
   }, [updateNodeInTree]);
 
+  const handleChildAdd = useCallback((parentNode: any, child: any) => {
+    setTree((prev) => updateNodeInTree(prev, parentNode.id, (n) => ({
+      ...n, children: [...(n.children || []), child],
+    })));
+  }, [updateNodeInTree]);
+
   // Collapse/expand all: bump key to force re-mount with different default
   const [expandMode, setExpandMode] = useState<'default' | 'all' | 'none'>('default');
   const [treeKey, setTreeKey] = useState(0);
@@ -388,7 +394,7 @@ function HierarchyView() {
       {/* Tree */}
       <div key={treeKey} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {tree.map((node) => (
-          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} onNodeUpdate={handleNodeUpdate} onTaskUpdate={handleTaskUpdate} onTaskRemove={handleTaskRemove} onTaskAdd={handleTaskAdd} />
+          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} onNodeUpdate={handleNodeUpdate} onTaskUpdate={handleTaskUpdate} onTaskRemove={handleTaskRemove} onTaskAdd={handleTaskAdd} onChildAdd={handleChildAdd} />
         ))}
       </div>
 
@@ -472,7 +478,7 @@ const NODE_STATUS_OPTIONS: Record<string, string[]> = {
   story: ['backlog', 'ready', 'in_progress', 'in_review', 'done', 'blocked'],
 };
 
-function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [], onApprove, onDismiss, onNodeClick, onNodeUpdate, onTaskUpdate, onTaskRemove, onTaskAdd }: {
+function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [], onApprove, onDismiss, onNodeClick, onNodeUpdate, onTaskUpdate, onTaskRemove, onTaskAdd, onChildAdd }: {
   node: any; depth: number;
   expandMode?: 'default' | 'all' | 'none';
   ownerOptions?: string[];
@@ -483,6 +489,7 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
   onTaskUpdate?: (id: string, updates: Record<string, any>) => void;
   onTaskRemove?: (id: string) => void;
   onTaskAdd?: (parentNode: any, newTask: any) => void;
+  onChildAdd?: (parentNode: any, child: any) => void;
 }) {
   const defaultExpanded = expandMode === 'all' ? true : expandMode === 'none' ? false : depth < 2;
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -639,18 +646,25 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
         <>
           {children.map((child: any) => (
             child.type ? (
-              <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} onNodeUpdate={onNodeUpdate} onTaskUpdate={onTaskUpdate} onTaskRemove={onTaskRemove} onTaskAdd={onTaskAdd} />
+              <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} onNodeUpdate={onNodeUpdate} onTaskUpdate={onTaskUpdate} onTaskRemove={onTaskRemove} onTaskAdd={onTaskAdd} onChildAdd={onChildAdd} />
             ) : (
               <TaskLeaf key={child.id} task={child} depth={depth + 1} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onUpdate={onTaskUpdate} onRemove={onTaskRemove} />
             )
           ))}
-          {/* Add task row for story nodes that have task children */}
+          {/* Add task row for story/epic nodes that have task children */}
           {(node.type === 'story' || node.type === 'epic') && children.some((c: any) => !c.type) && (
             <AddTaskRow
               depth={depth + 1}
               parentTaskId={children.find((c: any) => !c.type)?.id || ''}
               onAdd={(newTask) => onTaskAdd?.(node, newTask)}
             />
+          )}
+          {/* Add child hierarchy node rows */}
+          {node.type === 'initiative' && (
+            <AddChildRow depth={depth + 1} parentNode={node} childType="epic" onAdd={(p, c) => onChildAdd?.(p, c)} />
+          )}
+          {node.type === 'epic' && (
+            <AddChildRow depth={depth + 1} parentNode={node} childType="story" onAdd={(p, c) => onChildAdd?.(p, c)} />
           )}
         </>
       )}
@@ -954,6 +968,73 @@ function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', ownerOptions = [],
 }
 
 /* Inline add task input */
+function AddChildRow({ depth, parentNode, childType, onAdd }: {
+  depth: number; parentNode: any; childType: 'epic' | 'story';
+  onAdd: (parentNode: any, child: any) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [value, setValue] = useState('');
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (adding && inputRef.current) inputRef.current.focus();
+  }, [adding]);
+
+  const save = () => {
+    const title = value.trim();
+    if (!title) { setAdding(false); return; }
+    const endpoint = childType === 'epic' ? '/api/epics' : '/api/stories';
+    const parentKey = childType === 'epic' ? 'initiative_id' : 'epic_id';
+    api.post<any>(endpoint, { title, [parentKey]: parentNode.id })
+      .then((res) => { if (res[childType]) onAdd(parentNode, { ...res[childType], type: childType, children: [] }); })
+      .catch(() => {});
+    setValue('');
+    setAdding(false);
+  };
+
+  if (!adding) {
+    return (
+      <div
+        onClick={() => setAdding(true)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '4px 8px', paddingLeft: depth * 20 + 28,
+          marginBottom: 1, fontSize: 12, color: 'var(--text-muted)',
+          cursor: 'pointer', transition: 'color 0.1s',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+      >
+        <Plus size={12} />
+        <span>Add {childType}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '4px 8px', paddingLeft: depth * 20 + 28,
+      marginBottom: 1,
+    }}>
+      <Plus size={12} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setValue(''); setAdding(false); } }}
+        placeholder={`New ${childType} title...`}
+        style={{
+          flex: 1, fontSize: 12, padding: '3px 8px', border: '1px solid var(--accent)',
+          borderRadius: 4, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)',
+          outline: 'none',
+        }}
+      />
+    </div>
+  );
+}
+
 function AddTaskRow({ depth, parentTaskId, onAdd }: {
   depth: number; parentTaskId: string;
   onAdd: (task: any) => void;
