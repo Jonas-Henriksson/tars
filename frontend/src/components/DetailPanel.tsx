@@ -493,7 +493,6 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
             onMouseLeave={(e) => { e.currentTarget.style.filter = 'none'; }}
           >
             {displayValue(String(value || '—'))}
-            {hasOptions && <ChevronDown size={10} style={{ marginLeft: 4, verticalAlign: 'middle' }} />}
           </span>
           {field.hint && <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>{field.hint}</span>}
         </div>
@@ -595,35 +594,14 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
     );
   }
 
-  // Inline date picker
+  // Inline date picker — uses progressive picker
   if (field.type === 'date' && !editing) {
     return (
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-          {iconMap[field.key]}
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{field.label}</span>
-          {field.hint && <span title={field.hint} style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'help' }}>ⓘ</span>}
-        </div>
-        <input
-          type="date"
-          value={String(value || '')}
-          onChange={(e) => onInlineChange(e.target.value)}
-          style={{
-            ...inputStyle,
-            cursor: 'pointer',
-            backgroundColor: 'transparent',
-            border: '1px solid transparent',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = 'var(--border)';
-            e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'transparent';
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }}
-        />
-      </div>
+      <ProgressiveDatePicker
+        label={field.label}
+        value={String(value || '')}
+        onChange={(v) => onInlineChange(v)}
+      />
     );
   }
 
@@ -706,11 +684,10 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
             style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
           />
         ) : field.type === 'date' ? (
-          <input
-            type="date"
+          <ProgressiveDatePicker
+            label=""
             value={String(value || '')}
-            onChange={(e) => onChange(e.target.value)}
-            style={inputStyle}
+            onChange={(v) => onChange(v)}
           />
         ) : (
           <input

@@ -5,8 +5,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useStore } from '../store';
 import { getTheme } from '../themes';
 import { api } from '../api/client';
-import { Grid3x3, Columns3, List, GanttChart, ChevronDown, ChevronUp, Search, Play, Check } from 'lucide-react';
-import DetailPanel from '../components/DetailPanel';
+import { Grid3x3, Columns3, List, GanttChart, ChevronDown, ChevronUp, Search, Play, Check, Link2 } from 'lucide-react';
+import DetailPanel, { ProgressiveDatePicker } from '../components/DetailPanel';
 import type { DetailField } from '../components/DetailPanel';
 
 type TabId = 'matrix' | 'board' | 'list' | 'timeline';
@@ -74,12 +74,16 @@ export default function Work() {
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<SmartTask | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [hierTree, setHierTree] = useState<any[]>([]);
+  const [storyPickerOpen, setStoryPickerOpen] = useState(false);
+  const [storyPickerSearch, setStoryPickerSearch] = useState('');
 
   useEffect(() => {
     api.get<any>('/api/intel/tasks').then((data) => {
       setTasks(data.tasks || data.smart_tasks || []);
       setLoading(false);
     }).catch(() => setLoading(false));
+    api.get<any>('/api/hierarchy').then((data) => setHierTree(data.tree || [])).catch(() => {});
   }, []);
 
   const handleTaskClick = useCallback((task: SmartTask) => {
@@ -175,7 +179,6 @@ export default function Work() {
       options: ['confirmed', 'auto'],
       color: selectedTask.source === 'auto' ? '#8b5cf6' : '#22c55e',
       hint: selectedTask.source === 'auto' ? 'AI-generated task' : 'From meeting notes' },
-    { key: 'topics', label: 'Topics', value: selectedTask.topics || (selectedTask.topic ? [selectedTask.topic] : []), type: 'tags' },
     { key: 'source_title', label: 'Meeting Source', value: formatMeetingSource(selectedTask.source_title), type: 'readonly' },
     { key: 'source_url', label: 'Source Link', value: selectedTask.source_url, type: 'link' },
     { key: 'source_context', label: 'Context', value: selectedTask.source_context, type: 'expandable',
@@ -277,7 +280,7 @@ export default function Work() {
 
       <DetailPanel
         open={!!selectedTask}
-        onClose={() => setSelectedTask(null)}
+        onClose={() => { setSelectedTask(null); setStoryPickerOpen(false); setStoryPickerSearch(''); }}
         title={selectedTask?.description || ''}
         subtitle={selectedTask?.owner ? `Assigned to ${selectedTask.owner}` : undefined}
         badge={selectedTask ? {
@@ -285,9 +288,117 @@ export default function Work() {
           color: QUADRANT_LABELS[getTaskQuadrant(selectedTask)]?.color || '#94a3b8',
         } : undefined}
         fields={taskFields}
-        onSave={handleTaskSave}
+        onTitleChange={(newTitle) => {
+          if (!selectedTask) return;
+          handleTaskSave({ description: newTitle });
+        }}
         onFieldChange={handleFieldChange}
-      />
+      >
+        {/* Hierarchy context — show tree path if task is linked to a story */}
+        {selectedTask && (() => {
+          const path = selectedTask.story_id ? findAncestorPath(hierTree, selectedTask.story_id) : [];
+          return (
+            <div style={{ padding: '12px 0', marginTop: 8, borderTop: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Hierarchy
+              </div>
+              {path.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {path.map((node: any, i: number) => {
+                    const typeColor = TYPE_COLORS[node.type] || '#666';
+                    const isStory = node.type === 'story';
+                    return (
+                      <div key={node.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 6, fontSize: 12,
+                        padding: `2px 6px 2px ${i * 14 + 6}px`,
+                        backgroundColor: isStory ? (typeColor + '12') : 'transparent',
+                        borderLeft: isStory ? `2px solid ${typeColor}` : '2px solid transparent',
+                        borderRadius: 4,
+                      }}>
+                        {i > 0 && <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>└</span>}
+                        <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: typeColor, minWidth: 28 }}>
+                          {(TYPE_LABELS[node.type] || node.type || '').slice(0, 4)}
+                        </span>
+                        <span style={{
+                          color: isStory ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          fontWeight: isStory ? 600 : 400, flex: 1,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {node.title || node.description || '(untitled)'}
+                        </span>
+                        {isStory && (
+                          <button
+                            onClick={() => { setStoryPickerOpen(!storyPickerOpen); setStoryPickerSearch(''); }}
+                            title="Change linked story"
+                            style={{
+                              border: 'none', background: 'none', cursor: 'pointer',
+                              color: storyPickerOpen ? 'var(--accent)' : 'var(--text-muted)',
+                              padding: 1, borderRadius: 4, display: 'flex', alignItems: 'center',
+                              transition: 'color 0.1s', flexShrink: 0,
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+                            onMouseLeave={(e) => { if (!storyPickerOpen) e.currentTarget.style.color = 'var(--text-muted)'; }}
+                          >
+                            <Link2 size={11} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Not linked to hierarchy</span>
+                  <button
+                    onClick={() => { setStoryPickerOpen(!storyPickerOpen); setStoryPickerSearch(''); }}
+                    style={{
+                      fontSize: 11, padding: '2px 6px', borderRadius: 6,
+                      border: '1px dashed var(--border)', background: 'none',
+                      color: 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                  >
+                    + Link
+                  </button>
+                </div>
+              )}
+
+              {/* Story picker */}
+              {storyPickerOpen && (
+                <div style={{
+                  marginTop: 8, border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+                  backgroundColor: 'var(--bg-secondary)', overflow: 'hidden',
+                }}>
+                  <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Search size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                    <input
+                      autoFocus
+                      value={storyPickerSearch}
+                      onChange={(e) => setStoryPickerSearch(e.target.value)}
+                      placeholder="Search hierarchy..."
+                      style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontSize: 12, color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                  <div style={{ maxHeight: 280, overflowY: 'auto', padding: 4 }}>
+                    {hierTree.map((theme: any) => (
+                      <HierPickerNode key={theme.id} node={theme} depth={0} search={storyPickerSearch}
+                        onSelect={(storyId) => {
+                          api.post<any>(`/api/stories/${storyId}/link-task`, { task_id: selectedTask.id }).then(() => {
+                            setSelectedTask(prev => prev ? { ...prev, story_id: storyId } : null);
+                            setStoryPickerOpen(false);
+                            setStoryPickerSearch('');
+                          }).catch(() => {});
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </DetailPanel>
     </div>
   );
 }
@@ -715,4 +826,84 @@ function TaskCard({ task, compact, onClick }: { task: SmartTask; compact?: boole
       )}
     </div>
   );
+}
+
+/* ---------- Hierarchy helpers for Work page ---------- */
+
+const TYPE_COLORS: Record<string, string> = {
+  theme: '#8b5cf6', initiative: '#3b82f6', epic: '#10b981', story: '#f59e0b',
+};
+const TYPE_LABELS: Record<string, string> = {
+  theme: 'Theme', initiative: 'Initiative', epic: 'Epic', story: 'Story',
+};
+
+function findAncestorPath(tree: any[], targetId: string): any[] {
+  function walk(nodes: any[], path: any[]): any[] | null {
+    for (const n of nodes) {
+      const current = [...path, n];
+      if (n.id === targetId) return current;
+      if (n.children) {
+        const found = walk(n.children, current);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+  return walk(tree, []) || [];
+}
+
+function HierPickerNode({ node, depth, search, onSelect }: {
+  node: any; depth: number; search: string; onSelect: (storyId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(depth < 1);
+  const children: any[] = (node.children || []).filter((c: any) => c.type);
+  const typeColor = TYPE_COLORS[node.type] || '#666';
+  const isStory = node.type === 'story';
+  const hasChildren = children.length > 0;
+  const matchesSelf = search && (node.title || '').toLowerCase().includes(search.toLowerCase());
+  const hasDescMatch = search ? checkDescMatch(node, search) : true;
+  if (search && !matchesSelf && !hasDescMatch) return null;
+  const eff = (search && hasDescMatch && !matchesSelf) ? true : expanded;
+
+  return (
+    <div>
+      <div
+        onClick={() => {
+          if (isStory) { onSelect(node.id); return; }
+          if (hasChildren) setExpanded(!expanded);
+        }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px',
+          paddingLeft: depth * 14 + 6, cursor: isStory || hasChildren ? 'pointer' : 'default',
+          borderRadius: 4, transition: 'background-color 0.1s',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+      >
+        {hasChildren ? (
+          <span onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }} style={{ display: 'flex', padding: 1 }}>
+            {eff ? <ChevronDown size={10} /> : <span style={{ display: 'inline-block', width: 10, textAlign: 'center', fontSize: 10, color: 'var(--text-muted)' }}>›</span>}
+          </span>
+        ) : <span style={{ width: 12 }} />}
+        <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: typeColor, minWidth: 28 }}>
+          {(TYPE_LABELS[node.type] || node.type || '').slice(0, 4)}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: matchesSelf ? 600 : 400 }}>
+          {node.title || '(untitled)'}
+        </span>
+        {isStory && <Link2 size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />}
+      </div>
+      {eff && hasChildren && children.map((c: any) => (
+        <HierPickerNode key={c.id} node={c} depth={depth + 1} search={search} onSelect={onSelect} />
+      ))}
+    </div>
+  );
+}
+
+function checkDescMatch(node: any, search: string): boolean {
+  for (const c of (node.children || []).filter((c: any) => c.type)) {
+    if ((c.title || '').toLowerCase().includes(search.toLowerCase())) return true;
+    if (checkDescMatch(c, search)) return true;
+  }
+  return false;
 }
