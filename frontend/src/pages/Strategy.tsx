@@ -2426,17 +2426,47 @@ function PortfolioView() {
 
   if (loading) return <LoadingState />;
 
-  const members = Object.entries(portfolio);
+  // Sort by total workload descending — busiest people first
+  const members = Object.entries(portfolio)
+    .sort(([, a], [, b]) => (b.workload?.total_items || 0) - (a.workload?.total_items || 0));
+
+  const wl = selected?.data?.workload || {};
+  const isSelectedOverloaded = (wl.total_items || 0) >= 7;
+
+  // Build stories summary for expandable field
+  const storiesSummary = selected?.data?.stories?.length
+    ? selected.data.stories.map((s: any) => {
+        const statusIcon = s.status === 'blocked' ? '!!!' : s.status === 'done' ? 'done' : s.status === 'in_progress' ? '>>>' : '---';
+        return `[${statusIcon}] ${s.title}${s.epic_title ? ` (${s.epic_title})` : ''}`;
+      }).join('\n')
+    : '';
+
+  // Build needs-epic summary
+  const needsEpicSummary = selected?.data?.needs_epic?.length
+    ? selected.data.needs_epic.map((t: any) => `- ${t.description}`).join('\n')
+    : '';
+
+  // Build epics summary
+  const epicsSummary = selected?.data?.epics?.length
+    ? selected.data.epics.map((e: any) => {
+        const progress = e.story_count ? `${e.story_count} stories` : 'no stories';
+        return `[${(e.status || '').replace(/_/g, ' ')}] ${e.title} (${progress})${e.initiative ? ` — ${e.initiative}` : ''}`;
+      }).join('\n')
+    : '';
 
   const fields: DetailField[] = selected ? [
-    { key: 'total_epics', label: 'Total Epics', value: selected.data.workload?.total_epics || selected.data.epic_count || 0, type: 'readonly' },
-    { key: 'total_stories', label: 'Total Stories', value: selected.data.workload?.total_stories || selected.data.story_count || 0, type: 'readonly' },
-    { key: 'total_smart_tasks', label: 'Smart Tasks', value: selected.data.workload?.total_smart_tasks || selected.data.task_count || 0, type: 'readonly' },
-    { key: 'total_tracked', label: 'Tracked Tasks', value: selected.data.workload?.total_tracked_tasks || 0, type: 'readonly' },
-    { key: 'blocked', label: 'Blocked Stories', value: selected.data.workload?.blocked_stories || 0, type: 'readonly' },
-    { key: 'overdue', label: 'Overdue Tasks', value: selected.data.workload?.overdue_tasks || 0, type: 'readonly' },
-    { key: 'workload_status', label: 'Workload Status', value: selected.data.workload_status || 'normal', type: 'badge',
-      color: selected.data.workload_status === 'overloaded' ? '#ef4444' : '#22c55e' },
+    ...(selected.data.role ? [{ key: 'role', label: 'Role', value: selected.data.role, type: 'readonly' as const }] : []),
+    { key: 'workload_status', label: 'Workload', value: isSelectedOverloaded ? 'Heavy workload' : 'Normal', type: 'badge' as const,
+      color: isSelectedOverloaded ? '#ef4444' : '#22c55e' },
+    { key: 'total_epics', label: 'Epics', value: wl.epics || 0, type: 'readonly' as const },
+    { key: 'total_stories', label: 'Stories', value: wl.stories || 0, type: 'readonly' as const },
+    { key: 'total_smart_tasks', label: 'Smart Tasks', value: wl.smart_tasks || 0, type: 'readonly' as const },
+    { key: 'total_tracked', label: 'Tracked Tasks', value: wl.tracked_tasks || 0, type: 'readonly' as const },
+    ...(wl.blocked > 0 ? [{ key: 'blocked', label: 'Blocked Stories', value: wl.blocked, type: 'badge' as const, color: '#ef4444' }] : []),
+    ...(wl.overdue > 0 ? [{ key: 'overdue', label: 'Overdue Tasks', value: wl.overdue, type: 'badge' as const, color: '#f59e0b' }] : []),
+    ...(epicsSummary ? [{ key: 'epics_detail', label: `Epics (${selected.data.epics.length})`, value: epicsSummary, type: 'expandable' as const }] : []),
+    ...(storiesSummary ? [{ key: 'stories_detail', label: `Stories (${selected.data.stories.length})`, value: storiesSummary, type: 'expandable' as const }] : []),
+    ...(needsEpicSummary ? [{ key: 'needs_epic', label: `Needs Epic (${selected.data.needs_epic.length})`, value: needsEpicSummary, type: 'expandable' as const }] : []),
   ] : [];
 
   return (
@@ -2446,14 +2476,20 @@ function PortfolioView() {
           <EmptyState message="No portfolio data. Run a Notion scan first." />
         ) : (
           members.map(([name, data]: [string, any]) => {
-            const isOverloaded = data.workload_status === 'overloaded';
+            const w = data.workload || {};
+            const totalItems = w.total_items || 0;
+            const isOverloaded = totalItems >= 7;
+            const blocked = w.blocked || 0;
+            const overdue = w.overdue || 0;
+            const needsEpic = data.needs_epic_count || 0;
+            const hasAlerts = blocked > 0 || overdue > 0 || needsEpic > 0;
             return (
               <div
                 key={name}
                 onClick={() => setSelected({ name, data })}
                 style={{
                   ...cardStyle, cursor: 'pointer', transition: 'all 0.15s',
-                  borderLeft: `3px solid ${isOverloaded ? '#ef4444' : 'var(--accent)'}`,
+                  borderLeft: `3px solid ${isOverloaded ? '#ef4444' : blocked > 0 ? '#f59e0b' : 'var(--accent)'}`,
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
@@ -2472,31 +2508,43 @@ function PortfolioView() {
                   }}>
                     {name.charAt(0)}
                   </div>
-                  <div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{name}</h3>
-                    {data.workload_status && (
-                      <span style={{
-                        fontSize: 11, padding: '1px 8px', borderRadius: 10,
-                        backgroundColor: isOverloaded ? '#ef444420' : '#22c55e20',
-                        color: isOverloaded ? '#ef4444' : '#22c55e',
-                      }}>
-                        {data.workload_status}
-                      </span>
+                    {data.role && (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{data.role}</div>
                     )}
                   </div>
+                  {isOverloaded && (
+                    <span style={{
+                      fontSize: 10, padding: '2px 8px', borderRadius: 10, flexShrink: 0,
+                      backgroundColor: '#ef444420', color: '#ef4444', fontWeight: 500,
+                    }}>
+                      heavy
+                    </span>
+                  )}
                 </div>
-                <div style={{ display: 'flex', gap: 16, marginBottom: 8 }}>
-                  <MiniStat label="Epics" value={data.workload?.total_epics || data.epic_count || 0} />
-                  <MiniStat label="Stories" value={data.workload?.total_stories || data.story_count || 0} />
-                  <MiniStat label="Tasks" value={data.workload?.total_smart_tasks || data.task_count || 0} />
+                <div style={{ display: 'flex', gap: 16, marginBottom: hasAlerts ? 8 : 0 }}>
+                  <MiniStat label="Epics" value={w.epics || 0} />
+                  <MiniStat label="Stories" value={w.stories || 0} />
+                  <MiniStat label="Tasks" value={w.smart_tasks || 0} />
+                  <MiniStat label="Tracked" value={w.tracked_tasks || 0} />
                 </div>
-                {(data.workload?.blocked_stories > 0 || data.workload?.overdue_tasks > 0) && (
-                  <div style={{ display: 'flex', gap: 12, fontSize: 11 }}>
-                    {data.workload?.blocked_stories > 0 && (
-                      <span style={{ color: '#ef4444' }}>{data.workload.blocked_stories} blocked</span>
+                {hasAlerts && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11 }}>
+                    {blocked > 0 && (
+                      <span style={{ color: '#ef4444', padding: '1px 6px', borderRadius: 4, backgroundColor: '#ef444410' }}>
+                        {blocked} blocked
+                      </span>
                     )}
-                    {data.workload?.overdue_tasks > 0 && (
-                      <span style={{ color: '#f59e0b' }}>{data.workload.overdue_tasks} overdue</span>
+                    {overdue > 0 && (
+                      <span style={{ color: '#f59e0b', padding: '1px 6px', borderRadius: 4, backgroundColor: '#f59e0b10' }}>
+                        {overdue} overdue
+                      </span>
+                    )}
+                    {needsEpic > 0 && (
+                      <span style={{ color: '#8b5cf6', padding: '1px 6px', borderRadius: 4, backgroundColor: '#8b5cf620' }}>
+                        {needsEpic} need epic
+                      </span>
                     )}
                   </div>
                 )}
@@ -2510,7 +2558,7 @@ function PortfolioView() {
         open={!!selected}
         onClose={() => setSelected(null)}
         title={selected?.name || ''}
-        subtitle="Team member portfolio"
+        subtitle={selected?.data?.role || 'Team member portfolio'}
         fields={fields}
       />
     </>
