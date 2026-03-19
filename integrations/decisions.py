@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -304,6 +305,16 @@ def get_decision_summary() -> dict[str, Any]:
     }
 
 
+_ISO_TS_TAIL = re.compile(
+    r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[\.\d]*(?:[+-]\d{2}:\d{2}|Z)?$'
+)
+
+
+def _clean_page_title(raw: str) -> str:
+    """Strip trailing ISO timestamps from Notion page titles."""
+    return _ISO_TS_TAIL.sub("", raw).strip() or raw
+
+
 def import_notion_decisions() -> dict[str, Any]:
     """Preview decisions from the Notion knowledge graph for import.
 
@@ -318,9 +329,13 @@ def import_notion_decisions() -> dict[str, Any]:
 
     candidates: list[dict] = []
     for page_id, page in page_index.items():
-        page_title = page.get("title", "")
+        page_title = _clean_page_title(page.get("title", ""))
+        last_edited = page.get("last_edited", "")
         for dec in page.get("decisions", []):
-            if not isinstance(dec, dict):
+            # Normalise string-format decisions from LLM extraction
+            if isinstance(dec, str):
+                dec = {"text": dec, "by": ""}
+            elif not isinstance(dec, dict):
                 continue
             text = dec.get("text", "").strip()
             if not text:
@@ -331,6 +346,7 @@ def import_notion_decisions() -> dict[str, Any]:
                 "by": dec.get("by", ""),
                 "page_id": page_id,
                 "page_title": page_title,
+                "last_edited": last_edited,
                 "already_imported": already,
             })
 

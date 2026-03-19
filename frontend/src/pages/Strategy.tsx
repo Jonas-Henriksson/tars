@@ -1753,6 +1753,7 @@ function DecisionsView() {
                       <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{nd.text}</div>
                       <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
                         {nd.by && `By: ${nd.by} · `}From: {nd.page_title || 'Unknown page'}
+                        {nd.last_edited && ` · ${new Date(nd.last_edited).toLocaleDateString()}`}
                         {nd.already_imported && ' · Already imported'}
                       </div>
                     </div>
