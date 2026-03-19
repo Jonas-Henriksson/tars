@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useStore } from '../store';
 import { getTheme } from '../themes';
 import { api } from '../api/client';
-import { Target, Scale, Users, BarChart3, CheckCircle2, Circle, GitBranch, Check, X, Sparkles, ChevronRight, ChevronDown, Plus } from 'lucide-react';
+import { Target, Scale, Users, BarChart3, CheckCircle2, Circle, GitBranch, Check, X, Sparkles, ChevronRight, ChevronDown, Plus, Pencil, Trash2, Undo2 } from 'lucide-react';
 import DetailPanel from '../components/DetailPanel';
 import type { DetailField } from '../components/DetailPanel';
 
@@ -112,6 +112,24 @@ function HierarchyView() {
   const [requestingDecision, setRequestingDecision] = useState(false);
   const [decisionForm, setDecisionForm] = useState({ title: '', requested_from: '' });
   const [selectedDecision, setSelectedDecision] = useState<any>(null);
+
+  // Undo system
+  const [undoAction, setUndoAction] = useState<{ label: string; undo: () => void } | null>(null);
+  const undoTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showUndo = useCallback((label: string, undoFn: () => void) => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoAction({ label, undo: undoFn });
+    undoTimerRef.current = setTimeout(() => setUndoAction(null), 8000);
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    if (undoAction) {
+      undoAction.undo();
+      setUndoAction(null);
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    }
+  }, [undoAction]);
 
   const loadHierarchy = useCallback(() => {
     setLoading(true);
@@ -364,7 +382,24 @@ function HierarchyView() {
     api.post(`/api/dismiss/${type}/${id}`, {}).catch((err) => {
       console.error('Dismiss failed:', err);
     });
-  }, [removeNodeFromTree]);
+    showUndo('Item dismissed', () => loadHierarchy());
+  }, [removeNodeFromTree, showUndo, loadHierarchy]);
+
+  const handleNodeDelete = useCallback((node: any) => {
+    const type = node.type + 's';
+    const prevTree = tree;
+    const prevOps = operational;
+    const prevUnc = unclassified;
+    setTree((prev) => removeNodeFromTree(prev, node.id));
+    const endpoint = nodeEndpointMap[node.type];
+    if (endpoint) {
+      api.delete<any>(`${endpoint}/${node.id}`).catch(() => {});
+    }
+    showUndo(`${TYPE_LABELS[node.type] || node.type} "${node.title || ''}" deleted`, () => {
+      // Undo: reload hierarchy from server
+      loadHierarchy();
+    });
+  }, [tree, operational, unclassified, removeNodeFromTree, showUndo, loadHierarchy]);
 
   // Task-level updates
   const handleTaskUpdate = useCallback((taskId: string, updates: Record<string, any>) => {
@@ -474,7 +509,7 @@ function HierarchyView() {
       {/* Tree */}
       <div key={treeKey} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {tree.map((node) => (
-          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} onNodeUpdate={handleNodeUpdate} onTaskUpdate={handleTaskUpdate} onTaskRemove={handleTaskRemove} onTaskAdd={handleTaskAdd} onChildAdd={handleChildAdd} nodeDecisions={decisionsByNode} descendantPendingCounts={descendantPendingCounts} onDecisionClick={setSelectedDecision} />
+          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} onNodeUpdate={handleNodeUpdate} onNodeDelete={handleNodeDelete} onTaskUpdate={handleTaskUpdate} onTaskRemove={handleTaskRemove} onTaskAdd={handleTaskAdd} onChildAdd={handleChildAdd} nodeDecisions={decisionsByNode} descendantPendingCounts={descendantPendingCounts} onDecisionClick={setSelectedDecision} />
         ))}
       </div>
 
@@ -579,6 +614,41 @@ function HierarchyView() {
       >
         <HierarchyBreadcrumb linkedId={selectedDecision?.linked_id} tree={tree} />
       </DetailPanel>
+
+      {/* Undo toast */}
+      {undoAction && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '10px 16px', borderRadius: 8,
+          backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          zIndex: 1000, fontSize: 13,
+        }}>
+          <span style={{ color: 'var(--text-secondary)' }}>{undoAction.label}</span>
+          <button
+            onClick={handleUndo}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '4px 12px', border: 'none', borderRadius: 6,
+              backgroundColor: 'var(--accent)', color: '#fff',
+              fontSize: 12, fontWeight: 500, cursor: 'pointer',
+            }}
+          >
+            <Undo2 size={12} /> Undo
+          </button>
+          <button
+            onClick={() => setUndoAction(null)}
+            style={{
+              display: 'flex', alignItems: 'center', padding: 2,
+              border: 'none', background: 'none', cursor: 'pointer',
+              color: 'var(--text-muted)',
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -598,7 +668,7 @@ const NODE_STATUS_OPTIONS: Record<string, string[]> = {
   story: ['backlog', 'ready', 'in_progress', 'in_review', 'done', 'blocked'],
 };
 
-function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [], onApprove, onDismiss, onNodeClick, onNodeUpdate, onTaskUpdate, onTaskRemove, onTaskAdd, onChildAdd, nodeDecisions, descendantPendingCounts, onDecisionClick }: {
+function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [], onApprove, onDismiss, onNodeClick, onNodeUpdate, onNodeDelete, onTaskUpdate, onTaskRemove, onTaskAdd, onChildAdd, nodeDecisions, descendantPendingCounts, onDecisionClick }: {
   node: any; depth: number;
   expandMode?: 'default' | 'all' | 'none';
   ownerOptions?: string[];
@@ -606,6 +676,7 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
   onDismiss: (type: string, id: string) => void;
   onNodeClick?: (node: any) => void;
   onNodeUpdate?: (node: any, key: string, value: any) => void;
+  onNodeDelete?: (node: any) => void;
   onTaskUpdate?: (id: string, updates: Record<string, any>) => void;
   onTaskRemove?: (id: string) => void;
   onTaskAdd?: (parentNode: any, newTask: any) => void;
@@ -617,17 +688,20 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
   const defaultExpanded = expandMode === 'all' ? true : expandMode === 'none' ? false : depth < 2;
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [statusOpen, setStatusOpen] = useState(false);
+  const [ownerOpen, setOwnerOpen] = useState(false);
   const statusRef = React.useRef<HTMLDivElement>(null);
+  const ownerRef = React.useRef<HTMLDivElement>(null);
 
-  // Close status dropdown on outside click
+  // Close dropdowns on outside click
   React.useEffect(() => {
-    if (!statusOpen) return;
+    if (!statusOpen && !ownerOpen) return;
     const handler = (e: MouseEvent) => {
-      if (statusRef.current && !statusRef.current.contains(e.target as Node)) setStatusOpen(false);
+      if (statusOpen && statusRef.current && !statusRef.current.contains(e.target as Node)) setStatusOpen(false);
+      if (ownerOpen && ownerRef.current && !ownerRef.current.contains(e.target as Node)) setOwnerOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [statusOpen]);
+  }, [statusOpen, ownerOpen]);
   const children = node.children || [];
   const isAuto = node.source === 'auto';
   const entityType = node.type + 's'; // themes, initiatives, epics, stories
@@ -637,7 +711,7 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
   return (
     <div>
       <div
-        onClick={() => onNodeClick?.(node)}
+        onClick={() => setExpanded(!expanded)}
         onMouseEnter={() => setRowHovered(true)}
         onMouseLeave={() => setRowHovered(false)}
         style={{
@@ -651,10 +725,7 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
           transition: 'background-color 0.1s',
         }}
       >
-        <span
-          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
-          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 2 }}
-        >
+        <span style={{ display: 'flex', alignItems: 'center', padding: 2 }}>
           {children.length > 0 ? (
             expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
           ) : <span style={{ width: 14 }} />}
@@ -670,6 +741,36 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
         <span style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>
           {node.title || node.description || '(untitled)'}
         </span>
+
+        {/* Edit button — opens sidebar */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onNodeClick?.(node); }}
+          title="Edit details"
+          style={{
+            display: 'flex', alignItems: 'center', padding: 2,
+            border: 'none', background: 'none', cursor: 'pointer',
+            color: 'var(--text-muted)',
+            opacity: rowHovered ? 0.7 : 0, transition: 'opacity 0.15s',
+          }}
+        >
+          <Pencil size={12} />
+        </button>
+
+        {/* Delete button — on hover */}
+        {!isAuto && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onNodeDelete?.(node); }}
+            title="Delete"
+            style={{
+              display: 'flex', alignItems: 'center', padding: 2,
+              border: 'none', background: 'none', cursor: 'pointer',
+              color: '#ef4444',
+              opacity: rowHovered ? 0.5 : 0, transition: 'opacity 0.15s',
+            }}
+          >
+            <Trash2 size={12} />
+          </button>
+        )}
 
         {/* Dotted leader line connecting title to right-side badges */}
         <span style={{
@@ -710,6 +811,55 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
               <X size={14} />
             </button>
           </>
+        )}
+
+        {/* Owner inline dropdown */}
+        {node.type !== 'theme' && (
+          <div ref={ownerRef} style={{ position: 'relative', flexShrink: 0 }}>
+            <span
+              onClick={(e) => { e.stopPropagation(); setOwnerOpen(!ownerOpen); }}
+              style={{
+                fontSize: 11, padding: '1px 8px', borderRadius: 10, cursor: 'pointer',
+                backgroundColor: 'var(--bg-tertiary)',
+                color: node.owner ? 'var(--text-secondary)' : 'var(--text-muted)',
+                transition: 'background-color 0.1s', minWidth: 60, display: 'inline-block',
+                textAlign: 'center',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
+            >
+              {node.owner || '—'}
+            </span>
+            {ownerOpen && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, zIndex: 100, marginTop: 4,
+                backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: 6, overflow: 'hidden', minWidth: 140, maxHeight: 200, overflowY: 'auto',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              }}>
+                {ownerOptions.map((o) => (
+                  <div
+                    key={o}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (o !== node.owner) onNodeUpdate?.(node, 'owner', o);
+                      setOwnerOpen(false);
+                    }}
+                    style={{
+                      padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+                      color: o === node.owner ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      fontWeight: o === node.owner ? 600 : 400,
+                      transition: 'background-color 0.1s',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    {o}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {node.status && (
@@ -822,7 +972,7 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
         <>
           {children.map((child: any) => (
             child.type ? (
-              <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} onNodeUpdate={onNodeUpdate} onTaskUpdate={onTaskUpdate} onTaskRemove={onTaskRemove} onTaskAdd={onTaskAdd} onChildAdd={onChildAdd} nodeDecisions={nodeDecisions} descendantPendingCounts={descendantPendingCounts} onDecisionClick={onDecisionClick} />
+              <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} onNodeUpdate={onNodeUpdate} onNodeDelete={onNodeDelete} onTaskUpdate={onTaskUpdate} onTaskRemove={onTaskRemove} onTaskAdd={onTaskAdd} onChildAdd={onChildAdd} nodeDecisions={nodeDecisions} descendantPendingCounts={descendantPendingCounts} onDecisionClick={onDecisionClick} />
             ) : (
               <TaskLeaf key={child.id} task={child} depth={depth + 1} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onUpdate={onTaskUpdate} onRemove={onTaskRemove} />
             )
