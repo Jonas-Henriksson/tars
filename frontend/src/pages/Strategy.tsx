@@ -131,15 +131,15 @@ function HierarchyView() {
     }
   }, [undoAction]);
 
-  const loadHierarchy = useCallback(() => {
-    setLoading(true);
+  const loadHierarchy = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     api.get<any>('/api/hierarchy').then((data) => {
       setTree(data.tree || []);
       setOperational(data.operational_tasks || []);
       setUnclassified(data.unclassified_tasks || []);
       setCounts(data.counts || {});
-      setLoading(false);
-    }).catch(() => setLoading(false));
+      if (!silent) setLoading(false);
+    }).catch(() => { if (!silent) setLoading(false); });
     api.get<any>('/api/decisions').then((d) => setHierDecisions(d.decisions || [])).catch(() => {});
   }, []);
 
@@ -382,7 +382,7 @@ function HierarchyView() {
     api.post(`/api/dismiss/${type}/${id}`, {}).catch((err) => {
       console.error('Dismiss failed:', err);
     });
-    showUndo('Item dismissed', () => loadHierarchy());
+    showUndo('Item dismissed', () => loadHierarchy(true));
   }, [removeNodeFromTree, showUndo, loadHierarchy]);
 
   const handleNodeDelete = useCallback((node: any) => {
@@ -392,7 +392,7 @@ function HierarchyView() {
       api.delete<any>(`${endpoint}/${node.id}`).catch(() => {});
     }
     showUndo(`${TYPE_LABELS[node.type] || node.type} "${node.title || ''}" deleted`, () => {
-      loadHierarchy();
+      loadHierarchy(true);
     });
   }, [removeNodeFromTree, showUndo, loadHierarchy]);
 
@@ -809,15 +809,15 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
         )}
 
         {/* Owner inline dropdown */}
-        {node.type !== 'theme' && (
-          <div ref={ownerRef} style={{ position: 'relative', flexShrink: 0 }}>
+        <div ref={ownerRef} style={{ position: 'relative', flexShrink: 0, width: 90, textAlign: 'right' }}>
+          {node.type !== 'theme' && (
             <span
               onClick={(e) => { e.stopPropagation(); setOwnerOpen(!ownerOpen); }}
               style={{
                 fontSize: 11, padding: '1px 8px', borderRadius: 10, cursor: 'pointer',
                 backgroundColor: 'var(--bg-tertiary)',
                 color: node.owner ? 'var(--text-secondary)' : 'var(--text-muted)',
-                transition: 'background-color 0.1s', minWidth: 60, display: 'inline-block',
+                transition: 'background-color 0.1s', display: 'inline-block',
                 textAlign: 'center',
               }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
@@ -854,11 +854,11 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
                 ))}
               </div>
             )}
-          </div>
-        )}
+          )}
+        </div>
 
         {node.status && (
-          <div ref={statusRef} style={{ position: 'relative', flexShrink: 0 }}>
+          <div ref={statusRef} style={{ position: 'relative', flexShrink: 0, width: 80, textAlign: 'right' }}>
             <span
               onClick={(e) => { e.stopPropagation(); setStatusOpen(!statusOpen); }}
               style={{
