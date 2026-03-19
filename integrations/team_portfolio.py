@@ -294,6 +294,7 @@ def get_team_portfolio(
                     "description": t.get("description", ""),
                     "owner": t.get("owner", ""),
                     "topics": t.get("topics", []) if isinstance(t.get("topics"), list) else [],
+                    "source": "smart" if t in needs_epic_smart else "tracked",
                 }
                 for t in needs_epic
             ],

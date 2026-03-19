@@ -2636,6 +2636,11 @@ function PortfolioView() {
   const [localTaskUpdates, setLocalTaskUpdates] = useState<Record<string, any>>({});
   const [removedTaskIds, setRemovedTaskIds] = useState<Set<string>>(new Set());
   const [detailItem, setDetailItem] = useState<{ node: any; type: 'epic' | 'story' } | null>(null);
+  const [editingNeedsEpicId, setEditingNeedsEpicId] = useState<string | null>(null);
+  const [editingNeedsEpicDesc, setEditingNeedsEpicDesc] = useState('');
+  const [discardedNeedsEpic, setDiscardedNeedsEpic] = useState<Set<string>>(new Set());
+  const [initiativePickerOpen, setInitiativePickerOpen] = useState(false);
+  const [initiativeSearch, setInitiativeSearch] = useState('');
 
   if (loading) return <LoadingState />;
 
@@ -2875,7 +2880,7 @@ function PortfolioView() {
       {selected && (
         <>
           <div
-            onClick={() => { setSelected(null); setEpicPickerTask(null); setEpicSearch(''); setEditingTaskId(null); setStatusPickerTaskId(null); setLocalTaskUpdates({}); setRemovedTaskIds(new Set()); setTasksExpanded(false); setOpsExpanded(false); }}
+            onClick={() => { setSelected(null); setEpicPickerTask(null); setEpicSearch(''); setEditingTaskId(null); setStatusPickerTaskId(null); setLocalTaskUpdates({}); setRemovedTaskIds(new Set()); setTasksExpanded(false); setOpsExpanded(false); setEditingNeedsEpicId(null); setDiscardedNeedsEpic(new Set()); setDetailItem(null); setInitiativePickerOpen(false); }}
             style={{
               position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)',
               zIndex: 999, animation: 'fadeIn 0.15s ease',
@@ -2911,7 +2916,7 @@ function PortfolioView() {
                   </div>
                 </div>
                 <button
-                  onClick={() => { setSelected(null); setEpicPickerTask(null); setEpicSearch(''); setEditingTaskId(null); setStatusPickerTaskId(null); setLocalTaskUpdates({}); setRemovedTaskIds(new Set()); setTasksExpanded(false); setOpsExpanded(false); }}
+                  onClick={() => { setSelected(null); setEpicPickerTask(null); setEpicSearch(''); setEditingTaskId(null); setStatusPickerTaskId(null); setLocalTaskUpdates({}); setRemovedTaskIds(new Set()); setTasksExpanded(false); setOpsExpanded(false); setEditingNeedsEpicId(null); setDiscardedNeedsEpic(new Set()); setDetailItem(null); setInitiativePickerOpen(false); }}
                   style={{ padding: 8, border: 'none', borderRadius: 'var(--radius)', backgroundColor: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                   title="Close"
                 >
@@ -3340,18 +3345,21 @@ function PortfolioView() {
               })()}
 
               {/* Needs Epic section */}
-              {selectedNeedsEpic.length > 0 && (
+              {selectedNeedsEpic.length > 0 && (() => {
+                const visibleNeedsEpic = selectedNeedsEpic.filter((t: any) => !linkedTasks.has(t.id) && !discardedNeedsEpic.has(t.id));
+                if (visibleNeedsEpic.length === 0) return null;
+                return (
                 <div style={{ marginTop: selectedEpics.length > 0 ? 20 : 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                     <AlertTriangle size={14} style={{ color: '#8b5cf6' }} />
                     <span style={{ fontSize: 12, fontWeight: 600, color: '#8b5cf6' }}>
-                      Needs Epic ({selectedNeedsEpic.filter(t => !linkedTasks.has(t.id)).length})
+                      Needs Epic ({visibleNeedsEpic.length})
                     </span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {selectedNeedsEpic.map((t: any) => {
-                      if (linkedTasks.has(t.id)) return null;
+                    {visibleNeedsEpic.map((t: any) => {
                       const isPickerOpen = epicPickerTask === t.id;
+                      const isEditing = editingNeedsEpicId === t.id;
                       return (
                         <div key={t.id}>
                           <div style={{
@@ -3360,21 +3368,74 @@ function PortfolioView() {
                             borderRadius: 'var(--radius)', borderLeft: '2px solid #8b5cf6',
                             display: 'flex', alignItems: 'flex-start', gap: 8,
                           }}>
-                            <span style={{ flex: 1 }}>{t.description}</span>
-                            <button
-                              onClick={() => { setEpicPickerTask(isPickerOpen ? null : t.id); setEpicSearch(''); }}
-                              title="Link to a story"
-                              style={{
-                                border: 'none', background: 'none', cursor: 'pointer',
-                                color: isPickerOpen ? 'var(--accent)' : 'var(--text-muted)',
-                                padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center',
-                                transition: 'color 0.1s', flexShrink: 0, marginTop: 1,
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
-                              onMouseLeave={(e) => { if (!isPickerOpen) e.currentTarget.style.color = 'var(--text-muted)'; }}
-                            >
-                              <Link2 size={14} />
-                            </button>
+                            {isEditing ? (
+                              <input
+                                autoFocus
+                                value={editingNeedsEpicDesc}
+                                onChange={(e) => setEditingNeedsEpicDesc(e.target.value)}
+                                onBlur={() => {
+                                  if (editingNeedsEpicDesc.trim() && editingNeedsEpicDesc !== t.description) {
+                                    const endpoint = t.source === 'smart' ? `/api/intel/tasks/${t.id}` : `/api/tasks/${t.id}`;
+                                    api.patch<any>(endpoint, { description: editingNeedsEpicDesc.trim() }).catch(() => {});
+                                    t.description = editingNeedsEpicDesc.trim();
+                                  }
+                                  setEditingNeedsEpicId(null);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') e.currentTarget.blur();
+                                  if (e.key === 'Escape') setEditingNeedsEpicId(null);
+                                }}
+                                style={{
+                                  flex: 1, fontSize: 13, padding: '2px 6px', border: '1px solid var(--accent)',
+                                  borderRadius: 'var(--radius)', backgroundColor: 'var(--bg-primary)',
+                                  color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit',
+                                }}
+                              />
+                            ) : (
+                              <span
+                                style={{ flex: 1, cursor: 'text' }}
+                                onClick={() => { setEditingNeedsEpicId(t.id); setEditingNeedsEpicDesc(t.description); }}
+                              >
+                                {t.description}
+                              </span>
+                            )}
+                            <div style={{ display: 'flex', gap: 2, flexShrink: 0, marginTop: 1 }}>
+                              <button
+                                onClick={() => { setEpicPickerTask(isPickerOpen ? null : t.id); setEpicSearch(''); }}
+                                title="Link to a story"
+                                style={{
+                                  border: 'none', background: 'none', cursor: 'pointer',
+                                  color: isPickerOpen ? 'var(--accent)' : 'var(--text-muted)',
+                                  padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center',
+                                  transition: 'color 0.1s',
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+                                onMouseLeave={(e) => { if (!isPickerOpen) e.currentTarget.style.color = 'var(--text-muted)'; }}
+                              >
+                                <Link2 size={14} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const endpoint = t.source === 'smart' ? `/api/intel/tasks/${t.id}` : `/api/tasks/${t.id}`;
+                                  if (t.source === 'smart') {
+                                    api.delete<any>(endpoint).catch(() => {});
+                                  } else {
+                                    api.patch<any>(endpoint, { status: 'discarded' }).catch(() => {});
+                                  }
+                                  setDiscardedNeedsEpic(prev => new Set(prev).add(t.id));
+                                }}
+                                title="Discard"
+                                style={{
+                                  border: 'none', background: 'none', cursor: 'pointer',
+                                  color: 'var(--text-muted)', padding: 2, borderRadius: 4,
+                                  display: 'flex', alignItems: 'center', transition: 'color 0.1s',
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
                           </div>
                           {/* Epic / Story drill-down picker */}
                           {isPickerOpen && (
@@ -3420,7 +3481,8 @@ function PortfolioView() {
                     })}
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {/* Empty state */}
               {selectedEpics.length === 0 && selectedStories.length === 0 && allTasks.length === 0 && selectedNeedsEpic.length === 0 && (
@@ -3433,42 +3495,152 @@ function PortfolioView() {
             {/* Detail panel for editing epics/stories from portfolio */}
             <DetailPanel
               open={!!detailItem}
-              onClose={() => setDetailItem(null)}
+              onClose={() => { setDetailItem(null); setInitiativePickerOpen(false); setInitiativeSearch(''); }}
               title={detailItem?.node?.title || ''}
               subtitle={detailItem ? `${detailItem.type === 'epic' ? 'Epic' : 'Story'}${detailItem.node?.owner ? ` · ${detailItem.node.owner}` : ''}` : undefined}
+              subtitleColor={detailItem ? TYPE_COLORS[detailItem.type] : undefined}
               fields={detailItem ? getPortfolioDetailFields(detailItem.node, detailItem.type) : []}
+              onTitleChange={(newTitle) => {
+                if (!detailItem) return;
+                const endpoint = detailItem.type === 'epic' ? '/api/epics' : '/api/stories';
+                api.patch<any>(`${endpoint}/${detailItem.node.id}`, { title: newTitle }).catch(() => {});
+                setDetailItem(prev => prev ? { ...prev, node: { ...prev.node, title: newTitle } } : null);
+              }}
               onFieldChange={(key, value) => {
                 if (!detailItem) return;
                 const endpoint = detailItem.type === 'epic' ? '/api/epics' : '/api/stories';
                 api.patch<any>(`${endpoint}/${detailItem.node.id}`, { [key]: value }).catch(() => {});
                 setDetailItem(prev => prev ? { ...prev, node: { ...prev.node, [key]: value } } : null);
               }}
-              onSave={(updates) => {
-                if (!detailItem) return;
-                const endpoint = detailItem.type === 'epic' ? '/api/epics' : '/api/stories';
-                api.patch<any>(`${endpoint}/${detailItem.node.id}`, updates).catch(() => {});
-                setDetailItem(null);
-              }}
             >
-              {/* Hierarchy breadcrumb — full tree path for context */}
+              {/* Initiative linking for epics */}
+              {detailItem && detailItem.type === 'epic' && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Initiative</span>
+                  </div>
+                  {detailItem.node.initiative ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 14, color: 'var(--text-primary)', flex: 1 }}>{detailItem.node.initiative}</span>
+                      <button
+                        onClick={() => { setInitiativePickerOpen(!initiativePickerOpen); setInitiativeSearch(''); }}
+                        style={{
+                          fontSize: 11, padding: '2px 6px', borderRadius: 6,
+                          border: '1px dashed var(--border)', background: 'none',
+                          color: 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setInitiativePickerOpen(!initiativePickerOpen); setInitiativeSearch(''); }}
+                      style={{
+                        fontSize: 11, padding: '3px 8px', borderRadius: 8,
+                        border: '1px dashed var(--border)', background: 'none',
+                        color: 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                    >
+                      + Link to initiative
+                    </button>
+                  )}
+                  {/* Initiative picker - shows themes > initiatives */}
+                  {initiativePickerOpen && (
+                    <div style={{
+                      marginTop: 6, border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+                      backgroundColor: 'var(--bg-secondary)', overflow: 'hidden',
+                    }}>
+                      <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Search size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                        <input
+                          autoFocus
+                          value={initiativeSearch}
+                          onChange={(e) => setInitiativeSearch(e.target.value)}
+                          placeholder="Search initiatives..."
+                          style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontSize: 12, color: 'var(--text-primary)' }}
+                        />
+                      </div>
+                      <div style={{ maxHeight: 240, overflowY: 'auto', padding: 4 }}>
+                        {hierTree.map((theme: any) => {
+                          const initiatives = (theme.children || []).filter((c: any) => c.type === 'initiative');
+                          const matchesTheme = !initiativeSearch || (theme.title || '').toLowerCase().includes(initiativeSearch.toLowerCase());
+                          const matchingInits = initiatives.filter((init: any) =>
+                            !initiativeSearch || matchesTheme || (init.title || '').toLowerCase().includes(initiativeSearch.toLowerCase())
+                          );
+                          if (matchingInits.length === 0 && !matchesTheme) return null;
+                          return (
+                            <div key={theme.id}>
+                              <div style={{ padding: '3px 6px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: TYPE_COLORS.theme, minWidth: 28 }}>THEM</span>
+                                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{theme.title}</span>
+                              </div>
+                              {matchingInits.map((init: any) => (
+                                <div
+                                  key={init.id}
+                                  onClick={() => {
+                                    api.patch<any>(`/api/epics/${detailItem.node.id}`, { initiative_id: init.id, initiative: init.title }).catch(() => {});
+                                    setDetailItem(prev => prev ? { ...prev, node: { ...prev.node, initiative: init.title, initiative_id: init.id } } : null);
+                                    setInitiativePickerOpen(false);
+                                    setInitiativeSearch('');
+                                  }}
+                                  style={{
+                                    padding: '4px 6px', paddingLeft: 20, display: 'flex', alignItems: 'center', gap: 4,
+                                    cursor: 'pointer', borderRadius: 4, transition: 'background-color 0.1s',
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                >
+                                  <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: TYPE_COLORS.initiative, minWidth: 28 }}>INIT</span>
+                                  <span style={{ fontSize: 11, color: 'var(--text-primary)', flex: 1 }}>{init.title}</span>
+                                  {init.status && (
+                                    <span style={{
+                                      fontSize: 9, padding: '1px 4px', borderRadius: 3,
+                                      backgroundColor: (STATUS_COLORS[init.status] || '#94a3b8') + '20',
+                                      color: STATUS_COLORS[init.status] || '#94a3b8',
+                                    }}>
+                                      {(init.status || '').replace(/_/g, ' ')}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Full hierarchy tree — ancestors + current (highlighted) + children */}
               {detailItem && (() => {
-                const path = findAncestorPath(hierTree, detailItem.node.id);
-                if (path.length <= 1) return null;
+                const { path, targetNode } = findFullBranch(hierTree, detailItem.node.id);
+                if (path.length === 0) return null;
+                const descendants = targetNode ? collectDescendants(targetNode, path.length) : [];
                 return (
                   <div style={{
-                    padding: '8px 0', marginBottom: 8, borderBottom: '1px solid var(--border)',
+                    padding: '12px 0', marginTop: 8, borderTop: '1px solid var(--border)',
                   }}>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       Hierarchy
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {/* Ancestor path + current node */}
                       {path.map((ancestor, i) => {
-                        const isLast = i === path.length - 1;
+                        const isCurrent = ancestor.id === detailItem.node.id;
                         const typeColor = TYPE_COLORS[ancestor.type] || '#666';
                         return (
                           <div key={ancestor.id} style={{
                             display: 'flex', alignItems: 'center', gap: 6,
                             paddingLeft: i * 14, fontSize: 12,
+                            backgroundColor: isCurrent ? (typeColor + '12') : 'transparent',
+                            borderRadius: 4, padding: `2px 6px 2px ${i * 14 + 6}px`,
+                            borderLeft: isCurrent ? `2px solid ${typeColor}` : '2px solid transparent',
                           }}>
                             {i > 0 && (
                               <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>└</span>
@@ -3480,11 +3652,36 @@ function PortfolioView() {
                               {(TYPE_LABELS[ancestor.type] || ancestor.type || '').slice(0, 4)}
                             </span>
                             <span style={{
-                              color: isLast ? 'var(--text-primary)' : 'var(--text-secondary)',
-                              fontWeight: isLast ? 600 : 400,
+                              color: isCurrent ? 'var(--text-primary)' : 'var(--text-secondary)',
+                              fontWeight: isCurrent ? 600 : 400,
                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                             }}>
                               {ancestor.title || ancestor.description || '(untitled)'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {/* Children of current node */}
+                      {descendants.map(({ node: child, depth }, i) => {
+                        const typeColor = TYPE_COLORS[child.type] || '#666';
+                        return (
+                          <div key={child.id || i} style={{
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            fontSize: 11, padding: `2px 6px 2px ${depth * 14 + 6}px`,
+                            opacity: 0.7,
+                          }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>└</span>
+                            <span style={{
+                              fontSize: 9, fontWeight: 600, textTransform: 'uppercase',
+                              color: typeColor, minWidth: 28,
+                            }}>
+                              {(TYPE_LABELS[child.type] || child.type || '').slice(0, 4)}
+                            </span>
+                            <span style={{
+                              color: 'var(--text-muted)',
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}>
+                              {child.title || child.description || '(untitled)'}
                             </span>
                           </div>
                         );
@@ -3517,18 +3714,32 @@ function findAncestorPath(tree: any[], targetId: string): any[] {
   return walk(tree, []) || [];
 }
 
+/** Find full branch: ancestor path + children of target, returning { path, children } */
+function findFullBranch(tree: any[], targetId: string): { path: any[]; targetNode: any | null } {
+  const path = findAncestorPath(tree, targetId);
+  const targetNode = path.length > 0 ? path[path.length - 1] : null;
+  return { path, targetNode };
+}
+
+/** Recursively collect all descendants of a node (for display) */
+function collectDescendants(node: any, depth: number): { node: any; depth: number }[] {
+  const result: { node: any; depth: number }[] = [];
+  for (const child of (node.children || [])) {
+    result.push({ node: child, depth });
+    result.push(...collectDescendants(child, depth + 1));
+  }
+  return result;
+}
+
 /** Get fields for detail panel based on item type */
 function getPortfolioDetailFields(node: any, type: 'epic' | 'story'): DetailField[] {
   if (type === 'epic') return [
-    { key: 'title', label: 'Title', value: node.title, type: 'text' },
     { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'in_progress', 'done', 'cancelled'] },
     { key: 'priority', label: 'Priority', value: node.priority || 'high', type: 'select', options: ['high', 'medium', 'low'] },
     { key: 'quarter', label: 'Quarter', value: node.quarter || '', type: 'text' },
-    ...(node.initiative ? [{ key: 'initiative', label: 'Initiative', value: node.initiative, type: 'readonly' as const }] : []),
     { key: 'story_count', label: 'Stories', value: String(node.story_count || 0), type: 'readonly' },
   ];
   return [
-    { key: 'title', label: 'Title', value: node.title, type: 'text' },
     { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'in_progress', 'ready', 'in_review', 'done', 'blocked'] },
     { key: 'priority', label: 'Priority', value: node.priority || 'medium', type: 'select', options: ['high', 'medium', 'low'] },
     { key: 'size', label: 'Size', value: node.size || 'M', type: 'select', options: ['XS', 'S', 'M', 'L', 'XL'] },

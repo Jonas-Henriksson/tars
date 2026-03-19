@@ -35,23 +35,31 @@ interface DetailPanelProps {
   onClose: () => void;
   title: string;
   subtitle?: string;
+  subtitleColor?: string;
   badge?: { label: string; color: string };
   fields: DetailField[];
   onSave?: (updates: Record<string, any>) => void;
   onFieldChange?: (key: string, value: any) => void;
+  /** When provided, title becomes inline-editable (click to edit) and the edit button is hidden */
+  onTitleChange?: (title: string) => void;
   actions?: { label: string; onClick: () => void; variant?: 'primary' | 'danger' | 'ghost' }[];
   children?: React.ReactNode;
 }
 
-export default function DetailPanel({ open, onClose, title, subtitle, badge, fields, onSave, onFieldChange, actions, children }: DetailPanelProps) {
+export default function DetailPanel({ open, onClose, title, subtitle, subtitleColor, badge, fields, onSave, onFieldChange, onTitleChange, actions, children }: DetailPanelProps) {
   const [editing, setEditing] = useState(false);
   const [edits, setEdits] = useState<Record<string, any>>({});
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(title);
   const panelRef = useRef<HTMLDivElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
       setEditing(false);
       setEdits({});
+      setEditingTitle(false);
+      setTitleDraft(title);
     }
   }, [open, title]);
 
@@ -113,11 +121,46 @@ export default function DetailPanel({ open, onClose, title, subtitle, badge, fie
         }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>{title}</h2>
-              {subtitle && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>{subtitle}</p>}
+              {onTitleChange && editingTitle ? (
+                <input
+                  ref={titleInputRef}
+                  autoFocus
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onBlur={() => {
+                    if (titleDraft.trim() && titleDraft !== title) onTitleChange(titleDraft.trim());
+                    setEditingTitle(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.currentTarget.blur(); }
+                    if (e.key === 'Escape') { setTitleDraft(title); setEditingTitle(false); }
+                  }}
+                  style={{
+                    fontSize: 18, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3,
+                    width: '100%', padding: '2px 6px', border: '1px solid var(--accent)',
+                    borderRadius: 'var(--radius)', backgroundColor: 'var(--bg-secondary)',
+                    outline: 'none', fontFamily: 'inherit',
+                  }}
+                />
+              ) : (
+                <h2
+                  onClick={() => { if (onTitleChange) { setEditingTitle(true); setTitleDraft(title); } }}
+                  style={{
+                    fontSize: 18, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3,
+                    cursor: onTitleChange ? 'text' : 'default',
+                    borderRadius: 'var(--radius)', padding: '2px 0',
+                    transition: 'background-color 0.1s',
+                  }}
+                  onMouseEnter={(e) => { if (onTitleChange) e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                >
+                  {title}
+                </h2>
+              )}
+              {subtitle && <p style={{ fontSize: 13, color: subtitleColor || 'var(--text-muted)', marginTop: 4 }}>{subtitle}</p>}
             </div>
             <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-              {onSave && !editing && (
+              {onSave && !onTitleChange && !editing && (
                 <button onClick={() => setEditing(true)} style={iconBtnStyle} title="Edit">
                   <Edit3 size={16} />
                 </button>
@@ -298,6 +341,8 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
   const [expanded, setExpanded] = useState(false);
   const [convertedLines, setConvertedLines] = useState<Set<number>>(new Set());
   const [removedLines, setRemovedLines] = useState<Set<number>>(new Set());
+  const [inlineEditing, setInlineEditing] = useState(false);
+  const [inlineDraft, setInlineDraft] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -578,6 +623,60 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
             e.currentTarget.style.backgroundColor = 'transparent';
           }}
         />
+      </div>
+    );
+  }
+
+  // Inline text editing (click-to-edit for text fields outside edit mode)
+  if (field.type === 'text' && !editing && onInlineChange) {
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          {iconMap[field.key]}
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{field.label}</span>
+          {field.hint && <span title={field.hint} style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'help' }}>ⓘ</span>}
+        </div>
+        {inlineEditing ? (
+          <input
+            autoFocus
+            type="text"
+            value={inlineDraft}
+            onChange={(e) => setInlineDraft(e.target.value)}
+            onBlur={() => {
+              if (inlineDraft.trim() !== String(value || '')) onInlineChange(inlineDraft.trim());
+              setInlineEditing(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') { setInlineDraft(String(value || '')); setInlineEditing(false); }
+            }}
+            style={{
+              ...inputStyle,
+              border: '1px solid var(--accent)',
+              backgroundColor: 'var(--bg-secondary)',
+            }}
+          />
+        ) : (
+          <div
+            onClick={() => { setInlineDraft(String(value || '')); setInlineEditing(true); }}
+            style={{
+              fontSize: 14, color: value ? 'var(--text-primary)' : 'var(--text-muted)',
+              lineHeight: 1.5, cursor: 'text', padding: '6px 10px',
+              borderRadius: 'var(--radius)', border: '1px solid transparent',
+              transition: 'border-color 0.1s, background-color 0.1s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--border)';
+              e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'transparent';
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            {displayValue(String(value || '—'))}
+          </div>
+        )}
       </div>
     );
   }
