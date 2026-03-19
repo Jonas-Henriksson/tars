@@ -2434,41 +2434,27 @@ function PortfolioView() {
   const hiddenCount = allMembers.length - members.length;
 
   const wl = selected?.data?.workload || {};
-  const isSelectedOverloaded = (wl.total_items || 0) >= 7;
 
-  // Build stories summary for expandable field
-  const storiesSummary = selected?.data?.stories?.length
-    ? selected.data.stories.map((s: any) => {
-        const statusIcon = s.status === 'blocked' ? '!!!' : s.status === 'done' ? 'done' : s.status === 'in_progress' ? '>>>' : '---';
-        return `[${statusIcon}] ${s.title}${s.epic_title ? ` (${s.epic_title})` : ''}`;
+  // Build compact summary for sidebar
+  const epicsSummary = selected?.data?.epics?.length
+    ? selected.data.epics.map((e: any) => {
+        const stories = e.story_count ? `${e.story_count} stories` : 'no stories';
+        return `[${(e.status || 'backlog').replace(/_/g, ' ')}] ${e.title} (${stories})`;
       }).join('\n')
     : '';
 
-  // Build needs-epic summary
   const needsEpicSummary = selected?.data?.needs_epic?.length
     ? selected.data.needs_epic.map((t: any) => `- ${t.description}`).join('\n')
     : '';
 
-  // Build epics summary
-  const epicsSummary = selected?.data?.epics?.length
-    ? selected.data.epics.map((e: any) => {
-        const progress = e.story_count ? `${e.story_count} stories` : 'no stories';
-        return `[${(e.status || '').replace(/_/g, ' ')}] ${e.title} (${progress})${e.initiative ? ` — ${e.initiative}` : ''}`;
-      }).join('\n')
-    : '';
-
   const fields: DetailField[] = selected ? [
     ...(selected.data.role ? [{ key: 'role', label: 'Role', value: selected.data.role, type: 'readonly' as const }] : []),
-    { key: 'workload_status', label: 'Workload', value: isSelectedOverloaded ? 'Heavy workload' : 'Normal', type: 'badge' as const,
-      color: isSelectedOverloaded ? '#ef4444' : '#22c55e' },
-    { key: 'total_epics', label: 'Epics', value: wl.epics || 0, type: 'readonly' as const },
-    { key: 'total_stories', label: 'Stories', value: wl.stories || 0, type: 'readonly' as const },
-    { key: 'total_smart_tasks', label: 'Smart Tasks', value: wl.smart_tasks || 0, type: 'readonly' as const },
-    { key: 'total_tracked', label: 'Tracked Tasks', value: wl.tracked_tasks || 0, type: 'readonly' as const },
-    ...(wl.blocked > 0 ? [{ key: 'blocked', label: 'Blocked Stories', value: wl.blocked, type: 'badge' as const, color: '#ef4444' }] : []),
-    ...(wl.overdue > 0 ? [{ key: 'overdue', label: 'Overdue Tasks', value: wl.overdue, type: 'badge' as const, color: '#f59e0b' }] : []),
+    { key: 'summary', label: 'Workload Summary', value: [
+      `${wl.epics || 0} epics, ${wl.stories || 0} stories, ${wl.smart_tasks || 0} tasks, ${wl.tracked_tasks || 0} tracked`,
+      ...(wl.blocked > 0 ? [`${wl.blocked} blocked`] : []),
+      ...(wl.overdue > 0 ? [`${wl.overdue} overdue`] : []),
+    ].join(' · '), type: 'readonly' as const },
     ...(epicsSummary ? [{ key: 'epics_detail', label: `Epics (${selected.data.epics.length})`, value: epicsSummary, type: 'expandable' as const }] : []),
-    ...(storiesSummary ? [{ key: 'stories_detail', label: `Stories (${selected.data.stories.length})`, value: storiesSummary, type: 'expandable' as const }] : []),
     ...(needsEpicSummary ? [{ key: 'needs_epic', label: `Needs Epic (${selected.data.needs_epic.length})`, value: needsEpicSummary, type: 'expandable' as const }] : []),
   ] : [];
 
@@ -2480,25 +2466,30 @@ function PortfolioView() {
           {hiddenCount > 0 && <span>{hiddenCount} with no assigned items</span>}
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
         {members.length === 0 ? (
           <EmptyState message={allMembers.length > 0 ? `${allMembers.length} team members found but none have assigned epics, stories, or tasks. Assign owners in the Hierarchy tab.` : 'No portfolio data. Run a Notion scan first.'} />
         ) : (
           members.map(([name, data]: [string, any]) => {
             const w = data.workload || {};
             const totalItems = w.total_items || 0;
-            const isOverloaded = totalItems >= 7;
             const blocked = w.blocked || 0;
             const overdue = w.overdue || 0;
             const needsEpic = data.needs_epic_count || 0;
-            const hasAlerts = blocked > 0 || overdue > 0 || needsEpic > 0;
+            // Compact inline stats
+            const stats = [
+              w.epics ? `${w.epics} epics` : null,
+              w.stories ? `${w.stories} stories` : null,
+              (w.smart_tasks || 0) + (w.tracked_tasks || 0) > 0 ? `${(w.smart_tasks || 0) + (w.tracked_tasks || 0)} tasks` : null,
+            ].filter(Boolean);
             return (
               <div
                 key={name}
                 onClick={() => setSelected({ name, data })}
                 style={{
                   ...cardStyle, cursor: 'pointer', transition: 'all 0.15s',
-                  borderLeft: `3px solid ${isOverloaded ? '#ef4444' : blocked > 0 ? '#f59e0b' : 'var(--accent)'}`,
+                  padding: '12px 14px',
+                  borderLeft: `3px solid ${blocked > 0 ? '#ef4444' : overdue > 0 ? '#f59e0b' : 'var(--border)'}`,
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
@@ -2509,52 +2500,27 @@ function PortfolioView() {
                   e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{
-                    width: 36, height: 36, borderRadius: '50%', background: isOverloaded ? '#ef4444' : 'var(--accent)',
+                    width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#fff', fontSize: 14, fontWeight: 600, flexShrink: 0,
+                    color: '#fff', fontSize: 12, fontWeight: 600, flexShrink: 0,
                   }}>
                     {name.charAt(0)}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{name}</h3>
-                    {data.role && (
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{data.role}</div>
-                    )}
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                      {stats.join(' · ') || 'no items'}
+                    </div>
                   </div>
-                  {isOverloaded && (
-                    <span style={{
-                      fontSize: 10, padding: '2px 8px', borderRadius: 10, flexShrink: 0,
-                      backgroundColor: '#ef444420', color: '#ef4444', fontWeight: 500,
-                    }}>
-                      heavy
-                    </span>
-                  )}
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', flexShrink: 0 }}>{totalItems}</span>
                 </div>
-                <div style={{ display: 'flex', gap: 16, marginBottom: hasAlerts ? 8 : 0 }}>
-                  <MiniStat label="Epics" value={w.epics || 0} />
-                  <MiniStat label="Stories" value={w.stories || 0} />
-                  <MiniStat label="Tasks" value={w.smart_tasks || 0} />
-                  <MiniStat label="Tracked" value={w.tracked_tasks || 0} />
-                </div>
-                {hasAlerts && (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11 }}>
-                    {blocked > 0 && (
-                      <span style={{ color: '#ef4444', padding: '1px 6px', borderRadius: 4, backgroundColor: '#ef444410' }}>
-                        {blocked} blocked
-                      </span>
-                    )}
-                    {overdue > 0 && (
-                      <span style={{ color: '#f59e0b', padding: '1px 6px', borderRadius: 4, backgroundColor: '#f59e0b10' }}>
-                        {overdue} overdue
-                      </span>
-                    )}
-                    {needsEpic > 0 && (
-                      <span style={{ color: '#8b5cf6', padding: '1px 6px', borderRadius: 4, backgroundColor: '#8b5cf620' }}>
-                        {needsEpic} need epic
-                      </span>
-                    )}
+                {(blocked > 0 || overdue > 0 || needsEpic > 0) && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6, marginLeft: 36, fontSize: 10 }}>
+                    {blocked > 0 && <span style={{ color: '#ef4444' }}>{blocked} blocked</span>}
+                    {overdue > 0 && <span style={{ color: '#f59e0b' }}>{overdue} overdue</span>}
+                    {needsEpic > 0 && <span style={{ color: '#8b5cf6' }}>{needsEpic} need epic</span>}
                   </div>
                 )}
               </div>
@@ -2567,7 +2533,7 @@ function PortfolioView() {
         open={!!selected}
         onClose={() => setSelected(null)}
         title={selected?.name || ''}
-        subtitle={selected?.data?.role || 'Team member portfolio'}
+        subtitle={selected?.data?.role || 'Team member'}
         fields={fields}
       />
     </>
@@ -2728,14 +2694,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div style={{ textAlign: 'center' }}>
-      <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{value}</div>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</div>
-    </div>
-  );
-}
+
 
 function MiniStatCard({ label, value, color }: { label: string; value: number | string; color?: string }) {
   return (
