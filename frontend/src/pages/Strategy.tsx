@@ -2635,6 +2635,7 @@ function PortfolioView() {
   const [statusPickerTaskId, setStatusPickerTaskId] = useState<string | null>(null);
   const [localTaskUpdates, setLocalTaskUpdates] = useState<Record<string, any>>({});
   const [removedTaskIds, setRemovedTaskIds] = useState<Set<string>>(new Set());
+  const [detailItem, setDetailItem] = useState<{ node: any; type: 'epic' | 'story' } | null>(null);
 
   if (loading) return <LoadingState />;
 
@@ -2650,12 +2651,18 @@ function PortfolioView() {
   const people: [string, any][] = [];
   const groups: [string, any][] = [];
   for (const [name, data] of active) {
+    if (!name || !name.trim()) continue; // Skip empty/blank names
     const isGroup = knownGroups.has(name.toLowerCase())
       || (!data.role && !data.relationship && /^[a-z]/.test(name))
       || (!data.role && !data.relationship && name.split(/\s+/).length > 2);
     if (isGroup) groups.push([name, data]);
     else people.push([name, data]);
   }
+
+  // Group people by severity for display
+  const blockedPeople = people.filter(([, d]) => (d.workload?.blocked || 0) > 0);
+  const overduePeople = people.filter(([, d]) => (d.workload?.blocked || 0) === 0 && (d.workload?.overdue || 0) > 0);
+  const normalPeople = people.filter(([, d]) => (d.workload?.blocked || 0) === 0 && (d.workload?.overdue || 0) === 0);
 
   const handleLinkToStory = (taskId: string, storyId: string) => {
     api.post<any>(`/api/stories/${storyId}/link-task`, { task_id: taskId }).then(() => {
@@ -2788,6 +2795,12 @@ function PortfolioView() {
     memberStoriesByEpic[ep.id] = epStories;
   }
 
+  // Compute total unique stories visible (under epics + orphan stories)
+  const epicTitlesForCount = new Set(selectedEpics.map((e: any) => e.title));
+  const orphanStoriesForCount = selectedStories.filter((s: any) => !epicTitlesForCount.has(s.epic_title));
+  const storiesUnderEpics = selectedEpics.reduce((sum: number, ep: any) => sum + (memberStoriesByEpic[ep.id]?.length || 0), 0);
+  const totalVisibleStories = storiesUnderEpics + orphanStoriesForCount.length;
+
   return (
     <>
       {active.length > 0 && (
@@ -2801,13 +2814,45 @@ function PortfolioView() {
         <EmptyState message={allMembers.length > 0 ? `${allMembers.length} team members found but none have assigned epics, stories, or tasks. Assign owners in the Hierarchy tab.` : 'No portfolio data. Run a Notion scan first.'} />
       ) : (
         <>
-          {/* People section */}
+          {/* People section — grouped by severity */}
           {people.length > 0 && (
             <>
               {renderSectionHeader('People', people.length, 'var(--accent)')}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10, marginBottom: 20 }}>
-                {people.map(([name, data]) => renderMemberCard(name, data))}
-              </div>
+              {blockedPeople.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: '#ef4444', flexShrink: 0 }} />
+                    Blocked ({blockedPeople.length})
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
+                    {blockedPeople.map(([name, data]) => renderMemberCard(name, data))}
+                  </div>
+                </div>
+              )}
+              {overduePeople.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#f59e0b', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: '#f59e0b', flexShrink: 0 }} />
+                    Overdue ({overduePeople.length})
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
+                    {overduePeople.map(([name, data]) => renderMemberCard(name, data))}
+                  </div>
+                </div>
+              )}
+              {normalPeople.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  {(blockedPeople.length > 0 || overduePeople.length > 0) && (
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: 'var(--border)', flexShrink: 0 }} />
+                      On track ({normalPeople.length})
+                    </div>
+                  )}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
+                    {normalPeople.map(([name, data]) => renderMemberCard(name, data))}
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -2876,7 +2921,7 @@ function PortfolioView() {
                 display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12, marginTop: 4,
               }}>
                 {wl.epics > 0 && <span style={{ color: '#10b981', fontWeight: 500 }}>{wl.epics} epics</span>}
-                {selectedStories.length > 0 && <span style={{ color: '#f59e0b', fontWeight: 500 }}>{selectedStories.length} stories</span>}
+                {totalVisibleStories > 0 && <span style={{ color: '#f59e0b', fontWeight: 500 }}>{totalVisibleStories} stories</span>}
                 {allTasks.filter(t => !removedTaskIds.has(t.id)).length > 0 && (
                   <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{allTasks.filter(t => !removedTaskIds.has(t.id)).length} tasks</span>
                 )}
@@ -2892,7 +2937,10 @@ function PortfolioView() {
             <div onClick={() => { if (statusPickerTaskId) setStatusPickerTaskId(null); }} style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
               {/* Epics section */}
               {selectedEpics.length > 0 && (
-                <PortfolioEpicsSection epics={selectedEpics} storiesByEpic={memberStoriesByEpic} />
+                <PortfolioEpicsSection epics={selectedEpics} storiesByEpic={memberStoriesByEpic}
+                  onEditEpic={(ep) => setDetailItem({ node: ep, type: 'epic' })}
+                  onEditStory={(s) => setDetailItem({ node: s, type: 'story' })}
+                />
               )}
 
               {/* Stories not under an owned epic */}
@@ -2930,6 +2978,18 @@ function PortfolioView() {
                                 {s.status.replace(/_/g, ' ')}
                               </span>
                             )}
+                            <button
+                              onClick={() => setDetailItem({ node: s, type: 'story' })}
+                              title="Edit story"
+                              style={{
+                                border: 'none', background: 'none', cursor: 'pointer', padding: 2,
+                                color: 'var(--text-muted)', display: 'flex', alignItems: 'center', flexShrink: 0,
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                            >
+                              <Pencil size={12} />
+                            </button>
                           </div>
                         );
                       })}
@@ -3366,6 +3426,27 @@ function PortfolioView() {
                 </div>
               )}
             </div>
+
+            {/* Detail panel for editing epics/stories from portfolio */}
+            <DetailPanel
+              open={!!detailItem}
+              onClose={() => setDetailItem(null)}
+              title={detailItem?.node?.title || ''}
+              subtitle={detailItem ? `${detailItem.type === 'epic' ? 'Epic' : 'Story'}${detailItem.node?.owner ? ` · ${detailItem.node.owner}` : ''}` : undefined}
+              fields={detailItem ? getPortfolioDetailFields(detailItem.node, detailItem.type) : []}
+              onFieldChange={(key, value) => {
+                if (!detailItem) return;
+                const endpoint = detailItem.type === 'epic' ? '/api/epics' : '/api/stories';
+                api.patch<any>(`${endpoint}/${detailItem.node.id}`, { [key]: value }).catch(() => {});
+                setDetailItem(prev => prev ? { ...prev, node: { ...prev.node, [key]: value } } : null);
+              }}
+              onSave={(updates) => {
+                if (!detailItem) return;
+                const endpoint = detailItem.type === 'epic' ? '/api/epics' : '/api/stories';
+                api.patch<any>(`${endpoint}/${detailItem.node.id}`, updates).catch(() => {});
+                setDetailItem(null);
+              }}
+            />
           </div>
         </>
       )}
@@ -3373,8 +3454,31 @@ function PortfolioView() {
   );
 }
 
+/** Get fields for detail panel based on item type */
+function getPortfolioDetailFields(node: any, type: 'epic' | 'story'): DetailField[] {
+  if (type === 'epic') return [
+    { key: 'title', label: 'Title', value: node.title, type: 'text' },
+    { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'in_progress', 'done', 'cancelled'] },
+    { key: 'priority', label: 'Priority', value: node.priority || 'high', type: 'select', options: ['high', 'medium', 'low'] },
+    { key: 'quarter', label: 'Quarter', value: node.quarter || '', type: 'text' },
+    ...(node.initiative ? [{ key: 'initiative', label: 'Initiative', value: node.initiative, type: 'readonly' as const }] : []),
+    { key: 'story_count', label: 'Stories', value: String(node.story_count || 0), type: 'readonly' },
+  ];
+  return [
+    { key: 'title', label: 'Title', value: node.title, type: 'text' },
+    { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'in_progress', 'ready', 'in_review', 'done', 'blocked'] },
+    { key: 'priority', label: 'Priority', value: node.priority || 'medium', type: 'select', options: ['high', 'medium', 'low'] },
+    { key: 'size', label: 'Size', value: node.size || 'M', type: 'select', options: ['XS', 'S', 'M', 'L', 'XL'] },
+    ...(node.epic_title ? [{ key: 'epic_title', label: 'Epic', value: node.epic_title, type: 'readonly' as const }] : []),
+    ...(node.owner ? [{ key: 'owner', label: 'Owner', value: node.owner, type: 'readonly' as const }] : []),
+  ];
+}
+
 /** Epics section in portfolio sidebar — shows epics with expandable story lists */
-function PortfolioEpicsSection({ epics, storiesByEpic }: { epics: any[]; storiesByEpic: Record<string, any[]> }) {
+function PortfolioEpicsSection({ epics, storiesByEpic, onEditEpic, onEditStory }: {
+  epics: any[]; storiesByEpic: Record<string, any[]>;
+  onEditEpic?: (epic: any) => void; onEditStory?: (story: any) => void;
+}) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -3383,7 +3487,8 @@ function PortfolioEpicsSection({ epics, storiesByEpic }: { epics: any[]; stories
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {epics.map((ep: any) => (
-          <PortfolioEpicRow key={ep.id || ep.title} epic={ep} stories={storiesByEpic[ep.id] || []} />
+          <PortfolioEpicRow key={ep.id || ep.title} epic={ep} stories={storiesByEpic[ep.id] || []}
+            onEditEpic={onEditEpic} onEditStory={onEditStory} />
         ))}
       </div>
     </div>
@@ -3391,7 +3496,10 @@ function PortfolioEpicsSection({ epics, storiesByEpic }: { epics: any[]; stories
 }
 
 /** Single epic row — expandable to show stories */
-function PortfolioEpicRow({ epic, stories }: { epic: any; stories: any[] }) {
+function PortfolioEpicRow({ epic, stories, onEditEpic, onEditStory }: {
+  epic: any; stories: any[];
+  onEditEpic?: (epic: any) => void; onEditStory?: (story: any) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const statusColor = STATUS_COLORS[epic.status] || '#94a3b8';
   return (
@@ -3429,6 +3537,20 @@ function PortfolioEpicRow({ epic, stories }: { epic: any; stories: any[] }) {
             {epic.story_count} {epic.story_count === 1 ? 'story' : 'stories'}
           </span>
         )}
+        {onEditEpic && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onEditEpic(epic); }}
+            title="Edit epic"
+            style={{
+              border: 'none', background: 'none', cursor: 'pointer', padding: 2,
+              color: 'var(--text-muted)', display: 'flex', alignItems: 'center', flexShrink: 0,
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+          >
+            <Pencil size={12} />
+          </button>
+        )}
       </div>
       {expanded && stories.length > 0 && (
         <div style={{ marginLeft: 20, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -3459,6 +3581,20 @@ function PortfolioEpicRow({ epic, stories }: { epic: any; stories: any[] }) {
                   }}>
                     {s.status.replace(/_/g, ' ')}
                   </span>
+                )}
+                {onEditStory && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onEditStory(s); }}
+                    title="Edit story"
+                    style={{
+                      border: 'none', background: 'none', cursor: 'pointer', padding: 2,
+                      color: 'var(--text-muted)', display: 'flex', alignItems: 'center', flexShrink: 0,
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                  >
+                    <Pencil size={12} />
+                  </button>
                 )}
               </div>
             );
