@@ -19,6 +19,12 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'review', label: 'Review', icon: <BarChart3 size={16} /> },
 ];
 
+const linkBtnStyle: React.CSSProperties = {
+  border: 'none', background: 'none', cursor: 'pointer',
+  fontSize: 12, color: 'var(--accent)', padding: 0,
+  textDecoration: 'none',
+};
+
 const STATUS_COLORS: Record<string, string> = {
   on_track: '#22c55e', at_risk: '#f59e0b', off_track: '#ef4444',
   completed: '#6b7280', paused: '#94a3b8',
@@ -167,18 +173,35 @@ function HierarchyView() {
     api.post(`/api/dismiss/${type}/${id}`, {}).then(() => loadHierarchy()).catch(() => {});
   }, [loadHierarchy]);
 
+  // Collapse/expand all: bump key to force re-mount with different default
+  const [expandMode, setExpandMode] = useState<'default' | 'all' | 'none'>('default');
+  const [treeKey, setTreeKey] = useState(0);
+
+  const expandAll = useCallback(() => {
+    setExpandMode('all');
+    setTreeKey((k) => k + 1);
+  }, []);
+
+  const collapseAll = useCallback(() => {
+    setExpandMode('none');
+    setTreeKey((k) => k + 1);
+  }, []);
+
   if (loading) return <LoadingState />;
 
   return (
     <div>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+        <div style={{ display: 'flex', gap: 12, fontSize: 12, color: 'var(--text-muted)', alignItems: 'center' }}>
           <span>{counts.themes || 0} themes</span>
           <span>{counts.initiatives || 0} initiatives</span>
           <span>{counts.epics || 0} epics</span>
           <span>{counts.stories || 0} stories</span>
           <span>{counts.tasks || 0} tasks</span>
+          <span style={{ color: 'var(--border)' }}>|</span>
+          <button onClick={expandAll} style={linkBtnStyle}>Expand all</button>
+          <button onClick={collapseAll} style={linkBtnStyle}>Collapse all</button>
         </div>
         <button
           onClick={runClassification}
@@ -226,9 +249,9 @@ function HierarchyView() {
       )}
 
       {/* Tree */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div key={treeKey} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {tree.map((node) => (
-          <HierarchyNode key={node.id} node={node} depth={0} onApprove={handleApprove} onDismiss={handleDismiss} />
+          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} onApprove={handleApprove} onDismiss={handleDismiss} />
         ))}
       </div>
 
@@ -267,12 +290,14 @@ const TYPE_LABELS: Record<string, string> = {
   theme: 'Theme', initiative: 'Initiative', epic: 'Epic', story: 'Story',
 };
 
-function HierarchyNode({ node, depth, onApprove, onDismiss }: {
+function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismiss }: {
   node: any; depth: number;
+  expandMode?: 'default' | 'all' | 'none';
   onApprove: (type: string, id: string) => void;
   onDismiss: (type: string, id: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(depth < 2);
+  const defaultExpanded = expandMode === 'all' ? true : expandMode === 'none' ? false : depth < 2;
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const children = node.children || [];
   const isAuto = node.source === 'auto';
   const entityType = node.type + 's'; // themes, initiatives, epics, stories
@@ -354,7 +379,7 @@ function HierarchyNode({ node, depth, onApprove, onDismiss }: {
 
       {expanded && children.map((child: any) => (
         child.type ? (
-          <HierarchyNode key={child.id} node={child} depth={depth + 1} onApprove={onApprove} onDismiss={onDismiss} />
+          <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} onApprove={onApprove} onDismiss={onDismiss} />
         ) : (
           <TaskLeaf key={child.id} task={child} depth={depth + 1} onApprove={onApprove} onDismiss={onDismiss} />
         )
