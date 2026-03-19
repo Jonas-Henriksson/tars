@@ -165,13 +165,36 @@ function HierarchyView() {
     });
   }, [startPolling]);
 
+  // Optimistic tree update helpers
+  const updateNodeInTree = useCallback((nodes: any[], id: string, updater: (n: any) => any): any[] => {
+    return nodes.map((n) => {
+      if (n.id === id) return updater(n);
+      if (n.children) return { ...n, children: updateNodeInTree(n.children, id, updater) };
+      return n;
+    });
+  }, []);
+
+  const removeNodeFromTree = useCallback((nodes: any[], id: string): any[] => {
+    return nodes
+      .filter((n) => n.id !== id)
+      .map((n) => n.children ? { ...n, children: removeNodeFromTree(n.children, id) } : n);
+  }, []);
+
   const handleApprove = useCallback((type: string, id: string) => {
-    api.post(`/api/approve/${type}/${id}`, {}).then(() => loadHierarchy()).catch(() => {});
-  }, [loadHierarchy]);
+    // Optimistic: mark as confirmed locally
+    setTree((prev) => updateNodeInTree(prev, id, (n) => ({ ...n, source: 'confirmed' })));
+    setOperational((prev) => prev.map((t) => t.id === id ? { ...t, source: 'confirmed' } : t));
+    setUnclassified((prev) => prev.map((t) => t.id === id ? { ...t, source: 'confirmed' } : t));
+    api.post(`/api/approve/${type}/${id}`, {}).catch(() => loadHierarchy());
+  }, [updateNodeInTree, loadHierarchy]);
 
   const handleDismiss = useCallback((type: string, id: string) => {
-    api.post(`/api/dismiss/${type}/${id}`, {}).then(() => loadHierarchy()).catch(() => {});
-  }, [loadHierarchy]);
+    // Optimistic: remove from tree locally
+    setTree((prev) => removeNodeFromTree(prev, id));
+    setOperational((prev) => prev.filter((t) => t.id !== id));
+    setUnclassified((prev) => prev.filter((t) => t.id !== id));
+    api.post(`/api/dismiss/${type}/${id}`, {}).catch(() => loadHierarchy());
+  }, [removeNodeFromTree, loadHierarchy]);
 
   // Collapse/expand all: bump key to force re-mount with different default
   const [expandMode, setExpandMode] = useState<'default' | 'all' | 'none'>('default');
