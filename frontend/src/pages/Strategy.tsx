@@ -294,7 +294,7 @@ function HierarchyView() {
       { key: 'owner', label: 'Owner', value: node.owner, type: 'select', options: ownerOptions },
       { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'ready', 'in_progress', 'in_review', 'done', 'blocked'] },
       { key: 'priority', label: 'Priority', value: node.priority || 'medium', type: 'select', options: ['high', 'medium', 'low'] },
-      { key: 'size', label: 'Size', value: node.size || 'M', type: 'select', options: ['XS', 'S', 'M', 'L', 'XL'] },
+      { key: 'size', label: 'Size', value: node.size || 'M', type: 'select', options: ['XS', 'S', 'M', 'L', 'XL'], hint: 'XS: a few hours · S: 1–2 days · M: 3–5 days · L: 1–2 weeks · XL: 2+ weeks' },
       { key: 'acceptance_criteria', label: 'Acceptance Criteria', value: node.acceptance_criteria || [], type: 'tags', hint: 'Definition of done — specific conditions that must be met for this story to be accepted' },
     ];
     return [];
