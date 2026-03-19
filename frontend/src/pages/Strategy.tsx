@@ -261,6 +261,15 @@ function HierarchyView() {
     api.patch<any>(`${endpoint}/${selectedNode.id}`, { [key]: value }).catch(() => {});
   }, [selectedNode, updateNodeInTree]);
 
+  // Inline node update (e.g. status change from the tree row)
+  const handleNodeUpdate = useCallback((node: any, key: string, value: any) => {
+    const endpoint = nodeEndpointMap[node.type];
+    if (!endpoint) return;
+    setTree((prev) => updateNodeInTree(prev, node.id, (n) => ({ ...n, [key]: value })));
+    if (selectedNode?.id === node.id) setSelectedNode((prev: any) => prev ? { ...prev, [key]: value } : null);
+    api.patch<any>(`${endpoint}/${node.id}`, { [key]: value }).catch(() => {});
+  }, [updateNodeInTree, selectedNode]);
+
   const handleApprove = useCallback((type: string, id: string) => {
     // Optimistic: mark as confirmed locally
     setTree((prev) => updateNodeInTree(prev, id, (n) => ({ ...n, source: 'confirmed' })));
@@ -374,7 +383,7 @@ function HierarchyView() {
       {/* Tree */}
       <div key={treeKey} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {tree.map((node) => (
-          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} onTaskUpdate={handleTaskUpdate} onTaskRemove={handleTaskRemove} onTaskAdd={handleTaskAdd} />
+          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} onNodeUpdate={handleNodeUpdate} onTaskUpdate={handleTaskUpdate} onTaskRemove={handleTaskRemove} onTaskAdd={handleTaskAdd} />
         ))}
       </div>
 
@@ -453,19 +462,39 @@ const TYPE_LABELS: Record<string, string> = {
   theme: 'Theme', initiative: 'Initiative', epic: 'Epic', story: 'Story',
 };
 
-function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [], onApprove, onDismiss, onNodeClick, onTaskUpdate, onTaskRemove, onTaskAdd }: {
+const NODE_STATUS_OPTIONS: Record<string, string[]> = {
+  theme: ['active', 'completed', 'paused'],
+  initiative: ['on_track', 'at_risk', 'off_track', 'completed', 'paused'],
+  epic: ['backlog', 'in_progress', 'done', 'cancelled'],
+  story: ['backlog', 'ready', 'in_progress', 'in_review', 'done', 'blocked'],
+};
+
+function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [], onApprove, onDismiss, onNodeClick, onNodeUpdate, onTaskUpdate, onTaskRemove, onTaskAdd }: {
   node: any; depth: number;
   expandMode?: 'default' | 'all' | 'none';
   ownerOptions?: string[];
   onApprove: (type: string, id: string) => void;
   onDismiss: (type: string, id: string) => void;
   onNodeClick?: (node: any) => void;
+  onNodeUpdate?: (node: any, key: string, value: any) => void;
   onTaskUpdate?: (id: string, updates: Record<string, any>) => void;
   onTaskRemove?: (id: string) => void;
   onTaskAdd?: (parentNode: any, newTask: any) => void;
 }) {
   const defaultExpanded = expandMode === 'all' ? true : expandMode === 'none' ? false : depth < 2;
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const statusRef = React.useRef<HTMLDivElement>(null);
+
+  // Close status dropdown on outside click
+  React.useEffect(() => {
+    if (!statusOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (statusRef.current && !statusRef.current.contains(e.target as Node)) setStatusOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [statusOpen]);
   const children = node.children || [];
   const isAuto = node.source === 'auto';
   const entityType = node.type + 's'; // themes, initiatives, epics, stories
@@ -540,13 +569,55 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
         )}
 
         {node.status && (
-          <span style={{
-            fontSize: 11, padding: '1px 6px', borderRadius: 4,
-            backgroundColor: (STATUS_COLORS[node.status] || '#666') + '20',
-            color: STATUS_COLORS[node.status] || '#666',
-          }}>
-            {(node.status || '').replace(/_/g, ' ')}
-          </span>
+          <div ref={statusRef} style={{ position: 'relative', flexShrink: 0 }}>
+            <span
+              onClick={(e) => { e.stopPropagation(); setStatusOpen(!statusOpen); }}
+              style={{
+                fontSize: 11, padding: '1px 6px', borderRadius: 4, cursor: 'pointer',
+                backgroundColor: (STATUS_COLORS[node.status] || '#666') + '20',
+                color: STATUS_COLORS[node.status] || '#666',
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+            >
+              {(node.status || '').replace(/_/g, ' ')}
+            </span>
+            {statusOpen && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, zIndex: 100, marginTop: 4,
+                backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: 6, overflow: 'hidden', minWidth: 120,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              }}>
+                {(NODE_STATUS_OPTIONS[node.type] || []).map((s) => (
+                  <div
+                    key={s}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (s !== node.status) onNodeUpdate?.(node, 'status', s);
+                      setStatusOpen(false);
+                    }}
+                    style={{
+                      padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      color: s === node.status ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      fontWeight: s === node.status ? 600 : 400,
+                      transition: 'background-color 0.1s',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    <span style={{
+                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                      backgroundColor: STATUS_COLORS[s] || '#666',
+                    }} />
+                    {s.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -554,7 +625,7 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
         <>
           {children.map((child: any) => (
             child.type ? (
-              <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} onTaskUpdate={onTaskUpdate} onTaskRemove={onTaskRemove} onTaskAdd={onTaskAdd} />
+              <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} onNodeUpdate={onNodeUpdate} onTaskUpdate={onTaskUpdate} onTaskRemove={onTaskRemove} onTaskAdd={onTaskAdd} />
             ) : (
               <TaskLeaf key={child.id} task={child} depth={depth + 1} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onUpdate={onTaskUpdate} onRemove={onTaskRemove} />
             )
