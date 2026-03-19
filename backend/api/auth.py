@@ -189,7 +189,7 @@ async def create_team(body: TeamCreate, user: CurrentUser = Depends(get_current_
             "user_id": user.id,
             "team_id": team_id,
             "role": "owner",
-        })
+        }, auto_id=False)
 
     return {"team": {"id": team_id, "name": body.name, "role": "owner"}}
 
@@ -257,7 +257,7 @@ async def invite_member(
             "user_id": invitee["id"],
             "team_id": team_id,
             "role": body.role,
-        })
+        }, auto_id=False)
 
     return {"message": f"Invited {body.email} as {body.role}"}
 

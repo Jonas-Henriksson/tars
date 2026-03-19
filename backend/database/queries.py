@@ -13,6 +13,14 @@ def generate_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
+# Tables that may not have created_at/updated_at columns
+# Tables that don't have standard created_at/updated_at columns
+_TABLES_WITHOUT_TIMESTAMPS = {"team_members", "telegram_users", "api_keys", "schema_version", "audit_log"}
+
+# Tables that only have created_at (no updated_at)
+_TABLES_CREATED_ONLY = {"messages"}
+
+
 def now_iso() -> str:
     """Current UTC timestamp in ISO format."""
     return datetime.now(timezone.utc).isoformat()
@@ -28,14 +36,20 @@ def insert_row(
     data: dict[str, Any],
     *,
     id_field: str = "id",
+    auto_id: bool = True,
 ) -> dict[str, Any]:
-    """Insert a row and return it as a dict."""
-    if id_field not in data:
+    """Insert a row and return it as a dict.
+
+    Args:
+        auto_id: If True (default), auto-generate an ID if missing.
+                 Set to False for tables with composite keys (e.g. team_members).
+    """
+    if auto_id and id_field not in data:
         data[id_field] = generate_id()
-    if "created_at" not in data:
-        data["created_at"] = now_iso()
-    if "updated_at" not in data:
-        data["updated_at"] = now_iso()
+    if table not in _TABLES_WITHOUT_TIMESTAMPS:
+        data.setdefault("created_at", now_iso())
+        if table not in _TABLES_CREATED_ONLY:
+            data.setdefault("updated_at", now_iso())
 
     # Serialize lists/dicts to JSON strings
     serialized = {}

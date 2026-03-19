@@ -201,7 +201,7 @@ def _migration_v2(cur: sqlite3.Cursor) -> None:
     cur.execute("""
         CREATE TABLE IF NOT EXISTS smart_tasks (
             id TEXT PRIMARY KEY,
-            team_id TEXT REFERENCES teams(id) ON DELETE CASCADE,
+            team_id TEXT DEFAULT NULL REFERENCES teams(id) ON DELETE CASCADE,
             description TEXT NOT NULL,
             owner TEXT DEFAULT '',
             status TEXT DEFAULT 'open' CHECK(status IN ('open', 'done')),
@@ -223,7 +223,7 @@ def _migration_v2(cur: sqlite3.Cursor) -> None:
     cur.execute("""
         CREATE TABLE IF NOT EXISTS decisions (
             id TEXT PRIMARY KEY,
-            team_id TEXT REFERENCES teams(id) ON DELETE CASCADE,
+            team_id TEXT DEFAULT NULL REFERENCES teams(id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             rationale TEXT DEFAULT '',
             decided_by TEXT DEFAULT '',
@@ -243,7 +243,7 @@ def _migration_v2(cur: sqlite3.Cursor) -> None:
     cur.execute("""
         CREATE TABLE IF NOT EXISTS initiatives (
             id TEXT PRIMARY KEY,
-            team_id TEXT REFERENCES teams(id) ON DELETE CASCADE,
+            team_id TEXT DEFAULT NULL REFERENCES teams(id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             description TEXT DEFAULT '',
             owner TEXT DEFAULT '',
@@ -280,8 +280,8 @@ def _migration_v2(cur: sqlite3.Cursor) -> None:
     cur.execute("""
         CREATE TABLE IF NOT EXISTS epics (
             id TEXT PRIMARY KEY,
-            team_id TEXT REFERENCES teams(id) ON DELETE CASCADE,
-            initiative_id TEXT DEFAULT '' REFERENCES initiatives(id) ON DELETE SET NULL,
+            team_id TEXT DEFAULT NULL REFERENCES teams(id) ON DELETE CASCADE,
+            initiative_id TEXT DEFAULT NULL REFERENCES initiatives(id) ON DELETE SET NULL,
             title TEXT NOT NULL,
             description TEXT DEFAULT '',
             owner TEXT DEFAULT '',
@@ -322,7 +322,7 @@ def _migration_v2(cur: sqlite3.Cursor) -> None:
     cur.execute("""
         CREATE TABLE IF NOT EXISTS people (
             id TEXT PRIMARY KEY,
-            team_id TEXT REFERENCES teams(id) ON DELETE CASCADE,
+            team_id TEXT DEFAULT NULL REFERENCES teams(id) ON DELETE CASCADE,
             name TEXT NOT NULL,
             role TEXT DEFAULT '',
             relationship TEXT DEFAULT '',
