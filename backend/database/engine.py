@@ -127,6 +127,8 @@ def _migration_v1(cur: sqlite3.Cursor) -> None:
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_conversations_team ON conversations(team_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user_active ON conversations(user_id, is_archived)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(updated_at)")
 
     # Messages
     cur.execute("""
@@ -144,6 +146,7 @@ def _migration_v1(cur: sqlite3.Cursor) -> None:
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at)")
 
     # Memory — key-value store with user/team scoping
     cur.execute("""

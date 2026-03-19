@@ -161,6 +161,7 @@ async def run_streaming(
                     result = await registry.execute(
                         block.name, block.input,
                         user_id=user_id,
+                        team_id=team_id,
                     )
 
                     yield {
