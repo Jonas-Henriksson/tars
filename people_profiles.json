@@ -1,0 +1,107 @@
+{
+  "Jonas": {
+    "role": "Chief of Staff",
+    "relationship": "report",
+    "organization": "Executive Office",
+    "email": "jonas@company.com",
+    "notes": ""
+  },
+  "Stefan": {
+    "role": "Head of Data & AI",
+    "relationship": "stakeholder",
+    "organization": "Technology",
+    "email": "stefan@company.com",
+    "notes": ""
+  },
+  "Amanda": {
+    "role": "VP Supply Chain",
+    "relationship": "report",
+    "organization": "Operations",
+    "email": "amanda@company.com",
+    "notes": ""
+  },
+  "Rodrigo": {
+    "role": "Forecast Manager",
+    "relationship": "stakeholder",
+    "organization": "Operations",
+    "email": "rodrigo@company.com",
+    "notes": ""
+  },
+  "Tim": {
+    "role": "BI & Analytics Lead",
+    "relationship": "stakeholder",
+    "organization": "Technology",
+    "email": "tim@company.com",
+    "notes": ""
+  },
+  "Oliver": {
+    "role": "GSO Program Manager",
+    "relationship": "manager",
+    "organization": "Strategy",
+    "email": "oliver@company.com",
+    "notes": ""
+  },
+  "Karin": {
+    "role": "Logistics Director",
+    "relationship": "stakeholder",
+    "organization": "Operations",
+    "email": "karin@company.com",
+    "notes": ""
+  },
+  "Henrik": {
+    "role": "Planning Office Lead",
+    "relationship": "colleague",
+    "organization": "Strategy",
+    "email": "henrik@company.com",
+    "notes": ""
+  },
+  "Marco": {
+    "role": "Finance Controller",
+    "relationship": "manager",
+    "organization": "Finance",
+    "email": "marco@company.com",
+    "notes": ""
+  },
+  "Belinda": {
+    "role": "HR Business Partner",
+    "relationship": "manager",
+    "organization": "HR",
+    "email": "belinda@company.com",
+    "notes": ""
+  },
+  "Erik": {
+    "role": "Solutions Architect",
+    "relationship": "colleague",
+    "organization": "Technology",
+    "email": "erik@company.com",
+    "notes": ""
+  },
+  "Matthias": {
+    "role": "VP Operations",
+    "relationship": "colleague",
+    "organization": "Operations",
+    "email": "matthias@company.com",
+    "notes": ""
+  },
+  "Sievo": {
+    "role": "Procurement Lead",
+    "relationship": "manager",
+    "organization": "Procurement",
+    "email": "sievo@company.com",
+    "notes": ""
+  },
+  "Harald": {
+    "role": "Regional Head EMEA",
+    "relationship": "stakeholder",
+    "organization": "Operations",
+    "email": "harald@company.com",
+    "notes": ""
+  },
+  "Manuela": {
+    "role": "Change Management Lead",
+    "relationship": "colleague",
+    "organization": "HR",
+    "email": "manuela@company.com",
+    "notes": ""
+  }
+}
