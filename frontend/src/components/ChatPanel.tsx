@@ -63,7 +63,21 @@ export default function ChatPanel() {
       }
     };
 
-    ws.onclose = () => { wsRef.current = null; };
+    ws.onclose = () => {
+      wsRef.current = null;
+      // Auto-reconnect after 3 seconds
+      setTimeout(() => {
+        if (!wsRef.current) {
+          const newWs = createChatWebSocket();
+          newWs.onopen = ws.onopen;
+          newWs.onmessage = ws.onmessage;
+          newWs.onclose = ws.onclose;
+          newWs.onerror = ws.onerror;
+        }
+      }, 3000);
+    };
+
+    ws.onerror = () => { wsRef.current = null; };
 
     return () => { ws.close(); };
   }, []);

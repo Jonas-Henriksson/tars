@@ -17,7 +17,7 @@ from backend.auth.middleware import CurrentUser, get_current_user
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api", tags=["data"])
+router = APIRouter(prefix="/api", tags=["data"], dependencies=[Depends(get_current_user)])
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +160,7 @@ class PersonUpdate(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.get("/intel")
-async def get_intel(user: CurrentUser = Depends(get_current_user)):
+async def get_intel():
     from integrations.intel import get_intel as _get
     return JSONResponse(_get())
 
