@@ -2426,9 +2426,12 @@ function PortfolioView() {
 
   if (loading) return <LoadingState />;
 
-  // Sort by total workload descending — busiest people first
-  const members = Object.entries(portfolio)
+  // Sort by total workload descending — busiest people first, hide zero-workload entries
+  const allMembers = Object.entries(portfolio);
+  const members = allMembers
+    .filter(([, data]) => (data.workload?.total_items || 0) > 0)
     .sort(([, a], [, b]) => (b.workload?.total_items || 0) - (a.workload?.total_items || 0));
+  const hiddenCount = allMembers.length - members.length;
 
   const wl = selected?.data?.workload || {};
   const isSelectedOverloaded = (wl.total_items || 0) >= 7;
@@ -2471,9 +2474,15 @@ function PortfolioView() {
 
   return (
     <>
+      {members.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+          <span>{members.length} member{members.length !== 1 ? 's' : ''} with active work</span>
+          {hiddenCount > 0 && <span>{hiddenCount} with no assigned items</span>}
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
         {members.length === 0 ? (
-          <EmptyState message="No portfolio data. Run a Notion scan first." />
+          <EmptyState message={allMembers.length > 0 ? `${allMembers.length} team members found but none have assigned epics, stories, or tasks. Assign owners in the Hierarchy tab.` : 'No portfolio data. Run a Notion scan first.'} />
         ) : (
           members.map(([name, data]: [string, any]) => {
             const w = data.workload || {};
