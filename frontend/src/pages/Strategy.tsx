@@ -536,6 +536,33 @@ function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', onApprove, onDismi
   onDismiss: (type: string, id: string) => void;
 }) {
   const isAuto = task.source === 'auto';
+  const [editingField, setEditingField] = useState<'description' | 'owner' | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (editingField && inputRef.current) inputRef.current.focus();
+  }, [editingField]);
+
+  const startEdit = (field: 'description' | 'owner') => {
+    setEditingField(field);
+    setEditValue(field === 'description' ? (task.description || '') : (task.owner || ''));
+  };
+
+  const saveEdit = () => {
+    if (!editingField) return;
+    const val = editValue.trim();
+    if (val && val !== (editingField === 'description' ? task.description : task.owner)) {
+      task[editingField] = val;
+      api.patch<any>(`/api/intel/tasks/${task.id}`, { [editingField]: val }).catch(() => {});
+    }
+    setEditingField(null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') saveEdit();
+    if (e.key === 'Escape') setEditingField(null);
+  };
 
   return (
     <div style={{
@@ -547,9 +574,51 @@ function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', onApprove, onDismi
       fontSize: 12,
     }}>
       <Circle size={8} style={{ flexShrink: 0, color: borderColor }} />
-      <span style={{ flex: 1 }}>{task.description || '(no description)'}</span>
-      {task.owner && task.owner !== 'Me' && (
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{task.owner}</span>
+      {editingField === 'description' ? (
+        <input
+          ref={inputRef}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={saveEdit}
+          onKeyDown={handleKeyDown}
+          style={{
+            flex: 1, fontSize: 12, padding: '2px 6px', border: '1px solid var(--accent)',
+            borderRadius: 4, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)',
+            outline: 'none',
+          }}
+        />
+      ) : (
+        <span
+          onClick={() => startEdit('description')}
+          style={{ flex: 1, cursor: 'text', borderRadius: 4, padding: '1px 4px', transition: 'background-color 0.1s' }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        >
+          {task.description || '(no description)'}
+        </span>
+      )}
+      {editingField === 'owner' ? (
+        <input
+          ref={inputRef}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={saveEdit}
+          onKeyDown={handleKeyDown}
+          style={{
+            width: 80, fontSize: 11, padding: '2px 6px', border: '1px solid var(--accent)',
+            borderRadius: 4, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)',
+            outline: 'none', textAlign: 'right',
+          }}
+        />
+      ) : (
+        <span
+          onClick={() => startEdit('owner')}
+          style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'text', borderRadius: 4, padding: '1px 4px', transition: 'background-color 0.1s', minWidth: 30 }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        >
+          {task.owner || '—'}
+        </span>
       )}
       {isAuto && (
         <>
