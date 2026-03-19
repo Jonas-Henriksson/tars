@@ -275,16 +275,21 @@ function HierarchyView() {
     setTree((prev) => updateNodeInTree(prev, id, (n) => ({ ...n, source: 'confirmed' })));
     setOperational((prev) => prev.map((t) => t.id === id ? { ...t, source: 'confirmed' } : t));
     setUnclassified((prev) => prev.map((t) => t.id === id ? { ...t, source: 'confirmed' } : t));
-    api.post(`/api/approve/${type}/${id}`, {}).catch(() => loadHierarchy());
-  }, [updateNodeInTree, loadHierarchy]);
+    api.post(`/api/approve/${type}/${id}`, {}).catch((err) => {
+      console.error('Approve failed:', err);
+      // Don't reload — keep the optimistic update so the UI doesn't flicker
+    });
+  }, [updateNodeInTree]);
 
   const handleDismiss = useCallback((type: string, id: string) => {
     // Optimistic: remove from tree locally
     setTree((prev) => removeNodeFromTree(prev, id));
     setOperational((prev) => prev.filter((t) => t.id !== id));
     setUnclassified((prev) => prev.filter((t) => t.id !== id));
-    api.post(`/api/dismiss/${type}/${id}`, {}).catch(() => loadHierarchy());
-  }, [removeNodeFromTree, loadHierarchy]);
+    api.post(`/api/dismiss/${type}/${id}`, {}).catch((err) => {
+      console.error('Dismiss failed:', err);
+    });
+  }, [removeNodeFromTree]);
 
   // Task-level updates
   const handleTaskUpdate = useCallback((taskId: string, updates: Record<string, any>) => {
@@ -499,20 +504,24 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
   const isAuto = node.source === 'auto';
   const entityType = node.type + 's'; // themes, initiatives, epics, stories
 
+  const [rowHovered, setRowHovered] = useState(false);
+
   return (
     <div>
       <div
         onClick={() => onNodeClick?.(node)}
+        onMouseEnter={() => setRowHovered(true)}
+        onMouseLeave={() => setRowHovered(false)}
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '6px 8px', paddingLeft: depth * 20 + 8,
           borderLeft: `3px ${isAuto ? 'dashed' : 'solid'} ${TYPE_COLORS[node.type] || '#666'}`,
-          backgroundColor: 'var(--bg-card)',
+          backgroundColor: rowHovered ? 'var(--bg-hover)' : 'var(--bg-card)',
           borderRadius: 'var(--radius)',
           marginBottom: 1,
           color: isAuto ? 'var(--text-muted)' : 'var(--text-primary)',
           cursor: 'pointer',
-          transition: 'all 0.15s',
+          transition: 'background-color 0.1s',
         }}
       >
         <span
@@ -526,14 +535,22 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
 
         <span style={{
           fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
-          color: TYPE_COLORS[node.type] || '#666', minWidth: 60,
+          color: TYPE_COLORS[node.type] || '#666', minWidth: 60, flexShrink: 0,
         }}>
           {TYPE_LABELS[node.type] || node.type}
         </span>
 
-        <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>
+        <span style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>
           {node.title || node.description || '(untitled)'}
         </span>
+
+        {/* Dotted leader line connecting title to right-side badges */}
+        <span style={{
+          flex: 1, minWidth: 20,
+          borderBottom: '1px dotted var(--border)',
+          marginBottom: 2, opacity: rowHovered ? 0.6 : 0.25,
+          transition: 'opacity 0.15s',
+        }} />
 
         {isAuto && (
           <>
