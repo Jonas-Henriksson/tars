@@ -6,7 +6,7 @@ import { useStore } from '../store';
 import { getTheme } from '../themes';
 import { api } from '../api/client';
 import { Target, Scale, Users, BarChart3, CheckCircle2, Circle, GitBranch, Check, X, Sparkles, ChevronRight, ChevronDown, Plus, Pencil, Trash2, Undo2, Search, Link2, AlertTriangle } from 'lucide-react';
-import DetailPanel from '../components/DetailPanel';
+import DetailPanel, { ProgressiveDatePicker } from '../components/DetailPanel';
 import type { DetailField } from '../components/DetailPanel';
 
 type TabId = 'hierarchy' | 'health' | 'decisions' | 'portfolio' | 'review';
@@ -2641,6 +2641,8 @@ function PortfolioView() {
   const [discardedNeedsEpic, setDiscardedNeedsEpic] = useState<Set<string>>(new Set());
   const [initiativePickerOpen, setInitiativePickerOpen] = useState(false);
   const [initiativeSearch, setInitiativeSearch] = useState('');
+  const [epicPickerOpen, setEpicPickerOpen] = useState(false);
+  const [epicSearchDetail, setEpicSearchDetail] = useState('');
 
   if (loading) return <LoadingState />;
 
@@ -2663,6 +2665,8 @@ function PortfolioView() {
     if (isGroup) groups.push([name, data]);
     else people.push([name, data]);
   }
+
+  const memberNames = people.map(([name]) => name).sort();
 
   // Group people by severity for display
   const blockedPeople = people.filter(([, d]) => (d.workload?.blocked || 0) > 0);
@@ -2880,7 +2884,7 @@ function PortfolioView() {
       {selected && (
         <>
           <div
-            onClick={() => { setSelected(null); setEpicPickerTask(null); setEpicSearch(''); setEditingTaskId(null); setStatusPickerTaskId(null); setLocalTaskUpdates({}); setRemovedTaskIds(new Set()); setTasksExpanded(false); setOpsExpanded(false); setEditingNeedsEpicId(null); setDiscardedNeedsEpic(new Set()); setDetailItem(null); setInitiativePickerOpen(false); }}
+            onClick={() => { setSelected(null); setEpicPickerTask(null); setEpicSearch(''); setEditingTaskId(null); setStatusPickerTaskId(null); setLocalTaskUpdates({}); setRemovedTaskIds(new Set()); setTasksExpanded(false); setOpsExpanded(false); setEditingNeedsEpicId(null); setDiscardedNeedsEpic(new Set()); setDetailItem(null); setInitiativePickerOpen(false); setEpicPickerOpen(false); }}
             style={{
               position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)',
               zIndex: 999, animation: 'fadeIn 0.15s ease',
@@ -2916,7 +2920,7 @@ function PortfolioView() {
                   </div>
                 </div>
                 <button
-                  onClick={() => { setSelected(null); setEpicPickerTask(null); setEpicSearch(''); setEditingTaskId(null); setStatusPickerTaskId(null); setLocalTaskUpdates({}); setRemovedTaskIds(new Set()); setTasksExpanded(false); setOpsExpanded(false); setEditingNeedsEpicId(null); setDiscardedNeedsEpic(new Set()); setDetailItem(null); setInitiativePickerOpen(false); }}
+                  onClick={() => { setSelected(null); setEpicPickerTask(null); setEpicSearch(''); setEditingTaskId(null); setStatusPickerTaskId(null); setLocalTaskUpdates({}); setRemovedTaskIds(new Set()); setTasksExpanded(false); setOpsExpanded(false); setEditingNeedsEpicId(null); setDiscardedNeedsEpic(new Set()); setDetailItem(null); setInitiativePickerOpen(false); setEpicPickerOpen(false); }}
                   style={{ padding: 8, border: 'none', borderRadius: 'var(--radius)', backgroundColor: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                   title="Close"
                 >
@@ -3495,7 +3499,7 @@ function PortfolioView() {
             {/* Detail panel for editing epics/stories from portfolio */}
             <DetailPanel
               open={!!detailItem}
-              onClose={() => { setDetailItem(null); setInitiativePickerOpen(false); setInitiativeSearch(''); }}
+              onClose={() => { setDetailItem(null); setInitiativePickerOpen(false); setInitiativeSearch(''); setEpicPickerOpen(false); setEpicSearchDetail(''); }}
               title={detailItem?.node?.title || ''}
               subtitle={detailItem ? `${detailItem.type === 'epic' ? 'Epic' : 'Story'}${detailItem.node?.owner ? ` · ${detailItem.node.owner}` : ''}` : undefined}
               subtitleColor={detailItem ? TYPE_COLORS[detailItem.type] : undefined}
@@ -3513,6 +3517,29 @@ function PortfolioView() {
                 setDetailItem(prev => prev ? { ...prev, node: { ...prev.node, [key]: value } } : null);
               }}
             >
+              {/* Owner field — dropdown with free-text */}
+              {detailItem && <OwnerCombobox
+                value={detailItem.node.owner || ''}
+                memberNames={memberNames}
+                onChange={(v) => {
+                  const endpoint = detailItem.type === 'epic' ? '/api/epics' : '/api/stories';
+                  api.patch<any>(`${endpoint}/${detailItem.node.id}`, { owner: v }).catch(() => {});
+                  setDetailItem(prev => prev ? { ...prev, node: { ...prev.node, owner: v } } : null);
+                }}
+              />}
+
+              {/* Quarter field — progressive date picker */}
+              {detailItem && detailItem.type === 'epic' && (
+                <ProgressiveDatePicker
+                  label="Quarter"
+                  value={detailItem.node.quarter || ''}
+                  onChange={(v) => {
+                    api.patch<any>(`/api/epics/${detailItem.node.id}`, { quarter: v }).catch(() => {});
+                    setDetailItem(prev => prev ? { ...prev, node: { ...prev.node, quarter: v } } : null);
+                  }}
+                />
+              )}
+
               {/* Initiative linking for epics */}
               {detailItem && detailItem.type === 'epic' && (
                 <div style={{ marginBottom: 16 }}>
@@ -3622,6 +3649,9 @@ function PortfolioView() {
                 const { path, targetNode } = findFullBranch(hierTree, detailItem.node.id);
                 if (path.length === 0) return null;
                 const descendants = targetNode ? collectDescendants(targetNode, path.length) : [];
+                // Determine which ancestor is the re-linkable parent
+                // For stories → parent epic is re-linkable; for epics → parent initiative (handled separately above)
+                const relinkableType = detailItem.type === 'story' ? 'epic' : null;
                 return (
                   <div style={{
                     padding: '12px 0', marginTop: 8, borderTop: '1px solid var(--border)',
@@ -3634,6 +3664,7 @@ function PortfolioView() {
                       {path.map((ancestor, i) => {
                         const isCurrent = ancestor.id === detailItem.node.id;
                         const typeColor = TYPE_COLORS[ancestor.type] || '#666';
+                        const isRelinkable = !isCurrent && ancestor.type === relinkableType;
                         return (
                           <div key={ancestor.id} style={{
                             display: 'flex', alignItems: 'center', gap: 6,
@@ -3655,9 +3686,26 @@ function PortfolioView() {
                               color: isCurrent ? 'var(--text-primary)' : 'var(--text-secondary)',
                               fontWeight: isCurrent ? 600 : 400,
                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              flex: 1,
                             }}>
                               {ancestor.title || ancestor.description || '(untitled)'}
                             </span>
+                            {isRelinkable && (
+                              <button
+                                onClick={() => { setEpicPickerOpen(!epicPickerOpen); setEpicSearchDetail(''); }}
+                                title="Change epic"
+                                style={{
+                                  border: 'none', background: 'none', cursor: 'pointer',
+                                  color: epicPickerOpen ? 'var(--accent)' : 'var(--text-muted)',
+                                  padding: 1, borderRadius: 4, display: 'flex', alignItems: 'center',
+                                  transition: 'color 0.1s', flexShrink: 0,
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+                                onMouseLeave={(e) => { if (!epicPickerOpen) e.currentTarget.style.color = 'var(--text-muted)'; }}
+                              >
+                                <Link2 size={11} />
+                              </button>
+                            )}
                           </div>
                         );
                       })}
@@ -3687,6 +3735,79 @@ function PortfolioView() {
                         );
                       })}
                     </div>
+
+                    {/* Epic re-link picker for stories */}
+                    {epicPickerOpen && detailItem.type === 'story' && (
+                      <div style={{
+                        marginTop: 8, border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+                        backgroundColor: 'var(--bg-secondary)', overflow: 'hidden',
+                      }}>
+                        <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Search size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                          <input
+                            autoFocus
+                            value={epicSearchDetail}
+                            onChange={(e) => setEpicSearchDetail(e.target.value)}
+                            placeholder="Search epics..."
+                            style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontSize: 12, color: 'var(--text-primary)' }}
+                          />
+                        </div>
+                        <div style={{ maxHeight: 240, overflowY: 'auto', padding: 4 }}>
+                          {hierTree.map((theme: any) => {
+                            const inits = (theme.children || []).filter((c: any) => c.type === 'initiative');
+                            let hasMatch = false;
+                            const initElements = inits.map((init: any) => {
+                              const epics = (init.children || []).filter((c: any) => c.type === 'epic');
+                              const matchingEpics = epics.filter((ep: any) =>
+                                !epicSearchDetail || (ep.title || '').toLowerCase().includes(epicSearchDetail.toLowerCase())
+                                || (init.title || '').toLowerCase().includes(epicSearchDetail.toLowerCase())
+                                || (theme.title || '').toLowerCase().includes(epicSearchDetail.toLowerCase())
+                              );
+                              if (matchingEpics.length === 0) return null;
+                              hasMatch = true;
+                              return (
+                                <div key={init.id}>
+                                  <div style={{ padding: '2px 6px', paddingLeft: 14, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: TYPE_COLORS.initiative, minWidth: 28 }}>INIT</span>
+                                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{init.title}</span>
+                                  </div>
+                                  {matchingEpics.map((ep: any) => (
+                                    <div
+                                      key={ep.id}
+                                      onClick={() => {
+                                        api.patch<any>(`/api/stories/${detailItem.node.id}`, { epic_id: ep.id, epic_title: ep.title }).catch(() => {});
+                                        setDetailItem(prev => prev ? { ...prev, node: { ...prev.node, epic_id: ep.id, epic_title: ep.title } } : null);
+                                        setEpicPickerOpen(false);
+                                        setEpicSearchDetail('');
+                                      }}
+                                      style={{
+                                        padding: '4px 6px', paddingLeft: 28, display: 'flex', alignItems: 'center', gap: 4,
+                                        cursor: 'pointer', borderRadius: 4, transition: 'background-color 0.1s',
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    >
+                                      <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: TYPE_COLORS.epic, minWidth: 28 }}>EPIC</span>
+                                      <span style={{ fontSize: 11, color: 'var(--text-primary)', flex: 1 }}>{ep.title}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            });
+                            if (!hasMatch) return null;
+                            return (
+                              <div key={theme.id}>
+                                <div style={{ padding: '3px 6px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: TYPE_COLORS.theme, minWidth: 28 }}>THEM</span>
+                                  <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{theme.title}</span>
+                                </div>
+                                {initElements}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -3731,20 +3852,150 @@ function collectDescendants(node: any, depth: number): { node: any; depth: numbe
   return result;
 }
 
+/** Owner combobox — dropdown of members + free-text input */
+function OwnerCombobox({ value, memberNames, onChange }: {
+  value: string;
+  memberNames: string[];
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [customMode, setCustomMode] = useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    function close(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setCustomMode(false); setSearch(''); }
+    }
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  React.useEffect(() => {
+    if (customMode && inputRef.current) inputRef.current.focus();
+  }, [customMode]);
+
+  const filtered = memberNames.filter(n =>
+    !search || n.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div ref={ref} style={{ position: 'relative', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+        <Users size={14} style={{ color: 'var(--text-muted)' }} />
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Owner</span>
+      </div>
+      <div
+        onClick={() => setOpen(!open)}
+        style={{
+          fontSize: 14, color: value ? 'var(--text-primary)' : 'var(--text-muted)',
+          cursor: 'pointer', padding: '6px 10px',
+          borderRadius: 'var(--radius)', border: '1px solid transparent',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          transition: 'border-color 0.1s, background-color 0.1s',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = 'var(--border)';
+          e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+        }}
+        onMouseLeave={(e) => {
+          if (!open) {
+            e.currentTarget.style.borderColor = 'transparent';
+            e.currentTarget.style.backgroundColor = 'transparent';
+          }
+        }}
+      >
+        <span>{value || '—'}</span>
+        <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
+      </div>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, marginTop: 4,
+          backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)', boxShadow: 'var(--shadow-lg)',
+          overflow: 'hidden', maxHeight: 260,
+        }}>
+          {/* Search */}
+          <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Search size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+            <input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search or type name..."
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && search.trim()) {
+                  onChange(search.trim());
+                  setOpen(false);
+                  setSearch('');
+                }
+              }}
+              style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontSize: 12, color: 'var(--text-primary)' }}
+            />
+          </div>
+          <div style={{ overflowY: 'auto', maxHeight: 200 }}>
+            {/* Not set option */}
+            <div
+              onClick={() => { onChange(''); setOpen(false); setSearch(''); }}
+              style={{
+                padding: '6px 12px', fontSize: 13, color: 'var(--text-muted)', cursor: 'pointer',
+                fontStyle: 'italic', transition: 'background-color 0.1s',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              Not set
+            </div>
+            {filtered.map(name => (
+              <div
+                key={name}
+                onClick={() => { onChange(name); setOpen(false); setSearch(''); }}
+                style={{
+                  padding: '6px 12px', fontSize: 13, color: 'var(--text-primary)', cursor: 'pointer',
+                  fontWeight: name === value ? 600 : 400,
+                  backgroundColor: name === value ? 'var(--bg-hover)' : 'transparent',
+                  transition: 'background-color 0.1s',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = name === value ? 'var(--bg-hover)' : 'transparent'}
+              >
+                {name}
+              </div>
+            ))}
+            {/* Free text hint if search doesn't match */}
+            {search && !filtered.some(n => n.toLowerCase() === search.toLowerCase()) && (
+              <div
+                onClick={() => { onChange(search.trim()); setOpen(false); setSearch(''); }}
+                style={{
+                  padding: '6px 12px', fontSize: 12, color: 'var(--accent)', cursor: 'pointer',
+                  borderTop: '1px solid var(--border)', transition: 'background-color 0.1s',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                Set to "{search.trim()}"
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Get fields for detail panel based on item type */
 function getPortfolioDetailFields(node: any, type: 'epic' | 'story'): DetailField[] {
   if (type === 'epic') return [
     { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'in_progress', 'done', 'cancelled'] },
     { key: 'priority', label: 'Priority', value: node.priority || 'high', type: 'select', options: ['high', 'medium', 'low'] },
-    { key: 'quarter', label: 'Quarter', value: node.quarter || '', type: 'text' },
     { key: 'story_count', label: 'Stories', value: String(node.story_count || 0), type: 'readonly' },
   ];
   return [
     { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'in_progress', 'ready', 'in_review', 'done', 'blocked'] },
     { key: 'priority', label: 'Priority', value: node.priority || 'medium', type: 'select', options: ['high', 'medium', 'low'] },
     { key: 'size', label: 'Size', value: node.size || 'M', type: 'select', options: ['XS', 'S', 'M', 'L', 'XL'] },
-    ...(node.epic_title ? [{ key: 'epic_title', label: 'Epic', value: node.epic_title, type: 'readonly' as const }] : []),
-    ...(node.owner ? [{ key: 'owner', label: 'Owner', value: node.owner, type: 'readonly' as const }] : []),
   ];
 }
 

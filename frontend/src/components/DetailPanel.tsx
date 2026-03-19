@@ -778,3 +778,302 @@ const dangerBtnStyle: React.CSSProperties = {
   backgroundColor: 'var(--danger)', color: '#fff', fontSize: 13,
   fontWeight: 500, cursor: 'pointer',
 };
+
+/**
+ * Progressive date picker: Year → Quarter → Month → Day.
+ * User can stop at any level (e.g. "2026", "Q1 2026", "Jan 2026", "2026-01-15").
+ */
+export function ProgressiveDatePicker({ value, onChange, label }: {
+  value: string;
+  onChange: (v: string) => void;
+  label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [level, setLevel] = useState<'year' | 'quarter' | 'month' | 'day'>('year');
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [selectedQuarter, setSelectedQuarter] = useState<number | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function close(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const currentYear = new Date().getFullYear();
+  const years = [currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
+  const quarters = [1, 2, 3, 4];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  const openPicker = () => {
+    setLevel('year');
+    setSelectedYear(null);
+    setSelectedQuarter(null);
+    setSelectedMonth(null);
+    setOpen(true);
+  };
+
+  const selectYear = (y: number) => {
+    setSelectedYear(y);
+    setLevel('quarter');
+  };
+
+  const confirmYear = (y: number) => {
+    onChange(String(y));
+    setOpen(false);
+  };
+
+  const selectQuarter = (q: number) => {
+    setSelectedQuarter(q);
+    setLevel('month');
+  };
+
+  const confirmQuarter = (q: number) => {
+    onChange(`Q${q} ${selectedYear}`);
+    setOpen(false);
+  };
+
+  const selectMonth = (mIdx: number) => {
+    setSelectedMonth(mIdx);
+    setLevel('day');
+  };
+
+  const confirmMonth = (mIdx: number) => {
+    onChange(`${months[mIdx]} ${selectedYear}`);
+    setOpen(false);
+  };
+
+  const confirmDay = (day: number) => {
+    const m = (selectedMonth! + 1).toString().padStart(2, '0');
+    const d = day.toString().padStart(2, '0');
+    onChange(`${selectedYear}-${m}-${d}`);
+    setOpen(false);
+  };
+
+  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+
+  const quarterMonthRange = selectedQuarter ? [(selectedQuarter - 1) * 3, (selectedQuarter - 1) * 3 + 1, (selectedQuarter - 1) * 3 + 2] : [];
+
+  const cellStyle: React.CSSProperties = {
+    padding: '6px 8px', borderRadius: 4, cursor: 'pointer',
+    fontSize: 12, textAlign: 'center', transition: 'background-color 0.1s',
+    color: 'var(--text-primary)',
+  };
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+        <Calendar size={14} style={{ color: 'var(--text-muted)' }} />
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{label || 'Quarter'}</span>
+      </div>
+      <div
+        onClick={openPicker}
+        style={{
+          fontSize: 14, color: value ? 'var(--text-primary)' : 'var(--text-muted)',
+          cursor: 'pointer', padding: '6px 10px',
+          borderRadius: 'var(--radius)', border: '1px solid transparent',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          transition: 'border-color 0.1s, background-color 0.1s',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = 'var(--border)';
+          e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+        }}
+        onMouseLeave={(e) => {
+          if (!open) {
+            e.currentTarget.style.borderColor = 'transparent';
+            e.currentTarget.style.backgroundColor = 'transparent';
+          }
+        }}
+      >
+        <span>{value || '—'}</span>
+        <Calendar size={14} style={{ color: 'var(--text-muted)' }} />
+      </div>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, marginTop: 4,
+          backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)', boxShadow: 'var(--shadow-lg)',
+          overflow: 'hidden',
+        }}>
+          {/* Breadcrumb navigation */}
+          <div style={{
+            padding: '6px 10px', borderBottom: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)',
+          }}>
+            {selectedYear && (
+              <>
+                <span
+                  onClick={() => { setLevel('year'); setSelectedYear(null); setSelectedQuarter(null); setSelectedMonth(null); }}
+                  style={{ cursor: 'pointer', color: 'var(--accent)' }}
+                >Year</span>
+                <ChevronRight size={10} />
+              </>
+            )}
+            {selectedYear && level !== 'year' && (
+              <>
+                <span
+                  onClick={() => { setLevel('quarter'); setSelectedQuarter(null); setSelectedMonth(null); }}
+                  style={{ cursor: 'pointer', color: selectedQuarter ? 'var(--accent)' : 'var(--text-primary)', fontWeight: !selectedQuarter ? 600 : 400 }}
+                >{selectedYear}</span>
+              </>
+            )}
+            {selectedQuarter && (
+              <>
+                <ChevronRight size={10} />
+                <span
+                  onClick={() => { setLevel('month'); setSelectedMonth(null); }}
+                  style={{ cursor: 'pointer', color: selectedMonth !== null ? 'var(--accent)' : 'var(--text-primary)', fontWeight: selectedMonth === null ? 600 : 400 }}
+                >Q{selectedQuarter}</span>
+              </>
+            )}
+            {selectedMonth !== null && (
+              <>
+                <ChevronRight size={10} />
+                <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{months[selectedMonth]}</span>
+              </>
+            )}
+            {!selectedYear && <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Select year</span>}
+          </div>
+
+          {/* Year selection */}
+          {level === 'year' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, padding: 8 }}>
+              {years.map(y => (
+                <div key={y} style={{ display: 'flex', gap: 2 }}>
+                  <div
+                    onClick={() => selectYear(y)}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    style={{ ...cellStyle, flex: 1, fontWeight: y === currentYear ? 600 : 400 }}
+                  >
+                    {y}
+                  </div>
+                  <div
+                    onClick={() => confirmYear(y)}
+                    title={`Set to ${y}`}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    style={{ ...cellStyle, padding: '6px 4px', color: 'var(--text-muted)', fontSize: 10 }}
+                  >
+                    <Check size={12} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Quarter selection */}
+          {level === 'quarter' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, padding: 8 }}>
+              {quarters.map(q => (
+                <div key={q} style={{ display: 'flex', gap: 2 }}>
+                  <div
+                    onClick={() => selectQuarter(q)}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    style={{ ...cellStyle, flex: 1 }}
+                  >
+                    Q{q} {selectedYear}
+                  </div>
+                  <div
+                    onClick={() => confirmQuarter(q)}
+                    title={`Set to Q${q} ${selectedYear}`}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    style={{ ...cellStyle, padding: '6px 4px', color: 'var(--text-muted)', fontSize: 10 }}
+                  >
+                    <Check size={12} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Month selection */}
+          {level === 'month' && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, padding: 8 }}>
+              {quarterMonthRange.map(mIdx => (
+                <div key={mIdx} style={{ display: 'flex', gap: 2 }}>
+                  <div
+                    onClick={() => selectMonth(mIdx)}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    style={{ ...cellStyle, flex: 1 }}
+                  >
+                    {months[mIdx]}
+                  </div>
+                  <div
+                    onClick={() => confirmMonth(mIdx)}
+                    title={`Set to ${months[mIdx]} ${selectedYear}`}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    style={{ ...cellStyle, padding: '6px 4px', color: 'var(--text-muted)', fontSize: 10 }}
+                  >
+                    <Check size={12} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Day selection */}
+          {level === 'day' && selectedMonth !== null && selectedYear && (
+            <div style={{ padding: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+                {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(d => (
+                  <div key={d} style={{ fontSize: 9, textAlign: 'center', color: 'var(--text-muted)', padding: 2, fontWeight: 600 }}>{d}</div>
+                ))}
+                {(() => {
+                  const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
+                  // getDay: 0=Sun. We want Mon=0.
+                  const firstDay = (new Date(selectedYear, selectedMonth, 1).getDay() + 6) % 7;
+                  const cells: React.ReactNode[] = [];
+                  for (let i = 0; i < firstDay; i++) cells.push(<div key={`e${i}`} />);
+                  for (let d = 1; d <= daysInMonth; d++) {
+                    const day = d;
+                    cells.push(
+                      <div
+                        key={d}
+                        onClick={() => confirmDay(day)}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        style={{
+                          fontSize: 11, textAlign: 'center', padding: '4px 2px',
+                          borderRadius: 4, cursor: 'pointer', color: 'var(--text-primary)',
+                          transition: 'background-color 0.1s',
+                        }}
+                      >
+                        {d}
+                      </div>
+                    );
+                  }
+                  return cells;
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* Clear button */}
+          {value && (
+            <div style={{ borderTop: '1px solid var(--border)', padding: '4px 8px' }}>
+              <div
+                onClick={() => { onChange(''); setOpen(false); }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                style={{ ...cellStyle, color: 'var(--text-muted)', fontSize: 11 }}
+              >
+                Clear
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
