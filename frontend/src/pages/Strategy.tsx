@@ -2627,6 +2627,15 @@ function PortfolioView() {
     api.get<any>('/api/hierarchy').then((data) => setHierTree(data.tree || [])).catch(() => {});
   }, []);
 
+  // Task section state (must be before early returns for hooks rules)
+  const [tasksExpanded, setTasksExpanded] = useState(false);
+  const [opsExpanded, setOpsExpanded] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskDesc, setEditingTaskDesc] = useState('');
+  const [statusPickerTaskId, setStatusPickerTaskId] = useState<string | null>(null);
+  const [localTaskUpdates, setLocalTaskUpdates] = useState<Record<string, any>>({});
+  const [removedTaskIds, setRemovedTaskIds] = useState<Set<string>>(new Set());
+
   if (loading) return <LoadingState />;
 
   // Classify members: people have roles or capitalized first-letter names
@@ -2745,19 +2754,7 @@ function PortfolioView() {
     return fud && fud < today;
   };
 
-  // Task section collapse/expand state
-  const [tasksExpanded, setTasksExpanded] = useState(false);
-  const [opsExpanded, setOpsExpanded] = useState(false);
   const TASK_PREVIEW_COUNT = 5;
-
-  // Inline editing state for tasks
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [editingTaskDesc, setEditingTaskDesc] = useState('');
-  const [statusPickerTaskId, setStatusPickerTaskId] = useState<string | null>(null);
-
-  // Local task state for optimistic updates
-  const [localTaskUpdates, setLocalTaskUpdates] = useState<Record<string, any>>({});
-  const [removedTaskIds, setRemovedTaskIds] = useState<Set<string>>(new Set());
 
   const getTaskField = (t: any, field: string) => localTaskUpdates[t.id]?.[field] ?? t[field];
 
