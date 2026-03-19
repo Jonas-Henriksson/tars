@@ -970,8 +970,9 @@ async def get_hierarchy():
     initiatives = get_initiatives().get("initiatives", [])
     epics_data = get_epics().get("epics", [])
     stories_data = get_stories().get("stories", [])
-    tasks_data = get_smart_tasks(include_done=False).get("tasks",
-        get_smart_tasks(include_done=False).get("smart_tasks", []))
+    _task_result = get_smart_tasks(include_done=True)
+    tasks_data = _task_result.get("tasks",
+        _task_result.get("smart_tasks", []))
 
     # Build tree
     tree = []
@@ -1025,9 +1026,11 @@ async def get_hierarchy():
             init_node["children"].append(epic_node)
         tree.append(init_node)
 
-    # Operational tasks
+    # Operational tasks (exclude done from orphan lists)
     operational = [t for t in orphan_tasks if t.get("classification") == "operational"]
     unclassified = [t for t in orphan_tasks if t.get("classification") != "operational"]
+
+    linked_count = sum(len(v) for v in tasks_by_story.values())
 
     return JSONResponse({
         "tree": tree,
@@ -1039,6 +1042,7 @@ async def get_hierarchy():
             "epics": len(epics_data),
             "stories": len(stories_data),
             "tasks": len(tasks_data),
+            "linked": linked_count,
             "operational": len(operational),
             "unclassified": len(unclassified),
         },
