@@ -442,6 +442,7 @@ function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismi
   return (
     <div>
       <div
+        onClick={() => onNodeClick?.(node)}
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '6px 8px', paddingLeft: depth * 20 + 8,
@@ -450,12 +451,13 @@ function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismi
           borderRadius: 'var(--radius)',
           marginBottom: 1,
           color: isAuto ? 'var(--text-muted)' : 'var(--text-primary)',
+          cursor: 'pointer',
           transition: 'all 0.15s',
         }}
       >
         <span
-          onClick={() => setExpanded(!expanded)}
-          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 2 }}
         >
           {children.length > 0 ? (
             expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
@@ -469,12 +471,7 @@ function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismi
           {TYPE_LABELS[node.type] || node.type}
         </span>
 
-        <span
-          onClick={() => onNodeClick?.(node)}
-          style={{ fontSize: 13, fontWeight: 500, flex: 1, cursor: 'pointer', borderRadius: 4, padding: '2px 4px', transition: 'background-color 0.1s' }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-        >
+        <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>
           {node.title || node.description || '(untitled)'}
         </span>
 
