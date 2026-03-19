@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TARS Portfolio Board</title>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #0a0a0a;
+            --surface: #111113;
+            --surface-raised: #18181b;
+            --border: #27272a;
+            --border-subtle: #1e1e21;
+            --text: #fafafa;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent: #3b82f6;
+            --accent-dim: rgba(59, 130, 246, 0.12);
+            --green: #22c55e;
+            --green-dim: rgba(34, 197, 94, 0.12);
+            --green-text: #4ade80;
+            --amber: #f59e0b;
+            --amber-dim: rgba(245, 158, 11, 0.10);
+            --amber-text: #fbbf24;
+            --red: #ef4444;
+            --red-dim: rgba(239, 68, 68, 0.10);
+            --red-text: #f87171;
+            --purple: #a855f7;
+            --purple-dim: rgba(168, 85, 247, 0.10);
+            --purple-text: #c084fc;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .shell { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+        /* Header */
+        header {
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 16px 0;
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            z-index: 50;
+        }
+        .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
+        .brand span { font-size: 12px; color: var(--text-muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+        .nav-links a:hover { color: var(--text-secondary); background: var(--surface); }
+        .nav-links a.active { color: var(--text); background: var(--surface-raised); }
+
+        /* Page header */
+        .page-header { padding: 24px 0 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .page-title { font-size: 20px; font-weight: 600; }
+
+        /* Toolbar */
+        .toolbar { display: flex; align-items: center; gap: 8px; padding-bottom: 16px; flex-wrap: wrap; }
+        .toolbar-group { display: flex; gap: 2px; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 6px; overflow: hidden; }
+        .toolbar-btn {
+            background: transparent; border: none; color: var(--text-muted); font-size: 12px; font-weight: 500;
+            padding: 6px 14px; cursor: pointer; font-family: inherit; transition: all 0.15s;
+        }
+        .toolbar-btn:hover { color: var(--text-secondary); background: var(--surface-raised); }
+        .toolbar-btn.active { color: var(--text); background: var(--surface-raised); }
+        .toolbar-select {
+            background: var(--surface); border: 1px solid var(--border-subtle); color: var(--text-secondary);
+            font-size: 12px; padding: 6px 10px; border-radius: 6px; font-family: inherit; cursor: pointer;
+        }
+        .toolbar-search {
+            background: var(--surface); border: 1px solid var(--border-subtle); color: var(--text);
+            font-size: 12px; padding: 6px 10px; border-radius: 6px; font-family: inherit; width: 180px;
+        }
+        .toolbar-search::placeholder { color: var(--text-muted); }
+
+        /* Summary strip */
+        .summary-strip { display: flex; gap: 1px; background: var(--border-subtle); border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+        .summary-cell { flex: 1; background: var(--surface); padding: 12px 16px; text-align: center; }
+        .summary-value { font-size: 24px; font-weight: 600; }
+        .summary-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .val-backlog { color: var(--text-muted); }
+        .val-in-progress { color: var(--accent); }
+        .val-done { color: var(--green-text); }
+        .val-total { color: var(--text-secondary); }
+
+        /* Board view */
+        .board-container { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 24px; min-height: 400px; }
+        .board-column {
+            flex: 0 0 220px; background: var(--surface); border: 1px solid var(--border-subtle);
+            border-radius: 8px; display: flex; flex-direction: column; max-height: calc(100vh - 220px);
+        }
+        .col-header {
+            padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); display: flex;
+            align-items: center; justify-content: space-between; flex-shrink: 0;
+        }
+        .col-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+        .col-count { font-size: 11px; color: var(--text-muted); background: var(--bg); padding: 1px 7px; border-radius: 10px; }
+        .col-cards { flex: 1; overflow-y: auto; padding: 6px; min-height: 60px; }
+        .col-cards.drag-over { background: var(--accent-dim); }
+
+        /* Cards */
+        .board-card {
+            background: var(--surface-raised); border: 1px solid var(--border); border-radius: 6px;
+            padding: 10px 12px; margin-bottom: 6px; cursor: grab; transition: opacity 0.15s, box-shadow 0.15s;
+        }
+        .board-card:hover { border-color: var(--text-muted); }
+        .board-card.dragging { opacity: 0.4; }
+        .card-title { font-size: 13px; font-weight: 500; margin-bottom: 6px; line-height: 1.4; }
+        .card-meta { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+        .card-owner { font-size: 11px; color: var(--text-secondary); }
+        .card-progress { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+        /* Badges */
+        .badge {
+            display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px;
+            border-radius: 4px; text-transform: uppercase; letter-spacing: 0.03em;
+        }
+        .badge-high { background: var(--red-dim); color: var(--red-text); }
+        .badge-medium { background: var(--amber-dim); color: var(--amber-text); }
+        .badge-low { background: var(--accent-dim); color: var(--accent); }
+        .badge-backlog { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); }
+        .badge-ready { background: var(--purple-dim); color: var(--purple-text); }
+        .badge-in_progress { background: var(--accent-dim); color: var(--accent); }
+        .badge-in_review { background: var(--purple-dim); color: var(--purple-text); }
+        .badge-done { background: var(--green-dim); color: var(--green-text); }
+        .badge-blocked { background: var(--red-dim); color: var(--red-text); }
+        .badge-cancelled { background: var(--surface); color: var(--text-muted); }
+
+        /* Size badges */
+        .badge-size { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); font-size: 10px; padding: 1px 5px; }
+
+        /* Column header color accents */
+        .col-accent-backlog .col-title { color: var(--text-muted); }
+        .col-accent-ready .col-title { color: var(--purple-text); }
+        .col-accent-in_progress .col-title { color: var(--accent); }
+        .col-accent-in_review .col-title { color: var(--purple-text); }
+        .col-accent-done .col-title { color: var(--green-text); }
+        .col-accent-blocked .col-title { color: var(--red-text); }
+        .col-accent-cancelled .col-title { color: var(--text-muted); }
+
+        /* List view */
+        .list-container { margin-bottom: 24px; }
+        .list-table {
+            width: 100%; border-collapse: collapse; font-size: 13px;
+        }
+        .list-table th {
+            text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.05em; color: var(--text-muted); padding: 8px 10px;
+            border-bottom: 1px solid var(--border); cursor: pointer; user-select: none;
+            white-space: nowrap;
+        }
+        .list-table th:hover { color: var(--text-secondary); }
+        .list-table td { padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); vertical-align: middle; }
+        .list-table tbody tr:hover { background: var(--surface); }
+        .list-table .sort-indicator { font-size: 10px; margin-left: 2px; }
+        .col-title-cell { max-width: 320px; }
+        .col-title-cell span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* Inline select (status & priority) */
+        .inline-select {
+            background: transparent; border: none; color: inherit; font-size: 10px; font-weight: 600;
+            cursor: pointer; padding: 2px 4px; border-radius: 4px; font-family: inherit;
+            appearance: none; -webkit-appearance: none; text-transform: uppercase; letter-spacing: 0.03em;
+        }
+        .inline-select:focus { outline: 1px solid var(--accent); }
+
+        /* Row states */
+        .row-done { opacity: 0.5; }
+        .row-blocked { border-left: 2px solid var(--red); }
+
+        /* Loading & empty states */
+        .loading { text-align: center; padding: 48px; color: var(--text-muted); font-size: 13px; }
+        .empty-state { text-align: center; padding: 48px; color: var(--text-muted); }
+        .empty-state p { margin-bottom: 4px; }
+
+        /* Hidden */
+        .hidden { display: none !important; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .shell { padding: 0 12px; }
+            .board-column { flex: 0 0 180px; }
+            .toolbar { gap: 6px; }
+            .toolbar-search { width: 140px; }
+            .col-owner, .col-quarter, .col-size { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="shell">
+            <div class="header-row">
+                <div class="brand">
+                    <h1>TARS</h1>
+                    <span>Portfolio Board</span>
+                </div>
+                <nav class="nav-links">
+                    <a href="/">Voice</a>
+                    <a href="/tasks">Tasks</a>
+                    <a href="/briefing">Briefing</a>
+                    <a href="/executive">Executive</a>
+                    <a href="/board" class="active">Board</a>
+                    <a href="/people">People</a>
+                    <a href="/review">Review</a>
+                    <a href="/graph">Graph</a>
+                    <a href="/settings">Settings</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="shell">
+        <div class="page-header">
+            <div class="page-title">Portfolio Board</div>
+        </div>
+
+        <div class="toolbar">
+            <div class="toolbar-group" id="entityToggle">
+                <button class="toolbar-btn active" data-entity="epics">Epics</button>
+                <button class="toolbar-btn" data-entity="stories">Stories</button>
+            </div>
+            <div class="toolbar-group" id="viewToggle">
+                <button class="toolbar-btn active" data-view="board">Board</button>
+                <button class="toolbar-btn" data-view="list">List</button>
+            </div>
+            <select class="toolbar-select" id="filterOwner">
+                <option value="">All owners</option>
+            </select>
+            <select class="toolbar-select" id="filterPriority">
+                <option value="">All priorities</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+            </select>
+            <input type="text" class="toolbar-search" id="searchInput" placeholder="Search...">
+        </div>
+
+        <div class="summary-strip" id="summary"></div>
+
+        <div id="boardView"></div>
+        <div id="listView" class="hidden"></div>
+        <div class="loading" id="loadingEl">Loading portfolio data...</div>
+    </main>
+
+    <script>
+    (function() {
+        'use strict';
+
+        // State
+        let allEpics = [];
+        let allStories = [];
+        let currentEntity = 'epics';
+        let currentView = 'board';
+        let filterOwner = '';
+        let filterPriority = '';
+        let searchQuery = '';
+        let sortCol = 'status';
+        let sortAsc = true;
+
+        const EPIC_STATUSES = ['backlog', 'in_progress', 'done', 'cancelled'];
+        const STORY_STATUSES = ['backlog', 'ready', 'in_progress', 'in_review', 'done', 'blocked'];
+        const PRIORITIES = ['high', 'medium', 'low'];
+
+        const STATUS_LABELS = {
+            backlog: 'Backlog', ready: 'Ready', in_progress: 'In Progress',
+            in_review: 'In Review', done: 'Done', blocked: 'Blocked', cancelled: 'Cancelled'
+        };
+
+        // DOM
+        const boardView = document.getElementById('boardView');
+        const listView = document.getElementById('listView');
+        const loadingEl = document.getElementById('loadingEl');
+        const summaryEl = document.getElementById('summary');
+        const filterOwnerEl = document.getElementById('filterOwner');
+        const filterPriorityEl = document.getElementById('filterPriority');
+        const searchEl = document.getElementById('searchInput');
+
+        // Helpers
+        function esc(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function getStatuses() {
+            return currentEntity === 'epics' ? EPIC_STATUSES : STORY_STATUSES;
+        }
+
+        function getItems() {
+            let items = currentEntity === 'epics' ? allEpics : allStories;
+            if (filterOwner) {
+                const fl = filterOwner.toLowerCase();
+                items = items.filter(i => (i.owner || '').toLowerCase().includes(fl));
+            }
+            if (filterPriority) {
+                items = items.filter(i => i.priority === filterPriority);
+            }
+            if (searchQuery) {
+                const q = searchQuery.toLowerCase();
+                items = items.filter(i => (i.title || '').toLowerCase().includes(q) || (i.description || '').toLowerCase().includes(q));
+            }
+            return items;
+        }
+
+        // Data loading
+        async function loadData() {
+            try {
+                const [epicsResp, storiesResp] = await Promise.all([
+                    fetch('/api/epics'),
+                    fetch('/api/stories'),
+                ]);
+                const epicsData = await epicsResp.json();
+                const storiesData = await storiesResp.json();
+                allEpics = epicsData.epics || [];
+                allStories = storiesData.stories || [];
+                loadingEl.classList.add('hidden');
+                populateOwnerFilter();
+                render();
+            } catch (err) {
+                loadingEl.textContent = 'Failed to load data: ' + err.message;
+            }
+        }
+
+        function populateOwnerFilter() {
+            const owners = new Set();
+            allEpics.forEach(e => { if (e.owner) owners.add(e.owner); });
+            allStories.forEach(s => { if (s.owner) owners.add(s.owner); });
+            let html = '<option value="">All owners</option>';
+            Array.from(owners).sort().forEach(o => {
+                html += '<option value="' + esc(o) + '">' + esc(o) + '</option>';
+            });
+            filterOwnerEl.innerHTML = html;
+        }
+
+        // Render dispatcher
+        function render() {
+            renderSummary();
+            if (currentView === 'board') {
+                boardView.classList.remove('hidden');
+                listView.classList.add('hidden');
+                renderBoard();
+            } else {
+                boardView.classList.add('hidden');
+                listView.classList.remove('hidden');
+                renderList();
+            }
+        }
+
+        // Summary strip
+        function renderSummary() {
+            const items = currentEntity === 'epics' ? allEpics : allStories;
+            const statuses = getStatuses();
+            const backlog = items.filter(i => i.status === 'backlog').length;
+            const inProg = items.filter(i => i.status === 'in_progress').length;
+            const done = items.filter(i => i.status === 'done').length;
+
+            summaryEl.innerHTML =
+                '<div class="summary-cell"><div class="summary-value val-total">' + items.length + '</div><div class="summary-label">Total</div></div>' +
+                '<div class="summary-cell"><div class="summary-value val-backlog">' + backlog + '</div><div class="summary-label">Backlog</div></div>' +
+                '<div class="summary-cell"><div class="summary-value val-in-progress">' + inProg + '</div><div class="summary-label">In Progress</div></div>' +
+                '<div class="summary-cell"><div class="summary-value val-done">' + done + '</div><div class="summary-label">Done</div></div>';
+        }
+
+        // Board view
+        function renderBoard() {
+            const items = getItems();
+            const statuses = getStatuses();
+            let html = '<div class="board-container">';
+            statuses.forEach(function(st) {
+                const colItems = items.filter(i => i.status === st);
+                html += '<div class="board-column col-accent-' + st + '">';
+                html += '<div class="col-header"><span class="col-title">' + esc(STATUS_LABELS[st] || st) + '</span>';
+                html += '<span class="col-count">' + colItems.length + '</span></div>';
+                html += '<div class="col-cards" data-status="' + st + '">';
+                colItems.forEach(function(item) {
+                    html += renderCard(item);
+                });
+                if (colItems.length === 0) {
+                    html += '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:11px;">No items</div>';
+                }
+                html += '</div></div>';
+            });
+            html += '</div>';
+            boardView.innerHTML = html;
+            initDragAndDrop();
+        }
+
+        function renderCard(item) {
+            var html = '<div class="board-card" draggable="true" data-id="' + item.id + '" data-type="' + currentEntity + '">';
+            html += '<div class="card-title">' + esc(item.title) + '</div>';
+            html += '<div class="card-meta">';
+            html += '<span class="card-owner">' + esc(item.owner || 'Unassigned') + '</span>';
+            if (item.priority) {
+                html += '<span class="badge badge-' + item.priority + '">' + esc(item.priority) + '</span>';
+            }
+            if (currentEntity === 'stories' && item.size) {
+                html += '<span class="badge badge-size">' + esc(item.size) + '</span>';
+            }
+            html += '</div>';
+            if (currentEntity === 'epics' && item.progress) {
+                html += '<div class="card-progress">' + esc(item.progress) + ' stories</div>';
+            }
+            html += '</div>';
+            return html;
+        }
+
+        // Drag & drop
+        function initDragAndDrop() {
+            const cards = boardView.querySelectorAll('.board-card');
+            const cols = boardView.querySelectorAll('.col-cards');
+
+            cards.forEach(function(card) {
+                card.addEventListener('dragstart', function(e) {
+                    e.dataTransfer.setData('text/plain', card.dataset.id);
+                    e.dataTransfer.setData('application/x-type', card.dataset.type);
+                    e.dataTransfer.effectAllowed = 'move';
+                    requestAnimationFrame(function() { card.classList.add('dragging'); });
+                });
+                card.addEventListener('dragend', function() { card.classList.remove('dragging'); });
+            });
+
+            cols.forEach(function(col) {
+                col.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    col.classList.add('drag-over');
+                });
+                col.addEventListener('dragleave', function() { col.classList.remove('drag-over'); });
+                col.addEventListener('drop', async function(e) {
+                    e.preventDefault();
+                    col.classList.remove('drag-over');
+                    var itemId = e.dataTransfer.getData('text/plain');
+                    var itemType = e.dataTransfer.getData('application/x-type');
+                    var newStatus = col.dataset.status;
+                    if (!itemId || !newStatus) return;
+                    await patchItem(itemType, itemId, { status: newStatus });
+                });
+            });
+        }
+
+        // List view
+        function renderList() {
+            const items = getItems();
+            const isEpics = currentEntity === 'epics';
+            const sorted = sortItems(items);
+
+            let html = '<table class="list-table"><thead><tr>';
+            html += thCell('Title', 'title', 'col-title-cell');
+            html += thCell('Status', 'status', '');
+            html += thCell('Priority', 'priority', '');
+            html += thCell('Owner', 'owner', 'col-owner');
+            if (isEpics) {
+                html += thCell('Quarter', 'quarter', 'col-quarter');
+                html += thCell('Progress', 'progress', '');
+            } else {
+                html += thCell('Size', 'size', 'col-size');
+            }
+            html += '</tr></thead><tbody>';
+
+            if (sorted.length === 0) {
+                const colCount = isEpics ? 6 : 6;
+                html += '<tr><td colspan="' + colCount + '" style="text-align:center;padding:32px;color:var(--text-muted);">No items found</td></tr>';
+            }
+
+            sorted.forEach(function(item) {
+                html += renderRow(item, isEpics);
+            });
+
+            html += '</tbody></table>';
+            listView.innerHTML = '<div class="list-container">' + html + '</div>';
+            bindListEvents();
+        }
+
+        function thCell(label, col, cls) {
+            var arrow = sortCol === col ? (sortAsc ? ' \u25B2' : ' \u25BC') : '';
+            return '<th class="' + cls + '" data-col="' + col + '">' + label + '<span class="sort-indicator">' + arrow + '</span></th>';
+        }
+
+        function renderRow(item, isEpics) {
+            var rowClass = item.status === 'done' ? 'row-done' : (item.status === 'blocked' ? 'row-blocked' : '');
+            var html = '<tr class="' + rowClass + '" data-id="' + item.id + '">';
+
+            // Title
+            html += '<td class="col-title-cell"><span>' + esc(item.title) + '</span></td>';
+
+            // Status (inline select)
+            var statuses = isEpics ? EPIC_STATUSES : STORY_STATUSES;
+            html += '<td>' + inlineSelect(item, 'status', statuses, STATUS_LABELS) + '</td>';
+
+            // Priority (inline select)
+            html += '<td>' + inlineSelect(item, 'priority', PRIORITIES, { high: 'High', medium: 'Medium', low: 'Low' }) + '</td>';
+
+            // Owner
+            html += '<td class="col-owner"><span style="font-size:12px;color:var(--text-secondary)">' + esc(item.owner || 'Unassigned') + '</span></td>';
+
+            if (isEpics) {
+                html += '<td class="col-quarter"><span style="font-size:12px;color:var(--text-muted)">' + esc(item.quarter || '--') + '</span></td>';
+                html += '<td><span style="font-size:12px;color:var(--text-muted)">' + esc(item.progress || '--') + '</span></td>';
+            } else {
+                html += '<td class="col-size"><span class="badge badge-size">' + esc(item.size || '--') + '</span></td>';
+            }
+
+            html += '</tr>';
+            return html;
+        }
+
+        function inlineSelect(item, field, options, labels) {
+            var current = item[field] || options[0];
+            var badgeClass = field === 'status' ? 'badge-' + current : 'badge-' + current;
+            var html = '<select class="inline-select badge ' + badgeClass + '" data-id="' + item.id + '" data-field="' + field + '">';
+            options.forEach(function(opt) {
+                var sel = opt === current ? ' selected' : '';
+                var label = (labels && labels[opt]) ? labels[opt] : opt.charAt(0).toUpperCase() + opt.slice(1);
+                html += '<option value="' + opt + '"' + sel + '>' + esc(label) + '</option>';
+            });
+            html += '</select>';
+            return html;
+        }
+
+        function sortItems(items) {
+            var arr = items.slice();
+            var statusOrder = { in_progress: 0, backlog: 1, ready: 2, in_review: 3, blocked: 4, done: 5, cancelled: 6 };
+            var priorityOrder = { high: 0, medium: 1, low: 2 };
+            arr.sort(function(a, b) {
+                var va, vb;
+                if (sortCol === 'status') {
+                    va = statusOrder[a.status] !== undefined ? statusOrder[a.status] : 9;
+                    vb = statusOrder[b.status] !== undefined ? statusOrder[b.status] : 9;
+                } else if (sortCol === 'priority') {
+                    va = priorityOrder[a.priority] !== undefined ? priorityOrder[a.priority] : 9;
+                    vb = priorityOrder[b.priority] !== undefined ? priorityOrder[b.priority] : 9;
+                } else {
+                    va = (a[sortCol] || '').toString().toLowerCase();
+                    vb = (b[sortCol] || '').toString().toLowerCase();
+                }
+                if (va < vb) return sortAsc ? -1 : 1;
+                if (va > vb) return sortAsc ? 1 : -1;
+                return 0;
+            });
+            return arr;
+        }
+
+        function bindListEvents() {
+            // Sort headers
+            listView.querySelectorAll('th[data-col]').forEach(function(th) {
+                th.addEventListener('click', function() {
+                    var col = th.dataset.col;
+                    if (sortCol === col) sortAsc = !sortAsc;
+                    else { sortCol = col; sortAsc = true; }
+                    renderList();
+                });
+            });
+
+            // Inline select changes
+            listView.querySelectorAll('.inline-select').forEach(function(sel) {
+                sel.addEventListener('change', function() {
+                    var id = sel.dataset.id;
+                    var field = sel.dataset.field;
+                    var value = sel.value;
+                    var payload = {};
+                    payload[field] = value;
+                    patchItem(currentEntity, id, payload);
+                });
+                // Prevent row click when interacting with select
+                sel.addEventListener('click', function(e) { e.stopPropagation(); });
+            });
+        }
+
+        // API calls
+        async function patchItem(type, id, fields) {
+            var endpoint = type === 'epics'
+                ? '/api/epics/' + id
+                : '/api/stories/' + id;
+            try {
+                var resp = await fetch(endpoint, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(fields),
+                });
+                if (!resp.ok) {
+                    var err = await resp.json();
+                    console.error('Patch failed:', err);
+                    return;
+                }
+                var data = await resp.json();
+                // Update local state
+                var list = type === 'epics' ? allEpics : allStories;
+                var updated = data.epic || data.story;
+                if (updated) {
+                    var idx = list.findIndex(function(i) { return i.id === id; });
+                    if (idx !== -1) list[idx] = Object.assign(list[idx], updated);
+                }
+                render();
+            } catch (err) {
+                console.error('Patch error:', err);
+            }
+        }
+
+        // Event bindings
+        document.getElementById('entityToggle').addEventListener('click', function(e) {
+            var btn = e.target.closest('.toolbar-btn');
+            if (!btn) return;
+            currentEntity = btn.dataset.entity;
+            this.querySelectorAll('.toolbar-btn').forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            sortCol = 'status';
+            sortAsc = true;
+            render();
+        });
+
+        document.getElementById('viewToggle').addEventListener('click', function(e) {
+            var btn = e.target.closest('.toolbar-btn');
+            if (!btn) return;
+            currentView = btn.dataset.view;
+            this.querySelectorAll('.toolbar-btn').forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            render();
+        });
+
+        filterOwnerEl.addEventListener('change', function() {
+            filterOwner = this.value;
+            render();
+        });
+
+        filterPriorityEl.addEventListener('change', function() {
+            filterPriority = this.value;
+            render();
+        });
+
+        var searchTimeout;
+        searchEl.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            var val = this.value;
+            searchTimeout = setTimeout(function() {
+                searchQuery = val;
+                render();
+            }, 200);
+        });
+
+        // Init
+        loadData();
+    })();
+    </script>
+</body>
+</html>

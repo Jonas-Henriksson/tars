@@ -980,6 +980,12 @@ async def review_page():
     return FileResponse(_STATIC_DIR / "review.html")
 
 
+@app.get("/board")
+async def board_page():
+    """Serve the kanban board / portfolio page."""
+    return FileResponse(_STATIC_DIR / "board.html")
+
+
 @app.get("/api/intel/graph")
 async def get_intel_graph(max_nodes: int = 500, min_edge_weight: int = 1):
     """Build graph nodes and edges for relationship visualization."""
