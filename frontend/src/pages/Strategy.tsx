@@ -685,34 +685,52 @@ function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', ownerOptions = [],
         {isDone && <Check size={10} style={{ color: '#fff' }} />}
       </button>
 
-      {/* Description */}
-      {editingField === 'description' ? (
-        <input
-          ref={inputRef}
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onBlur={saveEdit}
-          onKeyDown={handleKeyDown}
-          style={{
-            flex: 1, fontSize: 12, padding: '2px 6px', border: '1px solid var(--accent)',
-            borderRadius: 4, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)',
-            outline: 'none',
-          }}
-        />
-      ) : (
-        <span
-          onClick={() => startEdit('description')}
-          style={{
-            flex: 1, cursor: 'text', borderRadius: 4, padding: '1px 4px',
-            textDecoration: isDone ? 'line-through' : 'none',
-            transition: 'background-color 0.1s',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-        >
-          {task.description || '(no description)'}
-        </span>
-      )}
+      {/* Description + remove button grouped together */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+        {editingField === 'description' ? (
+          <input
+            ref={inputRef}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={saveEdit}
+            onKeyDown={handleKeyDown}
+            style={{
+              flex: 1, fontSize: 12, padding: '2px 6px', border: '1px solid var(--accent)',
+              borderRadius: 4, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)',
+              outline: 'none',
+            }}
+          />
+        ) : (
+          <span
+            onClick={() => startEdit('description')}
+            style={{
+              cursor: 'text', borderRadius: 4, padding: '1px 4px',
+              textDecoration: isDone ? 'line-through' : 'none',
+              transition: 'background-color 0.1s',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            {task.description || '(no description)'}
+          </span>
+        )}
+
+        {/* Remove button — right next to title */}
+        {!isAuto && onRemove && (
+          <button
+            onClick={() => onRemove(task.id)}
+            title="Remove task"
+            style={{
+              display: 'flex', alignItems: 'center', padding: 2, border: 'none', background: 'none',
+              cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0,
+              opacity: hovered ? 0.7 : 0, transition: 'opacity 0.15s',
+            }}
+          >
+            <X size={12} />
+          </button>
+        )}
+      </div>
 
       {/* Owner badge / picker */}
       {editingField === 'owner' ? (
@@ -803,20 +821,6 @@ function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', ownerOptions = [],
         </>
       )}
 
-      {/* Remove button (on hover) */}
-      {!isAuto && onRemove && (
-        <button
-          onClick={() => onRemove(task.id)}
-          title="Remove task"
-          style={{
-            display: 'flex', alignItems: 'center', padding: 2, border: 'none', background: 'none',
-            cursor: 'pointer', color: 'var(--text-muted)',
-            opacity: hovered ? 0.7 : 0, transition: 'opacity 0.15s',
-          }}
-        >
-          <X size={12} />
-        </button>
-      )}
     </div>
   );
 }
