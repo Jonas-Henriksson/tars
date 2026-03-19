@@ -1,7 +1,7 @@
 /**
  * Strategy page — Initiatives, Decisions, Portfolio, Weekly Review.
  */
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useStore } from '../store';
 import { getTheme } from '../themes';
 import { api } from '../api/client';
@@ -89,52 +89,69 @@ function HierarchyView() {
 
   useEffect(() => { loadHierarchy(); }, [loadHierarchy]);
 
+  // Poll classification status — works even after navigating away and back
+  const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, []);
+
+  const handleStatusUpdate = useCallback((msg: any) => {
+    if (msg.message) setClassifyStatus(msg.message);
+    if (msg.phase === 'context') setClassifyProgress(5);
+    else if (msg.phase === 'phase1') setClassifyProgress(15);
+    else if (msg.phase === 'phase2' && msg.current && msg.total) {
+      setClassifyProgress(20 + Math.round((msg.current / msg.total) * 65));
+    }
+    else if (msg.phase === 'grammar') setClassifyProgress(90);
+
+    if (msg.status === 'complete') {
+      setClassifyProgress(100);
+      setClassifying(false);
+      setClassifyStatus(`Done: ${msg.themes_created || 0} themes, ${msg.initiatives_created || 0} initiatives, ${msg.epics_created || 0} epics, ${msg.stories_created || 0} stories`);
+      loadHierarchy();
+      stopPolling();
+    } else if (msg.status === 'error') {
+      setClassifying(false);
+      setClassifyStatus(`Classification failed: ${msg.message || 'unknown error'}`);
+      stopPolling();
+    }
+  }, [loadHierarchy, stopPolling]);
+
+  const startPolling = useCallback(() => {
+    stopPolling();
+    pollRef.current = setInterval(() => {
+      api.get<any>('/api/classify/status').then(handleStatusUpdate).catch(() => {});
+    }, 1500);
+  }, [handleStatusUpdate, stopPolling]);
+
+  // On mount, check if a classification is already running
+  useEffect(() => {
+    api.get<any>('/api/classify/status').then((msg) => {
+      if (msg.running) {
+        setClassifying(true);
+        handleStatusUpdate(msg);
+        startPolling();
+      } else if (msg.status === 'complete' && msg.themes_created !== undefined) {
+        // Show last completed result
+        handleStatusUpdate(msg);
+      }
+    }).catch(() => {});
+    return stopPolling;
+  }, [handleStatusUpdate, startPolling, stopPolling]);
+
   const runClassification = useCallback(() => {
     setClassifying(true);
     setClassifyStatus('Starting classification...');
     setClassifyProgress(0);
 
-    // Use fetch with POST since EventSource only supports GET
-    fetch('/api/classify/stream', { method: 'POST' }).then(async (response) => {
-      const reader = response.body?.getReader();
-      if (!reader) return;
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const msg = JSON.parse(line.slice(6));
-              if (msg.message) setClassifyStatus(msg.message);
-              // Update progress based on phase
-              if (msg.phase === 'context') setClassifyProgress(5);
-              else if (msg.phase === 'phase1') setClassifyProgress(15);
-              else if (msg.phase === 'phase2' && msg.current && msg.total) {
-                setClassifyProgress(20 + Math.round((msg.current / msg.total) * 65));
-              }
-              else if (msg.phase === 'grammar') setClassifyProgress(90);
-              if (msg.status === 'complete') {
-                setClassifyProgress(100);
-                setClassifying(false);
-                setClassifyStatus(`Done: ${msg.themes_created || 0} themes, ${msg.initiatives_created || 0} initiatives, ${msg.epics_created || 0} epics, ${msg.stories_created || 0} stories`);
-                loadHierarchy();
-              }
-            } catch {}
-          }
-        }
-      }
+    api.post<any>('/api/classify').then(() => {
+      startPolling();
     }).catch(() => {
       setClassifying(false);
-      setClassifyStatus('Classification failed');
+      setClassifyStatus('Failed to start classification');
     });
-  }, [loadHierarchy]);
+  }, [startPolling]);
 
   const handleApprove = useCallback((type: string, id: string) => {
     api.post(`/api/approve/${type}/${id}`, {}).then(() => loadHierarchy()).catch(() => {});

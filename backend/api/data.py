@@ -706,22 +706,63 @@ async def delete_theme(theme_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Classification
+# Classification — background job model
 # ---------------------------------------------------------------------------
+
+# In-memory job state so classification survives page navigation.
+_classify_job: dict = {"running": False, "status": "idle", "progress": {}}
+
+
+async def _run_classify_background(force: bool = False) -> None:
+    """Run classification as a background task, updating _classify_job."""
+    from integrations.classifier import classify_tasks
+
+    def on_progress(msg: dict) -> None:
+        _classify_job["progress"] = msg
+
+    try:
+        result = await classify_tasks(force_reclassify=force, on_progress=on_progress)
+        if "error" in result:
+            _classify_job["progress"] = {"status": "error", "message": result["error"]}
+            _classify_job["status"] = "error"
+        else:
+            result["status"] = "complete"
+            _classify_job["progress"] = result
+            _classify_job["status"] = "complete"
+    except Exception as exc:
+        _classify_job["progress"] = {"status": "error", "message": str(exc)}
+        _classify_job["status"] = "error"
+    finally:
+        _classify_job["running"] = False
+
 
 @router.post("/classify")
 async def run_classification(force: bool = False):
-    """Run agile auto-classification on all tasks using Opus."""
-    from integrations.classifier import classify_tasks
-    result = await classify_tasks(force_reclassify=force)
-    if "error" in result:
-        return JSONResponse(result, status_code=500)
-    return JSONResponse(result)
+    """Start classification as a background job. Returns immediately."""
+    if _classify_job["running"]:
+        return JSONResponse({"message": "Classification already running.", **_classify_job["progress"]})
+
+    _classify_job["running"] = True
+    _classify_job["status"] = "running"
+    _classify_job["progress"] = {"status": "started", "phase": "context", "message": "Starting classification..."}
+
+    asyncio.create_task(_run_classify_background(force=force))
+    return JSONResponse({"message": "Classification started.", "status": "started"})
+
+
+@router.get("/classify/status")
+async def classify_status():
+    """Poll current classification progress. Safe to call from any page."""
+    return JSONResponse({
+        "running": _classify_job["running"],
+        "status": _classify_job["status"],
+        **_classify_job["progress"],
+    })
 
 
 @router.post("/classify/stream")
 async def classify_stream(force: bool = False):
-    """SSE endpoint for streaming classification progress."""
+    """SSE endpoint for streaming classification progress (legacy)."""
     from integrations.classifier import classify_tasks
 
     progress_queue: asyncio.Queue = asyncio.Queue()
