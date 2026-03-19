@@ -363,7 +363,7 @@ function HierarchyView() {
             </span>
           </div>
           {operational.map((t: any) => (
-            <TaskLeaf key={t.id} task={t} onApprove={handleApprove} onDismiss={handleDismiss} />
+            <TaskLeaf key={t.id} task={t} borderColor="#f59e0b" onApprove={handleApprove} onDismiss={handleDismiss} />
           ))}
         </div>
       )}
@@ -380,7 +380,7 @@ function HierarchyView() {
             </span>
           </div>
           {unclassified.map((t: any) => (
-            <TaskLeaf key={t.id} task={t} onApprove={handleApprove} onDismiss={handleDismiss} />
+            <TaskLeaf key={t.id} task={t} borderColor="#64748b" onApprove={handleApprove} onDismiss={handleDismiss} />
           ))}
         </div>
       )}
@@ -534,8 +534,8 @@ function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismi
 }
 
 /* Task leaf node */
-function TaskLeaf({ task, depth = 0, onApprove, onDismiss }: {
-  task: any; depth?: number;
+function TaskLeaf({ task, depth = 0, borderColor = '#94a3b8', onApprove, onDismiss }: {
+  task: any; depth?: number; borderColor?: string;
   onApprove: (type: string, id: string) => void;
   onDismiss: (type: string, id: string) => void;
 }) {
@@ -545,12 +545,12 @@ function TaskLeaf({ task, depth = 0, onApprove, onDismiss }: {
     <div style={{
       display: 'flex', alignItems: 'center', gap: 6,
       padding: '4px 8px', paddingLeft: depth * 20 + 28,
-      borderLeft: `3px ${isAuto ? 'dashed' : 'solid'} #94a3b8`,
+      borderLeft: `3px ${isAuto ? 'dashed' : 'solid'} ${borderColor}`,
       marginBottom: 1,
       color: isAuto ? 'var(--text-muted)' : 'var(--text-secondary)',
       fontSize: 12,
     }}>
-      <Circle size={8} style={{ flexShrink: 0 }} />
+      <Circle size={8} style={{ flexShrink: 0, color: borderColor }} />
       <span style={{ flex: 1 }}>{task.description || '(no description)'}</span>
       {task.owner && task.owner !== 'Me' && (
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{task.owner}</span>
