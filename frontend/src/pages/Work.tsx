@@ -6,7 +6,7 @@ import { useStore } from '../store';
 import { getTheme } from '../themes';
 import { api } from '../api/client';
 import { Grid3x3, Columns3, List, GanttChart, ChevronDown, ChevronUp, Search, Play, Check, Link2 } from 'lucide-react';
-import DetailPanel, { ProgressiveDatePicker } from '../components/DetailPanel';
+import DetailPanel from '../components/DetailPanel';
 import type { DetailField } from '../components/DetailPanel';
 
 type TabId = 'matrix' | 'board' | 'list' | 'timeline';
