@@ -121,7 +121,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-#root { min-height: 100vh; display: flex; }
+#root { min-height: 100vh; display: flex; width: 100%; }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

@@ -19,7 +19,7 @@ export default function AppLayout() {
   ].filter(Boolean).join(' ');
 
   return (
-    <div className={rootClasses} style={{ display: 'flex', minHeight: '100vh' }}>
+    <div className={rootClasses} style={{ display: 'flex', minHeight: '100vh', width: '100%', backgroundColor: 'var(--bg-primary)' }}>
       <Sidebar />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <TopBar />
