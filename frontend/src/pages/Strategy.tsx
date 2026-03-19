@@ -811,49 +811,51 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
         {/* Owner inline dropdown */}
         <div ref={ownerRef} style={{ position: 'relative', flexShrink: 0, width: 90, textAlign: 'right' }}>
           {node.type !== 'theme' && (
-            <span
-              onClick={(e) => { e.stopPropagation(); setOwnerOpen(!ownerOpen); }}
-              style={{
-                fontSize: 11, padding: '1px 8px', borderRadius: 10, cursor: 'pointer',
-                backgroundColor: 'var(--bg-tertiary)',
-                color: node.owner ? 'var(--text-secondary)' : 'var(--text-muted)',
-                transition: 'background-color 0.1s', display: 'inline-block',
-                textAlign: 'center',
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
-            >
-              {node.owner || '—'}
-            </span>
-            {ownerOpen && (
-              <div style={{
-                position: 'absolute', top: '100%', right: 0, zIndex: 100, marginTop: 4,
-                backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
-                borderRadius: 6, overflow: 'hidden', minWidth: 140, maxHeight: 200, overflowY: 'auto',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-              }}>
-                {ownerOptions.map((o) => (
-                  <div
-                    key={o}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (o !== node.owner) onNodeUpdate?.(node, 'owner', o);
-                      setOwnerOpen(false);
-                    }}
-                    style={{
-                      padding: '5px 12px', fontSize: 12, cursor: 'pointer',
-                      color: o === node.owner ? 'var(--text-primary)' : 'var(--text-secondary)',
-                      fontWeight: o === node.owner ? 600 : 400,
-                      transition: 'background-color 0.1s',
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  >
-                    {o}
-                  </div>
-                ))}
-              </div>
-            )}
+            <>
+              <span
+                onClick={(e) => { e.stopPropagation(); setOwnerOpen(!ownerOpen); }}
+                style={{
+                  fontSize: 11, padding: '1px 8px', borderRadius: 10, cursor: 'pointer',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: node.owner ? 'var(--text-secondary)' : 'var(--text-muted)',
+                  transition: 'background-color 0.1s', display: 'inline-block',
+                  textAlign: 'center',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
+              >
+                {node.owner || '—'}
+              </span>
+              {ownerOpen && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, zIndex: 100, marginTop: 4,
+                  backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
+                  borderRadius: 6, overflow: 'hidden', minWidth: 140, maxHeight: 200, overflowY: 'auto',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                }}>
+                  {ownerOptions.map((o) => (
+                    <div
+                      key={o}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (o !== node.owner) onNodeUpdate?.(node, 'owner', o);
+                        setOwnerOpen(false);
+                      }}
+                      style={{
+                        padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+                        color: o === node.owner ? 'var(--text-primary)' : 'var(--text-secondary)',
+                        fontWeight: o === node.owner ? 600 : 400,
+                        transition: 'background-color 0.1s',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    >
+                      {o}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
 
