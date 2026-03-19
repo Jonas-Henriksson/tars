@@ -1,7 +1,7 @@
 /**
  * Strategy page — Initiatives, Decisions, Portfolio, Weekly Review.
  */
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useStore } from '../store';
 import { getTheme } from '../themes';
 import { api } from '../api/client';
@@ -90,6 +90,12 @@ function HierarchyView() {
   const [classifying, setClassifying] = useState(false);
   const [classifyStatus, setClassifyStatus] = useState('');
   const [classifyProgress, setClassifyProgress] = useState(0); // 0-100
+  // Decision requests linked to hierarchy nodes
+  const [hierDecisions, setHierDecisions] = useState<any[]>([]);
+  const { user } = useStore();
+  const [requestingDecision, setRequestingDecision] = useState(false);
+  const [decisionForm, setDecisionForm] = useState({ title: '', requested_from: '' });
+  const [selectedDecision, setSelectedDecision] = useState<any>(null);
 
   const loadHierarchy = useCallback(() => {
     setLoading(true);
@@ -100,9 +106,22 @@ function HierarchyView() {
       setCounts(data.counts || {});
       setLoading(false);
     }).catch(() => setLoading(false));
+    api.get<any>('/api/decisions').then((d) => setHierDecisions(d.decisions || [])).catch(() => {});
   }, []);
 
   useEffect(() => { loadHierarchy(); }, [loadHierarchy]);
+
+  // Lookup map: node ID → linked decisions
+  const decisionsByNode = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    for (const d of hierDecisions) {
+      if (d.linked_id) {
+        if (!map[d.linked_id]) map[d.linked_id] = [];
+        map[d.linked_id].push(d);
+      }
+    }
+    return map;
+  }, [hierDecisions]);
 
   // Poll classification status — works even after navigating away and back
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
@@ -253,6 +272,9 @@ function HierarchyView() {
   };
 
   const handleNodeFieldChange = useCallback((key: string, value: any) => {
+    // Route decision request form fields
+    if (key === '_decision_title') { setDecisionForm((f) => ({ ...f, title: value })); return; }
+    if (key === '_decision_from') { setDecisionForm((f) => ({ ...f, requested_from: value })); return; }
     if (!selectedNode) return;
     const endpoint = nodeEndpointMap[selectedNode.type];
     if (!endpoint) return;
@@ -260,6 +282,27 @@ function HierarchyView() {
     setSelectedNode((prev: any) => prev ? { ...prev, [key]: value } : null);
     api.patch<any>(`${endpoint}/${selectedNode.id}`, { [key]: value }).catch(() => {});
   }, [selectedNode, updateNodeInTree]);
+
+  const handleRequestDecision = useCallback(() => {
+    if (!selectedNode || !decisionForm.title.trim()) return;
+    const nodeLabel = TYPE_LABELS[selectedNode.type] || selectedNode.type;
+    api.post<any>('/api/decisions', {
+      title: decisionForm.title,
+      status: 'request',
+      source: 'request',
+      requested_by: user?.name || 'Me',
+      requested_from: decisionForm.requested_from,
+      request_reason: `Needed for: ${selectedNode.title}`,
+      linked_type: selectedNode.type,
+      linked_id: selectedNode.id,
+      linked_title: selectedNode.title,
+      from_workstream: `${nodeLabel}: ${selectedNode.title}`,
+    }).then((res) => {
+      if (res.decision) setHierDecisions((prev) => [res.decision, ...prev]);
+    }).catch(() => {});
+    setDecisionForm({ title: '', requested_from: '' });
+    setRequestingDecision(false);
+  }, [selectedNode, decisionForm, user]);
 
   // Inline node update (e.g. status change from the tree row)
   const handleNodeUpdate = useCallback((node: any, key: string, value: any) => {
@@ -394,7 +437,7 @@ function HierarchyView() {
       {/* Tree */}
       <div key={treeKey} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {tree.map((node) => (
-          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} onNodeUpdate={handleNodeUpdate} onTaskUpdate={handleTaskUpdate} onTaskRemove={handleTaskRemove} onTaskAdd={handleTaskAdd} onChildAdd={handleChildAdd} />
+          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} onNodeUpdate={handleNodeUpdate} onTaskUpdate={handleTaskUpdate} onTaskRemove={handleTaskRemove} onTaskAdd={handleTaskAdd} onChildAdd={handleChildAdd} nodeDecisions={decisionsByNode} onDecisionClick={setSelectedDecision} />
         ))}
       </div>
 
@@ -432,12 +475,19 @@ function HierarchyView() {
 
       {/* Detail panel for editing hierarchy nodes */}
       <DetailPanel
-        open={!!selectedNode}
-        onClose={() => setSelectedNode(null)}
+        open={!!selectedNode && !selectedDecision}
+        onClose={() => { setSelectedNode(null); setRequestingDecision(false); setDecisionForm({ title: '', requested_from: '' }); }}
         title={selectedNode?.title || selectedNode?.description || ''}
         subtitle={selectedNode ? `${TYPE_LABELS[selectedNode.type] || selectedNode.type}${selectedNode.owner ? ` · ${selectedNode.owner}` : ''}` : undefined}
         badge={selectedNode?.source === 'auto' ? { label: 'AI proposed', color: '#8b5cf6' } : undefined}
-        fields={selectedNode ? getNodeFields(selectedNode) : []}
+        fields={[
+          ...(selectedNode ? getNodeFields(selectedNode) : []),
+          ...(requestingDecision && selectedNode ? [
+            { key: '_decision_divider', label: '── Request a Decision ──', value: `From: ${TYPE_LABELS[selectedNode.type] || selectedNode.type} "${selectedNode.title}"`, type: 'readonly' as const },
+            { key: '_decision_title', label: 'What decision is needed?', value: decisionForm.title, type: 'text' as const },
+            { key: '_decision_from', label: 'Request from (who should decide?)', value: decisionForm.requested_from, type: 'text' as const },
+          ] : []),
+        ]}
         onFieldChange={handleNodeFieldChange}
         onSave={(updates) => {
           if (!selectedNode) return;
@@ -448,16 +498,49 @@ function HierarchyView() {
           setTree((prev) => updateNodeInTree(prev, selectedNode.id, (n) => ({ ...n, ...updates })));
           setSelectedNode(null);
         }}
-        actions={selectedNode?.source === 'auto' ? [
-          { label: 'Approve', variant: 'primary' as const, onClick: () => {
-            handleApprove(selectedNode.type + 's', selectedNode.id);
-            setSelectedNode((prev: any) => prev ? { ...prev, source: 'confirmed' } : null);
-          }},
-          { label: 'Dismiss', variant: 'danger' as const, onClick: () => {
-            handleDismiss(selectedNode.type + 's', selectedNode.id);
-            setSelectedNode(null);
-          }},
-        ] : undefined}
+        actions={requestingDecision ? [
+          { label: 'Submit Request', variant: 'primary' as const, onClick: handleRequestDecision },
+          { label: 'Cancel', variant: 'ghost' as const, onClick: () => { setRequestingDecision(false); setDecisionForm({ title: '', requested_from: '' }); } },
+        ] : [
+          ...(selectedNode?.source === 'auto' ? [
+            { label: 'Approve', variant: 'primary' as const, onClick: () => {
+              handleApprove(selectedNode.type + 's', selectedNode.id);
+              setSelectedNode((prev: any) => prev ? { ...prev, source: 'confirmed' } : null);
+            }},
+            { label: 'Dismiss', variant: 'danger' as const, onClick: () => {
+              handleDismiss(selectedNode.type + 's', selectedNode.id);
+              setSelectedNode(null);
+            }},
+          ] : []),
+          { label: 'Request Decision', variant: 'ghost' as const, onClick: () => setRequestingDecision(true) },
+        ]}
+      />
+
+      {/* Detail panel for viewing a decision from hierarchy indicator */}
+      <DetailPanel
+        open={!!selectedDecision}
+        onClose={() => setSelectedDecision(null)}
+        title={selectedDecision?.title || ''}
+        subtitle={selectedDecision?.request_reason || selectedDecision?.rationale}
+        badge={selectedDecision ? { label: (selectedDecision.status || '').replace(/_/g, ' '), color: STATUS_COLORS[selectedDecision.status] || '#94a3b8' } : undefined}
+        fields={selectedDecision ? [
+          { key: 'status', label: 'Status', value: selectedDecision.status, type: 'select' as const, options: ['pending', 'decided', 'revisit', 'request'], color: STATUS_COLORS[selectedDecision.status] },
+          { key: 'decided_by', label: 'Decided By', value: selectedDecision.decided_by, type: 'text' as const },
+          { key: 'requested_by', label: 'Requested By', value: selectedDecision.requested_by || '', type: 'readonly' as const },
+          { key: 'requested_from', label: 'Requested From', value: selectedDecision.requested_from || '', type: 'text' as const },
+          { key: 'request_reason', label: 'Reason', value: selectedDecision.request_reason || '', type: 'textarea' as const },
+          { key: 'from_workstream', label: 'From Workstream', value: selectedDecision.from_workstream || '', type: 'readonly' as const },
+          { key: 'linked_title', label: 'Linked Item', value: selectedDecision.linked_title ? `[${selectedDecision.linked_type}] ${selectedDecision.linked_title}` : '', type: 'readonly' as const },
+          { key: 'rationale', label: 'Rationale', value: selectedDecision.rationale || '', type: 'textarea' as const },
+          { key: 'outcome_notes', label: 'Outcome Notes', value: selectedDecision.outcome_notes || '', type: 'textarea' as const },
+          { key: 'created_at', label: 'Created', value: selectedDecision.created_at ? new Date(selectedDecision.created_at).toLocaleDateString() : '—', type: 'readonly' as const },
+        ] : []}
+        onSave={(updates) => {
+          if (!selectedDecision) return;
+          setHierDecisions((prev) => prev.map((d) => d.id === selectedDecision.id ? { ...d, ...updates } : d));
+          setSelectedDecision((prev: any) => prev ? { ...prev, ...updates } : null);
+          api.patch<any>(`/api/decisions/${selectedDecision.id}`, updates).catch(() => {});
+        }}
       />
     </div>
   );
@@ -478,7 +561,7 @@ const NODE_STATUS_OPTIONS: Record<string, string[]> = {
   story: ['backlog', 'ready', 'in_progress', 'in_review', 'done', 'blocked'],
 };
 
-function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [], onApprove, onDismiss, onNodeClick, onNodeUpdate, onTaskUpdate, onTaskRemove, onTaskAdd, onChildAdd }: {
+function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [], onApprove, onDismiss, onNodeClick, onNodeUpdate, onTaskUpdate, onTaskRemove, onTaskAdd, onChildAdd, nodeDecisions, onDecisionClick }: {
   node: any; depth: number;
   expandMode?: 'default' | 'all' | 'none';
   ownerOptions?: string[];
@@ -490,6 +573,8 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
   onTaskRemove?: (id: string) => void;
   onTaskAdd?: (parentNode: any, newTask: any) => void;
   onChildAdd?: (parentNode: any, child: any) => void;
+  nodeDecisions?: Record<string, any[]>;
+  onDecisionClick?: (decision: any) => void;
 }) {
   const defaultExpanded = expandMode === 'all' ? true : expandMode === 'none' ? false : depth < 2;
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -640,13 +725,51 @@ function HierarchyNode({ node, depth, expandMode = 'default', ownerOptions = [],
             )}
           </div>
         )}
+
+        {/* Decision indicators */}
+        {(() => {
+          const decs = nodeDecisions?.[node.id] || [];
+          if (!decs.length) return null;
+          const pending = decs.filter((d: any) => d.status === 'request' || d.status === 'pending');
+          const decided = decs.filter((d: any) => d.status === 'decided');
+          return (
+            <>
+              {pending.length > 0 && (
+                <span
+                  onClick={(e) => { e.stopPropagation(); onDecisionClick?.(pending[0]); }}
+                  title={pending.map((d: any) => d.title).join(', ')}
+                  style={{
+                    fontSize: 10, padding: '1px 6px', borderRadius: 4, cursor: 'pointer',
+                    backgroundColor: '#8b5cf620', color: '#8b5cf6', fontWeight: 500,
+                    whiteSpace: 'nowrap', flexShrink: 0,
+                  }}
+                >
+                  {pending.length} decision{pending.length > 1 ? 's' : ''} needed
+                </span>
+              )}
+              {decided.length > 0 && pending.length === 0 && (
+                <span
+                  onClick={(e) => { e.stopPropagation(); onDecisionClick?.(decided[0]); }}
+                  title={decided.map((d: any) => d.title).join(', ')}
+                  style={{
+                    fontSize: 10, padding: '1px 6px', borderRadius: 4, cursor: 'pointer',
+                    backgroundColor: '#3b82f620', color: '#3b82f6', fontWeight: 500,
+                    whiteSpace: 'nowrap', flexShrink: 0,
+                  }}
+                >
+                  {decided.length} decided
+                </span>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {expanded && (
         <>
           {children.map((child: any) => (
             child.type ? (
-              <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} onNodeUpdate={onNodeUpdate} onTaskUpdate={onTaskUpdate} onTaskRemove={onTaskRemove} onTaskAdd={onTaskAdd} onChildAdd={onChildAdd} />
+              <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} onNodeUpdate={onNodeUpdate} onTaskUpdate={onTaskUpdate} onTaskRemove={onTaskRemove} onTaskAdd={onTaskAdd} onChildAdd={onChildAdd} nodeDecisions={nodeDecisions} onDecisionClick={onDecisionClick} />
             ) : (
               <TaskLeaf key={child.id} task={child} depth={depth + 1} ownerOptions={ownerOptions} onApprove={onApprove} onDismiss={onDismiss} onUpdate={onTaskUpdate} onRemove={onTaskRemove} />
             )
