@@ -2733,6 +2733,56 @@ function PortfolioView() {
   const selectedTrackedTasks: any[] = selected?.data?.tracked_tasks || [];
   const allTasks = [...selectedSmartTasks, ...selectedTrackedTasks];
 
+  // Separate deliverable vs operational tasks
+  const deliverableTasks = allTasks.filter(t => t.classification !== 'operational');
+  const operationalTasks = allTasks.filter(t => t.classification === 'operational');
+
+  // Compute overdue status for each task
+  const today = new Date().toISOString().slice(0, 10);
+  const isTaskOverdue = (t: any) => {
+    if (t.status === 'done') return false;
+    const fud = t.follow_up_date;
+    return fud && fud < today;
+  };
+
+  // Task section collapse/expand state
+  const [tasksExpanded, setTasksExpanded] = useState(false);
+  const [opsExpanded, setOpsExpanded] = useState(false);
+  const TASK_PREVIEW_COUNT = 5;
+
+  // Inline editing state for tasks
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskDesc, setEditingTaskDesc] = useState('');
+  const [statusPickerTaskId, setStatusPickerTaskId] = useState<string | null>(null);
+
+  // Local task state for optimistic updates
+  const [localTaskUpdates, setLocalTaskUpdates] = useState<Record<string, any>>({});
+  const [removedTaskIds, setRemovedTaskIds] = useState<Set<string>>(new Set());
+
+  const getTaskField = (t: any, field: string) => localTaskUpdates[t.id]?.[field] ?? t[field];
+
+  const handlePortfolioTaskUpdate = (taskId: string, source: string, updates: Record<string, any>) => {
+    setLocalTaskUpdates(prev => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), ...updates } }));
+    const endpoint = source === 'smart' ? `/api/intel/tasks/${taskId}` : `/api/tasks/${taskId}`;
+    api.patch<any>(endpoint, updates).catch(() => {
+      // Revert on failure
+      setLocalTaskUpdates(prev => { const next = { ...prev }; delete next[taskId]; return next; });
+    });
+  };
+
+  const handlePortfolioTaskRemove = (taskId: string, source: string) => {
+    setRemovedTaskIds(prev => new Set(prev).add(taskId));
+    if (source === 'smart') {
+      api.delete<any>(`/api/intel/tasks/${taskId}`).catch(() => {
+        setRemovedTaskIds(prev => { const next = new Set(prev); next.delete(taskId); return next; });
+      });
+    } else {
+      api.patch<any>(`/api/tasks/${taskId}`, { status: 'discarded' }).catch(() => {
+        setRemovedTaskIds(prev => { const next = new Set(prev); next.delete(taskId); return next; });
+      });
+    }
+  };
+
   // Build member-specific stories-by-epic using their owned stories (not global hierarchy)
   const memberStoriesByEpic: Record<string, any[]> = {};
   for (const ep of selectedEpics) {
@@ -2780,7 +2830,7 @@ function PortfolioView() {
       {selected && (
         <>
           <div
-            onClick={() => { setSelected(null); setEpicPickerTask(null); setEpicSearch(''); }}
+            onClick={() => { setSelected(null); setEpicPickerTask(null); setEpicSearch(''); setEditingTaskId(null); setStatusPickerTaskId(null); setLocalTaskUpdates({}); setRemovedTaskIds(new Set()); setTasksExpanded(false); setOpsExpanded(false); }}
             style={{
               position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)',
               zIndex: 999, animation: 'fadeIn 0.15s ease',
@@ -2816,7 +2866,7 @@ function PortfolioView() {
                   </div>
                 </div>
                 <button
-                  onClick={() => { setSelected(null); setEpicPickerTask(null); setEpicSearch(''); }}
+                  onClick={() => { setSelected(null); setEpicPickerTask(null); setEpicSearch(''); setEditingTaskId(null); setStatusPickerTaskId(null); setLocalTaskUpdates({}); setRemovedTaskIds(new Set()); setTasksExpanded(false); setOpsExpanded(false); }}
                   style={{ padding: 8, border: 'none', borderRadius: 'var(--radius)', backgroundColor: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                   title="Close"
                 >
@@ -2829,17 +2879,20 @@ function PortfolioView() {
                 display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12, marginTop: 4,
               }}>
                 {wl.epics > 0 && <span style={{ color: '#10b981', fontWeight: 500 }}>{wl.epics} epics</span>}
-                {wl.stories > 0 && <span style={{ color: '#f59e0b', fontWeight: 500 }}>{wl.stories} stories</span>}
-                {(wl.smart_tasks || 0) + (wl.tracked_tasks || 0) > 0 && (
-                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{(wl.smart_tasks || 0) + (wl.tracked_tasks || 0)} tasks</span>
+                {selectedStories.length > 0 && <span style={{ color: '#f59e0b', fontWeight: 500 }}>{selectedStories.length} stories</span>}
+                {allTasks.filter(t => !removedTaskIds.has(t.id)).length > 0 && (
+                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{allTasks.filter(t => !removedTaskIds.has(t.id)).length} tasks</span>
                 )}
                 {wl.blocked > 0 && <span style={{ color: '#ef4444', fontWeight: 600 }}>{wl.blocked} blocked</span>}
-                {wl.overdue > 0 && <span style={{ color: '#f59e0b', fontWeight: 600 }}>{wl.overdue} overdue</span>}
+                {(() => {
+                  const overdueCount = allTasks.filter(t => !removedTaskIds.has(t.id) && isTaskOverdue(t)).length;
+                  return overdueCount > 0 ? <span style={{ color: '#ef4444', fontWeight: 600 }}>{overdueCount} overdue</span> : null;
+                })()}
               </div>
             </div>
 
             {/* Body — scrollable */}
-            <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
+            <div onClick={() => { if (statusPickerTaskId) setStatusPickerTaskId(null); }} style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
               {/* Epics section */}
               {selectedEpics.length > 0 && (
                 <PortfolioEpicsSection epics={selectedEpics} storiesByEpic={memberStoriesByEpic} />
@@ -2888,43 +2941,343 @@ function PortfolioView() {
                 );
               })()}
 
-              {/* Tasks section */}
-              {allTasks.length > 0 && (
-                <div style={{ marginTop: 20 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                    <CheckCircle2 size={14} style={{ color: 'var(--text-secondary)' }} />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                      Tasks ({allTasks.length})
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    {allTasks.map((t: any) => {
-                      const tColor = STATUS_COLORS[t.status] || '#94a3b8';
-                      return (
-                        <div key={t.id} style={{
-                          display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
-                          borderLeft: '2px solid var(--border)', borderRadius: 'var(--radius)',
-                          backgroundColor: 'var(--bg-secondary)', fontSize: 12,
-                        }}>
-                          <span style={{ color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {t.description}
-                          </span>
-                          {t.source_title && (
-                            <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {t.source_title}
+              {/* Deliverable Tasks section */}
+              {deliverableTasks.filter(t => !removedTaskIds.has(t.id)).length > 0 && (() => {
+                const visibleTasks = deliverableTasks.filter(t => !removedTaskIds.has(t.id));
+                const overdueFirst = [...visibleTasks].sort((a, b) => {
+                  const aOd = isTaskOverdue(a) ? 0 : 1;
+                  const bOd = isTaskOverdue(b) ? 0 : 1;
+                  return aOd - bOd;
+                });
+                const shown = tasksExpanded ? overdueFirst : overdueFirst.slice(0, TASK_PREVIEW_COUNT);
+                const hasMore = overdueFirst.length > TASK_PREVIEW_COUNT;
+                return (
+                  <div style={{ marginTop: 20 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <Target size={14} style={{ color: 'var(--accent)' }} />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>
+                        Tasks ({visibleTasks.length})
+                      </span>
+                      {visibleTasks.some(isTaskOverdue) && (
+                        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, backgroundColor: '#ef444420', color: '#ef4444', fontWeight: 600 }}>
+                          {visibleTasks.filter(isTaskOverdue).length} overdue
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      {shown.map((t: any) => {
+                        const status = getTaskField(t, 'status');
+                        const desc = getTaskField(t, 'description');
+                        const tColor = status === 'done' ? '#10b981' : isTaskOverdue(t) ? '#ef4444' : STATUS_COLORS[status] || '#94a3b8';
+                        const isEditing = editingTaskId === t.id;
+                        const isStatusOpen = statusPickerTaskId === t.id;
+                        return (
+                          <div key={t.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 4, padding: '5px 8px',
+                            borderLeft: `2px solid ${isTaskOverdue(t) ? '#ef4444' : 'var(--border)'}`,
+                            borderRadius: 'var(--radius)',
+                            backgroundColor: isTaskOverdue(t) ? '#ef444408' : 'var(--bg-secondary)',
+                            fontSize: 12, position: 'relative',
+                          }}>
+                            {/* Complete checkbox */}
+                            <button
+                              onClick={() => handlePortfolioTaskUpdate(t.id, t.source || 'smart', { status: 'done' })}
+                              title="Mark complete"
+                              style={{
+                                border: '1.5px solid var(--border)', background: 'none', cursor: 'pointer',
+                                width: 16, height: 16, borderRadius: 3, display: 'flex', alignItems: 'center',
+                                justifyContent: 'center', flexShrink: 0, color: 'var(--text-muted)', padding: 0,
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.color = '#10b981'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                            >
+                              {status === 'done' ? <Check size={10} /> : null}
+                            </button>
+                            {/* Inline editable title */}
+                            {isEditing ? (
+                              <input
+                                autoFocus
+                                value={editingTaskDesc}
+                                onChange={(e) => setEditingTaskDesc(e.target.value)}
+                                onBlur={() => {
+                                  if (editingTaskDesc.trim() && editingTaskDesc !== desc) {
+                                    handlePortfolioTaskUpdate(t.id, t.source || 'smart', { description: editingTaskDesc.trim() });
+                                  }
+                                  setEditingTaskId(null);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                  if (e.key === 'Escape') setEditingTaskId(null);
+                                }}
+                                style={{
+                                  flex: 1, border: '1px solid var(--accent)', borderRadius: 3, padding: '1px 4px',
+                                  fontSize: 12, backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)',
+                                  outline: 'none', minWidth: 0,
+                                }}
+                              />
+                            ) : (
+                              <span
+                                onClick={() => { setEditingTaskId(t.id); setEditingTaskDesc(desc); }}
+                                title="Click to edit"
+                                style={{
+                                  color: status === 'done' ? 'var(--text-muted)' : 'var(--text-secondary)',
+                                  textDecoration: status === 'done' ? 'line-through' : 'none',
+                                  flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                  cursor: 'text',
+                                }}
+                              >
+                                {desc}
+                              </span>
+                            )}
+                            {/* Overdue badge */}
+                            {isTaskOverdue(t) && (
+                              <span title={`Due: ${t.follow_up_date}`} style={{
+                                fontSize: 9, padding: '1px 4px', borderRadius: 3,
+                                backgroundColor: '#ef444420', color: '#ef4444', fontWeight: 600, flexShrink: 0,
+                              }}>
+                                overdue
+                              </span>
+                            )}
+                            {/* Clickable status badge */}
+                            <span
+                              onClick={(e) => { e.stopPropagation(); setStatusPickerTaskId(isStatusOpen ? null : t.id); }}
+                              title="Change status"
+                              style={{
+                                fontSize: 10, padding: '1px 5px', borderRadius: 3,
+                                backgroundColor: tColor + '20', color: tColor, flexShrink: 0,
+                                cursor: 'pointer', userSelect: 'none',
+                              }}
+                            >
+                              {(status || 'open').replace(/_/g, ' ')}
                             </span>
-                          )}
-                          {t.status && (
-                            <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 3, backgroundColor: tColor + '20', color: tColor, flexShrink: 0 }}>
-                              {(t.status || '').replace(/_/g, ' ')}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
+                            {/* Status picker dropdown */}
+                            {isStatusOpen && (
+                              <div style={{
+                                position: 'absolute', top: '100%', right: 0, zIndex: 10,
+                                backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                                borderRadius: 'var(--radius)', overflow: 'hidden', marginTop: 2,
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                              }}>
+                                {['open', 'in_progress', 'done', 'blocked'].map(s => {
+                                  const sc = STATUS_COLORS[s] || '#94a3b8';
+                                  return (
+                                    <div key={s}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handlePortfolioTaskUpdate(t.id, t.source || 'smart', { status: s });
+                                        setStatusPickerTaskId(null);
+                                      }}
+                                      style={{
+                                        padding: '4px 12px', fontSize: 11, cursor: 'pointer',
+                                        color: sc, display: 'flex', alignItems: 'center', gap: 6,
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    >
+                                      <Circle size={8} fill={sc} />
+                                      {s.replace(/_/g, ' ')}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {/* Discard button */}
+                            <button
+                              onClick={() => handlePortfolioTaskRemove(t.id, t.source || 'smart')}
+                              title="Discard task"
+                              style={{
+                                border: 'none', background: 'none', cursor: 'pointer', padding: 2,
+                                color: 'var(--text-muted)', display: 'flex', alignItems: 'center', flexShrink: 0,
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {hasMore && (
+                      <button
+                        onClick={() => setTasksExpanded(!tasksExpanded)}
+                        style={{
+                          border: 'none', background: 'none', cursor: 'pointer', color: 'var(--accent)',
+                          fontSize: 11, padding: '6px 0', width: '100%', textAlign: 'center',
+                        }}
+                      >
+                        {tasksExpanded ? 'Show less' : `Show all ${visibleTasks.length} tasks`}
+                      </button>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
+
+              {/* Operational Tasks section */}
+              {operationalTasks.filter(t => !removedTaskIds.has(t.id)).length > 0 && (() => {
+                const visibleOps = operationalTasks.filter(t => !removedTaskIds.has(t.id));
+                const overdueFirstOps = [...visibleOps].sort((a, b) => {
+                  const aOd = isTaskOverdue(a) ? 0 : 1;
+                  const bOd = isTaskOverdue(b) ? 0 : 1;
+                  return aOd - bOd;
+                });
+                const shownOps = opsExpanded ? overdueFirstOps : overdueFirstOps.slice(0, TASK_PREVIEW_COUNT);
+                const hasMoreOps = overdueFirstOps.length > TASK_PREVIEW_COUNT;
+                return (
+                  <div style={{ marginTop: 20 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <Scale size={14} style={{ color: 'var(--text-muted)' }} />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
+                        Operational ({visibleOps.length})
+                      </span>
+                      {visibleOps.some(isTaskOverdue) && (
+                        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, backgroundColor: '#ef444420', color: '#ef4444', fontWeight: 600 }}>
+                          {visibleOps.filter(isTaskOverdue).length} overdue
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      {shownOps.map((t: any) => {
+                        const status = getTaskField(t, 'status');
+                        const desc = getTaskField(t, 'description');
+                        const tColor = status === 'done' ? '#10b981' : isTaskOverdue(t) ? '#ef4444' : STATUS_COLORS[status] || '#94a3b8';
+                        const isEditing = editingTaskId === t.id;
+                        const isStatusOpen = statusPickerTaskId === t.id;
+                        return (
+                          <div key={t.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 4, padding: '5px 8px',
+                            borderLeft: `2px solid ${isTaskOverdue(t) ? '#ef4444' : 'var(--border)'}`,
+                            borderRadius: 'var(--radius)',
+                            backgroundColor: isTaskOverdue(t) ? '#ef444408' : 'var(--bg-secondary)',
+                            fontSize: 12, position: 'relative',
+                          }}>
+                            <button
+                              onClick={() => handlePortfolioTaskUpdate(t.id, t.source || 'tracked', { status: 'done' })}
+                              title="Mark complete"
+                              style={{
+                                border: '1.5px solid var(--border)', background: 'none', cursor: 'pointer',
+                                width: 16, height: 16, borderRadius: 3, display: 'flex', alignItems: 'center',
+                                justifyContent: 'center', flexShrink: 0, color: 'var(--text-muted)', padding: 0,
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.color = '#10b981'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                            >
+                              {status === 'done' ? <Check size={10} /> : null}
+                            </button>
+                            {isEditing ? (
+                              <input
+                                autoFocus
+                                value={editingTaskDesc}
+                                onChange={(e) => setEditingTaskDesc(e.target.value)}
+                                onBlur={() => {
+                                  if (editingTaskDesc.trim() && editingTaskDesc !== desc) {
+                                    handlePortfolioTaskUpdate(t.id, t.source || 'tracked', { description: editingTaskDesc.trim() });
+                                  }
+                                  setEditingTaskId(null);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                  if (e.key === 'Escape') setEditingTaskId(null);
+                                }}
+                                style={{
+                                  flex: 1, border: '1px solid var(--accent)', borderRadius: 3, padding: '1px 4px',
+                                  fontSize: 12, backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)',
+                                  outline: 'none', minWidth: 0,
+                                }}
+                              />
+                            ) : (
+                              <span
+                                onClick={() => { setEditingTaskId(t.id); setEditingTaskDesc(desc); }}
+                                title="Click to edit"
+                                style={{
+                                  color: status === 'done' ? 'var(--text-muted)' : 'var(--text-secondary)',
+                                  textDecoration: status === 'done' ? 'line-through' : 'none',
+                                  flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                  cursor: 'text',
+                                }}
+                              >
+                                {desc}
+                              </span>
+                            )}
+                            {isTaskOverdue(t) && (
+                              <span title={`Due: ${t.follow_up_date}`} style={{
+                                fontSize: 9, padding: '1px 4px', borderRadius: 3,
+                                backgroundColor: '#ef444420', color: '#ef4444', fontWeight: 600, flexShrink: 0,
+                              }}>
+                                overdue
+                              </span>
+                            )}
+                            <span
+                              onClick={(e) => { e.stopPropagation(); setStatusPickerTaskId(isStatusOpen ? null : t.id); }}
+                              title="Change status"
+                              style={{
+                                fontSize: 10, padding: '1px 5px', borderRadius: 3,
+                                backgroundColor: tColor + '20', color: tColor, flexShrink: 0,
+                                cursor: 'pointer', userSelect: 'none',
+                              }}
+                            >
+                              {(status || 'open').replace(/_/g, ' ')}
+                            </span>
+                            {isStatusOpen && (
+                              <div style={{
+                                position: 'absolute', top: '100%', right: 0, zIndex: 10,
+                                backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                                borderRadius: 'var(--radius)', overflow: 'hidden', marginTop: 2,
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                              }}>
+                                {['open', 'in_progress', 'done', 'blocked'].map(s => {
+                                  const sc = STATUS_COLORS[s] || '#94a3b8';
+                                  return (
+                                    <div key={s}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handlePortfolioTaskUpdate(t.id, t.source || 'tracked', { status: s });
+                                        setStatusPickerTaskId(null);
+                                      }}
+                                      style={{
+                                        padding: '4px 12px', fontSize: 11, cursor: 'pointer',
+                                        color: sc, display: 'flex', alignItems: 'center', gap: 6,
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    >
+                                      <Circle size={8} fill={sc} />
+                                      {s.replace(/_/g, ' ')}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            <button
+                              onClick={() => handlePortfolioTaskRemove(t.id, t.source || 'tracked')}
+                              title="Discard task"
+                              style={{
+                                border: 'none', background: 'none', cursor: 'pointer', padding: 2,
+                                color: 'var(--text-muted)', display: 'flex', alignItems: 'center', flexShrink: 0,
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {hasMoreOps && (
+                      <button
+                        onClick={() => setOpsExpanded(!opsExpanded)}
+                        style={{
+                          border: 'none', background: 'none', cursor: 'pointer', color: 'var(--accent)',
+                          fontSize: 11, padding: '6px 0', width: '100%', textAlign: 'center',
+                        }}
+                      >
+                        {opsExpanded ? 'Show less' : `Show all ${visibleOps.length} operational tasks`}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Needs Epic section */}
               {selectedNeedsEpic.length > 0 && (

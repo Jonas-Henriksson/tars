@@ -270,6 +270,8 @@ def get_team_portfolio(
                     "status": t.get("status", ""),
                     "quadrant": t.get("priority", {}).get("quadrant"),
                     "follow_up_date": t.get("follow_up_date", ""),
+                    "classification": _classify_task(t),
+                    "source": "smart",
                 }
                 for t in person_smart
             ],
@@ -279,6 +281,9 @@ def get_team_portfolio(
                     "description": t.get("description", ""),
                     "status": t.get("status", "open"),
                     "source_title": t.get("source_title", ""),
+                    "follow_up_date": t.get("follow_up_date", ""),
+                    "classification": _classify_task(t),
+                    "source": "tracked",
                 }
                 for t in person_tracked
             ],
