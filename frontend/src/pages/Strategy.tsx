@@ -1162,6 +1162,38 @@ function ProgressBar({ done, total }: { done: number; total: number }) {
   );
 }
 
+function CompletionSparkline({ data }: { data: { date: string; count: number }[] }) {
+  const total = data.reduce((s, d) => s + d.count, 0);
+  const max = Math.max(...data.map((d) => d.count), 1);
+  const w = 600, h = 48, pad = 2;
+
+  const points = data.map((d, i) => {
+    const x = pad + (i / (data.length - 1)) * (w - 2 * pad);
+    const y = h - pad - ((d.count / max) * (h - 2 * pad));
+    return `${x},${y}`;
+  });
+  const line = points.join(' ');
+  const area = `${pad},${h - pad} ${line} ${w - pad},${h - pad}`;
+
+  return (
+    <div style={{
+      ...cardStyle, padding: '12px 20px', marginBottom: 20,
+      display: 'flex', alignItems: 'center', gap: 16,
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Completions · Last 30 days</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{total} completed</span>
+        </div>
+        <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 48 }} preserveAspectRatio="none">
+          <polygon points={area} fill="var(--accent)" opacity="0.15" />
+          <polyline points={line} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 function HealthDashboard() {
   const [tree, setTree] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
@@ -1170,16 +1202,19 @@ function HealthDashboard() {
   const [expandedThemes, setExpandedThemes] = useState<Set<string>>(new Set());
   const [expandedInits, setExpandedInits] = useState<Set<string>>(new Set());
   const [selectedEpic, setSelectedEpic] = useState<any>(null);
+  const [trendData, setTrendData] = useState<{ date: string; count: number }[]>([]);
 
   useEffect(() => {
     Promise.all([
       api.get<any>('/api/hierarchy').catch(() => ({ tree: [] })),
       api.get<any>('/api/strategic-summary').catch(() => null),
       api.get<any>('/api/review/weekly').catch(() => null),
-    ]).then(([hierData, sumData, revData]) => {
+      api.get<any>('/api/analytics/completion-trend').catch(() => ({ days: [] })),
+    ]).then(([hierData, sumData, revData, trendRes]) => {
       setTree(hierData.tree || []);
       setSummary(sumData);
       setReview(revData);
+      setTrendData(trendRes?.days || []);
       setLoading(false);
     });
   }, []);
@@ -1199,13 +1234,14 @@ function HealthDashboard() {
 
   // Compute metrics
   const themeMetrics = new Map<string, NodeMetrics>();
-  let totalTasks = 0, totalDone = 0, totalBlocked = 0, totalOverdue = 0;
+  let totalTasks = 0, totalDone = 0, totalBlocked = 0, totalInProgress = 0, totalOverdue = 0;
   for (const theme of tree) {
     const m = aggregateMetrics(theme);
     themeMetrics.set(theme.id, m);
     totalTasks += m.total;
     totalDone += m.done;
     totalBlocked += m.blocked;
+    totalInProgress += m.inProgress;
   }
   totalOverdue = review?.smart_tasks?.overdue?.length || 0;
 
@@ -1243,14 +1279,38 @@ function HealthDashboard() {
   return (
     <>
       {/* Section A: Summary Ribbon */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 20 }}>
-        <MiniStatCard label="Themes" value={tree.length} />
-        <MiniStatCard label="On Track" value={initStats?.on_track || 0} color="#22c55e" />
+      {/* Row 1: Hero progress bar */}
+      <div style={{ ...cardStyle, padding: '16px 20px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 16 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Overall Progress</span>
+        <div style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: 'var(--border)', overflow: 'hidden' }}>
+          <div style={{
+            width: `${totalTasks > 0 ? Math.round((totalDone / totalTasks) * 100) : 0}%`,
+            height: '100%',
+            backgroundColor: totalDone === totalTasks && totalTasks > 0 ? '#22c55e' : 'var(--accent)',
+            borderRadius: 4,
+            transition: 'width 0.3s',
+          }} />
+        </div>
+        <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+          {totalTasks > 0 ? Math.round((totalDone / totalTasks) * 100) : 0}%
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+          {totalDone} / {totalTasks} tasks
+        </span>
+      </div>
+
+      {/* Row 2: Metric cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 12 }}>
+        <MiniStatCard label="Init On Track" value={`${initStats?.on_track || 0}/${initStats?.total || 0}`} color="#22c55e" />
         <MiniStatCard label="At Risk" value={initStats?.at_risk_count || 0} color="#f59e0b" />
         <MiniStatCard label="Off Track" value={initStats?.off_track_count || 0} color="#ef4444" />
-        <MiniStatCard label="Tasks Done" value={totalDone} color="var(--accent)" />
+        <MiniStatCard label="In Progress" value={totalInProgress} color="#3b82f6" />
         <MiniStatCard label="Overdue" value={totalOverdue} color="#ef4444" />
+        <MiniStatCard label="Blocked" value={totalBlocked} color="#ef4444" />
       </div>
+
+      {/* Row 3: Completion trend sparkline */}
+      <CompletionSparkline data={trendData} />
 
       {/* Section B: Theme Health Cards */}
       {tree.length === 0 ? (
@@ -1841,7 +1901,7 @@ function MiniStat({ label, value }: { label: string; value: number }) {
   );
 }
 
-function MiniStatCard({ label, value, color }: { label: string; value: number; color?: string }) {
+function MiniStatCard({ label, value, color }: { label: string; value: number | string; color?: string }) {
   return (
     <div style={{ ...cardStyle, padding: '14px 16px', textAlign: 'center' }}>
       <div style={{ fontSize: 24, fontWeight: 700, color: color || 'var(--text-primary)' }}>{value}</div>

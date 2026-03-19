@@ -417,6 +417,35 @@ async def get_weekly_review():
 
 
 # ---------------------------------------------------------------------------
+# Analytics
+# ---------------------------------------------------------------------------
+
+@router.get("/analytics/completion-trend")
+async def completion_trend():
+    """Return daily task completion counts for the last 30 days."""
+    from integrations.intel import get_intel as _get_intel
+    from datetime import datetime, timezone, timedelta
+
+    intel = _get_intel()
+    tasks = intel.get("smart_tasks", [])
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+
+    counts: dict[str, int] = {}
+    for t in tasks:
+        ca = t.get("completed_at", "")
+        if ca and ca[:10] >= cutoff:
+            counts[ca[:10]] = counts.get(ca[:10], 0) + 1
+
+    days = []
+    for i in range(30):
+        d = (now - timedelta(days=29 - i)).strftime("%Y-%m-%d")
+        days.append({"date": d, "count": counts.get(d, 0)})
+
+    return JSONResponse({"days": days})
+
+
+# ---------------------------------------------------------------------------
 # Meeting prep
 # ---------------------------------------------------------------------------
 

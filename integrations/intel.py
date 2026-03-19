@@ -1366,6 +1366,11 @@ def update_smart_task(
     for task in intel.get("smart_tasks", []):
         if task["id"] == task_id:
             if status:
+                if status == "done" and task.get("status") != "done":
+                    from datetime import datetime, timezone
+                    task["completed_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                elif status != "done" and task.get("status") == "done":
+                    task.pop("completed_at", None)
                 task["status"] = status
             if follow_up_date:
                 task["follow_up_date"] = follow_up_date
