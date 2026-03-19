@@ -45,6 +45,13 @@ export default function CommandCenter() {
   }, []);
 
   const criticalAlerts = alerts.filter((a) => a.severity === 'critical');
+  const warningAlerts = alerts.filter((a) => a.severity === 'warning');
+  const otherAlerts = alerts.filter((a) => a.severity !== 'critical' && a.severity !== 'warning');
+  const displayAlerts = [
+    ...criticalAlerts,
+    ...warningAlerts.slice(0, 3),
+    ...otherAlerts,
+  ].slice(0, 5);
   const initSummary = summary?.initiatives;
   const decSummary = summary?.decisions;
 
@@ -61,13 +68,22 @@ export default function CommandCenter() {
 
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)' }}>
-          Command Center
+      <div style={{ marginBottom: 24, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+        <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+          {(() => {
+            const h = new Date().getHours();
+            const greeting = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+            return `${greeting}, Jonas`;
+          })()}
         </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 4 }}>
+        {criticalAlerts.length > 0 && (
+          <span style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 12 }}>
+            {criticalAlerts.length} {criticalAlerts.length === 1 ? 'item needs' : 'items need'} your attention
+          </span>
+        )}
+        <span style={{ color: 'var(--text-muted)', fontSize: 13, marginLeft: 'auto' }}>
           {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-        </p>
+        </span>
       </div>
 
       {/* Alert banner */}
@@ -153,7 +169,7 @@ export default function CommandCenter() {
                 No alerts — all clear
               </div>
             ) : (
-              alerts.slice(0, 8).map((alert, i) => (
+              displayAlerts.map((alert, i) => (
                 <div
                   key={i}
                   onClick={() => setSelectedAlert(alert)}
@@ -179,9 +195,12 @@ export default function CommandCenter() {
                 </div>
               ))
             )}
-            {alerts.length > 8 && (
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: 8 }}>
-                +{alerts.length - 8} more alerts
+            {alerts.length > displayAlerts.length && (
+              <div
+                onClick={() => { /* TODO: expand all alerts */ }}
+                style={{ fontSize: 12, color: 'var(--accent)', textAlign: 'center', padding: 8, cursor: 'pointer', fontWeight: 500 }}
+              >
+                View all {alerts.length} alerts
               </div>
             )}
           </div>
@@ -212,16 +231,16 @@ export default function CommandCenter() {
             />
             <OverviewItem
               icon={<CheckCircle2 size={14} />}
-              label="Tasks by Priority"
+              label="Total Tasks"
               count={taskStats?.total || 0}
-              detail={taskStats?.quadrants ? `Q1: ${taskStats.quadrants['1'] || 0} urgent` : undefined}
+              detail={taskStats?.quadrants ? `Q1: ${taskStats.quadrants['1'] || 0} urgent · Q2: ${taskStats.quadrants['2'] || 0}` : undefined}
               color="var(--accent)"
               onClick={() => navigate('/work')}
             />
             <OverviewItem
               icon={<Users size={14} />}
               label="Team Overview"
-              count={0}
+              count="—"
               detail="View portfolio"
               color="var(--info)"
               onClick={() => navigate('/strategy?tab=portfolio')}
@@ -271,16 +290,16 @@ function StatCard({ icon, label, value, color, onClick }: {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>
-          <div style={{ fontSize: 28, fontWeight: 700, color }}>{value}</div>
+          <div style={{ fontSize: 24, fontWeight: 700, color }}>{value}</div>
         </div>
-        <div style={{ color, opacity: 0.3 }}>{icon}</div>
+        <div style={{ color, opacity: 0.5 }}>{icon}</div>
       </div>
     </div>
   );
 }
 
 function OverviewItem({ icon, label, count, detail, color, onClick }: {
-  icon: React.ReactNode; label: string; count: number; detail?: string; color: string; onClick?: () => void;
+  icon: React.ReactNode; label: string; count: number | string; detail?: string; color: string; onClick?: () => void;
 }) {
   return (
     <div

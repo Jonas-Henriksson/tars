@@ -9,6 +9,21 @@ import type { DetailField } from '../components/DetailPanel';
 
 type TabId = 'directory' | 'graph' | 'meeting-prep';
 
+const ORG_COLORS: Record<string, string> = {
+  Operations: '#3b82f6',
+  Technology: '#8b5cf6',
+  Strategy: '#10b981',
+  HR: '#f59e0b',
+  Finance: '#ef4444',
+  'Executive Office': '#6366f1',
+  Procurement: '#14b8a6',
+};
+
+function orgColor(org: string | undefined): string {
+  if (!org) return 'var(--accent)';
+  return ORG_COLORS[org] ?? 'var(--accent)';
+}
+
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'directory', label: 'Directory', icon: <Users size={16} /> },
   { id: 'graph', label: 'Graph', icon: <Network size={16} /> },
@@ -71,6 +86,7 @@ function DirectoryView() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Person | null>(null);
+  const [sortMode, setSortMode] = useState<'mentions' | 'az'>('mentions');
 
   useEffect(() => {
     api.get<any>('/api/people').then((data) => {
@@ -92,7 +108,7 @@ function DirectoryView() {
     p.role?.toLowerCase().includes(search.toLowerCase()) ||
     p.organization?.toLowerCase().includes(search.toLowerCase()) ||
     p.email?.toLowerCase().includes(search.toLowerCase())
-  );
+  ).sort((a, b) => sortMode === 'az' ? a.name.localeCompare(b.name) : (b.mentions || 0) - (a.mentions || 0));
 
   if (loading) return <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>Loading...</div>;
 
@@ -128,6 +144,32 @@ function DirectoryView() {
             Clear
           </button>
         )}
+        <div style={{ marginLeft: 12, display: 'flex', gap: 2, fontSize: 12 }}>
+          <button
+            onClick={() => setSortMode('mentions')}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px',
+              borderRadius: 'var(--radius)', fontSize: 12,
+              color: sortMode === 'mentions' ? 'var(--accent)' : 'var(--text-muted)',
+              fontWeight: sortMode === 'mentions' ? 600 : 400,
+              backgroundColor: sortMode === 'mentions' ? 'var(--accent-light)' : 'transparent',
+            }}
+          >
+            By mentions
+          </button>
+          <button
+            onClick={() => setSortMode('az')}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px',
+              borderRadius: 'var(--radius)', fontSize: 12,
+              color: sortMode === 'az' ? 'var(--accent)' : 'var(--text-muted)',
+              fontWeight: sortMode === 'az' ? 600 : 400,
+              backgroundColor: sortMode === 'az' ? 'var(--accent-light)' : 'transparent',
+            }}
+          >
+            A-Z
+          </button>
+        </div>
       </div>
 
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
@@ -158,11 +200,13 @@ function DirectoryView() {
                 e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
                 e.currentTarget.style.boxShadow = 'var(--shadow)';
                 e.currentTarget.style.borderColor = 'var(--accent)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = 'var(--bg-card)';
                 e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
                 e.currentTarget.style.borderColor = 'var(--border)';
+                e.currentTarget.style.transform = 'translateY(0)';
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
@@ -183,11 +227,13 @@ function DirectoryView() {
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>{p.organization}</div>
               )}
 
-              <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)' }}>
-                <span>{p.mentions || 0} mentions</span>
-                <span>{p.pages_count || p.pages?.length || 0} pages</span>
-                <span>{p.tasks_count || 0} tasks</span>
-              </div>
+              {((p.mentions || 0) > 0 || (p.pages_count || p.pages?.length || 0) > 0 || (p.tasks_count || 0) > 0) && (
+                <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)' }}>
+                  {(p.mentions || 0) > 0 && <span>{p.mentions} mentions</span>}
+                  {(p.pages_count || p.pages?.length || 0) > 0 && <span>{p.pages_count || p.pages?.length} pages</span>}
+                  {(p.tasks_count || 0) > 0 && <span>{p.tasks_count} tasks</span>}
+                </div>
+              )}
 
               {p.topics?.length > 0 && (
                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
@@ -249,9 +295,12 @@ function GraphView() {
 
   return (
     <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 24 }}>
-      <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 20 }}>
+      <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
         Relationship Network
       </h3>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 20 }}>
+        Circle size reflects mention frequency
+      </p>
       {entries.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
           No people data available yet.
@@ -264,18 +313,29 @@ function GraphView() {
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {orgPeople.sort((a, b) => (b.mentions || 0) - (a.mentions || 0)).map((p) => {
                   const size = 32 + Math.round(((p.mentions || 0) / maxMentions) * 24);
+                  const firstName = p.name.split(' ')[0];
+                  const showName = size > 40;
+                  const bg = orgColor(p.organization);
                   return (
-                    <div key={p.name} title={`${p.name} — ${p.mentions || 0} mentions`}
-                      style={{
-                        width: size, height: size, borderRadius: '50%',
-                        background: 'var(--accent)', display: 'flex', alignItems: 'center',
-                        justifyContent: 'center', color: '#fff', fontSize: Math.max(10, size / 3.5),
-                        fontWeight: 600, cursor: 'default', transition: 'transform 0.15s',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.15)'}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                      {p.name.charAt(0)}
+                    <div key={p.name} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <div
+                        title={`${p.name} — ${p.role || 'No role'} — ${p.mentions || 0} mentions`}
+                        style={{
+                          width: size, height: size, borderRadius: '50%',
+                          background: bg, display: 'flex', alignItems: 'center',
+                          justifyContent: 'center', color: '#fff', fontSize: Math.max(10, size / 3.5),
+                          fontWeight: 600, cursor: 'default', transition: 'transform 0.15s',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.15)'}
+                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                      >
+                        {p.name.charAt(0)}
+                      </div>
+                      {showName && (
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)', maxWidth: size + 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                          {firstName}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -309,10 +369,10 @@ function MeetingPrepView() {
         backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
         borderRadius: 'var(--radius-lg)', padding: 40, textAlign: 'center',
       }}>
-        <CalendarCheck size={48} style={{ color: 'var(--text-muted)', marginBottom: 16 }} />
+        <CalendarCheck size={32} style={{ color: 'var(--text-muted)', marginBottom: 12 }} />
         <h3 style={{ fontSize: 16, color: 'var(--text-primary)', marginBottom: 8 }}>Meeting Prep</h3>
         <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-          {prep?.reason || prep?.error || 'No upcoming meetings found. Connect your calendar to get meeting briefings.'}
+          {prep?.reason || prep?.error || 'Connect Microsoft 365 in Settings to get meeting briefings.'}
         </p>
       </div>
     );

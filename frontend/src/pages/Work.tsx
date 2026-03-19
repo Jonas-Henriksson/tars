@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useStore } from '../store';
 import { getTheme } from '../themes';
 import { api } from '../api/client';
-import { Grid3x3, Columns3, List, GanttChart, ChevronDown, ChevronUp } from 'lucide-react';
+import { Grid3x3, Columns3, List, GanttChart, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import DetailPanel from '../components/DetailPanel';
 import type { DetailField } from '../components/DetailPanel';
 
@@ -50,9 +50,8 @@ const QUADRANT_LABELS: Record<number, { name: string; color: string }> = {
 };
 
 const BOARD_COLUMNS = [
-  { id: 'backlog', label: 'Backlog', color: '#94a3b8' },
+  { id: 'backlog', label: 'Open', color: '#94a3b8' },
   { id: 'in_progress', label: 'In Progress', color: '#3b82f6' },
-  { id: 'review', label: 'Review', color: '#f59e0b' },
   { id: 'done', label: 'Done', color: '#22c55e' },
 ];
 
@@ -64,7 +63,6 @@ function getTaskPhase(t: SmartTask): string {
   const s = t.status?.toLowerCase();
   if (s === 'done' || s === 'completed') return 'done';
   if (s === 'in_progress' || s === 'in progress' || s === 'active') return 'in_progress';
-  if (s === 'review' || s === 'in_review') return 'review';
   return 'backlog';
 }
 
@@ -75,6 +73,7 @@ export default function Work() {
   const [tasks, setTasks] = useState<SmartTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<SmartTask | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     api.get<any>('/api/intel/tasks').then((data) => {
@@ -111,7 +110,7 @@ export default function Work() {
 
   const handleDragDrop = useCallback((taskId: string, newPhase: string) => {
     const statusMap: Record<string, string> = {
-      backlog: 'open', in_progress: 'in_progress', review: 'review', done: 'done',
+      backlog: 'open', in_progress: 'in_progress', done: 'done',
     };
     setTasks((prev) => prev.map((t) =>
       t.id === taskId ? { ...t, status: statusMap[newPhase] || newPhase } : t
@@ -162,7 +161,7 @@ export default function Work() {
 
   const taskFields: DetailField[] = selectedTask ? [
     { key: 'status', label: 'Status', value: selectedTask.status, type: 'select',
-      options: ['open', 'in_progress', 'review', 'done'] },
+      options: ['open', 'in_progress', 'done'] },
     { key: 'owner', label: 'Owner', value: selectedTask.owner, type: 'select',
       options: ownerOptions },
     { key: 'priority', label: 'Priority', value: QUADRANT_LABELS[getTaskQuadrant(selectedTask)]?.name, type: 'select',
@@ -211,14 +210,37 @@ export default function Work() {
     { key: 'delegated', label: 'Delegated', value: selectedTask.delegated ? 'Yes' : 'No', type: 'readonly' },
   ] : [];
 
+  const filteredTasks = searchQuery
+    ? tasks.filter((t) => t.description?.toLowerCase().includes(searchQuery.toLowerCase()))
+    : tasks;
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)' }}>Work</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-            {tasks.length} tasks{tasks.filter(t => t.status !== 'done').length < tasks.length && ` · ${tasks.filter(t => t.status !== 'done').length} open`}
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)' }}>Work</h1>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+              {filteredTasks.length}{searchQuery ? ` of ${tasks.length}` : ''} tasks{(() => { const openCount = filteredTasks.filter(t => t.status !== 'done').length; return openCount < filteredTasks.length ? ` · ${openCount} open` : ''; })()}
+            </p>
+          </div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)', padding: '5px 10px', minWidth: 200,
+          }}>
+            <Search size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+            <input
+              type="text" placeholder="Filter tasks..." value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ flex: 1, border: 'none', outline: 'none', background: 'none', color: 'var(--text-primary)', fontSize: 13 }}
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 11, padding: 0 }}>
+                Clear
+              </button>
+            )}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 4, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 3 }}>
           {TABS.map((t) => (
@@ -244,13 +266,13 @@ export default function Work() {
       {loading ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>Loading tasks...</div>
       ) : tab === 'matrix' ? (
-        <MatrixView tasks={tasks} onTaskClick={handleTaskClick} />
+        <MatrixView tasks={filteredTasks} onTaskClick={handleTaskClick} />
       ) : tab === 'board' ? (
-        <BoardView tasks={tasks} onTaskClick={handleTaskClick} onDragDrop={handleDragDrop} />
+        <BoardView tasks={filteredTasks} onTaskClick={handleTaskClick} onDragDrop={handleDragDrop} />
       ) : tab === 'list' ? (
-        <ListView tasks={tasks} onTaskClick={handleTaskClick} />
+        <ListView tasks={filteredTasks} onTaskClick={handleTaskClick} />
       ) : (
-        <TimelineView tasks={tasks} onTaskClick={handleTaskClick} />
+        <TimelineView tasks={filteredTasks} onTaskClick={handleTaskClick} />
       )}
 
       <DetailPanel
@@ -282,7 +304,7 @@ function MatrixView({ tasks, onTaskClick }: { tasks: SmartTask[]; onTaskClick: (
           <div key={q} style={{
             backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
             borderRadius: 'var(--radius-lg)', borderTop: `3px solid ${label.color}`,
-            padding: 16, minHeight: 200,
+            padding: 16, minHeight: qTasks.length === 0 ? 120 : 200,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: label.color }}>{label.name}</span>
@@ -291,15 +313,18 @@ function MatrixView({ tasks, onTaskClick }: { tasks: SmartTask[]; onTaskClick: (
               </span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {qTasks.slice(0, 10).map((t) => (
+              {qTasks.slice(0, 8).map((t) => (
                 <TaskCard key={t.id} task={t} compact onClick={() => onTaskClick(t)} />
               ))}
               {qTasks.length === 0 && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: 20 }}>No tasks</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: 12 }}>No tasks</div>
               )}
-              {qTasks.length > 10 && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: 4 }}>
-                  +{qTasks.length - 10} more
+              {qTasks.length > 8 && (
+                <div style={{
+                  fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '6px 4px',
+                  fontWeight: 500, backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)',
+                }}>
+                  +{qTasks.length - 8} more of {qTasks.length} tasks
                 </div>
               )}
             </div>
@@ -409,8 +434,8 @@ function BoardView({ tasks, onTaskClick, onDragDrop }: {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 60 }}>
                 {colTasks.length === 0 ? (
                   <div style={{
-                    fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: 20,
-                    border: '1px dashed var(--border)', borderRadius: 'var(--radius)',
+                    fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 20,
+                    border: '1px dashed var(--border-light)', borderRadius: 'var(--radius)',
                   }}>
                     Drop tasks here
                   </div>
@@ -512,8 +537,8 @@ function ListView({ tasks, onTaskClick }: { tasks: SmartTask[]; onTaskClick: (t:
                 <td style={{ padding: '10px 16px' }}>
                   <span style={{
                     fontSize: 11, padding: '2px 8px', borderRadius: 10,
-                    backgroundColor: t.status === 'done' ? '#22c55e20' : 'var(--accent-light)',
-                    color: t.status === 'done' ? '#22c55e' : 'var(--accent)',
+                    backgroundColor: t.status === 'done' ? '#22c55e20' : t.status === 'in_progress' ? '#3b82f620' : '#94a3b820',
+                    color: t.status === 'done' ? '#22c55e' : t.status === 'in_progress' ? '#3b82f6' : '#94a3b8',
                   }}>
                     {(t.status || 'open').replace(/_/g, ' ')}
                   </span>
@@ -563,7 +588,11 @@ function TimelineView({ tasks, onTaskClick }: { tasks: SmartTask[]; onTaskClick:
                   borderRadius: 'var(--radius)', display: 'inline-block',
                 }}>
                   {isToday ? 'Today' : new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                  {isPast && !isToday && ' (overdue)'}
+                  {isPast && !isToday && (() => {
+                    const diffMs = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00').getTime() - new Date(date + 'T00:00:00').getTime();
+                    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+                    return ` (${diffDays} ${diffDays === 1 ? 'day' : 'days'} overdue)`;
+                  })()}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {dateTasks.map((t) => (
@@ -627,7 +656,7 @@ function TaskCard({ task, compact, onClick }: { task: SmartTask; compact?: boole
       {!compact && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
           {task.owner && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3, fontWeight: 500 }}>
               {task.owner}
             </span>
           )}

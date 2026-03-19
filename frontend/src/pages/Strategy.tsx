@@ -45,11 +45,27 @@ export default function Strategy() {
   const { themeId } = useStore();
   const theme = getTheme(themeId);
   const [tab, setTab] = useState<TabId>(theme.layout.defaultStrategyTab);
+  const [strategySummary, setStrategySummary] = useState<any>(null);
+
+  useEffect(() => {
+    api.get<any>('/api/strategic-summary').then(setStrategySummary).catch(() => {});
+  }, []);
+
+  const currentQ = `Q${Math.ceil((new Date().getMonth() + 1) / 3)} ${new Date().getFullYear()}`;
+  const initCount = strategySummary?.initiatives?.total || 0;
+  const epicCount = strategySummary?.epics?.total || strategySummary?.initiatives?.epics_count || 0;
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)' }}>Strategy</h1>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)' }}>Strategy</h1>
+          {strategySummary && (
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+              {currentQ}{initCount ? ` · ${initCount} initiative${initCount !== 1 ? 's' : ''}` : ''}{epicCount ? ` · ${epicCount} epic${epicCount !== 1 ? 's' : ''}` : ''}
+            </p>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: 4, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 3 }}>
           {TABS.map((t) => (
             <button
@@ -1464,8 +1480,8 @@ function HealthDashboard() {
         <MiniStatCard label="Blocked" value={totalBlocked} color="#ef4444" />
       </div>
 
-      {/* Row 3: Completion trend sparkline */}
-      <CompletionSparkline data={trendData} />
+      {/* Row 3: Completion trend sparkline — only show when there's data */}
+      {trendData.some(d => d.count > 0) && <CompletionSparkline data={trendData} />}
 
       {/* Section B: Theme Health Cards */}
       {tree.length === 0 ? (
@@ -1568,14 +1584,14 @@ function HealthDashboard() {
       {/* Section C: Attention Required */}
       {attentionItems.length > 0 && (
         <div style={{ marginTop: 24 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 500, color: '#ef4444', marginBottom: 8 }}>Attention Required ({attentionItems.length})</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 500, color: '#f59e0b', marginBottom: 8 }}>Attention Required ({attentionItems.length})</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {attentionItems.slice(0, 10).map((item, i) => (
               <div key={i} style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px',
                 borderLeft: `3px solid ${item.color}`, fontSize: 12,
               }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: item.color, flexShrink: 0 }} />
+                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#f59e0b', flexShrink: 0 }} />
                 <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{item.label}</span>
                 <span style={{ flex: 1, borderBottom: '1px dotted var(--border)', marginBottom: 2, opacity: 0.25 }} />
                 <span style={{ color: 'var(--text-muted)' }}>{item.detail}</span>
@@ -1974,7 +1990,7 @@ function DecisionsView() {
       </div>
 
       {/* Decision cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {filtered.length === 0 ? (
           <EmptyState message={filter === 'all' ? 'No decisions logged yet. Click "+ Add Decision" to get started.' : `No ${filter} decisions.`} />
         ) : (
@@ -2683,7 +2699,7 @@ function StatusBadge({ status }: { status: string }) {
   const color = STATUS_COLORS[status] || '#94a3b8';
   return (
     <span style={{
-      fontSize: 11, padding: '3px 10px', borderRadius: 12,
+      fontSize: 11, padding: '3px 10px', borderRadius: 10,
       backgroundColor: color + '20', color, fontWeight: 500,
       display: 'inline-flex', alignItems: 'center', gap: 4,
     }}>
