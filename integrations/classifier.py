@@ -29,6 +29,25 @@ logger = logging.getLogger(__name__)
 _INTEL_FILE = Path(__file__).parent.parent / "notion_intel.json"
 
 
+def _extract_json(text: str) -> dict:
+    """Extract a JSON object from LLM output, ignoring preamble and markdown."""
+    text = text.strip()
+    # Strip markdown code fences
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    # Try direct parse first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Find the first { and last } to extract the JSON object
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return json.loads(text[start:end + 1])
+    raise json.JSONDecodeError("No JSON object found in response", text, 0)
+
+
 def _get_opus_client():
     """Get Anthropic client for Opus calls."""
     try:
@@ -352,10 +371,8 @@ async def classify_tasks(
             messages=[{"role": "user", "content": phase1_prompt}],
         )
         phase1_text = phase1_result.content[0].text.strip()
-        # Handle markdown code blocks
-        if phase1_text.startswith("```"):
-            phase1_text = phase1_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-        phase1_data = json.loads(phase1_text)
+        logger.info("Phase 1 raw response (first 200 chars): %s", phase1_text[:200])
+        phase1_data = _extract_json(phase1_text)
     except json.JSONDecodeError as e:
         logger.error("Phase 1: Opus returned invalid JSON: %s", e)
         return {"error": f"Classification failed — Opus returned invalid JSON in Phase 1: {e}"}
@@ -487,9 +504,7 @@ async def classify_tasks(
                 messages=[{"role": "user", "content": phase2_prompt}],
             )
             phase2_text = phase2_result.content[0].text.strip()
-            if phase2_text.startswith("```"):
-                phase2_text = phase2_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-            phase2_data = json.loads(phase2_text)
+            phase2_data = _extract_json(phase2_text)
         except (json.JSONDecodeError, Exception) as e:
             logger.warning("Phase 2 failed for initiative '%s': %s", init.get("title"), e)
             continue
