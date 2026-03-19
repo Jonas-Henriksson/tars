@@ -1054,7 +1054,7 @@ function countByStatus(nodes: any[]): Record<string, number> {
 function HealthBar({ counts, total }: { counts: Record<string, number>; total: number }) {
   if (total === 0) return null;
   const segments = [
-    { key: 'on_track', color: '#22c55e' }, { key: 'completed', color: '#22c55e' },
+    { key: 'completed', color: '#16a34a' }, { key: 'on_track', color: '#4ade80' },
     { key: 'at_risk', color: '#f59e0b' }, { key: 'paused', color: '#94a3b8' },
     { key: 'off_track', color: '#ef4444' },
   ];
