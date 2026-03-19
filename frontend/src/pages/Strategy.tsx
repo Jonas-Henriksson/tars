@@ -165,6 +165,79 @@ function HierarchyView() {
     });
   }, [startPolling]);
 
+  // --- Click-to-edit hierarchy nodes ---
+  const [selectedNode, setSelectedNode] = useState<any | null>(null);
+
+  // Collect all owners from tree for frequency-sorted dropdown
+  const collectOwners = useCallback((nodes: any[]): Record<string, number> => {
+    const counts: Record<string, number> = {};
+    for (const n of nodes) {
+      if (n.owner) counts[n.owner] = (counts[n.owner] || 0) + 1;
+      if (n.children) {
+        const sub = collectOwners(n.children);
+        for (const [k, v] of Object.entries(sub)) counts[k] = (counts[k] || 0) + v;
+      }
+    }
+    return counts;
+  }, []);
+  const ownerCounts = collectOwners(tree);
+  const ownerOptions = Object.entries(ownerCounts).sort((a, b) => b[1] - a[1]).map(([name]) => name);
+
+  const getNodeFields = useCallback((node: any): DetailField[] => {
+    const t = node.type;
+    if (t === 'theme') return [
+      { key: 'title', label: 'Title', value: node.title, type: 'text' },
+      { key: 'description', label: 'Description', value: node.description, type: 'textarea' },
+      { key: 'status', label: 'Status', value: node.status || 'active', type: 'select', options: ['active', 'completed', 'paused'] },
+    ];
+    if (t === 'initiative') return [
+      { key: 'title', label: 'Title', value: node.title, type: 'text' },
+      { key: 'description', label: 'Description', value: node.description, type: 'textarea' },
+      { key: 'owner', label: 'Owner', value: node.owner, type: 'select', options: ownerOptions },
+      { key: 'quarter', label: 'Quarter', value: node.quarter, type: 'text' },
+      { key: 'status', label: 'Status', value: node.status || 'on_track', type: 'select', options: ['on_track', 'at_risk', 'off_track', 'completed', 'paused'] },
+      { key: 'priority', label: 'Priority', value: node.priority || 'high', type: 'select', options: ['high', 'medium', 'low'] },
+    ];
+    if (t === 'epic') return [
+      { key: 'title', label: 'Title', value: node.title, type: 'text' },
+      { key: 'description', label: 'Description', value: node.description, type: 'textarea' },
+      { key: 'owner', label: 'Owner', value: node.owner, type: 'select', options: ownerOptions },
+      { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'in_progress', 'done', 'cancelled'] },
+      { key: 'priority', label: 'Priority', value: node.priority || 'high', type: 'select', options: ['high', 'medium', 'low'] },
+      { key: 'quarter', label: 'Quarter', value: node.quarter, type: 'text' },
+      { key: 'acceptance_criteria', label: 'Acceptance Criteria', value: node.acceptance_criteria || [], type: 'tags' },
+    ];
+    if (t === 'story') return [
+      { key: 'title', label: 'Title', value: node.title, type: 'text' },
+      { key: 'description', label: 'Description', value: node.description, type: 'textarea' },
+      { key: 'owner', label: 'Owner', value: node.owner, type: 'select', options: ownerOptions },
+      { key: 'status', label: 'Status', value: node.status || 'backlog', type: 'select', options: ['backlog', 'ready', 'in_progress', 'in_review', 'done', 'blocked'] },
+      { key: 'priority', label: 'Priority', value: node.priority || 'medium', type: 'select', options: ['high', 'medium', 'low'] },
+      { key: 'size', label: 'Size', value: node.size || 'M', type: 'select', options: ['XS', 'S', 'M', 'L', 'XL'] },
+      { key: 'acceptance_criteria', label: 'Acceptance Criteria', value: node.acceptance_criteria || [], type: 'tags' },
+    ];
+    return [];
+  }, [ownerOptions]);
+
+  const handleNodeClick = useCallback((node: any) => {
+    setSelectedNode(node);
+  }, []);
+
+  const nodeEndpointMap: Record<string, string> = {
+    theme: '/api/themes', initiative: '/api/initiatives',
+    epic: '/api/epics', story: '/api/stories',
+  };
+
+  const handleNodeFieldChange = useCallback((key: string, value: any) => {
+    if (!selectedNode) return;
+    const endpoint = nodeEndpointMap[selectedNode.type];
+    if (!endpoint) return;
+    // Optimistic local update
+    setTree((prev) => updateNodeInTree(prev, selectedNode.id, (n) => ({ ...n, [key]: value })));
+    setSelectedNode((prev: any) => prev ? { ...prev, [key]: value } : null);
+    api.patch<any>(`${endpoint}/${selectedNode.id}`, { [key]: value }).catch(() => {});
+  }, [selectedNode, updateNodeInTree]);
+
   // Optimistic tree update helpers
   const updateNodeInTree = useCallback((nodes: any[], id: string, updater: (n: any) => any): any[] => {
     return nodes.map((n) => {
@@ -274,7 +347,7 @@ function HierarchyView() {
       {/* Tree */}
       <div key={treeKey} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {tree.map((node) => (
-          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} onApprove={handleApprove} onDismiss={handleDismiss} />
+          <HierarchyNode key={node.id} node={node} depth={0} expandMode={expandMode} onApprove={handleApprove} onDismiss={handleDismiss} onNodeClick={handleNodeClick} />
         ))}
       </div>
 
@@ -311,6 +384,36 @@ function HierarchyView() {
           ))}
         </div>
       )}
+
+      {/* Detail panel for editing hierarchy nodes */}
+      <DetailPanel
+        open={!!selectedNode}
+        onClose={() => setSelectedNode(null)}
+        title={selectedNode?.title || selectedNode?.description || ''}
+        subtitle={selectedNode ? `${TYPE_LABELS[selectedNode.type] || selectedNode.type}${selectedNode.owner ? ` · ${selectedNode.owner}` : ''}` : undefined}
+        badge={selectedNode?.source === 'auto' ? { label: 'AI proposed', color: '#8b5cf6' } : undefined}
+        fields={selectedNode ? getNodeFields(selectedNode) : []}
+        onFieldChange={handleNodeFieldChange}
+        onSave={(updates) => {
+          if (!selectedNode) return;
+          const endpoint = nodeEndpointMap[selectedNode.type];
+          if (endpoint) {
+            api.patch<any>(`${endpoint}/${selectedNode.id}`, updates).catch(() => {});
+          }
+          setTree((prev) => updateNodeInTree(prev, selectedNode.id, (n) => ({ ...n, ...updates })));
+          setSelectedNode(null);
+        }}
+        actions={selectedNode?.source === 'auto' ? [
+          { label: 'Approve', variant: 'primary' as const, onClick: () => {
+            handleApprove(selectedNode.type + 's', selectedNode.id);
+            setSelectedNode((prev: any) => prev ? { ...prev, source: 'confirmed' } : null);
+          }},
+          { label: 'Dismiss', variant: 'danger' as const, onClick: () => {
+            handleDismiss(selectedNode.type + 's', selectedNode.id);
+            setSelectedNode(null);
+          }},
+        ] : undefined}
+      />
     </div>
   );
 }
@@ -323,11 +426,12 @@ const TYPE_LABELS: Record<string, string> = {
   theme: 'Theme', initiative: 'Initiative', epic: 'Epic', story: 'Story',
 };
 
-function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismiss }: {
+function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismiss, onNodeClick }: {
   node: any; depth: number;
   expandMode?: 'default' | 'all' | 'none';
   onApprove: (type: string, id: string) => void;
   onDismiss: (type: string, id: string) => void;
+  onNodeClick?: (node: any) => void;
 }) {
   const defaultExpanded = expandMode === 'all' ? true : expandMode === 'none' ? false : depth < 2;
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -346,14 +450,17 @@ function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismi
           borderRadius: 'var(--radius)',
           marginBottom: 1,
           color: isAuto ? 'var(--text-muted)' : 'var(--text-primary)',
-          cursor: 'pointer',
           transition: 'all 0.15s',
         }}
-        onClick={() => setExpanded(!expanded)}
       >
-        {children.length > 0 ? (
-          expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
-        ) : <span style={{ width: 14 }} />}
+        <span
+          onClick={() => setExpanded(!expanded)}
+          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+        >
+          {children.length > 0 ? (
+            expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+          ) : <span style={{ width: 14 }} />}
+        </span>
 
         <span style={{
           fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
@@ -362,7 +469,12 @@ function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismi
           {TYPE_LABELS[node.type] || node.type}
         </span>
 
-        <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>
+        <span
+          onClick={() => onNodeClick?.(node)}
+          style={{ fontSize: 13, fontWeight: 500, flex: 1, cursor: 'pointer', borderRadius: 4, padding: '2px 4px', transition: 'background-color 0.1s' }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        >
           {node.title || node.description || '(untitled)'}
         </span>
 
@@ -412,7 +524,7 @@ function HierarchyNode({ node, depth, expandMode = 'default', onApprove, onDismi
 
       {expanded && children.map((child: any) => (
         child.type ? (
-          <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} onApprove={onApprove} onDismiss={onDismiss} />
+          <HierarchyNode key={child.id} node={child} depth={depth + 1} expandMode={expandMode} onApprove={onApprove} onDismiss={onDismiss} onNodeClick={onNodeClick} />
         ) : (
           <TaskLeaf key={child.id} task={child} depth={depth + 1} onApprove={onApprove} onDismiss={onDismiss} />
         )

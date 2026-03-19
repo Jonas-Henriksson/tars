@@ -208,8 +208,12 @@ GRAMMAR:
 - Make titles concise, meaningful, and professional
 - No trailing punctuation on titles
 
+FIELD ENRICHMENT:
+For each theme, also provide a concise strategic description.
+For each initiative, also provide: owner (best person from the tasks), quarter (e.g. "Q1 2026"), priority ("high"/"medium"/"low"), status ("on_track").
+
 Return ONLY valid JSON (no markdown, no explanation):
-{{"themes": [{{"title": "...", "description": "..."}}], "initiatives": [{{"title": "...", "description": "...", "theme_index": 0, "task_ids": [...], "proposed": false}}], "proposed_initiatives": [{{"title": "...", "description": "...", "theme_index": 0, "rationale": "..."}}], "operational_task_ids": [...], "unclassified_task_ids": [...]}}
+{{"themes": [{{"title": "...", "description": "...", "status": "active"}}], "initiatives": [{{"title": "...", "description": "...", "theme_index": 0, "task_ids": [...], "proposed": false, "owner": "...", "quarter": "...", "priority": "high", "status": "on_track"}}], "proposed_initiatives": [{{"title": "...", "description": "...", "theme_index": 0, "rationale": "...", "owner": "...", "quarter": "...", "priority": "high"}}], "operational_task_ids": [...], "unclassified_task_ids": [...]}}
 
 TASKS:
 {tasks_json}
@@ -248,6 +252,10 @@ GAP-FILL (critical):
 - Mark all proposed items clearly so users can approve or dismiss them
 - Be pragmatic — only propose items that genuinely add value, not boilerplate
 
+FIELD ENRICHMENT:
+For each epic, also provide: owner (best person), priority ("high"/"medium"/"low"), acceptance_criteria (list of 2-4 measurable criteria).
+For each story, also provide: owner, priority, size ("XS"/"S"/"M"/"L"/"XL" based on complexity), acceptance_criteria (list of 2-4 criteria).
+
 GRAMMAR:
 - Capitalize first letter of all titles
 - Make titles concise and meaningful
@@ -255,7 +263,7 @@ GRAMMAR:
 - Consistent tense and style across all items
 
 Return ONLY valid JSON (no markdown, no explanation):
-{{"epics": [{{"title": "...", "description": "...", "stories": [{{"title": "...", "description": "...", "task_ids": [...]}}], "unlinked_task_ids": [...], "proposed_stories": [{{"title": "...", "description": "...", "rationale": "..."}}]}}], "proposed_epics": [{{"title": "...", "description": "...", "rationale": "...", "proposed_stories": [{{"title": "...", "description": "..."}}]}}], "proposed_tasks": [{{"description": "...", "rationale": "...", "epic_title": "...", "story_title": "..."}}]}}
+{{"epics": [{{"title": "...", "description": "...", "owner": "...", "priority": "high", "acceptance_criteria": ["..."], "stories": [{{"title": "...", "description": "...", "task_ids": [...], "owner": "...", "priority": "medium", "size": "M", "acceptance_criteria": ["..."]}}], "unlinked_task_ids": [...], "proposed_stories": [{{"title": "...", "description": "...", "rationale": "...", "owner": "...", "priority": "medium", "size": "M", "acceptance_criteria": ["..."]}}]}}], "proposed_epics": [{{"title": "...", "description": "...", "rationale": "...", "owner": "...", "priority": "high", "acceptance_criteria": ["..."], "proposed_stories": [{{"title": "...", "description": "...", "owner": "...", "priority": "medium", "size": "M", "acceptance_criteria": ["..."]}}]}}], "proposed_tasks": [{{"description": "...", "rationale": "...", "epic_title": "...", "story_title": "..."}}]}}
 """
 
 
@@ -391,6 +399,7 @@ async def classify_tasks(
             title=_normalize_title(t_data.get("title", "")),
             description=_normalize_description(t_data.get("description", "")),
             source="auto",
+            status=t_data.get("status", "active"),
         )
         themes_created.append(result.get("theme", {}))
 
@@ -406,6 +415,10 @@ async def classify_tasks(
             description=_normalize_description(i_data.get("description", "")),
             theme_id=theme_id,
             source="auto",
+            owner=i_data.get("owner", ""),
+            quarter=i_data.get("quarter", ""),
+            priority=i_data.get("priority", "high"),
+            status=i_data.get("status", "on_track"),
         )
         init = result.get("initiative", {})
         initiatives_created.append(init)
@@ -421,6 +434,9 @@ async def classify_tasks(
             description=_normalize_description(pi_data.get("description", "")),
             theme_id=theme_id,
             source="auto",
+            owner=pi_data.get("owner", ""),
+            quarter=pi_data.get("quarter", ""),
+            priority=pi_data.get("priority", "high"),
         )
         initiatives_created.append(result.get("initiative", {}))
 
@@ -516,6 +532,9 @@ async def classify_tasks(
                 description=_normalize_description(e_data.get("description", "")),
                 initiative_id=init_id,
                 source="auto",
+                owner=e_data.get("owner", ""),
+                priority=e_data.get("priority", "high"),
+                acceptance_criteria=e_data.get("acceptance_criteria"),
             )
             epic = epic_result.get("epic", {})
             epic_id = epic.get("id", "")
@@ -528,6 +547,10 @@ async def classify_tasks(
                     title=_normalize_title(s_data.get("title", "")),
                     description=_normalize_description(s_data.get("description", "")),
                     source="auto",
+                    owner=s_data.get("owner", ""),
+                    priority=s_data.get("priority", "medium"),
+                    size=s_data.get("size", "M"),
+                    acceptance_criteria=s_data.get("acceptance_criteria"),
                 )
                 story = story_result.get("story", {})
                 story_id = story.get("id", "")
@@ -555,6 +578,10 @@ async def classify_tasks(
                     title=_normalize_title(ps_data.get("title", "")),
                     description=_normalize_description(ps_data.get("description", "")),
                     source="auto",
+                    owner=ps_data.get("owner", ""),
+                    priority=ps_data.get("priority", "medium"),
+                    size=ps_data.get("size", "M"),
+                    acceptance_criteria=ps_data.get("acceptance_criteria"),
                 )
                 stories_created += 1
 
@@ -565,6 +592,9 @@ async def classify_tasks(
                 description=_normalize_description(pe_data.get("description", "")),
                 initiative_id=init_id,
                 source="auto",
+                owner=pe_data.get("owner", ""),
+                priority=pe_data.get("priority", "high"),
+                acceptance_criteria=pe_data.get("acceptance_criteria"),
             )
             pe = pe_result.get("epic", {})
             pe_id = pe.get("id", "")
@@ -576,6 +606,10 @@ async def classify_tasks(
                     title=_normalize_title(ps_data.get("title", "")),
                     description=_normalize_description(ps_data.get("description", "")),
                     source="auto",
+                    owner=ps_data.get("owner", ""),
+                    priority=ps_data.get("priority", "medium"),
+                    size=ps_data.get("size", "M"),
+                    acceptance_criteria=ps_data.get("acceptance_criteria"),
                 )
                 stories_created += 1
 
