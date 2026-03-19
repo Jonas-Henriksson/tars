@@ -747,6 +747,13 @@ async def scan_notion(
                 "status": "open",
                 "steps": suggested_steps,
                 "created_at": now.isoformat(),
+                # Agile classification fields (populated by classifier)
+                "story_id": "",
+                "classification": "unclassified",
+                "manual_override": False,
+                "override_at": "",
+                "confidence": 0.0,
+                "source": "confirmed",
             }
             new_tasks.append(task)
             existing_task_descs.add(d["description"].lower())
@@ -780,6 +787,13 @@ async def scan_notion(
                 "status": "open",
                 "steps": suggested_steps,
                 "created_at": now.isoformat(),
+                # Agile classification fields (populated by classifier)
+                "story_id": "",
+                "classification": "unclassified",
+                "manual_override": False,
+                "override_at": "",
+                "confidence": 0.0,
+                "source": "confirmed",
             }
             new_tasks.append(task)
             existing_task_descs.add(ot["description"].lower())
@@ -1449,6 +1463,40 @@ def delete_smart_task(task_id: str) -> dict:
             intel["executive_summary"] = _build_executive_summary(intel)
             _save_intel(intel)
             return {"message": "Task deleted."}
+    return {"error": f"Task not found: {task_id}"}
+
+
+def assign_task(
+    task_id: str,
+    story_id: str = "",
+    classification: str = "",
+) -> dict:
+    """Assign a task to a story and/or change its classification.
+
+    Sets manual_override=True to protect from future auto-classification.
+    """
+    intel = _load_intel()
+    for task in intel.get("smart_tasks", []):
+        if task["id"] == task_id:
+            if story_id is not None:
+                task["story_id"] = story_id
+            if classification and classification in ("strategic", "operational", "unclassified"):
+                task["classification"] = classification
+            task["manual_override"] = True
+            task["override_at"] = datetime.now(timezone.utc).isoformat()
+            _save_intel(intel)
+            return {"message": "Task assigned.", "task": _summarize_task(task)}
+    return {"error": f"Task not found: {task_id}"}
+
+
+def approve_task(task_id: str) -> dict:
+    """Approve an auto-generated task (change source from 'auto' to 'confirmed')."""
+    intel = _load_intel()
+    for task in intel.get("smart_tasks", []):
+        if task["id"] == task_id:
+            task["source"] = "confirmed"
+            _save_intel(intel)
+            return {"message": "Task approved.", "task": _summarize_task(task)}
     return {"error": f"Task not found: {task_id}"}
 
 

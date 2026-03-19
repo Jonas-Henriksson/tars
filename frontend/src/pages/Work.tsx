@@ -28,6 +28,11 @@ interface SmartTask {
   age_days?: number;
   steps?: string;
   delegated?: boolean;
+  story_id?: string;
+  classification?: string;
+  manual_override?: boolean;
+  confidence?: number;
+  source?: string;
 }
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
@@ -109,8 +114,12 @@ export default function Work() {
     { key: 'priority', label: 'Priority', value: QUADRANT_LABELS[getTaskQuadrant(selectedTask)]?.name, type: 'select',
       options: ['Do First', 'Schedule', 'Delegate', 'Defer'], color: QUADRANT_LABELS[getTaskQuadrant(selectedTask)]?.color },
     { key: 'follow_up_date', label: 'Follow-up Date', value: selectedTask.follow_up_date, type: 'date' },
+    { key: 'classification', label: 'Classification', value: selectedTask.classification || 'unclassified', type: 'badge',
+      color: selectedTask.classification === 'strategic' ? '#3b82f6' : selectedTask.classification === 'operational' ? '#f59e0b' : '#94a3b8' },
+    { key: 'source_flag', label: 'Source', value: selectedTask.source === 'auto' ? 'AI Proposed' : 'Confirmed', type: 'badge',
+      color: selectedTask.source === 'auto' ? '#8b5cf6' : '#22c55e' },
     { key: 'topics', label: 'Topics', value: selectedTask.topics || (selectedTask.topic ? [selectedTask.topic] : []), type: 'tags' },
-    { key: 'source_title', label: 'Source', value: selectedTask.source_title, type: 'readonly' },
+    { key: 'source_title', label: 'Meeting Source', value: selectedTask.source_title, type: 'readonly' },
     { key: 'source_url', label: 'Source Link', value: selectedTask.source_url, type: 'link' },
     { key: 'source_context', label: 'Context', value: selectedTask.source_context, type: 'textarea' },
     { key: 'steps', label: 'Next Steps', value: selectedTask.steps, type: 'textarea' },
@@ -504,6 +513,7 @@ function TimelineView({ tasks, onTaskClick }: { tasks: SmartTask[]; onTaskClick:
 
 function TaskCard({ task, compact, onClick }: { task: SmartTask; compact?: boolean; onClick?: () => void }) {
   const q = getTaskQuadrant(task);
+  const isAuto = task.source === 'auto';
   return (
     <div
       onClick={onClick}
@@ -511,7 +521,7 @@ function TaskCard({ task, compact, onClick }: { task: SmartTask; compact?: boole
         padding: compact ? '8px 10px' : '10px 12px',
         backgroundColor: 'var(--bg-secondary)',
         borderRadius: 'var(--radius)',
-        borderLeft: `3px solid ${QUADRANT_LABELS[q].color}`,
+        borderLeft: `3px ${isAuto ? 'dashed' : 'solid'} ${QUADRANT_LABELS[q].color}`,
         cursor: onClick ? 'pointer' : 'default',
         transition: 'background-color 0.1s, box-shadow 0.1s',
       }}
@@ -526,7 +536,7 @@ function TaskCard({ task, compact, onClick }: { task: SmartTask; compact?: boole
         e.currentTarget.style.boxShadow = 'none';
       }}
     >
-      <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.4 }}>
+      <div style={{ fontSize: 13, color: isAuto ? 'var(--text-muted)' : 'var(--text-primary)', lineHeight: 1.4 }}>
         {task.description?.slice(0, compact ? 80 : 150)}
       </div>
       {!compact && (
@@ -538,6 +548,16 @@ function TaskCard({ task, compact, onClick }: { task: SmartTask; compact?: boole
           )}
           {task.follow_up_date && (
             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{task.follow_up_date}</span>
+          )}
+          {isAuto && (
+            <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, backgroundColor: 'rgba(139,92,246,0.1)', color: '#8b5cf6' }}>
+              AI proposed
+            </span>
+          )}
+          {task.classification === 'operational' && (
+            <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, backgroundColor: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>
+              Operational
+            </span>
           )}
         </div>
       )}

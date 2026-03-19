@@ -59,6 +59,7 @@ def create_epic(
     quarter: str = "",
     priority: str = "high",
     acceptance_criteria: list[str] | None = None,
+    source: str = "confirmed",
 ) -> dict[str, Any]:
     """Create a new epic — a large body of work that delivers significant value.
 
@@ -70,6 +71,7 @@ def create_epic(
         quarter: Target quarter (e.g. "Q2 2026").
         priority: high | medium | low.
         acceptance_criteria: Definition of done for the whole epic.
+        source: "confirmed" (human-created/approved) | "auto" (AI-proposed).
     """
     data = _load_data()
 
@@ -83,6 +85,7 @@ def create_epic(
         "status": "backlog",
         "priority": priority,
         "acceptance_criteria": acceptance_criteria or [],
+        "source": source if source in ("confirmed", "auto") else "confirmed",
         "created_at": _now(),
         "updated_at": _now(),
     }
@@ -228,6 +231,34 @@ def update_epic(
     return {"error": f"Epic not found: {epic_id}"}
 
 
+def approve_epic(epic_id: str) -> dict[str, Any]:
+    """Approve an auto-generated epic (change source from 'auto' to 'confirmed')."""
+    data = _load_data()
+
+    for e in data["epics"]:
+        if e.get("id") == epic_id:
+            e["source"] = "confirmed"
+            e["updated_at"] = _now()
+            _save_data(data)
+            return {"message": "Epic approved.", "epic": e}
+
+    return {"error": f"Epic not found: {epic_id}"}
+
+
+def approve_story(story_id: str) -> dict[str, Any]:
+    """Approve an auto-generated story (change source from 'auto' to 'confirmed')."""
+    data = _load_data()
+
+    for s in data["stories"]:
+        if s.get("id") == story_id:
+            s["source"] = "confirmed"
+            s["updated_at"] = _now()
+            _save_data(data)
+            return {"message": "Story approved.", "story": s}
+
+    return {"error": f"Story not found: {story_id}"}
+
+
 def delete_epic(epic_id: str) -> dict[str, Any]:
     """Delete an epic and its user stories."""
     data = _load_data()
@@ -254,6 +285,7 @@ def create_story(
     size: str = "M",
     priority: str = "medium",
     acceptance_criteria: list[str] | None = None,
+    source: str = "confirmed",
 ) -> dict[str, Any]:
     """Create a user story within an epic.
 
@@ -267,6 +299,7 @@ def create_story(
         size: T-shirt size estimate (XS, S, M, L, XL).
         priority: high | medium | low.
         acceptance_criteria: Specific conditions that must be met.
+        source: "confirmed" (human-created/approved) | "auto" (AI-proposed).
     """
     data = _load_data()
 
@@ -290,6 +323,7 @@ def create_story(
         "status": "backlog",
         "acceptance_criteria": acceptance_criteria or [],
         "linked_task_ids": [],
+        "source": source if source in ("confirmed", "auto") else "confirmed",
         "created_at": _now(),
         "updated_at": _now(),
     }

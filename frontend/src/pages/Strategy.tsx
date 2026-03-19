@@ -5,13 +5,14 @@ import { useEffect, useState, useCallback } from 'react';
 import { useStore } from '../store';
 import { getTheme } from '../themes';
 import { api } from '../api/client';
-import { Target, Scale, Users, BarChart3, CheckCircle2, Circle } from 'lucide-react';
+import { Target, Scale, Users, BarChart3, CheckCircle2, Circle, GitBranch, Check, X, Sparkles, ChevronRight, ChevronDown } from 'lucide-react';
 import DetailPanel from '../components/DetailPanel';
 import type { DetailField } from '../components/DetailPanel';
 
-type TabId = 'initiatives' | 'decisions' | 'portfolio' | 'review';
+type TabId = 'hierarchy' | 'initiatives' | 'decisions' | 'portfolio' | 'review';
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
+  { id: 'hierarchy', label: 'Hierarchy', icon: <GitBranch size={16} /> },
   { id: 'initiatives', label: 'Initiatives', icon: <Target size={16} /> },
   { id: 'decisions', label: 'Decisions', icon: <Scale size={16} /> },
   { id: 'portfolio', label: 'Portfolio', icon: <Users size={16} /> },
@@ -54,10 +55,307 @@ export default function Strategy() {
         </div>
       </div>
 
-      {tab === 'initiatives' ? <InitiativesView /> :
+      {tab === 'hierarchy' ? <HierarchyView /> :
+       tab === 'initiatives' ? <InitiativesView /> :
        tab === 'decisions' ? <DecisionsView /> :
        tab === 'portfolio' ? <PortfolioView /> :
        <ReviewView />}
+    </div>
+  );
+}
+
+/* ---------- Hierarchy (full agile tree) ---------- */
+
+function HierarchyView() {
+  const [tree, setTree] = useState<any[]>([]);
+  const [operational, setOperational] = useState<any[]>([]);
+  const [unclassified, setUnclassified] = useState<any[]>([]);
+  const [counts, setCounts] = useState<any>({});
+  const [loading, setLoading] = useState(true);
+  const [classifying, setClassifying] = useState(false);
+  const [classifyStatus, setClassifyStatus] = useState('');
+
+  const loadHierarchy = useCallback(() => {
+    setLoading(true);
+    api.get<any>('/api/hierarchy').then((data) => {
+      setTree(data.tree || []);
+      setOperational(data.operational_tasks || []);
+      setUnclassified(data.unclassified_tasks || []);
+      setCounts(data.counts || {});
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { loadHierarchy(); }, [loadHierarchy]);
+
+  const runClassification = useCallback(() => {
+    setClassifying(true);
+    setClassifyStatus('Starting classification...');
+
+    // Use fetch with POST since EventSource only supports GET
+    fetch('/api/classify/stream', { method: 'POST' }).then(async (response) => {
+      const reader = response.body?.getReader();
+      if (!reader) return;
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const msg = JSON.parse(line.slice(6));
+              if (msg.message) setClassifyStatus(msg.message);
+              if (msg.status === 'complete') {
+                setClassifying(false);
+                setClassifyStatus(`Done: ${msg.themes_created || 0} themes, ${msg.initiatives_created || 0} initiatives, ${msg.epics_created || 0} epics, ${msg.stories_created || 0} stories`);
+                loadHierarchy();
+              }
+            } catch {}
+          }
+        }
+      }
+    }).catch(() => {
+      setClassifying(false);
+      setClassifyStatus('Classification failed');
+    });
+  }, [loadHierarchy]);
+
+  const handleApprove = useCallback((type: string, id: string) => {
+    api.post(`/api/approve/${type}/${id}`, {}).then(() => loadHierarchy()).catch(() => {});
+  }, [loadHierarchy]);
+
+  const handleDismiss = useCallback((type: string, id: string) => {
+    api.post(`/api/dismiss/${type}/${id}`, {}).then(() => loadHierarchy()).catch(() => {});
+  }, [loadHierarchy]);
+
+  if (loading) return <LoadingState />;
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+          <span>{counts.themes || 0} themes</span>
+          <span>{counts.initiatives || 0} initiatives</span>
+          <span>{counts.epics || 0} epics</span>
+          <span>{counts.stories || 0} stories</span>
+          <span>{counts.tasks || 0} tasks</span>
+        </div>
+        <button
+          onClick={runClassification}
+          disabled={classifying}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 16px', border: 'none', borderRadius: 'var(--radius)',
+            backgroundColor: classifying ? 'var(--bg-hover)' : 'var(--accent)',
+            color: classifying ? 'var(--text-muted)' : '#fff',
+            fontSize: 13, fontWeight: 500, cursor: classifying ? 'default' : 'pointer',
+          }}
+        >
+          <Sparkles size={14} />
+          {classifying ? 'Classifying...' : 'Classify Tasks'}
+        </button>
+      </div>
+
+      {classifyStatus && (
+        <div style={{
+          padding: '8px 12px', marginBottom: 12, borderRadius: 'var(--radius)',
+          backgroundColor: 'var(--accent-light)', color: 'var(--accent)', fontSize: 12,
+        }}>
+          {classifyStatus}
+        </div>
+      )}
+
+      {/* Tree */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {tree.map((node) => (
+          <HierarchyNode key={node.id} node={node} depth={0} onApprove={handleApprove} onDismiss={handleDismiss} />
+        ))}
+      </div>
+
+      {/* Operational tasks */}
+      {operational.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 8 }}>
+            Operational tasks ({operational.length})
+          </h3>
+          {operational.map((t: any) => (
+            <TaskLeaf key={t.id} task={t} onApprove={handleApprove} onDismiss={handleDismiss} />
+          ))}
+        </div>
+      )}
+
+      {/* Unclassified */}
+      {unclassified.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 8 }}>
+            Unclassified tasks ({unclassified.length})
+          </h3>
+          {unclassified.map((t: any) => (
+            <TaskLeaf key={t.id} task={t} onApprove={handleApprove} onDismiss={handleDismiss} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* Hierarchy tree node — recursive */
+const TYPE_COLORS: Record<string, string> = {
+  theme: '#8b5cf6', initiative: '#3b82f6', epic: '#10b981', story: '#f59e0b',
+};
+const TYPE_LABELS: Record<string, string> = {
+  theme: 'Theme', initiative: 'Initiative', epic: 'Epic', story: 'Story',
+};
+
+function HierarchyNode({ node, depth, onApprove, onDismiss }: {
+  node: any; depth: number;
+  onApprove: (type: string, id: string) => void;
+  onDismiss: (type: string, id: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(depth < 2);
+  const children = node.children || [];
+  const isAuto = node.source === 'auto';
+  const entityType = node.type + 's'; // themes, initiatives, epics, stories
+
+  return (
+    <div>
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '6px 8px', paddingLeft: depth * 20 + 8,
+          borderLeft: `3px ${isAuto ? 'dashed' : 'solid'} ${TYPE_COLORS[node.type] || '#666'}`,
+          backgroundColor: 'var(--bg-card)',
+          borderRadius: 'var(--radius)',
+          marginBottom: 1,
+          color: isAuto ? 'var(--text-muted)' : 'var(--text-primary)',
+          cursor: 'pointer',
+          transition: 'all 0.15s',
+        }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        {children.length > 0 ? (
+          expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+        ) : <span style={{ width: 14 }} />}
+
+        <span style={{
+          fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+          color: TYPE_COLORS[node.type] || '#666', minWidth: 60,
+        }}>
+          {TYPE_LABELS[node.type] || node.type}
+        </span>
+
+        <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>
+          {node.title || node.description || '(untitled)'}
+        </span>
+
+        {isAuto && (
+          <>
+            <span style={{
+              fontSize: 10, padding: '1px 6px', borderRadius: 4,
+              backgroundColor: 'var(--accent-light)', color: 'var(--accent)',
+            }}>
+              AI proposed
+            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); onApprove(entityType, node.id); }}
+              title="Approve"
+              style={{
+                display: 'flex', alignItems: 'center', padding: 2,
+                border: 'none', background: 'none', cursor: 'pointer',
+                color: '#22c55e', transition: 'opacity 0.15s',
+              }}
+            >
+              <Check size={16} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDismiss(entityType, node.id); }}
+              title="Dismiss"
+              style={{
+                display: 'flex', alignItems: 'center', padding: 2,
+                border: 'none', background: 'none', cursor: 'pointer',
+                color: '#ef4444', transition: 'opacity 0.15s',
+              }}
+            >
+              <X size={14} />
+            </button>
+          </>
+        )}
+
+        {node.status && (
+          <span style={{
+            fontSize: 11, padding: '1px 6px', borderRadius: 4,
+            backgroundColor: (STATUS_COLORS[node.status] || '#666') + '20',
+            color: STATUS_COLORS[node.status] || '#666',
+          }}>
+            {(node.status || '').replace(/_/g, ' ')}
+          </span>
+        )}
+      </div>
+
+      {expanded && children.map((child: any) => (
+        child.type ? (
+          <HierarchyNode key={child.id} node={child} depth={depth + 1} onApprove={onApprove} onDismiss={onDismiss} />
+        ) : (
+          <TaskLeaf key={child.id} task={child} depth={depth + 1} onApprove={onApprove} onDismiss={onDismiss} />
+        )
+      ))}
+    </div>
+  );
+}
+
+/* Task leaf node */
+function TaskLeaf({ task, depth = 0, onApprove, onDismiss }: {
+  task: any; depth?: number;
+  onApprove: (type: string, id: string) => void;
+  onDismiss: (type: string, id: string) => void;
+}) {
+  const isAuto = task.source === 'auto';
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '4px 8px', paddingLeft: depth * 20 + 28,
+      borderLeft: `3px ${isAuto ? 'dashed' : 'solid'} #94a3b8`,
+      marginBottom: 1,
+      color: isAuto ? 'var(--text-muted)' : 'var(--text-secondary)',
+      fontSize: 12,
+    }}>
+      <Circle size={8} style={{ flexShrink: 0 }} />
+      <span style={{ flex: 1 }}>{task.description || '(no description)'}</span>
+      {task.owner && task.owner !== 'Me' && (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{task.owner}</span>
+      )}
+      {isAuto && (
+        <>
+          <button
+            onClick={() => onApprove('tasks', task.id)}
+            title="Approve"
+            style={{
+              display: 'flex', alignItems: 'center', padding: 2,
+              border: 'none', background: 'none', cursor: 'pointer', color: '#22c55e',
+            }}
+          >
+            <Check size={14} />
+          </button>
+          <button
+            onClick={() => onDismiss('tasks', task.id)}
+            title="Dismiss"
+            style={{
+              display: 'flex', alignItems: 'center', padding: 2,
+              border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444',
+            }}
+          >
+            <X size={14} />
+          </button>
+        </>
+      )}
     </div>
   );
 }

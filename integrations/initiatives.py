@@ -42,6 +42,8 @@ def create_initiative(
     status: str = "on_track",
     priority: str = "high",
     milestones: list[str] | None = None,
+    theme_id: str = "",
+    source: str = "confirmed",
 ) -> dict[str, Any]:
     """Create a new strategic initiative.
 
@@ -53,6 +55,8 @@ def create_initiative(
         status: on_track | at_risk | off_track | completed | paused.
         priority: high | medium | low.
         milestones: Key milestones as text list.
+        theme_id: Parent theme ID (links to themes.json).
+        source: "confirmed" (human-created/approved) | "auto" (AI-proposed).
     """
     data = _load_data()
 
@@ -69,6 +73,8 @@ def create_initiative(
             for m in (milestones or [])
         ],
         "key_result_ids": [],
+        "theme_id": theme_id,
+        "source": source if source in ("confirmed", "auto") else "confirmed",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -177,6 +183,7 @@ def update_initiative(
     quarter: str = "",
     status: str = "",
     priority: str = "",
+    theme_id: str | None = None,
 ) -> dict[str, Any]:
     """Update a strategic initiative.
 
@@ -188,6 +195,7 @@ def update_initiative(
         quarter: New target quarter.
         status: New status (on_track, at_risk, off_track, completed, paused).
         priority: New priority (high, medium, low).
+        theme_id: Link to a different theme (pass "" to unlink).
     """
     data = _load_data()
 
@@ -205,6 +213,8 @@ def update_initiative(
                 i["status"] = status
             if priority:
                 i["priority"] = priority
+            if theme_id is not None:
+                i["theme_id"] = theme_id
             i["updated_at"] = datetime.now(timezone.utc).isoformat()
             _save_data(data)
 
@@ -344,6 +354,20 @@ def update_key_result(
             }
 
     return {"error": f"Key result not found: {kr_id}"}
+
+
+def approve_initiative(initiative_id: str) -> dict[str, Any]:
+    """Approve an auto-generated initiative (change source from 'auto' to 'confirmed')."""
+    data = _load_data()
+
+    for i in data["initiatives"]:
+        if i.get("id") == initiative_id:
+            i["source"] = "confirmed"
+            i["updated_at"] = datetime.now(timezone.utc).isoformat()
+            _save_data(data)
+            return {"message": "Initiative approved.", "initiative": i}
+
+    return {"error": f"Initiative not found: {initiative_id}"}
 
 
 def delete_initiative(initiative_id: str) -> dict[str, Any]:

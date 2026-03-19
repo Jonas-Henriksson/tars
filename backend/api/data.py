@@ -68,6 +68,7 @@ class InitiativeCreate(BaseModel):
     status: str = "on_track"
     priority: str = "high"
     milestones: list[str] = []
+    theme_id: str = ""
 
 
 class InitiativeUpdate(BaseModel):
@@ -77,6 +78,7 @@ class InitiativeUpdate(BaseModel):
     quarter: str | None = None
     status: str | None = None
     priority: str | None = None
+    theme_id: str | None = None
 
 
 class KeyResultCreate(BaseModel):
@@ -136,6 +138,24 @@ class StoryUpdate(BaseModel):
 
 class LinkTask(BaseModel):
     task_id: str
+
+
+class ThemeCreate(BaseModel):
+    title: str
+    description: str = ""
+    status: str = "active"
+
+
+class ThemeUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    status: str | None = None
+
+
+class TaskAssign(BaseModel):
+    story_id: str = ""
+    epic_id: str = ""
+    classification: str = ""
 
 
 class PersonCreate(BaseModel):
@@ -447,7 +467,8 @@ async def create_initiative(body: InitiativeCreate):
     from integrations.initiatives import create_initiative as _create
     return JSONResponse(_create(
         title=body.title, description=body.description, owner=body.owner,
-        quarter=body.quarter, status=body.status, priority=body.priority, milestones=body.milestones,
+        quarter=body.quarter, status=body.status, priority=body.priority,
+        milestones=body.milestones, theme_id=body.theme_id,
     ))
 
 
@@ -645,6 +666,252 @@ async def member_portfolio(name: str, include_done: bool = False):
     if "error" in result:
         return JSONResponse(result, status_code=404)
     return JSONResponse(result)
+
+
+# ---------------------------------------------------------------------------
+# Themes
+# ---------------------------------------------------------------------------
+
+@router.get("/themes")
+async def get_themes(status: str = ""):
+    from integrations.themes import get_themes as _get
+    return JSONResponse(_get(status=status))
+
+
+@router.post("/themes", status_code=201)
+async def create_theme(body: ThemeCreate):
+    from integrations.themes import create_theme as _create
+    return JSONResponse(_create(title=body.title, description=body.description, status=body.status))
+
+
+@router.patch("/themes/{theme_id}")
+async def update_theme(theme_id: str, body: ThemeUpdate):
+    from integrations.themes import update_theme as _update
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not fields:
+        return JSONResponse({"error": "No fields"}, status_code=400)
+    result = _update(theme_id, **fields)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@router.delete("/themes/{theme_id}")
+async def delete_theme(theme_id: str):
+    from integrations.themes import delete_theme
+    result = delete_theme(theme_id)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+# ---------------------------------------------------------------------------
+# Classification
+# ---------------------------------------------------------------------------
+
+@router.post("/classify")
+async def run_classification(force: bool = False):
+    """Run agile auto-classification on all tasks using Opus."""
+    from integrations.classifier import classify_tasks
+    result = await classify_tasks(force_reclassify=force)
+    if "error" in result:
+        return JSONResponse(result, status_code=500)
+    return JSONResponse(result)
+
+
+@router.post("/classify/stream")
+async def classify_stream(force: bool = False):
+    """SSE endpoint for streaming classification progress."""
+    from integrations.classifier import classify_tasks
+
+    progress_queue: asyncio.Queue = asyncio.Queue()
+
+    def on_progress(msg: dict) -> None:
+        progress_queue.put_nowait(msg)
+
+    async def generate():
+        try:
+            classify_task = asyncio.create_task(
+                classify_tasks(force_reclassify=force, on_progress=on_progress)
+            )
+            while not classify_task.done():
+                try:
+                    msg = await asyncio.wait_for(progress_queue.get(), timeout=1.0)
+                    yield f"data: {json.dumps(msg)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+
+            while not progress_queue.empty():
+                msg = progress_queue.get_nowait()
+                yield f"data: {json.dumps(msg)}\n\n"
+
+            result = classify_task.result()
+            result["status"] = "complete"
+            yield f"data: {json.dumps(result)}\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'status': 'error', 'message': str(exc)})}\n\n"
+
+    return StreamingResponse(
+        generate(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Approve / dismiss / assign
+# ---------------------------------------------------------------------------
+
+@router.post("/approve/{entity_type}/{entity_id}")
+async def approve_item(entity_type: str, entity_id: str):
+    """Approve an auto-generated item (source: auto → confirmed)."""
+    _approve_fns = {
+        "themes": ("integrations.themes", "approve_theme"),
+        "initiatives": ("integrations.initiatives", "approve_initiative"),
+        "epics": ("integrations.epics", "approve_epic"),
+        "stories": ("integrations.epics", "approve_story"),
+        "tasks": ("integrations.intel", "approve_task"),
+    }
+
+    if entity_type not in _approve_fns:
+        return JSONResponse({"error": f"Unknown entity type: {entity_type}"}, status_code=400)
+
+    module_name, fn_name = _approve_fns[entity_type]
+    import importlib
+    mod = importlib.import_module(module_name)
+    fn = getattr(mod, fn_name)
+    result = fn(entity_id)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@router.post("/dismiss/{entity_type}/{entity_id}")
+async def dismiss_item(entity_type: str, entity_id: str):
+    """Dismiss/delete an auto-generated item."""
+    _delete_fns = {
+        "themes": ("integrations.themes", "delete_theme"),
+        "initiatives": ("integrations.initiatives", "delete_initiative"),
+        "epics": ("integrations.epics", "delete_epic"),
+        "stories": ("integrations.epics", "delete_story"),
+        "tasks": ("integrations.intel", "delete_smart_task"),
+    }
+
+    if entity_type not in _delete_fns:
+        return JSONResponse({"error": f"Unknown entity type: {entity_type}"}, status_code=400)
+
+    module_name, fn_name = _delete_fns[entity_type]
+    import importlib
+    mod = importlib.import_module(module_name)
+    fn = getattr(mod, fn_name)
+    result = fn(entity_id)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@router.post("/intel/tasks/{task_id}/assign")
+async def assign_task_to_story(task_id: str, body: TaskAssign):
+    """Move a task to a different story/epic. Sets manual_override=True."""
+    from integrations.intel import assign_task
+    result = assign_task(
+        task_id=task_id,
+        story_id=body.story_id,
+        classification=body.classification,
+    )
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+# ---------------------------------------------------------------------------
+# Hierarchy (full tree view)
+# ---------------------------------------------------------------------------
+
+@router.get("/hierarchy")
+async def get_hierarchy():
+    """Get the full agile hierarchy tree: Themes → Initiatives → Epics → Stories → Tasks."""
+    from integrations.themes import get_themes
+    from integrations.initiatives import get_initiatives
+    from integrations.epics import get_epics, get_stories
+    from integrations.intel import get_smart_tasks
+
+    themes = get_themes().get("themes", [])
+    initiatives = get_initiatives().get("initiatives", [])
+    epics_data = get_epics().get("epics", [])
+    stories_data = get_stories().get("stories", [])
+    tasks_data = get_smart_tasks(include_done=False).get("tasks",
+        get_smart_tasks(include_done=False).get("smart_tasks", []))
+
+    # Build tree
+    tree = []
+
+    # Index by parent
+    init_by_theme: dict[str, list] = {}
+    for i in initiatives:
+        tid = i.get("theme_id", "")
+        init_by_theme.setdefault(tid, []).append(i)
+
+    epics_by_init: dict[str, list] = {}
+    for e in epics_data:
+        iid = e.get("initiative_id", "")
+        epics_by_init.setdefault(iid, []).append(e)
+
+    stories_by_epic: dict[str, list] = {}
+    for s in stories_data:
+        eid = s.get("epic_id", "")
+        stories_by_epic.setdefault(eid, []).append(s)
+
+    tasks_by_story: dict[str, list] = {}
+    orphan_tasks = []
+    for t in tasks_data:
+        sid = t.get("story_id", "")
+        if sid:
+            tasks_by_story.setdefault(sid, []).append(t)
+        else:
+            orphan_tasks.append(t)
+
+    for theme in themes:
+        theme_node = {**theme, "type": "theme", "children": []}
+        for init in init_by_theme.get(theme["id"], []):
+            init_node = {**init, "type": "initiative", "children": []}
+            for epic in epics_by_init.get(init["id"], []):
+                epic_node = {**epic, "type": "epic", "children": []}
+                for story in stories_by_epic.get(epic["id"], []):
+                    story_node = {**story, "type": "story", "children": tasks_by_story.get(story["id"], [])}
+                    epic_node["children"].append(story_node)
+                init_node["children"].append(epic_node)
+            theme_node["children"].append(init_node)
+        tree.append(theme_node)
+
+    # Unlinked initiatives (no theme)
+    for init in init_by_theme.get("", []):
+        init_node = {**init, "type": "initiative", "children": []}
+        for epic in epics_by_init.get(init["id"], []):
+            epic_node = {**epic, "type": "epic", "children": []}
+            for story in stories_by_epic.get(epic["id"], []):
+                story_node = {**story, "type": "story", "children": tasks_by_story.get(story["id"], [])}
+                epic_node["children"].append(story_node)
+            init_node["children"].append(epic_node)
+        tree.append(init_node)
+
+    # Operational tasks
+    operational = [t for t in orphan_tasks if t.get("classification") == "operational"]
+    unclassified = [t for t in orphan_tasks if t.get("classification") != "operational"]
+
+    return JSONResponse({
+        "tree": tree,
+        "operational_tasks": operational,
+        "unclassified_tasks": unclassified,
+        "counts": {
+            "themes": len(themes),
+            "initiatives": len(initiatives),
+            "epics": len(epics_data),
+            "stories": len(stories_data),
+            "tasks": len(tasks_data),
+            "operational": len(operational),
+            "unclassified": len(unclassified),
+        },
+    })
 
 
 # ---------------------------------------------------------------------------

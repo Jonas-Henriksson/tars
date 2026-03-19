@@ -52,6 +52,7 @@ def create_theme(
     title: str,
     description: str = "",
     status: str = "active",
+    source: str = "confirmed",
 ) -> dict[str, Any]:
     """Create a new strategic theme.
 
@@ -59,6 +60,7 @@ def create_theme(
         title: Theme name (e.g. "Digital Transformation").
         description: What this strategic area covers.
         status: active | completed | paused.
+        source: "confirmed" (human-created/approved) | "auto" (AI-proposed).
     """
     data = _load_data()
 
@@ -67,6 +69,7 @@ def create_theme(
         "title": title,
         "description": description,
         "status": status if status in THEME_STATUSES else "active",
+        "source": source if source in ("confirmed", "auto") else "confirmed",
         "created_at": _now(),
         "updated_at": _now(),
     }
@@ -153,6 +156,20 @@ def update_theme(
                 "theme": t,
                 "voice_summary": f"Updated theme '{t.get('title', '')}'.",
             }
+
+    return {"error": f"Theme not found: {theme_id}"}
+
+
+def approve_theme(theme_id: str) -> dict[str, Any]:
+    """Approve an auto-generated theme (change source from 'auto' to 'confirmed')."""
+    data = _load_data()
+
+    for t in data["themes"]:
+        if t.get("id") == theme_id:
+            t["source"] = "confirmed"
+            t["updated_at"] = _now()
+            _save_data(data)
+            return {"message": "Theme approved.", "theme": t}
 
     return {"error": f"Theme not found: {theme_id}"}
 

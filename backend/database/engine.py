@@ -387,8 +387,66 @@ def _migration_v3(cur: sqlite3.Cursor) -> None:
     cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at)")
 
 
+def _migration_v4(cur: sqlite3.Cursor) -> None:
+    """v4: Themes table, source fields, classification metadata."""
+
+    # Themes — top-level agile hierarchy
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS themes (
+            id TEXT PRIMARY KEY,
+            team_id TEXT DEFAULT NULL REFERENCES teams(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            status TEXT DEFAULT 'active'
+                CHECK(status IN ('active', 'completed', 'paused')),
+            source TEXT DEFAULT 'confirmed'
+                CHECK(source IN ('confirmed', 'auto')),
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_themes_status ON themes(status)")
+
+    # Add theme_id + source to initiatives
+    try:
+        cur.execute("ALTER TABLE initiatives ADD COLUMN theme_id TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    try:
+        cur.execute("ALTER TABLE initiatives ADD COLUMN source TEXT DEFAULT 'confirmed'")
+    except sqlite3.OperationalError:
+        pass
+
+    # Add source to epics
+    try:
+        cur.execute("ALTER TABLE epics ADD COLUMN source TEXT DEFAULT 'confirmed'")
+    except sqlite3.OperationalError:
+        pass
+
+    # Add source to stories
+    try:
+        cur.execute("ALTER TABLE stories ADD COLUMN source TEXT DEFAULT 'confirmed'")
+    except sqlite3.OperationalError:
+        pass
+
+    # Add classification fields to smart_tasks
+    for col, default in [
+        ("story_id", "''"),
+        ("classification", "'unclassified'"),
+        ("manual_override", "0"),
+        ("override_at", "''"),
+        ("confidence", "0.0"),
+        ("source", "'confirmed'"),
+    ]:
+        try:
+            cur.execute(f"ALTER TABLE smart_tasks ADD COLUMN {col} TEXT DEFAULT {default}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
+
 _MIGRATIONS = {
     1: _migration_v1,
     2: _migration_v2,
     3: _migration_v3,
+    4: _migration_v4,
 }
