@@ -223,21 +223,6 @@ function HierarchyView() {
     setSelectedNode(node);
   }, []);
 
-  const nodeEndpointMap: Record<string, string> = {
-    theme: '/api/themes', initiative: '/api/initiatives',
-    epic: '/api/epics', story: '/api/stories',
-  };
-
-  const handleNodeFieldChange = useCallback((key: string, value: any) => {
-    if (!selectedNode) return;
-    const endpoint = nodeEndpointMap[selectedNode.type];
-    if (!endpoint) return;
-    // Optimistic local update
-    setTree((prev) => updateNodeInTree(prev, selectedNode.id, (n) => ({ ...n, [key]: value })));
-    setSelectedNode((prev: any) => prev ? { ...prev, [key]: value } : null);
-    api.patch<any>(`${endpoint}/${selectedNode.id}`, { [key]: value }).catch(() => {});
-  }, [selectedNode, updateNodeInTree]);
-
   // Optimistic tree update helpers
   const updateNodeInTree = useCallback((nodes: any[], id: string, updater: (n: any) => any): any[] => {
     return nodes.map((n) => {
@@ -252,6 +237,20 @@ function HierarchyView() {
       .filter((n) => n.id !== id)
       .map((n) => n.children ? { ...n, children: removeNodeFromTree(n.children, id) } : n);
   }, []);
+
+  const nodeEndpointMap: Record<string, string> = {
+    theme: '/api/themes', initiative: '/api/initiatives',
+    epic: '/api/epics', story: '/api/stories',
+  };
+
+  const handleNodeFieldChange = useCallback((key: string, value: any) => {
+    if (!selectedNode) return;
+    const endpoint = nodeEndpointMap[selectedNode.type];
+    if (!endpoint) return;
+    setTree((prev) => updateNodeInTree(prev, selectedNode.id, (n) => ({ ...n, [key]: value })));
+    setSelectedNode((prev: any) => prev ? { ...prev, [key]: value } : null);
+    api.patch<any>(`${endpoint}/${selectedNode.id}`, { [key]: value }).catch(() => {});
+  }, [selectedNode, updateNodeInTree]);
 
   const handleApprove = useCallback((type: string, id: string) => {
     // Optimistic: mark as confirmed locally
