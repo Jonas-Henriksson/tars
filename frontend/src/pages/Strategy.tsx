@@ -386,20 +386,15 @@ function HierarchyView() {
   }, [removeNodeFromTree, showUndo, loadHierarchy]);
 
   const handleNodeDelete = useCallback((node: any) => {
-    const type = node.type + 's';
-    const prevTree = tree;
-    const prevOps = operational;
-    const prevUnc = unclassified;
     setTree((prev) => removeNodeFromTree(prev, node.id));
     const endpoint = nodeEndpointMap[node.type];
     if (endpoint) {
       api.delete<any>(`${endpoint}/${node.id}`).catch(() => {});
     }
     showUndo(`${TYPE_LABELS[node.type] || node.type} "${node.title || ''}" deleted`, () => {
-      // Undo: reload hierarchy from server
       loadHierarchy();
     });
-  }, [tree, operational, unclassified, removeNodeFromTree, showUndo, loadHierarchy]);
+  }, [removeNodeFromTree, showUndo, loadHierarchy]);
 
   // Task-level updates
   const handleTaskUpdate = useCallback((taskId: string, updates: Record<string, any>) => {
