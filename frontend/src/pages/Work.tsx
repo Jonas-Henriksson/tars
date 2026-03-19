@@ -89,14 +89,25 @@ export default function Work() {
 
   const handleTaskSave = useCallback((updates: Record<string, any>) => {
     if (!selectedTask) return;
+    // Map display values back to data values
+    const mapped: Record<string, any> = { ...updates };
+    if ('priority' in mapped) {
+      const qMap: Record<string, number> = { 'Do First': 1, 'Schedule': 2, 'Delegate': 3, 'Defer': 4 };
+      mapped.quadrant = qMap[mapped.priority] || 4;
+      delete mapped.priority;
+    }
     // Update local state optimistically
     setTasks((prev) => prev.map((t) =>
-      t.id === selectedTask.id ? { ...t, ...updates } : t
+      t.id === selectedTask.id ? { ...t, ...mapped } : t
     ));
-    setSelectedTask((prev) => prev ? { ...prev, ...updates } : null);
+    setSelectedTask((prev) => prev ? { ...prev, ...mapped } : null);
     // Try API update (fire and forget)
-    api.patch<any>(`/api/intel/tasks/${selectedTask.id}`, updates).catch(() => {});
+    api.patch<any>(`/api/intel/tasks/${selectedTask.id}`, mapped).catch(() => {});
   }, [selectedTask]);
+
+  const handleFieldChange = useCallback((key: string, value: any) => {
+    handleTaskSave({ [key]: value });
+  }, [handleTaskSave]);
 
   const handleDragDrop = useCallback((taskId: string, newPhase: string) => {
     const statusMap: Record<string, string> = {
@@ -108,21 +119,70 @@ export default function Work() {
     api.patch<any>(`/api/intel/tasks/${taskId}`, { status: statusMap[newPhase] || newPhase }).catch(() => {});
   }, []);
 
+  // Build owner options sorted by frequency (most assigned first)
+  const ownerFrequency = tasks.reduce<Record<string, number>>((acc, t) => {
+    if (t.owner) acc[t.owner] = (acc[t.owner] || 0) + 1;
+    return acc;
+  }, {});
+  const ownerOptions = Object.entries(ownerFrequency)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name]) => name);
+
+  // Format meeting source timestamp
+  const formatMeetingSource = (src: string | undefined): string => {
+    if (!src) return '—';
+    // Try to extract ISO date from the string
+    const isoMatch = src.match(/(\d{4}-\d{2}-\d{2}T[\d:.]+(?:[+-]\d{2}:\d{2})?)/);
+    if (isoMatch) {
+      const date = new Date(isoMatch[1]);
+      const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      const meetingName = src.replace(isoMatch[0], '').replace(/\s*$/, '').replace(/\s+/g, ' ').trim();
+      return meetingName ? `${meetingName} · ${dateStr} at ${timeStr}` : `${dateStr} at ${timeStr}`;
+    }
+    return src;
+  };
+
+  // Parse context into structured lines
+  const parseContextLines = (ctx: string | undefined): string[] => {
+    if (!ctx) return [];
+    // Split on [ ] markers used by Notion or newlines
+    return ctx.split(/\[\s*\]|\n/).map(s => s.trim()).filter(Boolean);
+  };
+
+  // Parse steps into structured lines
+  const parseStepLines = (steps: string | undefined): string[] => {
+    if (!steps) return [];
+    return steps.split(/\n/).map(s => s.trim()).filter(Boolean);
+  };
+
+  const classificationColors: Record<string, string> = {
+    strategic: '#3b82f6', operational: '#f59e0b', unclassified: '#94a3b8',
+  };
+
   const taskFields: DetailField[] = selectedTask ? [
-    { key: 'status', label: 'Status', value: selectedTask.status, type: 'select', options: ['open', 'in_progress', 'review', 'done'] },
-    { key: 'owner', label: 'Owner', value: selectedTask.owner, type: 'text' },
+    { key: 'status', label: 'Status', value: selectedTask.status, type: 'select',
+      options: ['open', 'in_progress', 'review', 'done'] },
+    { key: 'owner', label: 'Owner', value: selectedTask.owner, type: 'select',
+      options: ownerOptions },
     { key: 'priority', label: 'Priority', value: QUADRANT_LABELS[getTaskQuadrant(selectedTask)]?.name, type: 'select',
       options: ['Do First', 'Schedule', 'Delegate', 'Defer'], color: QUADRANT_LABELS[getTaskQuadrant(selectedTask)]?.color },
     { key: 'follow_up_date', label: 'Follow-up Date', value: selectedTask.follow_up_date, type: 'date' },
     { key: 'classification', label: 'Classification', value: selectedTask.classification || 'unclassified', type: 'badge',
-      color: selectedTask.classification === 'strategic' ? '#3b82f6' : selectedTask.classification === 'operational' ? '#f59e0b' : '#94a3b8' },
-    { key: 'source_flag', label: 'Source', value: selectedTask.source === 'auto' ? 'AI Proposed' : 'Confirmed', type: 'badge',
-      color: selectedTask.source === 'auto' ? '#8b5cf6' : '#22c55e' },
+      options: ['strategic', 'operational', 'unclassified'],
+      color: classificationColors[selectedTask.classification || 'unclassified'],
+      hint: 'How TARS categorizes this task' },
+    { key: 'source', label: 'Source', value: selectedTask.source === 'auto' ? 'auto' : 'confirmed', type: 'badge',
+      options: ['confirmed', 'auto'],
+      color: selectedTask.source === 'auto' ? '#8b5cf6' : '#22c55e',
+      hint: selectedTask.source === 'auto' ? 'AI-generated task' : 'From meeting notes' },
     { key: 'topics', label: 'Topics', value: selectedTask.topics || (selectedTask.topic ? [selectedTask.topic] : []), type: 'tags' },
-    { key: 'source_title', label: 'Meeting Source', value: selectedTask.source_title, type: 'readonly' },
+    { key: 'source_title', label: 'Meeting Source', value: formatMeetingSource(selectedTask.source_title), type: 'readonly' },
     { key: 'source_url', label: 'Source Link', value: selectedTask.source_url, type: 'link' },
-    { key: 'source_context', label: 'Context', value: selectedTask.source_context, type: 'textarea' },
-    { key: 'steps', label: 'Next Steps', value: selectedTask.steps, type: 'textarea' },
+    { key: 'source_context', label: 'Context', value: selectedTask.source_context, type: 'expandable',
+      lines: parseContextLines(selectedTask.source_context) },
+    { key: 'steps', label: 'Next Steps', value: selectedTask.steps, type: 'expandable',
+      lines: parseStepLines(selectedTask.steps) },
     { key: 'age_days', label: 'Age (days)', value: selectedTask.age_days, type: 'readonly' },
     { key: 'delegated', label: 'Delegated', value: selectedTask.delegated ? 'Yes' : 'No', type: 'readonly' },
   ] : [];
@@ -180,6 +240,7 @@ export default function Work() {
         } : undefined}
         fields={taskFields}
         onSave={handleTaskSave}
+        onFieldChange={handleFieldChange}
       />
     </div>
   );

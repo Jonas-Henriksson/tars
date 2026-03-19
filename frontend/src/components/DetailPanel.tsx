@@ -1,16 +1,23 @@
 /**
  * Reusable slide-over detail panel for viewing/editing items.
+ *
+ * Fields with type 'select', 'date', 'badge' are inline-editable on click.
+ * 'expandable' fields show a truncated preview that expands on click.
  */
 import { useEffect, useRef, useState } from 'react';
-import { X, Save, Edit3, Calendar, User, Tag, Flag, ExternalLink } from 'lucide-react';
+import { X, Save, Edit3, Calendar, User, Tag, Flag, ExternalLink, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 
 export interface DetailField {
   key: string;
   label: string;
   value: string | string[] | number | boolean | undefined;
-  type?: 'text' | 'select' | 'date' | 'tags' | 'textarea' | 'readonly' | 'link' | 'badge';
+  type?: 'text' | 'select' | 'date' | 'tags' | 'textarea' | 'readonly' | 'link' | 'badge' | 'expandable';
   options?: string[];
   color?: string;
+  /** Tooltip or helper text shown below the label */
+  hint?: string;
+  /** For 'expandable' type: formatted content lines */
+  lines?: string[];
 }
 
 interface DetailPanelProps {
@@ -21,10 +28,11 @@ interface DetailPanelProps {
   badge?: { label: string; color: string };
   fields: DetailField[];
   onSave?: (updates: Record<string, any>) => void;
+  onFieldChange?: (key: string, value: any) => void;
   actions?: { label: string; onClick: () => void; variant?: 'primary' | 'danger' | 'ghost' }[];
 }
 
-export default function DetailPanel({ open, onClose, title, subtitle, badge, fields, onSave, actions }: DetailPanelProps) {
+export default function DetailPanel({ open, onClose, title, subtitle, badge, fields, onSave, onFieldChange, actions }: DetailPanelProps) {
   const [editing, setEditing] = useState(false);
   const [edits, setEdits] = useState<Record<string, any>>({});
   const panelRef = useRef<HTMLDivElement>(null);
@@ -54,6 +62,15 @@ export default function DetailPanel({ open, onClose, title, subtitle, badge, fie
 
   const getFieldValue = (f: DetailField) => {
     return f.key in edits ? edits[f.key] : f.value;
+  };
+
+  const handleInlineChange = (key: string, value: any) => {
+    if (onFieldChange) {
+      onFieldChange(key, value);
+    } else {
+      setEdits({ ...edits, [key]: value });
+      onSave?.({ [key]: value });
+    }
   };
 
   return (
@@ -114,9 +131,11 @@ export default function DetailPanel({ open, onClose, title, subtitle, badge, fie
         <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {fields.map((f) => (
-              <FieldRow key={f.key} field={f} editing={editing && f.type !== 'readonly' && f.type !== 'badge'}
+              <FieldRow key={f.key} field={f}
+                editing={editing && f.type !== 'readonly' && f.type !== 'badge' && f.type !== 'expandable'}
                 value={getFieldValue(f)}
                 onChange={(v) => setEdits({ ...edits, [f.key]: v })}
+                onInlineChange={(v) => handleInlineChange(f.key, v)}
               />
             ))}
           </div>
@@ -163,12 +182,26 @@ export default function DetailPanel({ open, onClose, title, subtitle, badge, fie
   );
 }
 
-function FieldRow({ field, editing, value, onChange }: {
+function FieldRow({ field, editing, value, onChange, onInlineChange }: {
   field: DetailField;
   editing: boolean;
   value: any;
   onChange: (v: any) => void;
+  onInlineChange: (v: any) => void;
 }) {
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    function close(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setDropdownOpen(false);
+    }
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [dropdownOpen]);
+
   const iconMap: Record<string, React.ReactNode> = {
     owner: <User size={14} style={{ color: 'var(--text-muted)' }} />,
     status: <Flag size={14} style={{ color: 'var(--text-muted)' }} />,
@@ -176,19 +209,121 @@ function FieldRow({ field, editing, value, onChange }: {
     follow_up_date: <Calendar size={14} style={{ color: 'var(--text-muted)' }} />,
     priority: <Tag size={14} style={{ color: 'var(--text-muted)' }} />,
     quarter: <Calendar size={14} style={{ color: 'var(--text-muted)' }} />,
+    source_title: <Clock size={14} style={{ color: 'var(--text-muted)' }} />,
   };
 
+  // Expandable field (for Context, Next Steps)
+  if (field.type === 'expandable') {
+    const text = String(value || '');
+    const lines = field.lines || (text ? text.split(/\n|(?:\s*\[\s*\]\s*)/).filter(Boolean) : []);
+    const hasContent = lines.length > 0 && lines.some(l => l.trim());
+    return (
+      <div>
+        <div
+          onClick={() => hasContent && setExpanded(!expanded)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4,
+            cursor: hasContent ? 'pointer' : 'default', userSelect: 'none',
+          }}
+        >
+          {hasContent && (expanded ?
+            <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} /> :
+            <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
+          )}
+          {iconMap[field.key]}
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{field.label}</span>
+          {hasContent && !expanded && (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+              {lines.length} item{lines.length !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        {!hasContent && (
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', paddingLeft: 20 }}>—</div>
+        )}
+        {hasContent && expanded && (
+          <div style={{
+            paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4,
+          }}>
+            {lines.map((line, i) => {
+              const trimmed = line.trim();
+              if (!trimmed) return null;
+              // Detect numbered items
+              const numMatch = trimmed.match(/^(\d+)[.)]\s*(.*)/);
+              return (
+                <div key={i} style={{
+                  fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5,
+                  padding: '6px 10px',
+                  backgroundColor: 'var(--bg-secondary)',
+                  borderRadius: 'var(--radius)',
+                  borderLeft: '2px solid var(--border)',
+                }}>
+                  {numMatch ? (
+                    <span>
+                      <span style={{ fontWeight: 600, color: 'var(--accent)', marginRight: 6 }}>{numMatch[1]}.</span>
+                      {numMatch[2]}
+                    </span>
+                  ) : trimmed}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {hasContent && !expanded && (
+          <div style={{
+            fontSize: 13, color: 'var(--text-secondary)', paddingLeft: 20,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {lines[0]?.trim().slice(0, 80)}{(lines[0]?.trim().length || 0) > 80 ? '...' : ''}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Inline-clickable badge (select, classification, source, etc.)
   if (field.type === 'badge') {
     const color = field.color || 'var(--accent)';
+    const hasOptions = field.options && field.options.length > 0;
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 100 }}>{field.label}</span>
-        <span style={{
-          fontSize: 12, fontWeight: 500, padding: '3px 10px', borderRadius: 12,
-          backgroundColor: color + '20', color,
-        }}>
-          {String(value || '—').replace(/_/g, ' ')}
-        </span>
+      <div style={{ position: 'relative' }} ref={dropdownRef}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 100 }}>{field.label}</span>
+          <span
+            onClick={() => hasOptions && setDropdownOpen(!dropdownOpen)}
+            style={{
+              fontSize: 12, fontWeight: 500, padding: '3px 10px', borderRadius: 12,
+              backgroundColor: color + '20', color,
+              cursor: hasOptions ? 'pointer' : 'default',
+              transition: 'filter 0.1s',
+            }}
+            onMouseEnter={(e) => { if (hasOptions) e.currentTarget.style.filter = 'brightness(1.2)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.filter = 'none'; }}
+          >
+            {String(value || '—').replace(/_/g, ' ')}
+            {hasOptions && <ChevronDown size={10} style={{ marginLeft: 4, verticalAlign: 'middle' }} />}
+          </span>
+          {field.hint && <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>{field.hint}</span>}
+        </div>
+        {dropdownOpen && hasOptions && (
+          <div style={dropdownStyle}>
+            {field.options!.map((o) => (
+              <div
+                key={o}
+                onClick={() => { onInlineChange(o); setDropdownOpen(false); }}
+                style={{
+                  ...dropdownItemStyle,
+                  fontWeight: String(value) === o ? 600 : 400,
+                  backgroundColor: String(value) === o ? 'var(--bg-hover)' : 'transparent',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = String(value) === o ? 'var(--bg-hover)' : 'transparent'}
+              >
+                {o.replace(/_/g, ' ')}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -228,6 +363,92 @@ function FieldRow({ field, editing, value, onChange }: {
     );
   }
 
+  // Inline-clickable select (Status, Owner, Priority)
+  if (field.type === 'select' && field.options && !editing) {
+    return (
+      <div style={{ position: 'relative' }} ref={dropdownRef}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          {iconMap[field.key]}
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{field.label}</span>
+        </div>
+        <div
+          onClick={() => setDropdownOpen(!dropdownOpen)}
+          style={{
+            fontSize: 14, color: value ? 'var(--text-primary)' : 'var(--text-muted)',
+            cursor: 'pointer', padding: '6px 10px',
+            borderRadius: 'var(--radius)', border: '1px solid transparent',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            transition: 'border-color 0.1s, background-color 0.1s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'var(--border)';
+            e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+          }}
+          onMouseLeave={(e) => {
+            if (!dropdownOpen) {
+              e.currentTarget.style.borderColor = 'transparent';
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }
+          }}
+        >
+          <span>{String(value || '—').replace(/_/g, ' ')}</span>
+          <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
+        </div>
+        {dropdownOpen && (
+          <div style={dropdownStyle}>
+            {field.options.map((o) => (
+              <div
+                key={o}
+                onClick={() => { onInlineChange(o); setDropdownOpen(false); }}
+                style={{
+                  ...dropdownItemStyle,
+                  fontWeight: String(value) === o ? 600 : 400,
+                  backgroundColor: String(value) === o ? 'var(--bg-hover)' : 'transparent',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = String(value) === o ? 'var(--bg-hover)' : 'transparent'}
+              >
+                {o.replace(/_/g, ' ')}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Inline date picker
+  if (field.type === 'date' && !editing) {
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          {iconMap[field.key]}
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{field.label}</span>
+        </div>
+        <input
+          type="date"
+          value={String(value || '')}
+          onChange={(e) => onInlineChange(e.target.value)}
+          style={{
+            ...inputStyle,
+            cursor: 'pointer',
+            backgroundColor: 'transparent',
+            border: '1px solid transparent',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'var(--border)';
+            e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'transparent';
+            e.currentTarget.style.backgroundColor = 'transparent';
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Standard field rendering
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -279,6 +500,18 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid var(--border)', borderRadius: 'var(--radius)',
   backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)',
   outline: 'none',
+};
+
+const dropdownStyle: React.CSSProperties = {
+  position: 'absolute', top: '100%', left: 0, right: 0,
+  backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)', boxShadow: 'var(--shadow-lg)',
+  zIndex: 50, marginTop: 4, maxHeight: 200, overflow: 'auto',
+};
+
+const dropdownItemStyle: React.CSSProperties = {
+  padding: '8px 12px', fontSize: 13, color: 'var(--text-primary)',
+  cursor: 'pointer', transition: 'background-color 0.1s',
 };
 
 const iconBtnStyle: React.CSSProperties = {
