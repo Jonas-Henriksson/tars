@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useStore } from '../store';
 import { getTheme } from '../themes';
 import { api } from '../api/client';
-import { Target, Scale, Users, BarChart3, CheckCircle2, Circle, GitBranch, Check, X, Sparkles, ChevronRight, ChevronDown, Plus, Pencil, Trash2, Undo2 } from 'lucide-react';
+import { Target, Scale, Users, BarChart3, CheckCircle2, Circle, GitBranch, Check, X, Sparkles, ChevronRight, ChevronDown, Plus, Pencil, Trash2, Undo2, Search, Link2, AlertTriangle } from 'lucide-react';
 import DetailPanel from '../components/DetailPanel';
 import type { DetailField } from '../components/DetailPanel';
 
@@ -2614,127 +2614,527 @@ function PortfolioView() {
   const [portfolio, setPortfolio] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<{ name: string; data: any } | null>(null);
+  const [hierTree, setHierTree] = useState<any[]>([]);
+  const [epicPickerTask, setEpicPickerTask] = useState<string | null>(null);
+  const [epicSearch, setEpicSearch] = useState('');
+  const [linkedTasks, setLinkedTasks] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     api.get<any>('/api/portfolio').then((data) => {
       setPortfolio(data.portfolio || {});
       setLoading(false);
     }).catch(() => setLoading(false));
+    api.get<any>('/api/hierarchy').then((data) => setHierTree(data.tree || [])).catch(() => {});
   }, []);
 
   if (loading) return <LoadingState />;
 
-  // Sort by total workload descending — busiest people first, hide zero-workload entries
+  // Classify members: people have roles or capitalized first-letter names
   const allMembers = Object.entries(portfolio);
-  const members = allMembers
+  const active = allMembers
     .filter(([, data]) => (data.workload?.total_items || 0) > 0)
     .sort(([, a], [, b]) => (b.workload?.total_items || 0) - (a.workload?.total_items || 0));
-  const hiddenCount = allMembers.length - members.length;
+  const hiddenCount = allMembers.length - active.length;
 
+  // Heuristic: entries with a role, or whose name starts with uppercase and has no space/special suggesting a group
+  const knownGroups = new Set(['team', 'all', 'everyone', 'hr', 'finance', 'managers', 'leadership', 'group finance']);
+  const people: [string, any][] = [];
+  const groups: [string, any][] = [];
+  for (const [name, data] of active) {
+    const isGroup = knownGroups.has(name.toLowerCase())
+      || (!data.role && !data.relationship && /^[a-z]/.test(name))
+      || (!data.role && !data.relationship && name.split(/\s+/).length > 2);
+    if (isGroup) groups.push([name, data]);
+    else people.push([name, data]);
+  }
+
+  // Collect all epics from hierarchy for the epic picker
+  const allEpics = useMemo(() => {
+    const result: { id: string; title: string; status: string; initiative: string }[] = [];
+    function walk(nodes: any[], parentInit = '') {
+      for (const n of nodes) {
+        const initTitle = n.type === 'initiative' ? (n.title || '') : parentInit;
+        if (n.type === 'epic') {
+          result.push({ id: n.id, title: n.title || n.description || '', status: n.status || 'backlog', initiative: initTitle });
+        }
+        if (n.children) walk(n.children, initTitle);
+      }
+    }
+    walk(hierTree);
+    return result;
+  }, [hierTree]);
+
+  // Collect all stories from hierarchy for linking tasks
+  const allStories = useMemo(() => {
+    const result: { id: string; title: string; epicTitle: string; epicId: string }[] = [];
+    function walk(nodes: any[], parentEpic = '', parentEpicId = '') {
+      for (const n of nodes) {
+        const eTitle = n.type === 'epic' ? (n.title || '') : parentEpic;
+        const eId = n.type === 'epic' ? n.id : parentEpicId;
+        if (n.type === 'story') {
+          result.push({ id: n.id, title: n.title || n.description || '', epicTitle: eTitle, epicId: eId });
+        }
+        if (n.children) walk(n.children, eTitle, eId);
+      }
+    }
+    walk(hierTree);
+    return result;
+  }, [hierTree]);
+
+  // Group stories by epic for the picker
+  const storiesByEpic = useMemo(() => {
+    const map: Record<string, typeof allStories> = {};
+    for (const s of allStories) {
+      const key = s.epicId || '__none__';
+      (map[key] ||= []).push(s);
+    }
+    return map;
+  }, [allStories]);
+
+  const handleLinkToStory = (taskId: string, storyId: string) => {
+    api.post<any>(`/api/stories/${storyId}/link-task`, { task_id: taskId }).then(() => {
+      setLinkedTasks(prev => new Set(prev).add(taskId));
+      setEpicPickerTask(null);
+      setEpicSearch('');
+    }).catch(() => {});
+  };
+
+  const renderMemberCard = (name: string, data: any) => {
+    const w = data.workload || {};
+    const totalItems = w.total_items || 0;
+    const blocked = w.blocked || 0;
+    const overdue = w.overdue || 0;
+    const needsEpic = data.needs_epic_count || 0;
+    const stats = [
+      w.epics ? `${w.epics} epics` : null,
+      w.stories ? `${w.stories} stories` : null,
+      (w.smart_tasks || 0) + (w.tracked_tasks || 0) > 0 ? `${(w.smart_tasks || 0) + (w.tracked_tasks || 0)} tasks` : null,
+    ].filter(Boolean);
+    return (
+      <div
+        key={name}
+        onClick={() => setSelected({ name, data })}
+        style={{
+          ...cardStyle, cursor: 'pointer', transition: 'all 0.15s',
+          padding: '12px 14px',
+          borderLeft: `3px solid ${blocked > 0 ? '#ef4444' : overdue > 0 ? '#f59e0b' : 'var(--border)'}`,
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+          e.currentTarget.style.boxShadow = 'var(--shadow)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = 'var(--bg-card)';
+          e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontSize: 12, fontWeight: 600, flexShrink: 0,
+          }}>
+            {name.charAt(0).toUpperCase()}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+              {stats.join(' · ') || 'no items'}
+            </div>
+          </div>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', flexShrink: 0 }}>{totalItems}</span>
+        </div>
+        {(blocked > 0 || overdue > 0 || needsEpic > 0) && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, marginLeft: 36, fontSize: 10 }}>
+            {blocked > 0 && <span style={{ color: '#ef4444' }}>{blocked} blocked</span>}
+            {overdue > 0 && <span style={{ color: '#f59e0b' }}>{overdue} overdue</span>}
+            {needsEpic > 0 && <span style={{ color: '#8b5cf6' }}>{needsEpic} need epic</span>}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderSectionHeader = (label: string, count: number, color: string) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, marginTop: 4, gridColumn: '1 / -1' }}>
+      <span style={{
+        fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
+        color, display: 'inline-flex', alignItems: 'center', gap: 6,
+      }}>
+        {label} ({count})
+      </span>
+      <span style={{ flex: 1, height: 1, backgroundColor: 'var(--border)', opacity: 0.5 }} />
+    </div>
+  );
+
+  // Build sidebar content
   const wl = selected?.data?.workload || {};
+  const selectedEpics: any[] = selected?.data?.epics || [];
+  const selectedNeedsEpic: any[] = selected?.data?.needs_epic || [];
 
-  // Build compact summary for sidebar
-  const epicsSummary = selected?.data?.epics?.length
-    ? selected.data.epics.map((e: any) => {
-        const stories = e.story_count ? `${e.story_count} stories` : 'no stories';
-        return `[${(e.status || 'backlog').replace(/_/g, ' ')}] ${e.title} (${stories})`;
-      }).join('\n')
-    : '';
-
-  const needsEpicSummary = selected?.data?.needs_epic?.length
-    ? selected.data.needs_epic.map((t: any) => `- ${t.description}`).join('\n')
-    : '';
-
-  const fields: DetailField[] = selected ? [
-    ...(selected.data.role ? [{ key: 'role', label: 'Role', value: selected.data.role, type: 'readonly' as const }] : []),
-    { key: 'summary', label: 'Workload Summary', value: [
-      `${wl.epics || 0} epics, ${wl.stories || 0} stories, ${wl.smart_tasks || 0} tasks, ${wl.tracked_tasks || 0} tracked`,
-      ...(wl.blocked > 0 ? [`${wl.blocked} blocked`] : []),
-      ...(wl.overdue > 0 ? [`${wl.overdue} overdue`] : []),
-    ].join(' · '), type: 'readonly' as const },
-    ...(epicsSummary ? [{ key: 'epics_detail', label: `Epics (${selected.data.epics.length})`, value: epicsSummary, type: 'expandable' as const }] : []),
-    ...(needsEpicSummary ? [{ key: 'needs_epic', label: `Needs Epic (${selected.data.needs_epic.length})`, value: needsEpicSummary, type: 'expandable' as const }] : []),
-  ] : [];
+  // Filter epics for the picker
+  const filteredEpics = epicSearch
+    ? allEpics.filter(e => e.title.toLowerCase().includes(epicSearch.toLowerCase()) || e.initiative.toLowerCase().includes(epicSearch.toLowerCase()))
+    : allEpics;
 
   return (
     <>
-      {members.length > 0 && (
+      {active.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-          <span>{members.length} member{members.length !== 1 ? 's' : ''} with active work</span>
+          <span>{people.length} people{groups.length > 0 ? ` · ${groups.length} groups` : ''} with active work</span>
           {hiddenCount > 0 && <span>{hiddenCount} with no assigned items</span>}
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-        {members.length === 0 ? (
-          <EmptyState message={allMembers.length > 0 ? `${allMembers.length} team members found but none have assigned epics, stories, or tasks. Assign owners in the Hierarchy tab.` : 'No portfolio data. Run a Notion scan first.'} />
-        ) : (
-          members.map(([name, data]: [string, any]) => {
-            const w = data.workload || {};
-            const totalItems = w.total_items || 0;
-            const blocked = w.blocked || 0;
-            const overdue = w.overdue || 0;
-            const needsEpic = data.needs_epic_count || 0;
-            // Compact inline stats
-            const stats = [
-              w.epics ? `${w.epics} epics` : null,
-              w.stories ? `${w.stories} stories` : null,
-              (w.smart_tasks || 0) + (w.tracked_tasks || 0) > 0 ? `${(w.smart_tasks || 0) + (w.tracked_tasks || 0)} tasks` : null,
-            ].filter(Boolean);
-            return (
-              <div
-                key={name}
-                onClick={() => setSelected({ name, data })}
-                style={{
-                  ...cardStyle, cursor: 'pointer', transition: 'all 0.15s',
-                  padding: '12px 14px',
-                  borderLeft: `3px solid ${blocked > 0 ? '#ef4444' : overdue > 0 ? '#f59e0b' : 'var(--border)'}`,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                  e.currentTarget.style.boxShadow = 'var(--shadow)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--bg-card)';
-                  e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{
-                    width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#fff', fontSize: 12, fontWeight: 600, flexShrink: 0,
-                  }}>
-                    {name.charAt(0)}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
-                      {stats.join(' · ') || 'no items'}
+
+      {active.length === 0 ? (
+        <EmptyState message={allMembers.length > 0 ? `${allMembers.length} team members found but none have assigned epics, stories, or tasks. Assign owners in the Hierarchy tab.` : 'No portfolio data. Run a Notion scan first.'} />
+      ) : (
+        <>
+          {/* People section */}
+          {people.length > 0 && (
+            <>
+              {renderSectionHeader('People', people.length, 'var(--accent)')}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10, marginBottom: 20 }}>
+                {people.map(([name, data]) => renderMemberCard(name, data))}
+              </div>
+            </>
+          )}
+
+          {/* Groups section */}
+          {groups.length > 0 && (
+            <>
+              {renderSectionHeader('Groups & Teams', groups.length, 'var(--text-muted)')}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
+                {groups.map(([name, data]) => renderMemberCard(name, data))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {/* Rich sidebar panel */}
+      {selected && (
+        <>
+          <div
+            onClick={() => { setSelected(null); setEpicPickerTask(null); setEpicSearch(''); }}
+            style={{
+              position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)',
+              zIndex: 999, animation: 'fadeIn 0.15s ease',
+            }}
+          />
+          <div style={{
+            position: 'fixed', top: 0, right: 0, bottom: 0,
+            width: 520, maxWidth: '90vw', backgroundColor: 'var(--bg-primary)',
+            borderLeft: '1px solid var(--border)', zIndex: 1000,
+            display: 'flex', flexDirection: 'column',
+            boxShadow: '-4px 0 24px rgba(0,0,0,0.15)',
+            animation: 'slideIn 0.2s ease',
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '20px 24px 16px', borderBottom: '1px solid var(--border)',
+              display: 'flex', flexDirection: 'column', gap: 8,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: '50%', background: 'var(--accent)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', fontSize: 15, fontWeight: 600, flexShrink: 0,
+                    }}>
+                      {selected.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>{selected.name}</h2>
+                      {selected.data.role && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{selected.data.role}</p>}
                     </div>
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', flexShrink: 0 }}>{totalItems}</span>
                 </div>
-                {(blocked > 0 || overdue > 0 || needsEpic > 0) && (
-                  <div style={{ display: 'flex', gap: 6, marginTop: 6, marginLeft: 36, fontSize: 10 }}>
-                    {blocked > 0 && <span style={{ color: '#ef4444' }}>{blocked} blocked</span>}
-                    {overdue > 0 && <span style={{ color: '#f59e0b' }}>{overdue} overdue</span>}
-                    {needsEpic > 0 && <span style={{ color: '#8b5cf6' }}>{needsEpic} need epic</span>}
+                <button
+                  onClick={() => { setSelected(null); setEpicPickerTask(null); setEpicSearch(''); }}
+                  style={{ padding: 8, border: 'none', borderRadius: 'var(--radius)', backgroundColor: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  title="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Workload summary bar */}
+              <div style={{
+                display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12, marginTop: 4,
+              }}>
+                {wl.epics > 0 && <span style={{ color: '#10b981', fontWeight: 500 }}>{wl.epics} epics</span>}
+                {wl.stories > 0 && <span style={{ color: '#f59e0b', fontWeight: 500 }}>{wl.stories} stories</span>}
+                {(wl.smart_tasks || 0) + (wl.tracked_tasks || 0) > 0 && (
+                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{(wl.smart_tasks || 0) + (wl.tracked_tasks || 0)} tasks</span>
+                )}
+                {wl.blocked > 0 && <span style={{ color: '#ef4444', fontWeight: 600 }}>{wl.blocked} blocked</span>}
+                {wl.overdue > 0 && <span style={{ color: '#f59e0b', fontWeight: 600 }}>{wl.overdue} overdue</span>}
+              </div>
+            </div>
+
+            {/* Body — scrollable */}
+            <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
+              {/* Epics section */}
+              {selectedEpics.length > 0 && (
+                <PortfolioEpicsSection epics={selectedEpics} storiesByEpic={storiesByEpic} />
+              )}
+
+              {/* Needs Epic section */}
+              {selectedNeedsEpic.length > 0 && (
+                <div style={{ marginTop: selectedEpics.length > 0 ? 20 : 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <AlertTriangle size={14} style={{ color: '#8b5cf6' }} />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#8b5cf6' }}>
+                      Needs Epic ({selectedNeedsEpic.filter(t => !linkedTasks.has(t.id)).length})
+                    </span>
                   </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {selectedNeedsEpic.map((t: any) => {
+                      if (linkedTasks.has(t.id)) return null;
+                      const isPickerOpen = epicPickerTask === t.id;
+                      return (
+                        <div key={t.id}>
+                          <div style={{
+                            fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5,
+                            padding: '8px 12px', backgroundColor: 'var(--bg-secondary)',
+                            borderRadius: 'var(--radius)', borderLeft: '2px solid #8b5cf6',
+                            display: 'flex', alignItems: 'flex-start', gap: 8,
+                          }}>
+                            <span style={{ flex: 1 }}>{t.description}</span>
+                            <button
+                              onClick={() => { setEpicPickerTask(isPickerOpen ? null : t.id); setEpicSearch(''); }}
+                              title="Link to a story"
+                              style={{
+                                border: 'none', background: 'none', cursor: 'pointer',
+                                color: isPickerOpen ? 'var(--accent)' : 'var(--text-muted)',
+                                padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center',
+                                transition: 'color 0.1s', flexShrink: 0, marginTop: 1,
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+                              onMouseLeave={(e) => { if (!isPickerOpen) e.currentTarget.style.color = 'var(--text-muted)'; }}
+                            >
+                              <Link2 size={14} />
+                            </button>
+                          </div>
+                          {/* Epic / Story drill-down picker */}
+                          {isPickerOpen && (
+                            <div style={{
+                              marginTop: 4, marginLeft: 12, border: '1px solid var(--border)',
+                              borderRadius: 'var(--radius)', backgroundColor: 'var(--bg-secondary)',
+                              overflow: 'hidden',
+                            }}>
+                              {/* Search */}
+                              <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <Search size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                <input
+                                  autoFocus
+                                  value={epicSearch}
+                                  onChange={(e) => setEpicSearch(e.target.value)}
+                                  placeholder="Search epics..."
+                                  style={{
+                                    flex: 1, border: 'none', background: 'none', outline: 'none',
+                                    fontSize: 12, color: 'var(--text-primary)',
+                                  }}
+                                />
+                              </div>
+                              {/* Epic → Story tree */}
+                              <div style={{ maxHeight: 240, overflowY: 'auto', padding: 4 }}>
+                                {filteredEpics.length === 0 ? (
+                                  <div style={{ padding: 12, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>No epics found</div>
+                                ) : (
+                                  filteredEpics.map((ep) => (
+                                    <EpicPickerNode
+                                      key={ep.id}
+                                      epic={ep}
+                                      stories={storiesByEpic[ep.id] || []}
+                                      onSelectStory={(storyId) => handleLinkToStory(t.id, storyId)}
+                                    />
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Empty state */}
+              {selectedEpics.length === 0 && selectedNeedsEpic.length === 0 && (
+                <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
+                  No epics or unlinked tasks for this member.
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+/** Epics section in portfolio sidebar — shows epics with expandable story lists */
+function PortfolioEpicsSection({ epics, storiesByEpic }: { epics: any[]; storiesByEpic: Record<string, any[]> }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <Target size={14} style={{ color: '#10b981' }} />
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#10b981' }}>Epics ({epics.length})</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {epics.map((ep: any) => (
+          <PortfolioEpicRow key={ep.id || ep.title} epic={ep} stories={storiesByEpic[ep.id] || []} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Single epic row — expandable to show stories */
+function PortfolioEpicRow({ epic, stories }: { epic: any; stories: any[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const statusColor = STATUS_COLORS[epic.status] || '#94a3b8';
+  return (
+    <div>
+      <div
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px',
+          borderRadius: 'var(--radius)', cursor: 'pointer',
+          borderLeft: '3px solid #10b981', backgroundColor: 'var(--bg-secondary)',
+          transition: 'background-color 0.1s',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', padding: 1 }}>
+          {stories.length > 0 ? (
+            expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />
+          ) : <span style={{ width: 12 }} />}
+        </span>
+        <span style={{
+          fontSize: 10, fontWeight: 600, textTransform: 'uppercase', padding: '1px 5px',
+          borderRadius: 3, backgroundColor: statusColor + '20', color: statusColor,
+        }}>
+          {(epic.status || 'backlog').replace(/_/g, ' ')}
+        </span>
+        <span style={{
+          fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', flex: 1,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {epic.title}
+        </span>
+        {epic.story_count > 0 && (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+            {epic.story_count} {epic.story_count === 1 ? 'story' : 'stories'}
+          </span>
+        )}
+      </div>
+      {expanded && stories.length > 0 && (
+        <div style={{ marginLeft: 20, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {stories.map((s: any) => {
+            const sColor = STATUS_COLORS[s.status] || '#94a3b8';
+            return (
+              <div key={s.id} style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px',
+                borderLeft: '2px solid #f59e0b', borderRadius: 'var(--radius)',
+                fontSize: 12,
+              }}>
+                <span style={{
+                  fontSize: 9, fontWeight: 600, textTransform: 'uppercase',
+                  color: '#f59e0b', minWidth: 36,
+                }}>
+                  STORY
+                </span>
+                <span style={{
+                  color: 'var(--text-secondary)', flex: 1,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {s.title}
+                </span>
+                {s.status && (
+                  <span style={{
+                    fontSize: 10, padding: '1px 5px', borderRadius: 3,
+                    backgroundColor: sColor + '20', color: sColor,
+                  }}>
+                    {s.status.replace(/_/g, ' ')}
+                  </span>
                 )}
               </div>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
-      <DetailPanel
-        open={!!selected}
-        onClose={() => setSelected(null)}
-        title={selected?.name || ''}
-        subtitle={selected?.data?.role || 'Team member'}
-        fields={fields}
-      />
-    </>
+/** Epic picker node — shows an epic with expandable stories for linking */
+function EpicPickerNode({ epic, stories, onSelectStory }: {
+  epic: { id: string; title: string; status: string; initiative: string };
+  stories: { id: string; title: string }[];
+  onSelectStory: (storyId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const statusColor = STATUS_COLORS[epic.status] || '#94a3b8';
+  return (
+    <div>
+      <div
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 4, padding: '4px 6px',
+          cursor: 'pointer', borderRadius: 4, transition: 'background-color 0.1s',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+      >
+        <span style={{ display: 'flex', padding: 1 }}>
+          {stories.length > 0 ? (
+            expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />
+          ) : <span style={{ width: 12 }} />}
+        </span>
+        <span style={{
+          fontSize: 9, fontWeight: 600, textTransform: 'uppercase',
+          color: '#10b981', minWidth: 28,
+        }}>EPIC</span>
+        <span style={{
+          fontSize: 11, color: 'var(--text-secondary)', flex: 1,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{epic.title}</span>
+        <span style={{
+          fontSize: 9, padding: '1px 4px', borderRadius: 3,
+          backgroundColor: statusColor + '20', color: statusColor,
+        }}>{(epic.status || 'backlog').replace(/_/g, ' ')}</span>
+      </div>
+      {expanded && stories.length > 0 && (
+        <div style={{ marginLeft: 16 }}>
+          {stories.map((s) => (
+            <div
+              key={s.id}
+              onClick={(e) => { e.stopPropagation(); onSelectStory(s.id); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px',
+                cursor: 'pointer', borderRadius: 4, transition: 'background-color 0.1s',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <span style={{ width: 12 }} />
+              <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: '#f59e0b', minWidth: 28 }}>STORY</span>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</span>
+              <Link2 size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+            </div>
+          ))}
+        </div>
+      )}
+      {expanded && stories.length === 0 && (
+        <div style={{ marginLeft: 28, padding: '3px 6px', fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>No stories in this epic</div>
+      )}
+    </div>
   );
 }
 
