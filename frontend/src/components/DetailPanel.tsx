@@ -20,6 +20,8 @@ export interface DetailField {
   lines?: string[];
   /** For 'expandable' type: action button on each line (e.g. "Convert to task") */
   lineAction?: { label: string; icon?: 'plus'; onAction: (line: string) => void };
+  /** For 'expandable' type: remove button on each line */
+  lineRemove?: { label: string; onRemove: (lineIndex: number) => void };
 }
 
 interface DetailPanelProps {
@@ -194,6 +196,7 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [convertedLines, setConvertedLines] = useState<Set<number>>(new Set());
+  const [removedLines, setRemovedLines] = useState<Set<number>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -250,7 +253,7 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
           }}>
             {lines.map((line, i) => {
               const trimmed = line.trim();
-              if (!trimmed) return null;
+              if (!trimmed || removedLines.has(i)) return null;
               const numMatch = trimmed.match(/^(\d+)[.)]\s*(.*)/);
               const displayText = numMatch ? numMatch[2] : trimmed;
               const isConverted = convertedLines.has(i);
@@ -269,30 +272,42 @@ function FieldRow({ field, editing, value, onChange, onInlineChange }: {
                     )}
                     {displayText}
                   </span>
-                  {field.lineAction && (
-                    isConverted ? (
-                      <Check size={14} style={{ color: 'var(--success)', flexShrink: 0 }} />
-                    ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                    {field.lineAction && (
+                      isConverted ? (
+                        <Check size={14} style={{ color: 'var(--success)' }} />
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            field.lineAction!.onAction(displayText);
+                            setConvertedLines(prev => new Set(prev).add(i));
+                          }}
+                          title={field.lineAction.label}
+                          style={lineActionBtnStyle}
+                          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                        >
+                          <Plus size={14} />
+                        </button>
+                      )
+                    )}
+                    {field.lineRemove && !isConverted && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          field.lineAction!.onAction(displayText);
-                          setConvertedLines(prev => new Set(prev).add(i));
+                          setRemovedLines(prev => new Set(prev).add(i));
+                          field.lineRemove!.onRemove(i);
                         }}
-                        title={field.lineAction.label}
-                        style={{
-                          border: 'none', background: 'none', cursor: 'pointer',
-                          color: 'var(--text-muted)', padding: 2, borderRadius: 4,
-                          display: 'flex', alignItems: 'center', flexShrink: 0,
-                          transition: 'color 0.1s',
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+                        title={field.lineRemove.label}
+                        style={lineActionBtnStyle}
+                        onMouseEnter={(e) => e.currentTarget.style.color = 'var(--danger)'}
                         onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
                       >
-                        <Plus size={14} />
+                        <X size={14} />
                       </button>
-                    )
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -559,6 +574,13 @@ const ghostBtnStyle: React.CSSProperties = {
   padding: '8px 16px', border: '1px solid var(--border)', borderRadius: 'var(--radius)',
   backgroundColor: 'transparent', color: 'var(--text-secondary)', fontSize: 13,
   cursor: 'pointer',
+};
+
+const lineActionBtnStyle: React.CSSProperties = {
+  border: 'none', background: 'none', cursor: 'pointer',
+  color: 'var(--text-muted)', padding: 2, borderRadius: 4,
+  display: 'flex', alignItems: 'center',
+  transition: 'color 0.1s',
 };
 
 const dangerBtnStyle: React.CSSProperties = {

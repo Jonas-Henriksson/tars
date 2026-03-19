@@ -196,6 +196,16 @@ export default function Work() {
             })
             .catch(() => {});
         },
+      },
+      lineRemove: {
+        label: 'Remove step',
+        onRemove: (lineIndex: number) => {
+          if (!selectedTask) return;
+          const currentLines = parseStepLines(selectedTask.steps);
+          const updated = currentLines.filter((_, idx) => idx !== lineIndex).join('\n');
+          handleFieldChange('steps', updated);
+          setSelectedTask((prev) => prev ? { ...prev, steps: updated } : null);
+        },
       } },
     { key: 'age_days', label: 'Age (days)', value: selectedTask.age_days, type: 'readonly' },
     { key: 'delegated', label: 'Delegated', value: selectedTask.delegated ? 'Yes' : 'No', type: 'readonly' },
