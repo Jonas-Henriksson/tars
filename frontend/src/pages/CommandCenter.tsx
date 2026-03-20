@@ -992,7 +992,7 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
         <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
             <span style={{ fontSize: 11, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-              {syncProgress.page_title || 'Scanning...'}
+              {(syncProgress.page_title || 'Scanning...').replace(/\d{4}-\d{2}-\d{2}T[\d:.]+([+-]\d{2}:\d{2}|Z)/g, '').trim()}
             </span>
             <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, marginLeft: 8 }}>
               {syncProgress.current}/{syncProgress.total} pages
