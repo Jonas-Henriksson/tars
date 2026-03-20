@@ -114,7 +114,6 @@ export default function Work() {
 
   const handleMatrixDragDrop = useCallback((taskId: string, newQuadrant: number) => {
     const qLabel = QUADRANT_LABELS[newQuadrant]?.name || 'Defer';
-    const qMap: Record<string, number> = { 'Do First': 1, 'Schedule': 2, 'Delegate': 3, 'Defer': 4 };
     setTasks((prev) => prev.map((t) =>
       t.id === taskId ? { ...t, quadrant: newQuadrant, priority: { quadrant: newQuadrant, label: qLabel } } : t
     ));
