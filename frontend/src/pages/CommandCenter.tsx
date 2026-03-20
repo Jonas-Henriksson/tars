@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import {
   Calendar, AlertTriangle, Mail, TrendingUp, CheckCircle2, ChevronRight, ChevronDown, ChevronLeft,
-  Target, Scale, Users, CalendarCheck, Clock, Zap, User, Package, Eye, X, Pencil,
+  Target, Scale, Users, CalendarCheck, Clock, Zap, User, Package, Eye, X, Pencil, RefreshCw,
 } from 'lucide-react';
 
 interface AlertData {
@@ -755,11 +755,20 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
   });
   const [undoStack, setUndoStack] = useState<{ label: string; items: { entity_type: string; id: string }[] }[]>([]);
   const [hierTree, setHierTree] = useState<any[]>([]);
+  const [syncing, setSyncing] = useState(false);
 
   // Load hierarchy tree for linking tasks
   useEffect(() => {
     api.get<any>('/api/hierarchy').then((d) => setHierTree(d.tree || [])).catch(() => {});
   }, []);
+
+  const handleSync = () => {
+    setSyncing(true);
+    api.post<any>('/api/intel/scan', { max_pages: 50 })
+      .then(() => onUpdate(currentDateParam))
+      .catch(() => {})
+      .finally(() => setSyncing(false));
+  };
 
   const todayStr = new Date().toISOString().split('T')[0];
   const currentDateParam = dateMode === 'single' ? selectedDate : undefined;
@@ -831,6 +840,7 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
 
   return (
     <div style={{ ...cardStyle, marginBottom: 24 }}>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       <div style={{ ...cardHeaderStyle, justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Eye size={16} />
@@ -844,6 +854,37 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Last sync + Sync button */}
+          {summary.last_scan_at && !syncing && (
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }} title={`Last sync: ${new Date(summary.last_scan_at).toLocaleString()}`}>
+              {(() => {
+                const diff = Date.now() - new Date(summary.last_scan_at).getTime();
+                const mins = Math.floor(diff / 60000);
+                if (mins < 1) return 'just now';
+                if (mins < 60) return `${mins}m ago`;
+                const hrs = Math.floor(mins / 60);
+                if (hrs < 24) return `${hrs}h ago`;
+                return `${Math.floor(hrs / 24)}d ago`;
+              })()}
+            </span>
+          )}
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            title="Fetch new meetings from Notion"
+            style={{
+              fontSize: 11, fontWeight: 500, border: 'none', borderRadius: 8,
+              padding: '3px 10px', cursor: syncing ? 'default' : 'pointer', transition: 'all 0.1s',
+              backgroundColor: syncing ? 'rgba(99,102,241,0.15)' : 'var(--bg-secondary)',
+              color: syncing ? 'var(--accent)' : 'var(--text-muted)',
+              display: 'flex', alignItems: 'center', gap: 4, opacity: syncing ? 0.7 : 1,
+            }}
+            onMouseEnter={(e) => { if (!syncing) e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
+            onMouseLeave={(e) => { if (!syncing) e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'; }}
+          >
+            <RefreshCw size={11} style={syncing ? { animation: 'spin 1s linear infinite' } : {}} />
+            {syncing ? 'Syncing...' : 'Sync'}
+          </button>
           {/* Date navigation */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <button

@@ -888,6 +888,10 @@ async def get_meeting_review(days: int = 3, date: str = ""):
     # Count groups that have a real source title (= actual meeting/page sources)
     source_groups = len([m for m in meetings if m["source_title"] and m["source_title"] != "Other items"])
 
+    # Include last scan timestamp
+    from integrations.intel import _load_intel as _load_intel_data
+    last_scan_at = _load_intel_data().get("last_scan_at")
+
     return JSONResponse({
         "meetings": meetings,
         "summary": {
@@ -897,6 +901,7 @@ async def get_meeting_review(days: int = 3, date: str = ""):
             "meetings_count": source_groups,
             "groups_count": len(meetings),
             "date": target_date.isoformat(),
+            "last_scan_at": last_scan_at,
         },
     })
 
