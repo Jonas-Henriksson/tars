@@ -112,6 +112,15 @@ export default function Work() {
     handleTaskSave({ [key]: value });
   }, [handleTaskSave]);
 
+  const handleMatrixDragDrop = useCallback((taskId: string, newQuadrant: number) => {
+    const qLabel = QUADRANT_LABELS[newQuadrant]?.name || 'Defer';
+    const qMap: Record<string, number> = { 'Do First': 1, 'Schedule': 2, 'Delegate': 3, 'Defer': 4 };
+    setTasks((prev) => prev.map((t) =>
+      t.id === taskId ? { ...t, quadrant: newQuadrant, priority: { quadrant: newQuadrant, label: qLabel } } : t
+    ));
+    api.patch<any>(`/api/intel/tasks/${taskId}`, { quadrant: newQuadrant }).catch(() => {});
+  }, []);
+
   const handleDragDrop = useCallback((taskId: string, newPhase: string) => {
     const statusMap: Record<string, string> = {
       backlog: 'open', in_progress: 'in_progress', done: 'done',
@@ -269,7 +278,7 @@ export default function Work() {
       {loading ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>Loading tasks...</div>
       ) : tab === 'matrix' ? (
-        <MatrixView tasks={filteredTasks} onTaskClick={handleTaskClick} />
+        <MatrixView tasks={filteredTasks} onTaskClick={handleTaskClick} onDragDrop={handleMatrixDragDrop} />
       ) : tab === 'board' ? (
         <BoardView tasks={filteredTasks} onTaskClick={handleTaskClick} onDragDrop={handleDragDrop} />
       ) : tab === 'list' ? (
@@ -405,18 +414,53 @@ export default function Work() {
 
 /* ---------- Matrix View ---------- */
 
-function MatrixView({ tasks, onTaskClick }: { tasks: SmartTask[]; onTaskClick: (t: SmartTask) => void }) {
+function MatrixView({ tasks, onTaskClick, onDragDrop }: {
+  tasks: SmartTask[]; onTaskClick: (t: SmartTask) => void;
+  onDragDrop: (taskId: string, newQuadrant: number) => void;
+}) {
+  const [dragOverQ, setDragOverQ] = useState<number | null>(null);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    e.dataTransfer.setData('text/plain', taskId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedId(taskId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, q: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverQ(q);
+  };
+
+  const handleDrop = (e: React.DragEvent, q: number) => {
+    e.preventDefault();
+    const taskId = e.dataTransfer.getData('text/plain');
+    if (taskId) onDragDrop(taskId, q);
+    setDragOverQ(null);
+    setDraggedId(null);
+  };
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
       {[1, 2, 3, 4].map((q) => {
         const qTasks = tasks.filter((t) => getTaskQuadrant(t) === q && t.status !== 'done');
         const label = QUADRANT_LABELS[q];
+        const isOver = dragOverQ === q;
         return (
-          <div key={q} style={{
-            backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg)', borderTop: `3px solid ${label.color}`,
-            padding: 16, minHeight: qTasks.length === 0 ? 120 : 200,
-          }}>
+          <div
+            key={q}
+            onDragOver={(e) => handleDragOver(e, q)}
+            onDragLeave={() => setDragOverQ(null)}
+            onDrop={(e) => handleDrop(e, q)}
+            style={{
+              backgroundColor: isOver ? (label.color + '10') : 'var(--bg-card)',
+              border: `1px solid ${isOver ? label.color + '60' : 'var(--border)'}`,
+              borderRadius: 'var(--radius-lg)', borderTop: `3px solid ${label.color}`,
+              padding: 16, minHeight: qTasks.length === 0 ? 120 : 200,
+              transition: 'background-color 0.15s, border-color 0.15s',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: label.color }}>{label.name}</span>
               <span style={{ fontSize: 12, color: 'var(--text-muted)', backgroundColor: 'var(--bg-secondary)', padding: '2px 8px', borderRadius: 10 }}>
@@ -425,10 +469,27 @@ function MatrixView({ tasks, onTaskClick }: { tasks: SmartTask[]; onTaskClick: (
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {qTasks.slice(0, 8).map((t) => (
-                <TaskCard key={t.id} task={t} compact onClick={() => onTaskClick(t)} />
+                <div
+                  key={t.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, t.id)}
+                  onDragEnd={() => { setDraggedId(null); setDragOverQ(null); }}
+                  style={{ opacity: draggedId === t.id ? 0.4 : 1, cursor: 'grab' }}
+                >
+                  <TaskCard task={t} compact onClick={() => onTaskClick(t)} />
+                </div>
               ))}
-              {qTasks.length === 0 && (
+              {qTasks.length === 0 && !isOver && (
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: 12 }}>No tasks</div>
+              )}
+              {isOver && (
+                <div style={{
+                  fontSize: 12, color: label.color, textAlign: 'center', padding: '8px 4px',
+                  border: `1px dashed ${label.color}40`, borderRadius: 'var(--radius)',
+                  backgroundColor: label.color + '08',
+                }}>
+                  Drop here to move to {label.name}
+                </div>
               )}
               {qTasks.length > 8 && (
                 <div style={{
