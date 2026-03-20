@@ -2,6 +2,7 @@
  * Strategy page — Initiatives, Decisions, Portfolio, Weekly Review.
  */
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../store';
 import { getTheme } from '../themes';
 import { api } from '../api/client';
@@ -44,7 +45,15 @@ const STATUS_COLORS: Record<string, string> = {
 export default function Strategy() {
   const { themeId } = useStore();
   const theme = getTheme(themeId);
-  const [tab, setTab] = useState<TabId>(theme.layout.defaultStrategyTab);
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab') as TabId | null;
+  const [tab, setTab] = useState<TabId>(tabParam && ['hierarchy', 'health', 'decisions', 'portfolio', 'review'].includes(tabParam) ? tabParam : theme.layout.defaultStrategyTab);
+
+  useEffect(() => {
+    if (tabParam && ['hierarchy', 'health', 'decisions', 'portfolio', 'review'].includes(tabParam)) {
+      setTab(tabParam);
+    }
+  }, [tabParam]);
   const [strategySummary, setStrategySummary] = useState<any>(null);
 
   useEffect(() => {

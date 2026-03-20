@@ -463,27 +463,28 @@ function GraphView() {
     });
 
     // Simple force simulation (no D3 needed — basic physics)
+    // Gentle parameters: low initial energy, fast decay, heavy damping
     let running = true;
-    const alpha = { value: 1.0 };
+    const alpha = { value: 0.3 };
 
     function tick() {
       if (!running) return;
-      alpha.value *= 0.99;
+      alpha.value *= 0.97;
       if (alpha.value < 0.001) { alpha.value = 0; }
 
-      // Center force
+      // Center force (gentle pull)
       nodes.forEach((n: any) => {
-        n.vx += (width / 2 - n.x) * 0.005 * alpha.value;
-        n.vy += (height / 2 - n.y) * 0.005 * alpha.value;
+        n.vx += (width / 2 - n.x) * 0.003 * alpha.value;
+        n.vy += (height / 2 - n.y) * 0.003 * alpha.value;
       });
 
-      // Repulsion (charge)
+      // Repulsion (charge — much softer)
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const dx = nodes[j].x - nodes[i].x;
           const dy = nodes[j].y - nodes[i].y;
           const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-          const force = -200 * alpha.value / (dist * dist);
+          const force = -60 * alpha.value / (dist * dist);
           const fx = force * dx / dist;
           const fy = force * dy / dist;
           nodes[i].vx -= fx; nodes[i].vy -= fy;
@@ -500,7 +501,7 @@ function GraphView() {
         const dy = t.y - s.y;
         const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
         const desired = 100 + s.r + t.r;
-        const force = (dist - desired) * 0.01 * alpha.value;
+        const force = (dist - desired) * 0.005 * alpha.value;
         const fx = force * dx / dist;
         const fy = force * dy / dist;
         s.vx += fx; s.vy += fy;
@@ -526,9 +527,9 @@ function GraphView() {
         }
       }
 
-      // Apply velocity + boundary
+      // Apply velocity + boundary (heavy damping for smooth motion)
       nodes.forEach((n: any) => {
-        n.vx *= 0.8; n.vy *= 0.8;
+        n.vx *= 0.6; n.vy *= 0.6;
         n.x += n.vx; n.y += n.vy;
         n.x = Math.max(n.r + 5, Math.min(width - n.r - 5, n.x));
         n.y = Math.max(n.r + 5, Math.min(height - n.r - 5, n.y));

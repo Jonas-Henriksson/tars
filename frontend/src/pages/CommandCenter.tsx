@@ -1,15 +1,13 @@
 /**
  * Command Center — the home dashboard, layout driven by theme.
  */
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import {
-  Calendar, AlertTriangle, Mail, TrendingUp, CheckCircle2, ChevronRight,
-  Target, Scale, Users, CalendarCheck, Clock,
+  Calendar, AlertTriangle, Mail, TrendingUp, CheckCircle2, ChevronRight, ChevronDown,
+  Target, Scale, Users, CalendarCheck, Clock, Zap, User, Building2, Package,
 } from 'lucide-react';
-import DetailPanel from '../components/DetailPanel';
-import type { DetailField } from '../components/DetailPanel';
 
 interface AlertData {
   type: string;
@@ -29,7 +27,8 @@ export default function CommandCenter() {
   const [summary, setSummary] = useState<any>(null);
   const [taskStats, setTaskStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedAlert, setSelectedAlert] = useState<AlertData | null>(null);
+  const [expandedAlert, setExpandedAlert] = useState<number | null>(null);
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
   const [meetingPrep, setMeetingPrep] = useState<any>(null);
 
   useEffect(() => {
@@ -58,16 +57,7 @@ export default function CommandCenter() {
   const initSummary = summary?.initiatives;
   const decSummary = summary?.decisions;
 
-  const alertFields: DetailField[] = selectedAlert ? [
-    { key: 'severity', label: 'Severity', value: selectedAlert.severity, type: 'badge',
-      color: selectedAlert.severity === 'critical' ? '#ef4444' : selectedAlert.severity === 'warning' ? '#f59e0b' : '#3b82f6' },
-    { key: 'type', label: 'Type', value: selectedAlert.type?.replace(/_/g, ' '), type: 'readonly' },
-    { key: 'detail', label: 'Details', value: selectedAlert.detail, type: 'readonly' },
-    ...(selectedAlert.person ? [{ key: 'person', label: 'Person', value: selectedAlert.person, type: 'readonly' as const }] : []),
-    ...(selectedAlert.task_count ? [{ key: 'task_count', label: 'Task Count', value: selectedAlert.task_count, type: 'readonly' as const }] : []),
-    ...(selectedAlert.days_overdue ? [{ key: 'days_overdue', label: 'Days Overdue', value: selectedAlert.days_overdue, type: 'readonly' as const }] : []),
-    ...(selectedAlert.suggested_action ? [{ key: 'suggested_action', label: 'Suggested Action', value: selectedAlert.suggested_action, type: 'readonly' as const }] : []),
-  ] : [];
+  const alertsRef = React.useRef<HTMLDivElement>(null);
 
   return (
     <div>
@@ -110,7 +100,10 @@ export default function CommandCenter() {
             {criticalAlerts.slice(0, 2).map((a) => a.title).join('; ')}
           </div>
           <button
-            onClick={() => { /* scroll to alerts section */ }}
+            onClick={() => {
+              setShowAllAlerts(true);
+              alertsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
             style={{
               fontSize: 12, color: 'var(--danger)', background: 'none', border: 'none',
               cursor: 'pointer', fontWeight: 500, whiteSpace: 'nowrap',
@@ -154,7 +147,7 @@ export default function CommandCenter() {
       {/* Two column layout */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 20 }}>
         {/* Alerts list */}
-        <div style={cardStyle}>
+        <div style={cardStyle} ref={alertsRef}>
           <h2 style={cardHeaderStyle}>
             <AlertTriangle size={16} />
             Alerts & Attention
@@ -172,38 +165,59 @@ export default function CommandCenter() {
                 No alerts — all clear
               </div>
             ) : (
-              displayAlerts.map((alert, i) => (
-                <div
-                  key={i}
-                  onClick={() => setSelectedAlert(alert)}
-                  style={{
-                    display: 'flex', alignItems: 'flex-start', gap: 10,
-                    padding: '10px 12px', backgroundColor: 'var(--bg-secondary)',
-                    borderRadius: 'var(--radius)',
-                    borderLeft: `3px solid ${alert.severity === 'critical' ? 'var(--danger)' : alert.severity === 'warning' ? 'var(--warning)' : 'var(--info)'}`,
-                    cursor: 'pointer', transition: 'background-color 0.1s',
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
-                      {alert.title}
+              (showAllAlerts ? alerts : displayAlerts).map((alert, i) => {
+                const isExpanded = expandedAlert === i;
+                const severityColor = alert.severity === 'critical' ? 'var(--danger)' : alert.severity === 'warning' ? 'var(--warning)' : 'var(--info)';
+                return (
+                  <div key={i}>
+                    <div
+                      onClick={() => setExpandedAlert(isExpanded ? null : i)}
+                      style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10,
+                        padding: '10px 12px', backgroundColor: isExpanded ? 'var(--bg-hover)' : 'var(--bg-secondary)',
+                        borderRadius: isExpanded ? 'var(--radius) var(--radius) 0 0' : 'var(--radius)',
+                        borderLeft: `3px solid ${severityColor}`,
+                        cursor: 'pointer', transition: 'background-color 0.1s',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                      onMouseLeave={(e) => { if (!isExpanded) e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'; }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
+                          {alert.title}
+                        </div>
+                        {!isExpanded && (
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {alert.detail?.slice(0, 100)}
+                          </div>
+                        )}
+                      </div>
+                      {isExpanded
+                        ? <ChevronDown size={14} style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: 2 }} />
+                        : <ChevronRight size={14} style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: 2 }} />
+                      }
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                      {alert.detail?.slice(0, 100)}
-                    </div>
+                    {isExpanded && (
+                      <AlertExpandedContent alert={alert} severityColor={severityColor} navigate={navigate} />
+                    )}
                   </div>
-                  <ChevronRight size={14} style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: 2 }} />
-                </div>
-              ))
+                );
+              })
             )}
-            {alerts.length > displayAlerts.length && (
+            {!showAllAlerts && alerts.length > displayAlerts.length && (
               <div
-                onClick={() => { /* TODO: expand all alerts */ }}
+                onClick={() => setShowAllAlerts(true)}
                 style={{ fontSize: 12, color: 'var(--accent)', textAlign: 'center', padding: 8, cursor: 'pointer', fontWeight: 500 }}
               >
                 View all {alerts.length} alerts
+              </div>
+            )}
+            {showAllAlerts && alerts.length > 5 && (
+              <div
+                onClick={() => setShowAllAlerts(false)}
+                style={{ fontSize: 12, color: 'var(--accent)', textAlign: 'center', padding: 8, cursor: 'pointer', fontWeight: 500 }}
+              >
+                Show less
               </div>
             )}
           </div>
@@ -222,7 +236,7 @@ export default function CommandCenter() {
               count={initSummary?.total || 0}
               detail={initSummary?.on_track ? `${initSummary.on_track} on track` : undefined}
               color="#22c55e"
-              onClick={() => navigate('/strategy')}
+              onClick={() => navigate('/strategy?tab=hierarchy')}
             />
             <OverviewItem
               icon={<Scale size={14} />}
@@ -321,18 +335,7 @@ export default function CommandCenter() {
         </div>
       )}
 
-      {/* Alert detail panel */}
-      <DetailPanel
-        open={!!selectedAlert}
-        onClose={() => setSelectedAlert(null)}
-        title={selectedAlert?.title || ''}
-        subtitle={selectedAlert?.detail}
-        badge={selectedAlert ? {
-          label: selectedAlert.severity,
-          color: selectedAlert.severity === 'critical' ? '#ef4444' : selectedAlert.severity === 'warning' ? '#f59e0b' : '#3b82f6',
-        } : undefined}
-        fields={alertFields}
-      />
+      {/* Alert detail panel removed — alerts now expand inline */}
     </div>
   );
 }
@@ -422,3 +425,119 @@ const cardHeaderStyle: React.CSSProperties = {
   alignItems: 'center',
   gap: 8,
 };
+
+/* ---------- Alert inline expansion ---------- */
+
+function parseAlertItems(detail: string): { label: string; meta?: string }[] {
+  if (!detail) return [];
+  // Split on semicolons, "and X more" patterns
+  const cleaned = detail.replace(/\s+and\s+\d+\s+more$/, '');
+  return cleaned.split(/;\s*/).filter(Boolean).map((s) => {
+    // Try to extract person + count: "Rodrigo is overloaded (12 open tasks)"
+    const personMatch = s.match(/^(.+?)\s+is\s+overloaded\s*\((\d+\s+open\s+tasks)\)/i);
+    if (personMatch) return { label: personMatch[1].trim(), meta: personMatch[2] };
+    // Try "Initiative at risk: Name"
+    const initMatch = s.match(/^Initiative at risk:\s*(.+)/i);
+    if (initMatch) return { label: initMatch[1].trim(), meta: 'at risk' };
+    // Try "X has N deliverable tasks without an epic"
+    const orphanMatch = s.match(/^(.+?)\s+has\s+(\d+\s+deliverable\s+tasks?\s+without\s+an?\s+\w+)/i);
+    if (orphanMatch) return { label: orphanMatch[1].trim(), meta: orphanMatch[2] };
+    return { label: s.trim() };
+  });
+}
+
+function getAlertIcon(type: string) {
+  if (type === 'bottleneck') return <User size={12} />;
+  if (type === 'initiative_risk') return <Target size={12} />;
+  if (type === 'orphaned_deliverable') return <Package size={12} />;
+  return <Zap size={12} />;
+}
+
+function AlertExpandedContent({ alert, severityColor, navigate }: {
+  alert: AlertData; severityColor: string;
+  navigate: (path: string) => void;
+}) {
+  const items = parseAlertItems(alert.detail || '');
+  const andMoreMatch = alert.detail?.match(/and\s+(\d+)\s+more$/);
+
+  return (
+    <div style={{
+      backgroundColor: 'var(--bg-secondary)', borderLeft: `3px solid ${severityColor}`,
+      borderRadius: '0 0 var(--radius) var(--radius)', padding: '12px 14px',
+      borderTop: '1px solid var(--border)',
+    }}>
+      {/* Meta row */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span style={{
+          fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+          padding: '2px 8px', borderRadius: 8,
+          backgroundColor: severityColor === 'var(--danger)' ? 'rgba(239,68,68,0.15)' : severityColor === 'var(--warning)' ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)',
+          color: severityColor,
+        }}>
+          {alert.severity}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          {alert.type?.replace(/_/g, ' ')}
+        </span>
+        {alert.suggested_action && (
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 'auto', fontStyle: 'italic' }}>
+            Suggested: {alert.suggested_action}
+          </span>
+        )}
+      </div>
+
+      {/* Structured items */}
+      {items.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {items.map((item, j) => (
+            <div
+              key={j}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (alert.type === 'bottleneck') navigate(`/work?search=${encodeURIComponent(item.label)}`);
+                else if (alert.type === 'initiative_risk') navigate('/strategy');
+                else if (alert.type === 'orphaned_deliverable') navigate('/strategy');
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 10px', backgroundColor: 'var(--bg-card)',
+                borderRadius: 'var(--radius)', cursor: 'pointer',
+                transition: 'background-color 0.1s',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-card)'}
+            >
+              <span style={{ color: severityColor, flexShrink: 0 }}>
+                {getAlertIcon(alert.type)}
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500, flex: 1 }}>
+                {item.label}
+              </span>
+              {item.meta && (
+                <span style={{
+                  fontSize: 11, color: 'var(--text-muted)', flexShrink: 0,
+                  padding: '1px 6px', backgroundColor: 'var(--bg-secondary)', borderRadius: 8,
+                }}>
+                  {item.meta}
+                </span>
+              )}
+              <ChevronRight size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+            </div>
+          ))}
+          {andMoreMatch && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '4px 10px', fontStyle: 'italic' }}>
+              and {andMoreMatch[1]} more...
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Fallback if no structured items parsed */}
+      {items.length === 0 && alert.detail && (
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          {alert.detail}
+        </div>
+      )}
+    </div>
+  );
+}
