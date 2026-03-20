@@ -370,28 +370,31 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
   const [expandedMeeting, setExpandedMeeting] = useState<string | null>(null);
   const [filterAutoOnly, setFilterAutoOnly] = useState(false);
   const [processedIds, setProcessedIds] = useState<Set<string>>(new Set());
+  const [dateMode, setDateMode] = useState<'range' | 'single'>('range');
   const [selectedDate, setSelectedDate] = useState(() => {
-    // Use date from API response, or today
     return data?.summary?.date || new Date().toISOString().split('T')[0];
   });
 
   const todayStr = new Date().toISOString().split('T')[0];
 
   const changeDate = (delta: number) => {
-    const d = new Date(selectedDate + 'T12:00:00');
+    const base = dateMode === 'range' ? todayStr : selectedDate;
+    const d = new Date(base + 'T12:00:00');
     d.setDate(d.getDate() + delta);
     const next = d.toISOString().split('T')[0];
     setSelectedDate(next);
+    setDateMode('single');
     setProcessedIds(new Set());
     onUpdate(next);
   };
 
-  const formatDateLabel = (dateStr: string) => {
-    if (dateStr === todayStr) return 'Today';
+  const formatDateLabel = () => {
+    if (dateMode === 'range') return 'Last 3 days';
+    if (selectedDate === todayStr) return 'Today';
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    if (dateStr === yesterday.toISOString().split('T')[0]) return 'Yesterday';
-    const d = new Date(dateStr + 'T12:00:00');
+    if (selectedDate === yesterday.toISOString().split('T')[0]) return 'Yesterday';
+    const d = new Date(selectedDate + 'T12:00:00');
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
@@ -399,7 +402,7 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
     try {
       await api.post(`/api/approve/${entityType}/${id}`, {});
       setProcessedIds((prev) => new Set(prev).add(id));
-      onUpdate(selectedDate);
+      onUpdate(dateMode === 'single' ? selectedDate : undefined);
     } catch { /* ignore */ }
   };
 
@@ -407,7 +410,7 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
     try {
       await api.post(`/api/dismiss/${entityType}/${id}`, {});
       setProcessedIds((prev) => new Set(prev).add(id));
-      onUpdate(selectedDate);
+      onUpdate(dateMode === 'single' ? selectedDate : undefined);
     } catch { /* ignore */ }
   };
 
@@ -450,27 +453,44 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
               <ChevronLeft size={14} />
             </button>
             <button
-              onClick={() => { setSelectedDate(todayStr); setProcessedIds(new Set()); onUpdate(todayStr); }}
+              onClick={() => {
+                if (dateMode === 'single') {
+                  // Go back to range mode
+                  setDateMode('range');
+                  setSelectedDate(todayStr);
+                  setProcessedIds(new Set());
+                  onUpdate();
+                } else {
+                  // Switch to single-date mode for today
+                  setDateMode('single');
+                  setSelectedDate(todayStr);
+                  setProcessedIds(new Set());
+                  onUpdate(todayStr);
+                }
+              }}
               style={{
                 fontSize: 11, fontWeight: 500, border: 'none', borderRadius: 6,
                 padding: '2px 8px', cursor: 'pointer', transition: 'all 0.1s',
-                backgroundColor: selectedDate === todayStr ? 'var(--bg-secondary)' : 'rgba(99,102,241,0.12)',
-                color: selectedDate === todayStr ? 'var(--text-muted)' : 'var(--accent)',
+                backgroundColor: dateMode === 'range' ? 'var(--bg-secondary)' : 'rgba(99,102,241,0.12)',
+                color: dateMode === 'range' ? 'var(--text-muted)' : 'var(--accent)',
                 minWidth: 80, textAlign: 'center',
               }}
-              title="Click to jump to today"
+              title={dateMode === 'single' ? 'Click to show last 3 days' : 'Click to filter by today'}
             >
-              {formatDateLabel(selectedDate)}
+              {formatDateLabel()}
             </button>
             <button
               onClick={() => changeDate(1)}
-              disabled={selectedDate >= todayStr}
+              disabled={dateMode === 'range' || selectedDate >= todayStr}
               style={{
-                background: 'none', border: 'none', cursor: selectedDate >= todayStr ? 'default' : 'pointer',
-                padding: 4, color: selectedDate >= todayStr ? 'var(--border)' : 'var(--text-muted)',
-                borderRadius: 4, display: 'flex', opacity: selectedDate >= todayStr ? 0.3 : 1,
+                background: 'none', border: 'none',
+                cursor: (dateMode === 'range' || selectedDate >= todayStr) ? 'default' : 'pointer',
+                padding: 4,
+                color: (dateMode === 'range' || selectedDate >= todayStr) ? 'var(--border)' : 'var(--text-muted)',
+                borderRadius: 4, display: 'flex',
+                opacity: (dateMode === 'range' || selectedDate >= todayStr) ? 0.3 : 1,
               }}
-              onMouseEnter={(e) => { if (selectedDate < todayStr) e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
+              onMouseEnter={(e) => { if (dateMode === 'single' && selectedDate < todayStr) e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
               title="Next day"
             >
@@ -494,7 +514,7 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {meetings.length === 0 && (
           <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 20, textAlign: 'center' }}>
-            No items for {formatDateLabel(selectedDate).toLowerCase()}
+            No items for {formatDateLabel().toLowerCase()}
           </div>
         )}
         {meetings.map((meeting: any) => {
