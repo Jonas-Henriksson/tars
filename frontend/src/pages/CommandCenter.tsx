@@ -756,18 +756,47 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
   const [undoStack, setUndoStack] = useState<{ label: string; items: { entity_type: string; id: string }[] }[]>([]);
   const [hierTree, setHierTree] = useState<any[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{ current: number; total: number; page_title: string; new_tasks: number } | null>(null);
 
   // Load hierarchy tree for linking tasks
   useEffect(() => {
     api.get<any>('/api/hierarchy').then((d) => setHierTree(d.tree || [])).catch(() => {});
   }, []);
 
-  const handleSync = () => {
+  const handleSync = async () => {
     setSyncing(true);
-    api.post<any>('/api/intel/scan', { max_pages: 50 })
-      .then(() => onUpdate(currentDateParam))
-      .catch(() => {})
-      .finally(() => setSyncing(false));
+    setSyncProgress(null);
+    try {
+      const res = await fetch('/api/intel/scan/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ max_pages: 50 }),
+      });
+      const reader = res.body?.getReader();
+      if (!reader) { setSyncing(false); return; }
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // Parse SSE lines
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const msg = JSON.parse(line.slice(6));
+            if (msg.status === 'processing' || msg.status === 'started' || msg.status === 'finalizing') {
+              setSyncProgress({ current: msg.current || 0, total: msg.total || 0, page_title: msg.page_title || '', new_tasks: msg.new_tasks || 0 });
+            }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+      onUpdate(currentDateParam);
+    } catch { /* ignore */ }
+    setSyncing(false);
+    setSyncProgress(null);
   };
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -957,6 +986,28 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
           </button>
         </div>
       </div>
+
+      {/* Sync progress bar */}
+      {syncing && syncProgress && syncProgress.total > 0 && (
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+              {syncProgress.page_title || 'Scanning...'}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, marginLeft: 8 }}>
+              {syncProgress.current}/{syncProgress.total} pages
+              {syncProgress.new_tasks > 0 && ` · ${syncProgress.new_tasks} new tasks`}
+            </span>
+          </div>
+          <div style={{ height: 3, backgroundColor: 'var(--bg-secondary)', borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', borderRadius: 2, transition: 'width 0.3s ease',
+              backgroundColor: 'var(--accent)',
+              width: `${Math.round((syncProgress.current / syncProgress.total) * 100)}%`,
+            }} />
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {meetings.length === 0 && (
