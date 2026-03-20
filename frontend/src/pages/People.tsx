@@ -3,7 +3,10 @@
  */
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../api/client';
-import { Users, Network, CalendarCheck, Search, Clock } from 'lucide-react';
+import {
+  Users, Network, CalendarCheck, Search, Clock, ChevronDown, ChevronRight,
+  CheckCircle2, TrendingUp, AlertTriangle, Scale, Calendar, MessageSquare, Zap,
+} from 'lucide-react';
 import DetailPanel from '../components/DetailPanel';
 import type { DetailField } from '../components/DetailPanel';
 
@@ -590,129 +593,329 @@ function GraphView() {
 
 /* ---------- Meeting Prep ---------- */
 
-function MeetingPrepView() {
-  const [prep, setPrep] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+const SECTION_ICONS: Record<string, React.ReactNode> = {
+  check: <CheckCircle2 size={16} />,
+  trending: <TrendingUp size={16} />,
+  alert: <AlertTriangle size={16} />,
+  scale: <Scale size={16} />,
+  calendar: <Calendar size={16} />,
+};
 
+const SECTION_COLORS: Record<string, string> = {
+  status: '#22c55e',
+  progress: '#3b82f6',
+  blockers: '#ef4444',
+  decisions: '#f59e0b',
+  forward: '#8b5cf6',
+};
+
+function MeetingPrepView() {
+  const [people, setPeople] = useState<string[]>([]);
+  const [selectedPerson, setSelectedPerson] = useState<string>('');
+  const [prep, setPrep] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [peopleLoading, setPeopleLoading] = useState(true);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['status', 'progress', 'blockers', 'decisions', 'forward']));
+
+  // Load people list
   useEffect(() => {
-    api.get<any>('/api/meeting-prep').then((data) => {
-      setPrep(data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    api.get<any>('/api/people').then((data) => {
+      const pMap = data.people || {};
+      const names = Object.keys(pMap).sort((a, b) => {
+        const am = pMap[a]?.mentions || 0;
+        const bm = pMap[b]?.mentions || 0;
+        return bm - am;
+      });
+      setPeople(names);
+      setPeopleLoading(false);
+    }).catch(() => setPeopleLoading(false));
   }, []);
 
-  if (loading) return <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>Loading meeting prep...</div>;
+  // Load 1:1 prep when person selected
+  useEffect(() => {
+    if (!selectedPerson) { setPrep(null); return; }
+    setLoading(true);
+    api.get<any>(`/api/meeting-prep/one-on-one/${encodeURIComponent(selectedPerson)}`).then((data) => {
+      setPrep(data);
+      setLoading(false);
+    }).catch(() => { setPrep(null); setLoading(false); });
+  }, [selectedPerson]);
 
-  if (!prep || !prep.available || prep.error) {
-    return (
-      <div style={{
-        backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-lg)', padding: 40, textAlign: 'center',
-      }}>
-        <CalendarCheck size={32} style={{ color: 'var(--text-muted)', marginBottom: 12 }} />
-        <h3 style={{ fontSize: 16, color: 'var(--text-primary)', marginBottom: 8 }}>Meeting Prep</h3>
-        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-          {prep?.reason || prep?.error || 'Connect Microsoft 365 in Settings to get meeting briefings.'}
-        </p>
-      </div>
-    );
-  }
-
-  const event = prep.event || prep.meeting;
+  const toggleSection = (id: string) => {
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Meeting header */}
+      {/* Person selector */}
       <div style={{
         backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
         borderRadius: 'var(--radius-lg)', padding: 20,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <CalendarCheck size={18} style={{ color: 'var(--accent)' }} />
-          <h3 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)' }}>
-            {event?.subject || 'Next Meeting'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <CalendarCheck size={20} style={{ color: 'var(--accent)' }} />
+          <h3 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            1:1 Meeting Prep
           </h3>
         </div>
-        <div style={{ display: 'flex', gap: 16, fontSize: 13, color: 'var(--text-muted)' }}>
-          {prep.time_until && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Clock size={14} /> {prep.time_until}
-            </span>
-          )}
-          {event?.attendees && <span>{event.attendees.length} attendees</span>}
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+          Select a person to generate a structured 30-minute 1:1 briefing with status, progress, blockers, and decision asks.
+        </p>
+        <div style={{ position: 'relative' }}>
+          <select
+            value={selectedPerson}
+            onChange={(e) => setSelectedPerson(e.target.value)}
+            disabled={peopleLoading}
+            style={{
+              width: '100%', maxWidth: 400, padding: '10px 14px', fontSize: 14,
+              backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)',
+              border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+              outline: 'none', cursor: 'pointer', appearance: 'none',
+              WebkitAppearance: 'none',
+            }}
+          >
+            <option value="">{peopleLoading ? 'Loading people...' : 'Choose a person...'}</option>
+            {people.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+          <ChevronDown size={14} style={{
+            position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
+            color: 'var(--text-muted)', pointerEvents: 'none',
+          }} />
         </div>
       </div>
 
-      {/* Attendee profiles */}
-      {prep.attendee_profiles?.length > 0 && (
-        <div style={{
-          backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)', padding: 20,
-        }}>
-          <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Attendees</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {prep.attendee_profiles.map((a: any, i: number) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
-                backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)',
-              }}>
-                <div style={{
-                  width: 32, height: 32, borderRadius: '50%', background: 'var(--accent)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#fff', fontSize: 12, fontWeight: 600, flexShrink: 0,
-                }}>
-                  {(a.name || a.email || '?').charAt(0)}
-                </div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{a.name || a.email}</div>
-                  {a.role && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.role}</div>}
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* Loading state */}
+      {loading && (
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
+          Preparing 1:1 briefing for {selectedPerson}...
         </div>
       )}
 
-      {/* Talking points */}
-      {prep.talking_points?.length > 0 && (
-        <div style={{
-          backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)', padding: 20,
-        }}>
-          <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Talking Points</h4>
-          <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {prep.talking_points.map((tp: string, i: number) => (
-              <li key={i} style={{
-                fontSize: 13, color: 'var(--text-secondary)', padding: '6px 10px',
-                backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)',
-                borderLeft: '3px solid var(--accent)',
+      {/* Prep content */}
+      {prep && !loading && (
+        <>
+          {/* Key takeaways banner */}
+          {prep.takeaways?.length > 0 && (
+            <div style={{
+              backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-lg)', padding: 16,
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)', marginBottom: 10 }}>
+                Key Takeaways
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {prep.takeaways.map((t: any, i: number) => {
+                  const color = t.severity === 'warning' ? '#ef4444' : t.severity === 'ok' ? '#22c55e' : '#3b82f6';
+                  return (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                      backgroundColor: color + '10', borderLeft: `3px solid ${color}`,
+                      borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--text-primary)',
+                    }}>
+                      {t.severity === 'warning' ? <AlertTriangle size={14} style={{ color, flexShrink: 0 }} />
+                        : t.severity === 'ok' ? <CheckCircle2 size={14} style={{ color, flexShrink: 0 }} />
+                        : <Zap size={14} style={{ color, flexShrink: 0 }} />}
+                      {t.text}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Person summary bar */}
+          <div style={{
+            display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center',
+            padding: '10px 16px', backgroundColor: 'var(--bg-card)',
+            border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
+          }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: '50%', background: 'var(--accent)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 14, fontWeight: 600, flexShrink: 0,
+            }}>
+              {prep.person?.charAt(0) || '?'}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{prep.person}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {[prep.role, prep.organization, prep.relationship].filter(Boolean).join(' · ') || 'Team member'}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{prep.total_tasks ?? 0}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Tasks</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{prep.topics?.length ?? 0}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Topics</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Agenda sections */}
+          {prep.sections?.map((section: any) => {
+            const isExpanded = expandedSections.has(section.id);
+            const sectionColor = SECTION_COLORS[section.id] || 'var(--accent)';
+            return (
+              <div key={section.id} style={{
+                backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-lg)', overflow: 'hidden',
+                borderLeft: `3px solid ${sectionColor}`,
               }}>
-                {tp}
-              </li>
-            ))}
-          </ul>
-        </div>
+                {/* Section header */}
+                <div
+                  onClick={() => toggleSection(section.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px',
+                    cursor: 'pointer', transition: 'background-color 0.1s',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <span style={{ color: sectionColor, flexShrink: 0 }}>
+                    {SECTION_ICONS[section.icon] || <MessageSquare size={16} />}
+                  </span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>
+                    {section.title}
+                  </span>
+                  <span style={{
+                    fontSize: 11, color: 'var(--text-muted)', padding: '2px 8px',
+                    backgroundColor: 'var(--bg-secondary)', borderRadius: 10,
+                  }}>
+                    {section.duration}
+                  </span>
+                  {isExpanded
+                    ? <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
+                    : <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />}
+                </div>
+
+                {/* Section content */}
+                {isExpanded && (
+                  <div style={{ padding: '0 16px 16px' }}>
+                    {/* Narrative */}
+                    <div style={{
+                      fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6,
+                      padding: '10px 14px', backgroundColor: sectionColor + '08',
+                      borderRadius: 'var(--radius)', marginBottom: 12,
+                      borderLeft: `2px solid ${sectionColor}30`,
+                    }}>
+                      {section.narrative}
+                    </div>
+
+                    {/* Items */}
+                    {section.items?.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+                        {section.items.map((item: any, j: number) => (
+                          <div key={j} style={{
+                            display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+                            backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)',
+                          }}>
+                            {item.type === 'stat' && (
+                              <>
+                                <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: 1 }}>{item.label}</span>
+                                <span style={{
+                                  fontSize: 13, fontWeight: 600,
+                                  color: item.color || 'var(--text-primary)',
+                                }}>{item.value}</span>
+                              </>
+                            )}
+                            {item.type === 'task' && (
+                              <>
+                                <span style={{
+                                  fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 6,
+                                  backgroundColor: sectionColor + '20', color: sectionColor,
+                                }}>
+                                  {item.priority}
+                                </span>
+                                <span style={{ fontSize: 12, color: 'var(--text-primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {item.label}
+                                </span>
+                                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{item.value}</span>
+                              </>
+                            )}
+                            {(item.type === 'blocker' || item.type === 'upcoming') && (
+                              <>
+                                <span style={{ fontSize: 12, color: 'var(--text-primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {item.label}
+                                </span>
+                                <span style={{ fontSize: 11, color: item.type === 'blocker' ? '#ef4444' : 'var(--text-muted)', flexShrink: 0 }}>
+                                  {item.value}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Suggested questions */}
+                    {section.questions?.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)', marginBottom: 6 }}>
+                          Suggested Questions
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          {section.questions.map((q: string, j: number) => (
+                            <div key={j} style={{
+                              fontSize: 12, color: 'var(--text-secondary)', padding: '4px 10px',
+                              backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)',
+                              fontStyle: 'italic',
+                            }}>
+                              "{q}"
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Recent context */}
+          {prep.recent_pages?.length > 0 && (
+            <div style={{
+              backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-lg)', padding: 16,
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)', marginBottom: 8 }}>
+                Recent Activity
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {prep.recent_pages.map((p: any, i: number) => (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', padding: '4px 8px',
+                    fontSize: 12, color: 'var(--text-secondary)',
+                  }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{p.title}</span>
+                    <span style={{ color: 'var(--text-muted)', flexShrink: 0, marginLeft: 12 }}>{p.last_edited?.slice(0, 10)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
-      {/* Open items */}
-      {prep.open_items?.length > 0 && (
+      {/* Empty state when no person selected */}
+      {!selectedPerson && !loading && (
         <div style={{
           backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)', padding: 20,
+          borderRadius: 'var(--radius-lg)', padding: 60, textAlign: 'center',
         }}>
-          <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Open Items</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {prep.open_items.map((item: any, i: number) => (
-              <div key={i} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '8px 10px', backgroundColor: 'var(--bg-secondary)',
-                borderRadius: 'var(--radius)',
-              }}>
-                <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{item.description}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{item.owner}</span>
-              </div>
-            ))}
-          </div>
+          <Users size={32} style={{ color: 'var(--text-muted)', marginBottom: 12 }} />
+          <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+            Select a person above to generate a 1:1 meeting brief
+          </p>
         </div>
       )}
     </div>

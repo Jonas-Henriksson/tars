@@ -477,6 +477,165 @@ async def api_meeting_prep(event_id: str = "", minutes_ahead: int = 480):
     return JSONResponse(await get_meeting_prep(event_id=event_id, minutes_ahead=minutes_ahead))
 
 
+@router.get("/meeting-prep/one-on-one/{person_name}")
+async def api_one_on_one_prep(person_name: str):
+    """Generate a structured 1:1 meeting prep for a specific person."""
+    from integrations.people import get_person as _get_person, get_all_people
+    from integrations.intel import get_smart_tasks
+
+    person = _get_person(person_name)
+    if "error" in person:
+        return JSONResponse({"error": f"Person '{person_name}' not found"}, status_code=404)
+
+    # Get tasks owned by this person
+    all_tasks = get_smart_tasks(owner=person_name, include_done=False)
+    tasks = all_tasks.get("tasks", all_tasks.get("smart_tasks", []))
+
+    # Categorize tasks
+    urgent = [t for t in tasks if (t.get("priority", {}).get("quadrant") or t.get("quadrant", 4)) == 1]
+    scheduled = [t for t in tasks if (t.get("priority", {}).get("quadrant") or t.get("quadrant", 4)) == 2]
+    delegated = [t for t in tasks if (t.get("priority", {}).get("quadrant") or t.get("quadrant", 4)) == 3]
+    deferred = [t for t in tasks if (t.get("priority", {}).get("quadrant") or t.get("quadrant", 4)) == 4]
+
+    overdue = [t for t in tasks if t.get("follow_up_date") and t["follow_up_date"] < __import__("datetime").date.today().isoformat()]
+
+    # Recent pages/context
+    pages = person.get("pages", [])[:5]
+    topics = person.get("topics", [])
+
+    # Build structured prep
+    sections = []
+
+    # 1. Opening / Status check
+    sections.append({
+        "id": "status",
+        "title": "Status & Check-in",
+        "duration": "5 min",
+        "icon": "check",
+        "narrative": f"Open with a personal check-in. {person_name} currently has {len(tasks)} open tasks"
+                     + (f" ({len(overdue)} overdue)" if overdue else "")
+                     + ". Ask how they're feeling about their workload and any recent wins.",
+        "items": [
+            {"label": "Open tasks", "value": str(len(tasks)), "type": "stat"},
+            {"label": "Urgent (Do First)", "value": str(len(urgent)), "type": "stat", "color": "#ef4444" if urgent else None},
+            {"label": "Overdue", "value": str(len(overdue)), "type": "stat", "color": "#ef4444" if overdue else None},
+        ],
+        "questions": [
+            "How are things going overall?",
+            "Any wins or progress to celebrate since last time?",
+        ],
+    })
+
+    # 2. Progress review
+    progress_items = []
+    for t in (urgent + scheduled)[:6]:
+        progress_items.append({
+            "label": t.get("description", "")[:80],
+            "value": t.get("status", "open"),
+            "type": "task",
+            "priority": t.get("priority", {}).get("label") or f"Q{t.get('quadrant', 4)}",
+        })
+    sections.append({
+        "id": "progress",
+        "title": "Progress Review",
+        "duration": "10 min",
+        "icon": "trending",
+        "narrative": f"Review the highest-priority items. {person_name} has {len(urgent)} urgent and {len(scheduled)} scheduled tasks. "
+                     + ("Focus on the overdue items first. " if overdue else "")
+                     + "Walk through status on each and identify what's blocking progress.",
+        "items": progress_items,
+        "questions": [
+            "What's the status on your top priorities?",
+            "Are any of these blocked or at risk?",
+            "Do you need any decisions or resources to move forward?",
+        ],
+    })
+
+    # 3. Blockers & Concerns
+    blocker_items = []
+    for t in overdue[:4]:
+        blocker_items.append({
+            "label": t.get("description", "")[:80],
+            "value": f"Due {t.get('follow_up_date', '?')}",
+            "type": "blocker",
+        })
+    sections.append({
+        "id": "blockers",
+        "title": "Blockers & Concerns",
+        "duration": "5 min",
+        "icon": "alert",
+        "narrative": "Surface any impediments."
+                     + (f" There are {len(overdue)} overdue items that may indicate blockers." if overdue else " No overdue items — check for hidden concerns.")
+                     + " Ask directly about what's slowing them down.",
+        "items": blocker_items,
+        "questions": [
+            "What's the biggest obstacle you're facing right now?",
+            "Is anything slowing you down that I can help remove?",
+            "Any concerns about upcoming deadlines?",
+        ],
+    })
+
+    # 4. Decision asks
+    sections.append({
+        "id": "decisions",
+        "title": "Decisions & Asks",
+        "duration": "5 min",
+        "icon": "scale",
+        "narrative": f"Give {person_name} space to raise any decisions they need from you or escalations. "
+                     + "This is also the time to align on priorities or re-assign work if needed.",
+        "items": [],
+        "questions": [
+            "Any decisions you need from me?",
+            "Anything you'd like to escalate or get alignment on?",
+            "Should we re-prioritize anything based on what we've discussed?",
+        ],
+    })
+
+    # 5. Forward look
+    upcoming = [t for t in scheduled[:4]]
+    forward_items = [{"label": t.get("description", "")[:80], "value": t.get("follow_up_date", ""), "type": "upcoming"} for t in upcoming]
+    sections.append({
+        "id": "forward",
+        "title": "Forward Look & Next Steps",
+        "duration": "5 min",
+        "icon": "calendar",
+        "narrative": f"Align on what {person_name} will focus on until the next check-in. "
+                     + f"They have {len(scheduled)} scheduled tasks coming up."
+                     + " Agree on clear next steps and owners.",
+        "items": forward_items,
+        "questions": [
+            "What are your top 3 priorities for the next week?",
+            "Is there anything you want to start or stop doing?",
+            "When should we check in again?",
+        ],
+    })
+
+    # Key takeaways (auto-generated highlights)
+    takeaways = []
+    if overdue:
+        takeaways.append({"text": f"{len(overdue)} overdue tasks need attention", "severity": "warning"})
+    if len(urgent) > 3:
+        takeaways.append({"text": f"Heavy urgent load ({len(urgent)} Do First tasks) — risk of burnout", "severity": "warning"})
+    if len(tasks) > 20:
+        takeaways.append({"text": f"High task count ({len(tasks)}) — consider reprioritizing", "severity": "info"})
+    if len(tasks) == 0:
+        takeaways.append({"text": "No open tasks — check if assignments are up to date", "severity": "info"})
+    if not takeaways:
+        takeaways.append({"text": f"Workload appears balanced ({len(tasks)} tasks, {len(urgent)} urgent)", "severity": "ok"})
+
+    return JSONResponse({
+        "person": person_name,
+        "role": person.get("role", ""),
+        "relationship": person.get("relationship", ""),
+        "organization": person.get("organization", ""),
+        "total_tasks": len(tasks),
+        "topics": topics[:8],
+        "sections": sections,
+        "takeaways": takeaways,
+        "recent_pages": [{"title": p.get("title", ""), "last_edited": p.get("last_edited", "")} for p in pages],
+    })
+
+
 # ---------------------------------------------------------------------------
 # Decisions
 # ---------------------------------------------------------------------------

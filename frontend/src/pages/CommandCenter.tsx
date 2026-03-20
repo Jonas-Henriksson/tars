@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import {
   Calendar, AlertTriangle, Mail, TrendingUp, CheckCircle2, ChevronRight, ChevronDown,
-  Target, Scale, Users, CalendarCheck, Clock, Zap, User, Building2, Package,
+  Target, Scale, Users, CalendarCheck, Clock, Zap, User, Package,
 } from 'lucide-react';
 
 interface AlertData {
