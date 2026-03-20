@@ -374,6 +374,10 @@ const _ENTITY_LABEL: Record<string, string> = {
   tasks: 'task', stories: 'story', epics: 'epic', initiatives: 'init', decisions: 'decision',
 };
 
+function _ucFirst(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
 // --- Hierarchy picker (reused from Work.tsx pattern) ---
 const _HIER_COLORS: Record<string, string> = {
   theme: '#8b5cf6', initiative: '#3b82f6', epic: '#10b981', story: '#f59e0b',
@@ -540,7 +544,7 @@ function MeetingReviewItem({ item, hierTree, onReview, onDismiss, onNavigate, on
                 cursor: 'text', borderRadius: 3, padding: '1px 0',
               }}
             >
-              {item.title}
+              {_ucFirst(item.title)}
             </div>
           )}
 
