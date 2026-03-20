@@ -4,7 +4,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 import {
-  Users, Network, CalendarCheck, Search, Clock, ChevronDown, ChevronRight,
+  Users, Network, CalendarCheck, Search, ChevronDown, ChevronRight,
   CheckCircle2, TrendingUp, AlertTriangle, Scale, Calendar, MessageSquare, Zap,
 } from 'lucide-react';
 import DetailPanel from '../components/DetailPanel';
