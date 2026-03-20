@@ -609,6 +609,29 @@ const SECTION_COLORS: Record<string, string> = {
   forward: '#8b5cf6',
 };
 
+const QUADRANT_LABELS: Record<number, { name: string; color: string }> = {
+  1: { name: 'Do First', color: '#ef4444' },
+  2: { name: 'Schedule', color: '#3b82f6' },
+  3: { name: 'Delegate', color: '#f59e0b' },
+  4: { name: 'Defer', color: '#94a3b8' },
+};
+
+const HIER_TYPE_COLORS: Record<string, string> = {
+  theme: '#8b5cf6', initiative: '#3b82f6', epic: '#10b981', story: '#f59e0b',
+};
+
+function findHierPath(tree: any[], targetId: string): any[] {
+  function walk(nodes: any[], path: any[]): any[] | null {
+    for (const n of nodes) {
+      const cur = [...path, n];
+      if (n.id === targetId) return cur;
+      if (n.children) { const f = walk(n.children, cur); if (f) return f; }
+    }
+    return null;
+  }
+  return walk(tree, []) || [];
+}
+
 function MeetingPrepView() {
   const [people, setPeople] = useState<string[]>([]);
   const [selectedPerson, setSelectedPerson] = useState<string>('');
@@ -616,25 +639,23 @@ function MeetingPrepView() {
   const [loading, setLoading] = useState(false);
   const [peopleLoading, setPeopleLoading] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['status', 'progress', 'blockers', 'decisions', 'forward']));
+  const [editingTask, setEditingTask] = useState<string | null>(null);
+  const [removedTasks, setRemovedTasks] = useState<Set<string>>(new Set());
 
-  // Load people list
   useEffect(() => {
     api.get<any>('/api/people').then((data) => {
       const pMap = data.people || {};
-      const names = Object.keys(pMap).sort((a, b) => {
-        const am = pMap[a]?.mentions || 0;
-        const bm = pMap[b]?.mentions || 0;
-        return bm - am;
-      });
+      const names = Object.keys(pMap).sort((a, b) => (pMap[b]?.mentions || 0) - (pMap[a]?.mentions || 0));
       setPeople(names);
       setPeopleLoading(false);
     }).catch(() => setPeopleLoading(false));
   }, []);
 
-  // Load 1:1 prep when person selected
   useEffect(() => {
     if (!selectedPerson) { setPrep(null); return; }
     setLoading(true);
+    setRemovedTasks(new Set());
+    setEditingTask(null);
     api.get<any>(`/api/meeting-prep/one-on-one/${encodeURIComponent(selectedPerson)}`).then((data) => {
       setPrep(data);
       setLoading(false);
@@ -648,6 +669,30 @@ function MeetingPrepView() {
       return next;
     });
   };
+
+  const updateTask = useCallback((taskId: string, updates: Record<string, any>) => {
+    api.patch<any>(`/api/intel/tasks/${taskId}`, updates).catch(() => {});
+    // Update local prep state
+    setPrep((prev: any) => {
+      if (!prev) return prev;
+      const updateTaskInList = (tasks: any[]) =>
+        tasks.map((t: any) => t.id === taskId ? { ...t, ...updates } : t);
+      return {
+        ...prev,
+        all_tasks: updateTaskInList(prev.all_tasks || []),
+        sections: prev.sections?.map((s: any) => ({
+          ...s,
+          tasks: updateTaskInList(s.tasks || []),
+        })),
+      };
+    });
+  }, []);
+
+  const removeTask = useCallback((taskId: string) => {
+    setRemovedTasks((prev) => new Set(prev).add(taskId));
+  }, []);
+
+  const hierTree = prep?.hierarchy || [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -690,17 +735,15 @@ function MeetingPrepView() {
         </div>
       </div>
 
-      {/* Loading state */}
       {loading && (
         <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
           Preparing 1:1 briefing for {selectedPerson}...
         </div>
       )}
 
-      {/* Prep content */}
       {prep && !loading && (
         <>
-          {/* Key takeaways banner */}
+          {/* Key takeaways */}
           {prep.takeaways?.length > 0 && (
             <div style={{
               backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -729,7 +772,7 @@ function MeetingPrepView() {
             </div>
           )}
 
-          {/* Person summary bar */}
+          {/* Person summary */}
           <div style={{
             display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center',
             padding: '10px 16px', backgroundColor: 'var(--bg-card)',
@@ -749,14 +792,16 @@ function MeetingPrepView() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{prep.total_tasks ?? 0}</div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Tasks</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{prep.topics?.length ?? 0}</div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Topics</div>
-              </div>
+              {[
+                { val: prep.total_tasks ?? 0, label: 'Tasks' },
+                { val: prep.urgent_count ?? 0, label: 'Urgent', color: '#ef4444' },
+                { val: prep.overdue_count ?? 0, label: 'Overdue', color: '#ef4444' },
+              ].map((s, i) => (
+                <div key={i} style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: s.val > 0 && s.color ? s.color : 'var(--text-primary)' }}>{s.val}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{s.label}</div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -764,13 +809,13 @@ function MeetingPrepView() {
           {prep.sections?.map((section: any) => {
             const isExpanded = expandedSections.has(section.id);
             const sectionColor = SECTION_COLORS[section.id] || 'var(--accent)';
+            const sectionTasks = (section.tasks || []).filter((t: any) => !removedTasks.has(t.id));
             return (
               <div key={section.id} style={{
                 backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-lg)', overflow: 'hidden',
                 borderLeft: `3px solid ${sectionColor}`,
               }}>
-                {/* Section header */}
                 <div
                   onClick={() => toggleSection(section.id)}
                   style={{
@@ -786,6 +831,14 @@ function MeetingPrepView() {
                   <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>
                     {section.title}
                   </span>
+                  {sectionTasks.length > 0 && (
+                    <span style={{
+                      fontSize: 11, color: sectionColor, padding: '2px 8px',
+                      backgroundColor: sectionColor + '15', borderRadius: 10, fontWeight: 600,
+                    }}>
+                      {sectionTasks.length}
+                    </span>
+                  )}
                   <span style={{
                     fontSize: 11, color: 'var(--text-muted)', padding: '2px 8px',
                     backgroundColor: 'var(--bg-secondary)', borderRadius: 10,
@@ -797,7 +850,6 @@ function MeetingPrepView() {
                     : <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />}
                 </div>
 
-                {/* Section content */}
                 {isExpanded && (
                   <div style={{ padding: '0 16px 16px' }}>
                     {/* Narrative */}
@@ -810,7 +862,7 @@ function MeetingPrepView() {
                       {section.narrative}
                     </div>
 
-                    {/* Items */}
+                    {/* Stat items */}
                     {section.items?.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
                         {section.items.map((item: any, j: number) => (
@@ -818,41 +870,143 @@ function MeetingPrepView() {
                             display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
                             backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)',
                           }}>
-                            {item.type === 'stat' && (
-                              <>
-                                <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: 1 }}>{item.label}</span>
-                                <span style={{
-                                  fontSize: 13, fontWeight: 600,
-                                  color: item.color || 'var(--text-primary)',
-                                }}>{item.value}</span>
-                              </>
-                            )}
-                            {item.type === 'task' && (
-                              <>
-                                <span style={{
-                                  fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 6,
-                                  backgroundColor: sectionColor + '20', color: sectionColor,
-                                }}>
-                                  {item.priority}
-                                </span>
-                                <span style={{ fontSize: 12, color: 'var(--text-primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {item.label}
-                                </span>
-                                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{item.value}</span>
-                              </>
-                            )}
-                            {(item.type === 'blocker' || item.type === 'upcoming') && (
-                              <>
-                                <span style={{ fontSize: 12, color: 'var(--text-primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {item.label}
-                                </span>
-                                <span style={{ fontSize: 11, color: item.type === 'blocker' ? '#ef4444' : 'var(--text-muted)', flexShrink: 0 }}>
-                                  {item.value}
-                                </span>
-                              </>
-                            )}
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: 1 }}>{item.label}</span>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: item.color || 'var(--text-primary)' }}>{item.value}</span>
                           </div>
                         ))}
+                      </div>
+                    )}
+
+                    {/* Full task rows with hierarchy context + inline editing */}
+                    {sectionTasks.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                        {sectionTasks.map((task: any) => {
+                          const q = task.priority?.quadrant || task.quadrant || 4;
+                          const ql = QUADRANT_LABELS[q] || QUADRANT_LABELS[4];
+                          const hierPath = task.story_id ? findHierPath(hierTree, task.story_id) : [];
+                          const isEditing = editingTask === task.id;
+                          const isOverdue = task.follow_up_date && task.follow_up_date < new Date().toISOString().slice(0, 10);
+                          return (
+                            <div key={task.id} style={{
+                              backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)',
+                              border: isEditing ? '1px solid var(--accent)' : '1px solid transparent',
+                              overflow: 'hidden', transition: 'border-color 0.15s',
+                            }}>
+                              {/* Hierarchy breadcrumb */}
+                              {hierPath.length > 0 && (
+                                <div style={{
+                                  display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px',
+                                  backgroundColor: 'var(--bg-tertiary)', fontSize: 10, color: 'var(--text-muted)',
+                                  borderBottom: '1px solid var(--border)',
+                                }}>
+                                  {hierPath.map((node: any, idx: number) => (
+                                    <span key={node.id} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                      {idx > 0 && <span style={{ margin: '0 2px' }}>/</span>}
+                                      <span style={{ color: HIER_TYPE_COLORS[node.type] || '#666', fontWeight: 600, textTransform: 'uppercase', fontSize: 9 }}>
+                                        {(node.type || '').slice(0, 4)}
+                                      </span>
+                                      <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {node.title || '(untitled)'}
+                                      </span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Task main row */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px' }}>
+                                {/* Priority badge — clickable to cycle */}
+                                <span
+                                  onClick={() => {
+                                    const nextQ = q >= 4 ? 1 : q + 1;
+                                    updateTask(task.id, { quadrant: nextQ });
+                                  }}
+                                  title={`Priority: ${ql.name} (click to change)`}
+                                  style={{
+                                    fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 6,
+                                    backgroundColor: ql.color + '20', color: ql.color,
+                                    cursor: 'pointer', flexShrink: 0, textTransform: 'uppercase',
+                                    transition: 'filter 0.1s', userSelect: 'none',
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(1.3)'}
+                                  onMouseLeave={(e) => e.currentTarget.style.filter = 'none'}
+                                >
+                                  {ql.name}
+                                </span>
+                                {/* Description — inline editable */}
+                                {isEditing ? (
+                                  <input
+                                    autoFocus
+                                    defaultValue={task.description}
+                                    onBlur={(e) => {
+                                      const v = e.target.value.trim();
+                                      if (v && v !== task.description) updateTask(task.id, { description: v });
+                                      setEditingTask(null);
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                      if (e.key === 'Escape') setEditingTask(null);
+                                    }}
+                                    style={{
+                                      flex: 1, fontSize: 12, color: 'var(--text-primary)', fontWeight: 500,
+                                      border: 'none', background: 'none', outline: 'none', padding: 0,
+                                    }}
+                                  />
+                                ) : (
+                                  <span
+                                    onClick={() => setEditingTask(task.id)}
+                                    style={{
+                                      flex: 1, fontSize: 12, color: 'var(--text-primary)', fontWeight: 500,
+                                      cursor: 'text', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                    }}
+                                    title="Click to edit"
+                                  >
+                                    {task.description}
+                                  </span>
+                                )}
+                                {/* Follow-up date */}
+                                {task.follow_up_date && (
+                                  <span style={{
+                                    fontSize: 10, color: isOverdue ? '#ef4444' : 'var(--text-muted)',
+                                    flexShrink: 0, fontWeight: isOverdue ? 600 : 400,
+                                  }}>
+                                    {isOverdue ? 'Overdue ' : ''}{task.follow_up_date}
+                                  </span>
+                                )}
+                                {/* Status toggle */}
+                                <select
+                                  value={task.status || 'open'}
+                                  onChange={(e) => updateTask(task.id, { status: e.target.value })}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    fontSize: 10, padding: '2px 4px', borderRadius: 4,
+                                    backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)',
+                                    border: '1px solid var(--border)', cursor: 'pointer',
+                                    flexShrink: 0, outline: 'none',
+                                  }}
+                                >
+                                  <option value="open">Open</option>
+                                  <option value="in_progress">In Progress</option>
+                                  <option value="done">Done</option>
+                                </select>
+                                {/* Remove from prep */}
+                                <button
+                                  onClick={() => removeTask(task.id)}
+                                  title="Remove from prep"
+                                  style={{
+                                    border: 'none', background: 'none', cursor: 'pointer',
+                                    color: 'var(--text-muted)', padding: 2, borderRadius: 4,
+                                    display: 'flex', alignItems: 'center', flexShrink: 0,
+                                    transition: 'color 0.1s',
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                                  onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
 
@@ -881,7 +1035,7 @@ function MeetingPrepView() {
             );
           })}
 
-          {/* Recent context */}
+          {/* Recent activity */}
           {prep.recent_pages?.length > 0 && (
             <div style={{
               backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -897,7 +1051,7 @@ function MeetingPrepView() {
                     fontSize: 12, color: 'var(--text-secondary)',
                   }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{p.title}</span>
-                    <span style={{ color: 'var(--text-muted)', flexShrink: 0, marginLeft: 12 }}>{p.last_edited?.slice(0, 10)}</span>
+                    <span style={{ color: 'var(--text-muted)', flexShrink: 0, marginLeft: 12 }}>{p.last_edited}</span>
                   </div>
                 ))}
               </div>
@@ -906,7 +1060,6 @@ function MeetingPrepView() {
         </>
       )}
 
-      {/* Empty state when no person selected */}
       {!selectedPerson && !loading && (
         <div style={{
           backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',

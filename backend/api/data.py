@@ -480,33 +480,59 @@ async def api_meeting_prep(event_id: str = "", minutes_ahead: int = 480):
 @router.get("/meeting-prep/one-on-one/{person_name}")
 async def api_one_on_one_prep(person_name: str):
     """Generate a structured 1:1 meeting prep for a specific person."""
-    from integrations.people import get_person as _get_person, get_all_people
+    import datetime as _dt
+    from integrations.people import get_person as _get_person
     from integrations.intel import get_smart_tasks
 
     person = _get_person(person_name)
     if "error" in person:
         return JSONResponse({"error": f"Person '{person_name}' not found"}, status_code=404)
 
-    # Get tasks owned by this person
+    # Get tasks owned by this person (full objects for inline editing)
     all_tasks = get_smart_tasks(owner=person_name, include_done=False)
     tasks = all_tasks.get("tasks", all_tasks.get("smart_tasks", []))
+    today = _dt.date.today().isoformat()
 
-    # Categorize tasks
-    urgent = [t for t in tasks if (t.get("priority", {}).get("quadrant") or t.get("quadrant", 4)) == 1]
-    scheduled = [t for t in tasks if (t.get("priority", {}).get("quadrant") or t.get("quadrant", 4)) == 2]
-    delegated = [t for t in tasks if (t.get("priority", {}).get("quadrant") or t.get("quadrant", 4)) == 3]
-    deferred = [t for t in tasks if (t.get("priority", {}).get("quadrant") or t.get("quadrant", 4)) == 4]
+    def _q(t):
+        return t.get("priority", {}).get("quadrant") or t.get("quadrant", 4)
 
-    overdue = [t for t in tasks if t.get("follow_up_date") and t["follow_up_date"] < __import__("datetime").date.today().isoformat()]
+    urgent = [t for t in tasks if _q(t) == 1]
+    scheduled = [t for t in tasks if _q(t) == 2]
+    delegated_tasks = [t for t in tasks if _q(t) == 3]
+    deferred = [t for t in tasks if _q(t) == 4]
+    overdue = [t for t in tasks if t.get("follow_up_date") and t["follow_up_date"] < today]
 
-    # Recent pages/context
+    # Get hierarchy tree for context
+    try:
+        from integrations.hierarchy import get_hierarchy
+        hier = get_hierarchy()
+        hier_tree = hier.get("tree", [])
+    except Exception:
+        hier_tree = []
+
     pages = person.get("pages", [])[:5]
     topics = person.get("topics", [])
 
-    # Build structured prep
+    # Format page dates nicely
+    def _friendly_date(iso: str) -> str:
+        if not iso:
+            return ""
+        try:
+            dt = _dt.datetime.fromisoformat(iso.replace("Z", "+00:00"))
+            delta = _dt.datetime.now(_dt.timezone.utc) - dt.astimezone(_dt.timezone.utc)
+            if delta.days == 0:
+                return "Today"
+            if delta.days == 1:
+                return "Yesterday"
+            if delta.days < 7:
+                return f"{delta.days} days ago"
+            return dt.strftime("%b %d, %Y")
+        except Exception:
+            return iso[:10] if len(iso) >= 10 else iso
+
     sections = []
 
-    # 1. Opening / Status check
+    # 1. Status & Check-in
     sections.append({
         "id": "status",
         "title": "Status & Check-in",
@@ -518,23 +544,17 @@ async def api_one_on_one_prep(person_name: str):
         "items": [
             {"label": "Open tasks", "value": str(len(tasks)), "type": "stat"},
             {"label": "Urgent (Do First)", "value": str(len(urgent)), "type": "stat", "color": "#ef4444" if urgent else None},
+            {"label": "Scheduled", "value": str(len(scheduled)), "type": "stat"},
             {"label": "Overdue", "value": str(len(overdue)), "type": "stat", "color": "#ef4444" if overdue else None},
         ],
+        "tasks": [],
         "questions": [
             "How are things going overall?",
             "Any wins or progress to celebrate since last time?",
         ],
     })
 
-    # 2. Progress review
-    progress_items = []
-    for t in (urgent + scheduled)[:6]:
-        progress_items.append({
-            "label": t.get("description", "")[:80],
-            "value": t.get("status", "open"),
-            "type": "task",
-            "priority": t.get("priority", {}).get("label") or f"Q{t.get('quadrant', 4)}",
-        })
+    # 2. Progress Review — full task objects for editing
     sections.append({
         "id": "progress",
         "title": "Progress Review",
@@ -543,7 +563,8 @@ async def api_one_on_one_prep(person_name: str):
         "narrative": f"Review the highest-priority items. {person_name} has {len(urgent)} urgent and {len(scheduled)} scheduled tasks. "
                      + ("Focus on the overdue items first. " if overdue else "")
                      + "Walk through status on each and identify what's blocking progress.",
-        "items": progress_items,
+        "items": [],
+        "tasks": (urgent + scheduled)[:8],
         "questions": [
             "What's the status on your top priorities?",
             "Are any of these blocked or at risk?",
@@ -551,14 +572,7 @@ async def api_one_on_one_prep(person_name: str):
         ],
     })
 
-    # 3. Blockers & Concerns
-    blocker_items = []
-    for t in overdue[:4]:
-        blocker_items.append({
-            "label": t.get("description", "")[:80],
-            "value": f"Due {t.get('follow_up_date', '?')}",
-            "type": "blocker",
-        })
+    # 3. Blockers & Concerns — overdue tasks
     sections.append({
         "id": "blockers",
         "title": "Blockers & Concerns",
@@ -567,7 +581,8 @@ async def api_one_on_one_prep(person_name: str):
         "narrative": "Surface any impediments."
                      + (f" There are {len(overdue)} overdue items that may indicate blockers." if overdue else " No overdue items — check for hidden concerns.")
                      + " Ask directly about what's slowing them down.",
-        "items": blocker_items,
+        "items": [],
+        "tasks": overdue[:6],
         "questions": [
             "What's the biggest obstacle you're facing right now?",
             "Is anything slowing you down that I can help remove?",
@@ -584,6 +599,7 @@ async def api_one_on_one_prep(person_name: str):
         "narrative": f"Give {person_name} space to raise any decisions they need from you or escalations. "
                      + "This is also the time to align on priorities or re-assign work if needed.",
         "items": [],
+        "tasks": [],
         "questions": [
             "Any decisions you need from me?",
             "Anything you'd like to escalate or get alignment on?",
@@ -591,9 +607,7 @@ async def api_one_on_one_prep(person_name: str):
         ],
     })
 
-    # 5. Forward look
-    upcoming = [t for t in scheduled[:4]]
-    forward_items = [{"label": t.get("description", "")[:80], "value": t.get("follow_up_date", ""), "type": "upcoming"} for t in upcoming]
+    # 5. Forward look — scheduled tasks
     sections.append({
         "id": "forward",
         "title": "Forward Look & Next Steps",
@@ -602,7 +616,8 @@ async def api_one_on_one_prep(person_name: str):
         "narrative": f"Align on what {person_name} will focus on until the next check-in. "
                      + f"They have {len(scheduled)} scheduled tasks coming up."
                      + " Agree on clear next steps and owners.",
-        "items": forward_items,
+        "items": [],
+        "tasks": scheduled[:6],
         "questions": [
             "What are your top 3 priorities for the next week?",
             "Is there anything you want to start or stop doing?",
@@ -610,7 +625,7 @@ async def api_one_on_one_prep(person_name: str):
         ],
     })
 
-    # Key takeaways (auto-generated highlights)
+    # Key takeaways
     takeaways = []
     if overdue:
         takeaways.append({"text": f"{len(overdue)} overdue tasks need attention", "severity": "warning"})
@@ -629,10 +644,14 @@ async def api_one_on_one_prep(person_name: str):
         "relationship": person.get("relationship", ""),
         "organization": person.get("organization", ""),
         "total_tasks": len(tasks),
+        "overdue_count": len(overdue),
+        "urgent_count": len(urgent),
         "topics": topics[:8],
         "sections": sections,
         "takeaways": takeaways,
-        "recent_pages": [{"title": p.get("title", ""), "last_edited": p.get("last_edited", "")} for p in pages],
+        "all_tasks": tasks,
+        "hierarchy": hier_tree,
+        "recent_pages": [{"title": p.get("title", ""), "last_edited": _friendly_date(p.get("last_edited", ""))} for p in pages],
     })
 
 
