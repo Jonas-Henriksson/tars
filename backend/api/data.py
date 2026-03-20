@@ -518,10 +518,9 @@ async def get_meeting_review(days: int = 3, date: str = ""):
         cleaned = cleaned.rstrip(' —->')
         return cleaned.strip()
 
-    # No created_at window filter — we load ALL items, then filter meetings
-    # by their extracted meeting_date after grouping.
-    def _in_window(_item: dict) -> bool:
-        return True  # accept all items; date filtering happens on meetings
+    # Accept all items that haven't been reviewed; date filtering happens on meetings.
+    def _in_window(item: dict) -> bool:
+        return not item.get("reviewed_at")
 
     # Load all entities
     themes = {t["id"]: t for t in get_themes().get("themes", [])}
@@ -1566,6 +1565,88 @@ async def dismiss_item(entity_type: str, entity_id: str):
     if "error" in result:
         return JSONResponse(result, status_code=404)
     return JSONResponse(result)
+
+
+# ---------------------------------------------------------------------------
+# Review (mark items as reviewed so they leave meeting review)
+# ---------------------------------------------------------------------------
+
+def _set_reviewed(entity_type: str, entity_id: str, reviewed: bool) -> dict:
+    """Set or clear reviewed_at on an entity."""
+    from datetime import datetime, timezone
+    import importlib
+
+    _entity_loaders: dict[str, tuple] = {
+        "tasks": ("integrations.intel", "_load_intel", "_save_intel", "smart_tasks", "id"),
+        "stories": ("integrations.epics", "_load_data", "_save_data", "stories", "id"),
+        "epics": ("integrations.epics", "_load_data", "_save_data", "epics", "id"),
+        "initiatives": ("integrations.initiatives", "_load_data", "_save_data", "initiatives", "id"),
+        "decisions": ("integrations.decisions", "_load_data", "_save_data", "decisions", "id"),
+    }
+
+    if entity_type not in _entity_loaders:
+        return {"error": f"Unknown entity type: {entity_type}"}
+
+    module_name, load_fn, save_fn, list_key, id_key = _entity_loaders[entity_type]
+    mod = importlib.import_module(module_name)
+    data = getattr(mod, load_fn)()
+    items = data.get(list_key, [])
+
+    for item in items:
+        if item.get(id_key) == entity_id:
+            if reviewed:
+                item["reviewed_at"] = datetime.now(timezone.utc).isoformat()
+                # Also approve auto items
+                if item.get("source") == "auto":
+                    item["source"] = "confirmed"
+            else:
+                item.pop("reviewed_at", None)
+            getattr(mod, save_fn)(data)
+            return {"message": "ok", "id": entity_id, "reviewed": reviewed}
+
+    return {"error": f"Not found: {entity_type}/{entity_id}"}
+
+
+class ReviewBulkBody(BaseModel):
+    items: list[dict]  # [{"entity_type": "tasks", "id": "abc123"}, ...]
+
+
+@router.post("/review/{entity_type}/{entity_id}")
+async def review_item(entity_type: str, entity_id: str):
+    """Mark an item as reviewed (sets reviewed_at, approves auto items)."""
+    result = _set_reviewed(entity_type, entity_id, reviewed=True)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@router.post("/unreview/{entity_type}/{entity_id}")
+async def unreview_item(entity_type: str, entity_id: str):
+    """Undo review — clear reviewed_at so item reappears in meeting review."""
+    result = _set_reviewed(entity_type, entity_id, reviewed=False)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+@router.post("/review-bulk")
+async def review_bulk(body: ReviewBulkBody):
+    """Mark multiple items as reviewed in one call."""
+    results = []
+    for entry in body.items:
+        r = _set_reviewed(entry["entity_type"], entry["id"], reviewed=True)
+        results.append(r)
+    return JSONResponse({"results": results, "reviewed": len([r for r in results if "error" not in r])})
+
+
+@router.post("/unreview-bulk")
+async def unreview_bulk(body: ReviewBulkBody):
+    """Undo review for multiple items."""
+    results = []
+    for entry in body.items:
+        r = _set_reviewed(entry["entity_type"], entry["id"], reviewed=False)
+        results.append(r)
+    return JSONResponse({"results": results, "unreviewed": len([r for r in results if "error" not in r])})
 
 
 @router.post("/intel/tasks/{task_id}/assign")

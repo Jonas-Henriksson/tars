@@ -362,6 +362,202 @@ const entityColors: Record<string, string> = {
   decisions: '#f59e0b',
 };
 
+// --- Inline-editable meeting review item ---
+const _ENTITY_ENDPOINTS: Record<string, string> = {
+  tasks: '/api/intel/tasks',
+  stories: '/api/stories',
+  epics: '/api/epics',
+  initiatives: '/api/initiatives',
+  decisions: '/api/decisions',
+};
+const _ENTITY_LABEL: Record<string, string> = {
+  tasks: 'task', stories: 'story', epics: 'epic', initiatives: 'init', decisions: 'decision',
+};
+
+function MeetingReviewItem({ item, onReview, onDismiss, onNavigate }: {
+  item: any;
+  onReview: (entityType: string, id: string, title: string) => void;
+  onDismiss: (entityType: string, id: string, title: string) => void;
+  onNavigate: (item: any) => void;
+}) {
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleVal, setTitleVal] = useState(item.title || '');
+  const [editingOwner, setEditingOwner] = useState(false);
+  const [ownerVal, setOwnerVal] = useState(item.owner || '');
+
+  const titleKey = item.entity_type === 'tasks' ? 'description' : 'title';
+  const endpoint = _ENTITY_ENDPOINTS[item.entity_type];
+
+  const saveTitle = () => {
+    setEditingTitle(false);
+    if (titleVal !== item.title && endpoint) {
+      item.title = titleVal;
+      api.patch<any>(`${endpoint}/${item.id}`, { [titleKey]: titleVal }).catch(() => {});
+    }
+  };
+
+  const saveOwner = () => {
+    setEditingOwner(false);
+    const ownerKey = item.entity_type === 'decisions' ? 'decided_by' : 'owner';
+    if (ownerVal !== item.owner && endpoint) {
+      item.owner = ownerVal;
+      api.patch<any>(`${endpoint}/${item.id}`, { [ownerKey]: ownerVal }).catch(() => {});
+    }
+  };
+
+  const hierColor: Record<string, string> = {
+    theme: '#64748b', initiative: '#f97316', epic: '#a855f7', story: '#22c55e',
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: 8,
+        padding: '8px 10px', backgroundColor: 'var(--bg-card)',
+        borderRadius: 'var(--radius)', transition: 'background-color 0.1s',
+      }}
+      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-card)'}
+    >
+      {/* Entity type badge */}
+      <span style={{
+        fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+        padding: '2px 6px', borderRadius: 6, flexShrink: 0, marginTop: 2,
+        backgroundColor: `${entityColors[item.entity_type] || '#888'}20`,
+        color: entityColors[item.entity_type] || '#888',
+      }}>
+        {_ENTITY_LABEL[item.entity_type] || item.entity_type?.replace(/s$/, '')}
+      </span>
+
+      {/* Title + hierarchy + owner — all inline-editable */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Editable title */}
+        {editingTitle ? (
+          <input
+            autoFocus
+            value={titleVal}
+            onChange={(e) => setTitleVal(e.target.value)}
+            onBlur={saveTitle}
+            onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setTitleVal(item.title); setEditingTitle(false); } }}
+            style={{
+              fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', width: '100%',
+              background: 'var(--bg-secondary)', border: '1px solid var(--accent)',
+              borderRadius: 4, padding: '2px 6px', outline: 'none',
+            }}
+          />
+        ) : (
+          <div
+            onClick={() => setEditingTitle(true)}
+            title="Click to edit title"
+            style={{
+              fontSize: 12, fontWeight: 500, color: 'var(--text-primary)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              cursor: 'text', borderRadius: 3, padding: '1px 0',
+            }}
+          >
+            {item.title}
+          </div>
+        )}
+
+        {/* Hierarchy path — clickable to navigate */}
+        {item.hierarchy_path?.length > 0 ? (
+          <div style={{ fontSize: 10, marginTop: 2, display: 'flex', alignItems: 'center', gap: 2, overflow: 'hidden' }}>
+            {item.hierarchy_path.map((h: any, idx: number) => (
+              <React.Fragment key={h.id}>
+                {idx > 0 && <span style={{ color: 'var(--text-muted)' }}> › </span>}
+                <span style={{ color: hierColor[h.type] || 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  {h.title}
+                </span>
+              </React.Fragment>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, fontStyle: 'italic' }}>
+            No hierarchy assigned
+          </div>
+        )}
+
+        {/* Editable owner */}
+        {editingOwner ? (
+          <input
+            autoFocus
+            value={ownerVal}
+            onChange={(e) => setOwnerVal(e.target.value)}
+            onBlur={saveOwner}
+            onKeyDown={(e) => { if (e.key === 'Enter') saveOwner(); if (e.key === 'Escape') { setOwnerVal(item.owner); setEditingOwner(false); } }}
+            style={{
+              fontSize: 10, color: 'var(--text-primary)', marginTop: 2,
+              background: 'var(--bg-secondary)', border: '1px solid var(--accent)',
+              borderRadius: 3, padding: '1px 4px', outline: 'none', width: 120,
+            }}
+          />
+        ) : (
+          <div
+            onClick={() => { setOwnerVal(item.owner || ''); setEditingOwner(true); }}
+            title="Click to edit owner"
+            style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1, cursor: 'text', display: 'flex', alignItems: 'center', gap: 3 }}
+          >
+            <User size={9} />
+            {item.owner || 'Unassigned'}
+          </div>
+        )}
+      </div>
+
+      {/* Created timestamp */}
+      {item.created_at && (
+        <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, marginTop: 3, whiteSpace: 'nowrap' }}>
+          {(() => {
+            const d = new Date(item.created_at);
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+              + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+          })()}
+        </span>
+      )}
+
+      {/* Source badge */}
+      <span style={{
+        fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+        padding: '2px 6px', borderRadius: 6, flexShrink: 0, marginTop: 2,
+        backgroundColor: item.source === 'auto' ? 'rgba(245,158,11,0.15)' : 'rgba(34,197,94,0.15)',
+        color: item.source === 'auto' ? '#f59e0b' : '#22c55e',
+      }}>
+        {item.source}
+      </span>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginTop: 1 }}>
+        <button
+          title="Review (approve &amp; remove from review)"
+          onClick={(e) => { e.stopPropagation(); onReview(item.entity_type, item.id, item.title); }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3, color: '#22c55e', borderRadius: 4, display: 'flex' }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(34,197,94,0.15)'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        >
+          <CheckCircle2 size={14} />
+        </button>
+        <button
+          title="Dismiss (delete item)"
+          onClick={(e) => { e.stopPropagation(); onDismiss(item.entity_type, item.id, item.title); }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3, color: 'var(--danger)', borderRadius: 4, display: 'flex' }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.15)'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        >
+          <X size={14} />
+        </button>
+        <button
+          title="View"
+          onClick={(e) => { e.stopPropagation(); onNavigate(item); }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3, color: 'var(--text-muted)', borderRadius: 4, display: 'flex' }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        >
+          <ChevronRight size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MeetingReviewCard({ data, navigate, onUpdate }: {
   data: any;
   navigate: (path: string) => void;
@@ -369,13 +565,14 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
 }) {
   const [expandedMeeting, setExpandedMeeting] = useState<string | null>(null);
   const [filterAutoOnly, setFilterAutoOnly] = useState(false);
-  const [processedIds, setProcessedIds] = useState<Set<string>>(new Set());
   const [dateMode, setDateMode] = useState<'range' | 'single'>('range');
   const [selectedDate, setSelectedDate] = useState(() => {
     return data?.summary?.date || new Date().toISOString().split('T')[0];
   });
+  const [undoStack, setUndoStack] = useState<{ label: string; items: { entity_type: string; id: string }[] }[]>([]);
 
   const todayStr = new Date().toISOString().split('T')[0];
+  const currentDateParam = dateMode === 'single' ? selectedDate : undefined;
 
   const changeDate = (delta: number) => {
     const base = dateMode === 'range' ? todayStr : selectedDate;
@@ -384,7 +581,6 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
     const next = d.toISOString().split('T')[0];
     setSelectedDate(next);
     setDateMode('single');
-    setProcessedIds(new Set());
     onUpdate(next);
   };
 
@@ -398,19 +594,39 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
-  const handleApprove = async (entityType: string, id: string) => {
+  const handleReview = async (entityType: string, id: string, title: string) => {
     try {
-      await api.post(`/api/approve/${entityType}/${id}`, {});
-      setProcessedIds((prev) => new Set(prev).add(id));
-      onUpdate(dateMode === 'single' ? selectedDate : undefined);
+      await api.post(`/api/review/${entityType}/${id}`, {});
+      setUndoStack((prev) => [...prev.slice(-9), { label: `Reviewed: ${title.slice(0, 40)}`, items: [{ entity_type: entityType, id }] }]);
+      onUpdate(currentDateParam);
     } catch { /* ignore */ }
   };
 
-  const handleDismiss = async (entityType: string, id: string) => {
+  const handleDismiss = async (entityType: string, id: string, title: string) => {
     try {
       await api.post(`/api/dismiss/${entityType}/${id}`, {});
-      setProcessedIds((prev) => new Set(prev).add(id));
-      onUpdate(dateMode === 'single' ? selectedDate : undefined);
+      setUndoStack((prev) => [...prev.slice(-9), { label: `Dismissed: ${title.slice(0, 40)}`, items: [{ entity_type: entityType, id }] }]);
+      onUpdate(currentDateParam);
+    } catch { /* ignore */ }
+  };
+
+  const handleReviewAll = async (meeting: any) => {
+    const items = (meeting.items || []).map((i: any) => ({ entity_type: i.entity_type, id: i.id }));
+    if (items.length === 0) return;
+    try {
+      await api.post('/api/review-bulk', { items });
+      setUndoStack((prev) => [...prev.slice(-9), { label: `Reviewed all: ${meeting.source_title || 'Other items'} (${items.length})`, items }]);
+      onUpdate(currentDateParam);
+    } catch { /* ignore */ }
+  };
+
+  const handleUndo = async () => {
+    const last = undoStack[undoStack.length - 1];
+    if (!last) return;
+    try {
+      await api.post('/api/unreview-bulk', { items: last.items });
+      setUndoStack((prev) => prev.slice(0, -1));
+      onUpdate(currentDateParam);
     } catch { /* ignore */ }
   };
 
@@ -458,13 +674,13 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
                   // Go back to range mode
                   setDateMode('range');
                   setSelectedDate(todayStr);
-                  setProcessedIds(new Set());
+                  
                   onUpdate();
                 } else {
                   // Switch to single-date mode for today
                   setDateMode('single');
                   setSelectedDate(todayStr);
-                  setProcessedIds(new Set());
+                  
                   onUpdate(todayStr);
                 }
               }}
@@ -519,7 +735,6 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
         )}
         {meetings.map((meeting: any) => {
           const items = (meeting.items || [])
-            .filter((i: any) => !processedIds.has(i.id))
             .filter((i: any) => !filterAutoOnly || i.source === 'auto');
           if (items.length === 0) return null;
 
@@ -569,6 +784,22 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
                     )}
                   </div>
                 </div>
+                {/* Review all button */}
+                <button
+                  title="Review all items in this meeting"
+                  onClick={(e) => { e.stopPropagation(); handleReviewAll(meeting); }}
+                  style={{
+                    fontSize: 10, fontWeight: 500, border: 'none', borderRadius: 6,
+                    padding: '4px 10px', cursor: 'pointer', transition: 'all 0.15s',
+                    backgroundColor: 'rgba(34,197,94,0.1)', color: '#22c55e',
+                    display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(34,197,94,0.25)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(34,197,94,0.1)'}
+                >
+                  <CheckCircle2 size={12} />
+                  Review all
+                </button>
                 {isExpanded
                   ? <ChevronDown size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                   : <ChevronRight size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
@@ -584,113 +815,13 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
                   display: 'flex', flexDirection: 'column', gap: 6,
                 }}>
                   {items.map((item: any) => (
-                    <div
+                    <MeetingReviewItem
                       key={item.id}
-                      style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 8,
-                        padding: '8px 10px', backgroundColor: 'var(--bg-card)',
-                        borderRadius: 'var(--radius)', transition: 'background-color 0.1s',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-card)'}
-                    >
-                      {/* Entity type badge */}
-                      <span style={{
-                        fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
-                        padding: '2px 6px', borderRadius: 6, flexShrink: 0, marginTop: 2,
-                        backgroundColor: `${entityColors[item.entity_type] || '#888'}20`,
-                        color: entityColors[item.entity_type] || '#888',
-                      }}>
-                        {item.entity_type === 'tasks' ? 'task' :
-                         item.entity_type === 'stories' ? 'story' :
-                         item.entity_type === 'initiatives' ? 'init' :
-                         item.entity_type === 'decisions' ? 'decision' :
-                         item.entity_type?.replace(/s$/, '')}
-                      </span>
-
-                      {/* Title + hierarchy + owner */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {item.title}
-                        </div>
-                        {item.hierarchy_path?.length > 0 && (
-                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {item.hierarchy_path.map((h: any) => h.title).join(' › ')}
-                          </div>
-                        )}
-                        {item.owner && (
-                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
-                            <User size={9} style={{ marginRight: 3, verticalAlign: 'middle' }} />
-                            {item.owner}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Created timestamp */}
-                      {item.created_at && (
-                        <span style={{
-                          fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, marginTop: 3, whiteSpace: 'nowrap',
-                        }}>
-                          {(() => {
-                            const d = new Date(item.created_at);
-                            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                              + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-                          })()}
-                        </span>
-                      )}
-
-                      {/* Source badge */}
-                      <span style={{
-                        fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
-                        padding: '2px 6px', borderRadius: 6, flexShrink: 0, marginTop: 2,
-                        backgroundColor: item.source === 'auto' ? 'rgba(245,158,11,0.15)' : 'rgba(34,197,94,0.15)',
-                        color: item.source === 'auto' ? '#f59e0b' : '#22c55e',
-                      }}>
-                        {item.source}
-                      </span>
-
-                      {/* Actions */}
-                      <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginTop: 1 }}>
-                        {item.source === 'auto' && (
-                          <button
-                            title="Approve"
-                            onClick={(e) => { e.stopPropagation(); handleApprove(item.entity_type, item.id); }}
-                            style={{
-                              background: 'none', border: 'none', cursor: 'pointer', padding: 3,
-                              color: '#22c55e', borderRadius: 4, display: 'flex',
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(34,197,94,0.15)'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                          >
-                            <CheckCircle2 size={14} />
-                          </button>
-                        )}
-                        <button
-                          title="Dismiss"
-                          onClick={(e) => { e.stopPropagation(); handleDismiss(item.entity_type, item.id); }}
-                          style={{
-                            background: 'none', border: 'none', cursor: 'pointer', padding: 3,
-                            color: 'var(--danger)', borderRadius: 4, display: 'flex',
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.15)'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                        >
-                          <X size={14} />
-                        </button>
-                        <button
-                          title="View"
-                          onClick={(e) => { e.stopPropagation(); navigateToItem(item); }}
-                          style={{
-                            background: 'none', border: 'none', cursor: 'pointer', padding: 3,
-                            color: 'var(--text-muted)', borderRadius: 4, display: 'flex',
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                        >
-                          <ChevronRight size={14} />
-                        </button>
-                      </div>
-                    </div>
+                      item={item}
+                      onReview={handleReview}
+                      onDismiss={handleDismiss}
+                      onNavigate={navigateToItem}
+                    />
                   ))}
                 </div>
               )}
@@ -698,6 +829,32 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
           );
         })}
       </div>
+
+      {/* Undo toast */}
+      {undoStack.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '8px 12px', marginTop: 8,
+          backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)',
+          border: '1px solid var(--border)',
+        }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            {undoStack[undoStack.length - 1].label}
+          </span>
+          <button
+            onClick={handleUndo}
+            style={{
+              fontSize: 11, fontWeight: 500, border: 'none', borderRadius: 6,
+              padding: '3px 10px', cursor: 'pointer',
+              backgroundColor: 'rgba(99,102,241,0.12)', color: 'var(--accent)',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(99,102,241,0.25)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(99,102,241,0.12)'}
+          >
+            Undo
+          </button>
+        </div>
+      )}
     </div>
   );
 }

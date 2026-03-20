@@ -1092,6 +1092,7 @@ def _summarize_task(task: dict) -> dict:
         "source": task.get("source", "confirmed"),
         "confidence": task.get("confidence", 0.0),
         "manual_override": task.get("manual_override", False),
+        "reviewed_at": task.get("reviewed_at", ""),
     }
 
 
