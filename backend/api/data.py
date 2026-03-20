@@ -95,6 +95,9 @@ class InitiativeCreate(BaseModel):
     priority: str = "high"
     milestones: list[str] = []
     theme_id: str = ""
+    source_title: str = ""
+    source_url: str = ""
+    source_page_id: str = ""
 
 
 class InitiativeUpdate(BaseModel):
@@ -129,6 +132,9 @@ class EpicCreate(BaseModel):
     quarter: str = ""
     priority: str = "high"
     acceptance_criteria: list[str] = []
+    source_title: str = ""
+    source_url: str = ""
+    source_page_id: str = ""
 
 
 class EpicUpdate(BaseModel):
@@ -150,6 +156,9 @@ class StoryCreate(BaseModel):
     size: str = "M"
     priority: str = "medium"
     acceptance_criteria: list[str] = []
+    source_title: str = ""
+    source_url: str = ""
+    source_page_id: str = ""
 
 
 class StoryUpdate(BaseModel):
@@ -503,6 +512,105 @@ async def get_meeting_review(days: int = 3, date: str = ""):
     for s in stories_list:
         for tid in s.get("linked_task_ids", []):
             task_to_story[tid] = s["id"]
+
+    # --- derive source_title for entities missing it (propagate from tasks) ---
+    from collections import Counter as _Counter
+
+    # Build task source index: task_id -> {source_title, source_url, source_page_id}
+    task_source: dict[str, dict] = {}
+    for t in tasks_list:
+        st = t.get("source_title", "")
+        if st:
+            task_source[t["id"]] = {
+                "source_title": st,
+                "source_url": t.get("source_url", ""),
+                "source_page_id": t.get("source_page_id", ""),
+            }
+
+    def _derive_source(source_titles: list[str], url_map: dict, pid_map: dict) -> dict:
+        if not source_titles:
+            return {}
+        best = _Counter(source_titles).most_common(1)[0][0]
+        return {
+            "source_title": best,
+            "source_url": url_map.get(best, ""),
+            "source_page_id": pid_map.get(best, ""),
+        }
+
+    # Stories: derive from linked tasks
+    story_derived: dict[str, dict] = {}
+    for s in stories_list:
+        if s.get("source_title"):
+            story_derived[s["id"]] = {
+                "source_title": s["source_title"],
+                "source_url": s.get("source_url", ""),
+                "source_page_id": s.get("source_page_id", ""),
+            }
+            continue
+        titles, urls, pids = [], {}, {}
+        for tid in s.get("linked_task_ids", []):
+            src = task_source.get(tid)
+            if src:
+                titles.append(src["source_title"])
+                urls[src["source_title"]] = src["source_url"]
+                pids[src["source_title"]] = src["source_page_id"]
+        derived = _derive_source(titles, urls, pids)
+        if derived:
+            story_derived[s["id"]] = derived
+            # Patch in-memory so hierarchy items pick it up
+            s["source_title"] = derived["source_title"]
+            s["source_url"] = derived["source_url"]
+            s["source_page_id"] = derived["source_page_id"]
+
+    # Epics: derive from child stories
+    epic_derived: dict[str, dict] = {}
+    for e in epics_list:
+        if e.get("source_title"):
+            epic_derived[e["id"]] = {
+                "source_title": e["source_title"],
+                "source_url": e.get("source_url", ""),
+                "source_page_id": e.get("source_page_id", ""),
+            }
+            continue
+        titles, urls, pids = [], {}, {}
+        for s in stories_list:
+            if s.get("epic_id") == e["id"]:
+                src = story_derived.get(s["id"])
+                if src:
+                    titles.append(src["source_title"])
+                    urls[src["source_title"]] = src["source_url"]
+                    pids[src["source_title"]] = src["source_page_id"]
+        derived = _derive_source(titles, urls, pids)
+        if derived:
+            epic_derived[e["id"]] = derived
+            e["source_title"] = derived["source_title"]
+            e["source_url"] = derived["source_url"]
+            e["source_page_id"] = derived["source_page_id"]
+
+    # Initiatives: derive from child epics
+    init_derived: dict[str, dict] = {}
+    for i_id, init in initiatives.items():
+        if init.get("source_title"):
+            init_derived[i_id] = {
+                "source_title": init["source_title"],
+                "source_url": init.get("source_url", ""),
+                "source_page_id": init.get("source_page_id", ""),
+            }
+            continue
+        titles, urls, pids = [], {}, {}
+        for e in epics_list:
+            if e.get("initiative_id") == i_id:
+                src = epic_derived.get(e["id"])
+                if src:
+                    titles.append(src["source_title"])
+                    urls[src["source_title"]] = src["source_url"]
+                    pids[src["source_title"]] = src["source_page_id"]
+        derived = _derive_source(titles, urls, pids)
+        if derived:
+            init_derived[i_id] = derived
+            init["source_title"] = derived["source_title"]
+            init["source_url"] = derived["source_url"]
+            init["source_page_id"] = derived["source_page_id"]
 
     # --- hierarchy path helpers ---
     def _path_from_story(story_id: str) -> list[dict]:
@@ -979,6 +1087,8 @@ async def create_initiative(body: InitiativeCreate):
         title=body.title, description=body.description, owner=body.owner,
         quarter=body.quarter, status=body.status, priority=body.priority,
         milestones=body.milestones, theme_id=body.theme_id,
+        source_title=body.source_title, source_url=body.source_url,
+        source_page_id=body.source_page_id,
     ))
 
 
@@ -1086,6 +1196,8 @@ async def create_epic(body: EpicCreate):
         title=body.title, description=body.description, owner=body.owner,
         initiative_id=body.initiative_id, quarter=body.quarter,
         priority=body.priority, acceptance_criteria=body.acceptance_criteria,
+        source_title=body.source_title, source_url=body.source_url,
+        source_page_id=body.source_page_id,
     ))
 
 
@@ -1123,6 +1235,8 @@ async def create_story(body: StoryCreate):
         epic_id=body.epic_id, title=body.title, description=body.description,
         owner=body.owner, size=body.size, priority=body.priority,
         acceptance_criteria=body.acceptance_criteria,
+        source_title=body.source_title, source_url=body.source_url,
+        source_page_id=body.source_page_id,
     )
     if "error" in result:
         return JSONResponse(result, status_code=404)

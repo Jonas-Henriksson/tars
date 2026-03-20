@@ -664,6 +664,9 @@ def _register_epic_tools() -> None:
             owner=a.get("owner", ""), initiative_id=a.get("initiative_id", ""),
             quarter=a.get("quarter", ""), priority=a.get("priority", "high"),
             acceptance_criteria=a.get("acceptance_criteria"),
+            source_title=a.get("source_title", ""),
+            source_url=a.get("source_url", ""),
+            source_page_id=a.get("source_page_id", ""),
         )
 
     registry.register("create_epic", "Create an epic — a large deliverable.", {
@@ -676,6 +679,9 @@ def _register_epic_tools() -> None:
             "quarter": {"type": "string"},
             "priority": {"type": "string", "enum": ["high", "medium", "low"]},
             "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
+            "source_title": {"type": "string", "description": "Origin meeting/page title"},
+            "source_url": {"type": "string", "description": "Origin page URL"},
+            "source_page_id": {"type": "string", "description": "Origin page ID"},
         },
         "required": ["title"],
     }, _ce, category="agile")
@@ -727,6 +733,9 @@ def _register_epic_tools() -> None:
             description=a.get("description", ""), owner=a.get("owner", ""),
             size=a.get("size", "M"), priority=a.get("priority", "medium"),
             acceptance_criteria=a.get("acceptance_criteria"),
+            source_title=a.get("source_title", ""),
+            source_url=a.get("source_url", ""),
+            source_page_id=a.get("source_page_id", ""),
         )
 
     registry.register("create_story", "Create a user story within an epic.", {
@@ -738,6 +747,9 @@ def _register_epic_tools() -> None:
             "size": {"type": "string", "enum": ["XS", "S", "M", "L", "XL"]},
             "priority": {"type": "string", "enum": ["high", "medium", "low"]},
             "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
+            "source_title": {"type": "string", "description": "Origin meeting/page title"},
+            "source_url": {"type": "string", "description": "Origin page URL"},
+            "source_page_id": {"type": "string", "description": "Origin page ID"},
         },
         "required": ["epic_id", "title"],
     }, _cs, category="agile")
@@ -889,6 +901,9 @@ def _register_strategic_tools() -> None:
             owner=a.get("owner", ""), quarter=a.get("quarter", ""),
             status=a.get("status", "on_track"), priority=a.get("priority", "high"),
             milestones=a.get("milestones"),
+            source_title=a.get("source_title", ""),
+            source_url=a.get("source_url", ""),
+            source_page_id=a.get("source_page_id", ""),
         )
 
     registry.register("create_initiative", "Create a strategic initiative.", {
@@ -899,6 +914,9 @@ def _register_strategic_tools() -> None:
             "status": {"type": "string", "enum": ["on_track", "at_risk", "off_track", "completed", "paused"]},
             "priority": {"type": "string", "enum": ["high", "medium", "low"]},
             "milestones": {"type": "array", "items": {"type": "string"}},
+            "source_title": {"type": "string", "description": "Origin meeting/page title"},
+            "source_url": {"type": "string", "description": "Origin page URL"},
+            "source_page_id": {"type": "string", "description": "Origin page ID"},
         },
         "required": ["title"],
     }, _ci, category="strategic")

@@ -1079,6 +1079,7 @@ def _summarize_task(task: dict) -> dict:
         "follow_up_date": task.get("follow_up_date"),
         "source_title": task.get("source_title", ""),
         "source_url": task.get("source_url", ""),
+        "source_page_id": task.get("source_page_id", ""),
         "source_context": task.get("source_context", ""),
         "age_days": task.get("age_days", 0),
         "quadrant": task.get("priority", {}).get("quadrant"),
