@@ -44,6 +44,9 @@ def create_initiative(
     milestones: list[str] | None = None,
     theme_id: str = "",
     source: str = "confirmed",
+    source_title: str = "",
+    source_url: str = "",
+    source_page_id: str = "",
 ) -> dict[str, Any]:
     """Create a new strategic initiative.
 
@@ -57,6 +60,9 @@ def create_initiative(
         milestones: Key milestones as text list.
         theme_id: Parent theme ID (links to themes.json).
         source: "confirmed" (human-created/approved) | "auto" (AI-proposed).
+        source_title: Origin meeting/page title for traceability.
+        source_url: URL of the source page.
+        source_page_id: Notion page ID of the source.
     """
     data = _load_data()
 
@@ -75,6 +81,9 @@ def create_initiative(
         "key_result_ids": [],
         "theme_id": theme_id,
         "source": source if source in ("confirmed", "auto") else "confirmed",
+        "source_title": source_title,
+        "source_url": source_url,
+        "source_page_id": source_page_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }

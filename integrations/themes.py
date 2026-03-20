@@ -53,6 +53,9 @@ def create_theme(
     description: str = "",
     status: str = "active",
     source: str = "confirmed",
+    source_title: str = "",
+    source_url: str = "",
+    source_page_id: str = "",
 ) -> dict[str, Any]:
     """Create a new strategic theme.
 
@@ -61,6 +64,9 @@ def create_theme(
         description: What this strategic area covers.
         status: active | completed | paused.
         source: "confirmed" (human-created/approved) | "auto" (AI-proposed).
+        source_title: Origin meeting/page title for traceability.
+        source_url: URL of the source page.
+        source_page_id: Notion page ID of the source.
     """
     data = _load_data()
 
@@ -70,6 +76,9 @@ def create_theme(
         "description": description,
         "status": status if status in THEME_STATUSES else "active",
         "source": source if source in ("confirmed", "auto") else "confirmed",
+        "source_title": source_title,
+        "source_url": source_url,
+        "source_page_id": source_page_id,
         "created_at": _now(),
         "updated_at": _now(),
     }

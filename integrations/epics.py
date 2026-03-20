@@ -60,6 +60,9 @@ def create_epic(
     priority: str = "high",
     acceptance_criteria: list[str] | None = None,
     source: str = "confirmed",
+    source_title: str = "",
+    source_url: str = "",
+    source_page_id: str = "",
 ) -> dict[str, Any]:
     """Create a new epic — a large body of work that delivers significant value.
 
@@ -72,6 +75,9 @@ def create_epic(
         priority: high | medium | low.
         acceptance_criteria: Definition of done for the whole epic.
         source: "confirmed" (human-created/approved) | "auto" (AI-proposed).
+        source_title: Origin meeting/page title for traceability.
+        source_url: URL of the source page.
+        source_page_id: Notion page ID of the source.
     """
     data = _load_data()
 
@@ -86,6 +92,9 @@ def create_epic(
         "priority": priority,
         "acceptance_criteria": acceptance_criteria or [],
         "source": source if source in ("confirmed", "auto") else "confirmed",
+        "source_title": source_title,
+        "source_url": source_url,
+        "source_page_id": source_page_id,
         "created_at": _now(),
         "updated_at": _now(),
     }
@@ -286,6 +295,9 @@ def create_story(
     priority: str = "medium",
     acceptance_criteria: list[str] | None = None,
     source: str = "confirmed",
+    source_title: str = "",
+    source_url: str = "",
+    source_page_id: str = "",
 ) -> dict[str, Any]:
     """Create a user story within an epic.
 
@@ -300,6 +312,9 @@ def create_story(
         priority: high | medium | low.
         acceptance_criteria: Specific conditions that must be met.
         source: "confirmed" (human-created/approved) | "auto" (AI-proposed).
+        source_title: Origin meeting/page title for traceability.
+        source_url: URL of the source page.
+        source_page_id: Notion page ID of the source.
     """
     data = _load_data()
 
@@ -324,6 +339,9 @@ def create_story(
         "acceptance_criteria": acceptance_criteria or [],
         "linked_task_ids": [],
         "source": source if source in ("confirmed", "auto") else "confirmed",
+        "source_title": source_title,
+        "source_url": source_url,
+        "source_page_id": source_page_id,
         "created_at": _now(),
         "updated_at": _now(),
     }

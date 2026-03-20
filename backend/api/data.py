@@ -1498,6 +1498,154 @@ async def get_hierarchy():
 
 
 # ---------------------------------------------------------------------------
+# Backfill source metadata
+# ---------------------------------------------------------------------------
+
+@router.post("/backfill-source-metadata")
+async def backfill_source_metadata():
+    """Backfill source_title on existing entities by tracing linked tasks."""
+    from integrations.intel import _load_intel
+    from integrations.epics import (
+        _load_data as _load_epics, _save_data as _save_epics,
+    )
+    from integrations.initiatives import (
+        _load_data as _load_inits, _save_data as _save_inits,
+    )
+    from integrations.themes import (
+        _load_data as _load_themes, _save_data as _save_themes,
+    )
+    from collections import Counter
+
+    intel = _load_intel()
+    tasks = intel.get("smart_tasks", [])
+    task_by_id = {t["id"]: t for t in tasks}
+
+    def _best_source(task_ids: list[str]) -> dict:
+        titles: list[str] = []
+        url_map: dict[str, str] = {}
+        pid_map: dict[str, str] = {}
+        for tid in task_ids:
+            t = task_by_id.get(tid)
+            if not t:
+                continue
+            st = t.get("source_title", "")
+            if st:
+                titles.append(st)
+                url_map[st] = t.get("source_url", "")
+                pid_map[st] = t.get("source_page_id", "")
+        if not titles:
+            return {}
+        best = Counter(titles).most_common(1)[0][0]
+        return {
+            "source_title": best,
+            "source_url": url_map.get(best, ""),
+            "source_page_id": pid_map.get(best, ""),
+        }
+
+    updated = {"stories": 0, "epics": 0, "initiatives": 0, "themes": 0}
+
+    # --- Stories: use linked_task_ids ---
+    epics_db = _load_epics()
+    story_source: dict[str, dict] = {}  # story_id -> source info
+    for story in epics_db.get("stories", []):
+        if story.get("source_title"):
+            continue
+        linked = story.get("linked_task_ids", [])
+        src = _best_source(linked)
+        if src:
+            story.update(src)
+            story_source[story["id"]] = src
+            updated["stories"] += 1
+
+    # Also build story_source for stories that already had source_title
+    for story in epics_db.get("stories", []):
+        if story.get("source_title") and story["id"] not in story_source:
+            story_source[story["id"]] = {
+                "source_title": story["source_title"],
+                "source_url": story.get("source_url", ""),
+                "source_page_id": story.get("source_page_id", ""),
+            }
+
+    # --- Epics: aggregate from their stories ---
+    epic_source: dict[str, dict] = {}
+    for epic in epics_db.get("epics", []):
+        if epic.get("source_title"):
+            continue
+        child_stories = [s for s in epics_db.get("stories", []) if s.get("epic_id") == epic["id"]]
+        titles: list[str] = []
+        url_map: dict[str, str] = {}
+        pid_map: dict[str, str] = {}
+        for s in child_stories:
+            st = s.get("source_title", "")
+            if st:
+                titles.append(st)
+                url_map[st] = s.get("source_url", "")
+                pid_map[st] = s.get("source_page_id", "")
+        if titles:
+            best = Counter(titles).most_common(1)[0][0]
+            src = {"source_title": best, "source_url": url_map.get(best, ""), "source_page_id": pid_map.get(best, "")}
+            epic.update(src)
+            epic_source[epic["id"]] = src
+            updated["epics"] += 1
+
+    _save_epics(epics_db)
+
+    # --- Initiatives: aggregate from their epics ---
+    inits_db = _load_inits()
+    init_source: dict[str, dict] = {}
+    for init in inits_db.get("initiatives", []):
+        if init.get("source_title"):
+            continue
+        child_epics = [e for e in epics_db.get("epics", []) if e.get("initiative_id") == init["id"]]
+        titles = []
+        url_map = {}
+        pid_map = {}
+        for e in child_epics:
+            st = e.get("source_title", "")
+            if st:
+                titles.append(st)
+                url_map[st] = e.get("source_url", "")
+                pid_map[st] = e.get("source_page_id", "")
+        if titles:
+            best = Counter(titles).most_common(1)[0][0]
+            src = {"source_title": best, "source_url": url_map.get(best, ""), "source_page_id": pid_map.get(best, "")}
+            init.update(src)
+            init_source[init["id"]] = src
+            updated["initiatives"] += 1
+
+    _save_inits(inits_db)
+
+    # --- Themes: aggregate from their initiatives ---
+    themes_db = _load_themes()
+    for theme in themes_db.get("themes", []):
+        if theme.get("source_title"):
+            continue
+        child_inits = [i for i in inits_db.get("initiatives", []) if i.get("theme_id") == theme["id"]]
+        titles = []
+        url_map = {}
+        pid_map = {}
+        for i in child_inits:
+            st = i.get("source_title", "")
+            if st:
+                titles.append(st)
+                url_map[st] = i.get("source_url", "")
+                pid_map[st] = i.get("source_page_id", "")
+        if titles:
+            best = Counter(titles).most_common(1)[0][0]
+            theme.update({"source_title": best, "source_url": url_map.get(best, ""), "source_page_id": pid_map.get(best, "")})
+            updated["themes"] += 1
+
+    _save_themes(themes_db)
+
+    return JSONResponse({
+        "message": "Source metadata backfilled.",
+        "updated": updated,
+        "tasks_with_source": sum(1 for t in tasks if t.get("source_title")),
+        "total_tasks": len(tasks),
+    })
+
+
+# ---------------------------------------------------------------------------
 # People
 # ---------------------------------------------------------------------------
 

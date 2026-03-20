@@ -388,6 +388,33 @@ async def classify_tasks(
         logger.error("Phase 1 API call failed: %s", e)
         return {"error": f"Classification failed — API error: {e}"}
 
+    # --- Helper: resolve dominant source metadata from task IDs ---
+    task_by_id = {t["id"]: t for t in tasks_to_classify}
+
+    def _dominant_source(task_ids: list[str]) -> dict:
+        """Return the most common source_title/url/page_id from a set of tasks."""
+        from collections import Counter
+        titles: list[str] = []
+        url_map: dict[str, str] = {}
+        pid_map: dict[str, str] = {}
+        for tid in task_ids:
+            t = task_by_id.get(tid)
+            if not t:
+                continue
+            st = t.get("source_title", "")
+            if st:
+                titles.append(st)
+                url_map[st] = t.get("source_url", "")
+                pid_map[st] = t.get("source_page_id", "")
+        if not titles:
+            return {"source_title": "", "source_url": "", "source_page_id": ""}
+        best = Counter(titles).most_common(1)[0][0]
+        return {
+            "source_title": best,
+            "source_url": url_map.get(best, ""),
+            "source_page_id": pid_map.get(best, ""),
+        }
+
     # Apply Phase 1 results
     from integrations.themes import create_theme
     from integrations.initiatives import create_initiative
@@ -409,6 +436,7 @@ async def classify_tasks(
     for i_data in phase1_data.get("initiatives", []):
         theme_idx = i_data.get("theme_index", 0)
         theme_id = themes_created[theme_idx]["id"] if theme_idx < len(themes_created) else ""
+        src = _dominant_source(i_data.get("task_ids", []))
 
         result = create_initiative(
             title=_normalize_title(i_data.get("title", "")),
@@ -419,6 +447,9 @@ async def classify_tasks(
             quarter=i_data.get("quarter", ""),
             priority=i_data.get("priority", "high"),
             status=i_data.get("status", "on_track"),
+            source_title=src["source_title"],
+            source_url=src["source_url"],
+            source_page_id=src["source_page_id"],
         )
         init = result.get("initiative", {})
         initiatives_created.append(init)
@@ -428,6 +459,7 @@ async def classify_tasks(
     for pi_data in phase1_data.get("proposed_initiatives", []):
         theme_idx = pi_data.get("theme_index", 0)
         theme_id = themes_created[theme_idx]["id"] if theme_idx < len(themes_created) else ""
+        pi_src = _dominant_source(pi_data.get("task_ids", []))
 
         result = create_initiative(
             title=_normalize_title(pi_data.get("title", "")),
@@ -437,6 +469,9 @@ async def classify_tasks(
             owner=pi_data.get("owner", ""),
             quarter=pi_data.get("quarter", ""),
             priority=pi_data.get("priority", "high"),
+            source_title=pi_src["source_title"],
+            source_url=pi_src["source_url"],
+            source_page_id=pi_src["source_page_id"],
         )
         initiatives_created.append(result.get("initiative", {}))
 
@@ -528,8 +563,13 @@ async def classify_tasks(
             logger.warning("Phase 2 failed for initiative '%s': %s", init.get("title"), e)
             continue
 
+        # Resolve source metadata for this initiative's entities
+        init_src = _dominant_source(init_task_ids)
+
         # Create epics and stories
         for e_data in phase2_data.get("epics", []):
+            # Use epic-specific tasks if available, fall back to initiative source
+            e_src = _dominant_source(e_data.get("task_ids", [])) if e_data.get("task_ids") else init_src
             epic_result = create_epic(
                 title=_normalize_title(e_data.get("title", "")),
                 description=_normalize_description(e_data.get("description", "")),
@@ -538,6 +578,9 @@ async def classify_tasks(
                 owner=e_data.get("owner", ""),
                 priority=e_data.get("priority", "high"),
                 acceptance_criteria=e_data.get("acceptance_criteria"),
+                source_title=e_src["source_title"],
+                source_url=e_src["source_url"],
+                source_page_id=e_src["source_page_id"],
             )
             epic = epic_result.get("epic", {})
             epic_id = epic.get("id", "")
@@ -545,6 +588,7 @@ async def classify_tasks(
 
             # Create stories within this epic
             for s_data in e_data.get("stories", []):
+                s_src = _dominant_source(s_data.get("task_ids", [])) if s_data.get("task_ids") else e_src
                 story_result = create_story(
                     epic_id=epic_id,
                     title=_normalize_title(s_data.get("title", "")),
@@ -554,6 +598,9 @@ async def classify_tasks(
                     priority=s_data.get("priority", "medium"),
                     size=s_data.get("size", "M"),
                     acceptance_criteria=s_data.get("acceptance_criteria"),
+                    source_title=s_src["source_title"],
+                    source_url=s_src["source_url"],
+                    source_page_id=s_src["source_page_id"],
                 )
                 story = story_result.get("story", {})
                 story_id = story.get("id", "")
@@ -597,6 +644,9 @@ async def classify_tasks(
                     priority=ps_data.get("priority", "medium"),
                     size=ps_data.get("size", "M"),
                     acceptance_criteria=ps_data.get("acceptance_criteria"),
+                    source_title=e_src["source_title"],
+                    source_url=e_src["source_url"],
+                    source_page_id=e_src["source_page_id"],
                 )
                 stories_created += 1
 
@@ -610,6 +660,9 @@ async def classify_tasks(
                 owner=pe_data.get("owner", ""),
                 priority=pe_data.get("priority", "high"),
                 acceptance_criteria=pe_data.get("acceptance_criteria"),
+                source_title=init_src["source_title"],
+                source_url=init_src["source_url"],
+                source_page_id=init_src["source_page_id"],
             )
             pe = pe_result.get("epic", {})
             pe_id = pe.get("id", "")
@@ -625,6 +678,9 @@ async def classify_tasks(
                     priority=ps_data.get("priority", "medium"),
                     size=ps_data.get("size", "M"),
                     acceptance_criteria=ps_data.get("acceptance_criteria"),
+                    source_title=init_src["source_title"],
+                    source_url=init_src["source_url"],
+                    source_page_id=init_src["source_page_id"],
                 )
                 stories_created += 1
 
