@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import {
   Calendar, AlertTriangle, Mail, TrendingUp, CheckCircle2, ChevronRight, ChevronDown,
-  Target, Scale, Users, CalendarCheck, Clock, Zap, User, Package,
+  Target, Scale, Users, CalendarCheck, Clock, Zap, User, Package, Eye, X,
 } from 'lucide-react';
 
 interface AlertData {
@@ -30,6 +30,7 @@ export default function CommandCenter() {
   const [expandedAlert, setExpandedAlert] = useState<number | null>(null);
   const [showAllAlerts, setShowAllAlerts] = useState(false);
   const [meetingPrep, setMeetingPrep] = useState<any>(null);
+  const [meetingReview, setMeetingReview] = useState<any>(null);
 
   useEffect(() => {
     Promise.all([
@@ -37,11 +38,13 @@ export default function CommandCenter() {
       api.get<any>('/api/strategic-summary').catch(() => ({})),
       api.get<any>('/api/review/weekly').catch(() => ({})),
       api.get<any>('/api/meeting-prep').catch(() => null),
-    ]).then(([alertsData, summaryData, reviewData, meetingData]) => {
+      api.get<any>('/api/meeting-review').catch(() => ({ meetings: [], summary: {} })),
+    ]).then(([alertsData, summaryData, reviewData, meetingData, meetingReviewData]) => {
       setAlerts(alertsData.alerts || []);
       setSummary(summaryData);
       setTaskStats(reviewData.smart_tasks || {});
       setMeetingPrep(meetingData?.available ? meetingData : null);
+      setMeetingReview(meetingReviewData?.summary?.total_items > 0 ? meetingReviewData : null);
       setLoading(false);
     });
   }, []);
@@ -143,6 +146,14 @@ export default function CommandCenter() {
           color="var(--success)"
         />
       </div>
+
+      {/* Meeting Review */}
+      {meetingReview && (
+        <MeetingReviewCard data={meetingReview} navigate={navigate} onUpdate={() => {
+          api.get<any>('/api/meeting-review').catch(() => ({ meetings: [], summary: {} }))
+            .then((d) => setMeetingReview(d?.summary?.total_items > 0 ? d : null));
+        }} />
+      )}
 
       {/* Two column layout */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 20 }}>
@@ -336,6 +347,235 @@ export default function CommandCenter() {
       )}
 
       {/* Alert detail panel removed — alerts now expand inline */}
+    </div>
+  );
+}
+
+/* ---------- Meeting Review card ---------- */
+
+const entityColors: Record<string, string> = {
+  tasks: '#3b82f6',
+  stories: '#22c55e',
+  epics: '#a855f7',
+  initiatives: '#f97316',
+  decisions: '#f59e0b',
+};
+
+function MeetingReviewCard({ data, navigate, onUpdate }: {
+  data: any;
+  navigate: (path: string) => void;
+  onUpdate: () => void;
+}) {
+  const [expandedMeeting, setExpandedMeeting] = useState<string | null>(null);
+  const [filterAutoOnly, setFilterAutoOnly] = useState(false);
+  const [processedIds, setProcessedIds] = useState<Set<string>>(new Set());
+
+  const handleApprove = async (entityType: string, id: string) => {
+    try {
+      await api.post(`/api/approve/${entityType}/${id}`, {});
+      setProcessedIds((prev) => new Set(prev).add(id));
+      onUpdate();
+    } catch { /* ignore */ }
+  };
+
+  const handleDismiss = async (entityType: string, id: string) => {
+    try {
+      await api.post(`/api/dismiss/${entityType}/${id}`, {});
+      setProcessedIds((prev) => new Set(prev).add(id));
+      onUpdate();
+    } catch { /* ignore */ }
+  };
+
+  const navigateToItem = (item: any) => {
+    if (item.entity_type === 'tasks') navigate('/work');
+    else if (item.entity_type === 'decisions') navigate('/strategy?tab=decisions');
+    else navigate('/strategy?tab=hierarchy');
+  };
+
+  const meetings = data.meetings || [];
+  const summary = data.summary || {};
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: 24 }}>
+      <div style={{ ...cardHeaderStyle, justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Eye size={16} />
+          Meeting Review
+          <span style={{
+            fontSize: 11, color: 'var(--text-muted)', fontWeight: 400,
+            padding: '1px 8px', backgroundColor: 'var(--bg-secondary)', borderRadius: 10,
+          }}>
+            {summary.total_items || 0} new item{summary.total_items !== 1 ? 's' : ''} from {summary.meetings_count || 0} meeting{summary.meetings_count !== 1 ? 's' : ''}
+          </span>
+        </div>
+        <button
+          onClick={() => setFilterAutoOnly(!filterAutoOnly)}
+          style={{
+            fontSize: 11, fontWeight: 500, border: 'none', borderRadius: 8,
+            padding: '3px 10px', cursor: 'pointer', transition: 'all 0.1s',
+            backgroundColor: filterAutoOnly ? 'rgba(245,158,11,0.15)' : 'var(--bg-secondary)',
+            color: filterAutoOnly ? '#f59e0b' : 'var(--text-muted)',
+          }}
+        >
+          {filterAutoOnly ? 'Auto only' : 'All sources'}
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {meetings.map((meeting: any) => {
+          const items = (meeting.items || [])
+            .filter((i: any) => !processedIds.has(i.id))
+            .filter((i: any) => !filterAutoOnly || i.source === 'auto');
+          if (items.length === 0) return null;
+
+          const key = meeting.source_page_id || '__ungrouped__';
+          const isExpanded = expandedMeeting === key;
+
+          return (
+            <div key={key}>
+              {/* Meeting group header */}
+              <div
+                onClick={() => setExpandedMeeting(isExpanded ? null : key)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 12px', backgroundColor: isExpanded ? 'var(--bg-hover)' : 'var(--bg-secondary)',
+                  borderRadius: isExpanded ? 'var(--radius) var(--radius) 0 0' : 'var(--radius)',
+                  borderLeft: '3px solid var(--accent)',
+                  cursor: 'pointer', transition: 'background-color 0.1s',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                onMouseLeave={(e) => { if (!isExpanded) e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'; }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {meeting.source_title || 'Untitled Meeting'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', gap: 8 }}>
+                    <span>{items.length} item{items.length !== 1 ? 's' : ''}</span>
+                    {meeting.counts?.auto > 0 && (
+                      <span style={{ color: '#f59e0b' }}>{meeting.counts.auto} auto</span>
+                    )}
+                    {meeting.counts?.confirmed > 0 && (
+                      <span style={{ color: '#22c55e' }}>{meeting.counts.confirmed} confirmed</span>
+                    )}
+                  </div>
+                </div>
+                {isExpanded
+                  ? <ChevronDown size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                  : <ChevronRight size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                }
+              </div>
+
+              {/* Expanded items */}
+              {isExpanded && (
+                <div style={{
+                  backgroundColor: 'var(--bg-secondary)', borderLeft: '3px solid var(--accent)',
+                  borderRadius: '0 0 var(--radius) var(--radius)', padding: '8px 12px',
+                  borderTop: '1px solid var(--border)',
+                  display: 'flex', flexDirection: 'column', gap: 6,
+                }}>
+                  {items.map((item: any) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 8,
+                        padding: '8px 10px', backgroundColor: 'var(--bg-card)',
+                        borderRadius: 'var(--radius)', transition: 'background-color 0.1s',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-card)'}
+                    >
+                      {/* Entity type badge */}
+                      <span style={{
+                        fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+                        padding: '2px 6px', borderRadius: 6, flexShrink: 0, marginTop: 2,
+                        backgroundColor: `${entityColors[item.entity_type] || '#888'}20`,
+                        color: entityColors[item.entity_type] || '#888',
+                      }}>
+                        {item.entity_type === 'tasks' ? 'task' :
+                         item.entity_type === 'stories' ? 'story' :
+                         item.entity_type === 'initiatives' ? 'init' :
+                         item.entity_type === 'decisions' ? 'decision' :
+                         item.entity_type?.replace(/s$/, '')}
+                      </span>
+
+                      {/* Title + hierarchy + owner */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.title}
+                        </div>
+                        {item.hierarchy_path?.length > 0 && (
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {item.hierarchy_path.map((h: any) => h.title).join(' › ')}
+                          </div>
+                        )}
+                        {item.owner && (
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
+                            <User size={9} style={{ marginRight: 3, verticalAlign: 'middle' }} />
+                            {item.owner}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Source badge */}
+                      <span style={{
+                        fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+                        padding: '2px 6px', borderRadius: 6, flexShrink: 0, marginTop: 2,
+                        backgroundColor: item.source === 'auto' ? 'rgba(245,158,11,0.15)' : 'rgba(34,197,94,0.15)',
+                        color: item.source === 'auto' ? '#f59e0b' : '#22c55e',
+                      }}>
+                        {item.source}
+                      </span>
+
+                      {/* Actions */}
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginTop: 1 }}>
+                        {item.source === 'auto' && (
+                          <button
+                            title="Approve"
+                            onClick={(e) => { e.stopPropagation(); handleApprove(item.entity_type, item.id); }}
+                            style={{
+                              background: 'none', border: 'none', cursor: 'pointer', padding: 3,
+                              color: '#22c55e', borderRadius: 4, display: 'flex',
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(34,197,94,0.15)'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                          >
+                            <CheckCircle2 size={14} />
+                          </button>
+                        )}
+                        <button
+                          title="Dismiss"
+                          onClick={(e) => { e.stopPropagation(); handleDismiss(item.entity_type, item.id); }}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer', padding: 3,
+                            color: 'var(--danger)', borderRadius: 4, display: 'flex',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.15)'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
+                          <X size={14} />
+                        </button>
+                        <button
+                          title="View"
+                          onClick={(e) => { e.stopPropagation(); navigateToItem(item); }}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer', padding: 3,
+                            color: 'var(--text-muted)', borderRadius: 4, display: 'flex',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
