@@ -36,7 +36,13 @@ def _load_intel() -> dict:
 
 
 def _save_intel(data: dict) -> None:
-    _INTEL_FILE.write_text(json.dumps(data, indent=2, default=str))
+    logger.info("_save_intel: writing %d tasks to %s", len(data.get("smart_tasks", [])), _INTEL_FILE)
+    try:
+        _INTEL_FILE.write_text(json.dumps(data, indent=2, default=str))
+        logger.info("_save_intel: SUCCESS, file size = %d bytes", _INTEL_FILE.stat().st_size)
+    except Exception as e:
+        logger.error("_save_intel: FAILED: %s", e)
+        raise
 
 
 def _empty_intel() -> dict:
