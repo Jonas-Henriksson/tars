@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import {
-  Calendar, AlertTriangle, Mail, TrendingUp, CheckCircle2, ChevronRight, ChevronDown,
+  Calendar, AlertTriangle, Mail, TrendingUp, CheckCircle2, ChevronRight, ChevronDown, ChevronLeft,
   Target, Scale, Users, CalendarCheck, Clock, Zap, User, Package, Eye, X,
 } from 'lucide-react';
 
@@ -149,9 +149,10 @@ export default function CommandCenter() {
 
       {/* Meeting Review */}
       {meetingReview && (
-        <MeetingReviewCard data={meetingReview} navigate={navigate} onUpdate={() => {
-          api.get<any>('/api/meeting-review').catch(() => ({ meetings: [], summary: {} }))
-            .then((d) => setMeetingReview(d?.summary?.total_items > 0 ? d : null));
+        <MeetingReviewCard data={meetingReview} navigate={navigate} onUpdate={(date?: string) => {
+          const params = date ? `?date=${date}` : '';
+          api.get<any>(`/api/meeting-review${params}`).catch(() => ({ meetings: [], summary: {} }))
+            .then((d) => setMeetingReview(d || { meetings: [], summary: {} }));
         }} />
       )}
 
@@ -364,11 +365,35 @@ const entityColors: Record<string, string> = {
 function MeetingReviewCard({ data, navigate, onUpdate }: {
   data: any;
   navigate: (path: string) => void;
-  onUpdate: () => void;
+  onUpdate: (date?: string) => void;
 }) {
   const [expandedMeeting, setExpandedMeeting] = useState<string | null>(null);
   const [filterAutoOnly, setFilterAutoOnly] = useState(false);
   const [processedIds, setProcessedIds] = useState<Set<string>>(new Set());
+  const [selectedDate, setSelectedDate] = useState(() => {
+    // Use date from API response, or today
+    return data?.summary?.date || new Date().toISOString().split('T')[0];
+  });
+
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const changeDate = (delta: number) => {
+    const d = new Date(selectedDate + 'T12:00:00');
+    d.setDate(d.getDate() + delta);
+    const next = d.toISOString().split('T')[0];
+    setSelectedDate(next);
+    setProcessedIds(new Set());
+    onUpdate(next);
+  };
+
+  const formatDateLabel = (dateStr: string) => {
+    if (dateStr === todayStr) return 'Today';
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (dateStr === yesterday.toISOString().split('T')[0]) return 'Yesterday';
+    const d = new Date(dateStr + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
 
   const handleApprove = async (entityType: string, id: string) => {
     try {
@@ -405,30 +430,80 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
             fontSize: 11, color: 'var(--text-muted)', fontWeight: 400,
             padding: '1px 8px', backgroundColor: 'var(--bg-secondary)', borderRadius: 10,
           }}>
-            {summary.total_items || 0} new item{summary.total_items !== 1 ? 's' : ''} from {summary.meetings_count || 0} meeting{summary.meetings_count !== 1 ? 's' : ''}
+            {summary.total_items || 0} item{summary.total_items !== 1 ? 's' : ''}
+            {summary.meetings_count > 0 && ` from ${summary.meetings_count} source${summary.meetings_count !== 1 ? 's' : ''}`}
           </span>
         </div>
-        <button
-          onClick={() => setFilterAutoOnly(!filterAutoOnly)}
-          style={{
-            fontSize: 11, fontWeight: 500, border: 'none', borderRadius: 8,
-            padding: '3px 10px', cursor: 'pointer', transition: 'all 0.1s',
-            backgroundColor: filterAutoOnly ? 'rgba(245,158,11,0.15)' : 'var(--bg-secondary)',
-            color: filterAutoOnly ? '#f59e0b' : 'var(--text-muted)',
-          }}
-        >
-          {filterAutoOnly ? 'Auto only' : 'All sources'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Date navigation */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <button
+              onClick={() => changeDate(-1)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+                color: 'var(--text-muted)', borderRadius: 4, display: 'flex',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              title="Previous day"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <button
+              onClick={() => { setSelectedDate(todayStr); setProcessedIds(new Set()); onUpdate(todayStr); }}
+              style={{
+                fontSize: 11, fontWeight: 500, border: 'none', borderRadius: 6,
+                padding: '2px 8px', cursor: 'pointer', transition: 'all 0.1s',
+                backgroundColor: selectedDate === todayStr ? 'var(--bg-secondary)' : 'rgba(99,102,241,0.12)',
+                color: selectedDate === todayStr ? 'var(--text-muted)' : 'var(--accent)',
+                minWidth: 80, textAlign: 'center',
+              }}
+              title="Click to jump to today"
+            >
+              {formatDateLabel(selectedDate)}
+            </button>
+            <button
+              onClick={() => changeDate(1)}
+              disabled={selectedDate >= todayStr}
+              style={{
+                background: 'none', border: 'none', cursor: selectedDate >= todayStr ? 'default' : 'pointer',
+                padding: 4, color: selectedDate >= todayStr ? 'var(--border)' : 'var(--text-muted)',
+                borderRadius: 4, display: 'flex', opacity: selectedDate >= todayStr ? 0.3 : 1,
+              }}
+              onMouseEnter={(e) => { if (selectedDate < todayStr) e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              title="Next day"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+          <button
+            onClick={() => setFilterAutoOnly(!filterAutoOnly)}
+            style={{
+              fontSize: 11, fontWeight: 500, border: 'none', borderRadius: 8,
+              padding: '3px 10px', cursor: 'pointer', transition: 'all 0.1s',
+              backgroundColor: filterAutoOnly ? 'rgba(245,158,11,0.15)' : 'var(--bg-secondary)',
+              color: filterAutoOnly ? '#f59e0b' : 'var(--text-muted)',
+            }}
+          >
+            {filterAutoOnly ? 'Auto only' : 'All sources'}
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {meetings.length === 0 && (
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 20, textAlign: 'center' }}>
+            No items for {formatDateLabel(selectedDate).toLowerCase()}
+          </div>
+        )}
         {meetings.map((meeting: any) => {
           const items = (meeting.items || [])
             .filter((i: any) => !processedIds.has(i.id))
             .filter((i: any) => !filterAutoOnly || i.source === 'auto');
           if (items.length === 0) return null;
 
-          const key = meeting.source_page_id || '__ungrouped__';
+          const key = meeting.source_title || meeting.source_page_id || '__ungrouped__';
           const isExpanded = expandedMeeting === key;
 
           return (
@@ -448,7 +523,7 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
-                    {meeting.source_title || 'Untitled Meeting'}
+                    {meeting.source_title || 'Other items'}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', gap: 8 }}>
                     <span>{items.length} item{items.length !== 1 ? 's' : ''}</span>

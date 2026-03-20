@@ -443,13 +443,17 @@ async def get_weekly_review():
 # ---------------------------------------------------------------------------
 
 @router.get("/meeting-review")
-async def get_meeting_review(days: int = 3):
+async def get_meeting_review(days: int = 3, date: str = ""):
     """Aggregate recently created items across all entity types for review.
 
-    Groups items by their source meeting (via source_page_id) and resolves
+    Groups items by their source meeting (via source_title) and resolves
     hierarchy paths so the user can see where each item landed.
+
+    Query params:
+      date  – YYYY-MM-DD to show items created on that specific day only.
+      days  – fallback: show items created in the last N days (default 3).
     """
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timezone, timedelta, date as date_type
     from integrations.themes import get_themes
     from integrations.initiatives import get_initiatives
     from integrations.epics import get_epics, get_stories
@@ -457,9 +461,21 @@ async def get_meeting_review(days: int = 3):
     from integrations.decisions import get_decisions
 
     now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(days=days)
 
-    def _after_cutoff(item: dict) -> bool:
+    # Determine filter window
+    if date:
+        try:
+            target_date = date_type.fromisoformat(date)
+        except ValueError:
+            target_date = now.date()
+        day_start = datetime(target_date.year, target_date.month, target_date.day, tzinfo=timezone.utc)
+        day_end = day_start + timedelta(days=1)
+    else:
+        day_start = now - timedelta(days=days)
+        day_end = now + timedelta(days=1)  # include today fully
+        target_date = now.date()
+
+    def _in_window(item: dict) -> bool:
         ca = item.get("created_at", "")
         if not ca:
             return False
@@ -467,7 +483,7 @@ async def get_meeting_review(days: int = 3):
             dt = datetime.fromisoformat(ca)
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
-            return dt >= cutoff
+            return day_start <= dt < day_end
         except (ValueError, TypeError):
             return False
 
@@ -536,7 +552,7 @@ async def get_meeting_review(days: int = 3):
 
     # Tasks
     for t in tasks_list:
-        if not _after_cutoff(t):
+        if not _in_window(t):
             continue
         sid = t.get("story_id", "") or task_to_story.get(t.get("id", ""), "")
         all_items.append({
@@ -555,7 +571,7 @@ async def get_meeting_review(days: int = 3):
 
     # Stories
     for s in stories_list:
-        if not _after_cutoff(s):
+        if not _in_window(s):
             continue
         all_items.append({
             "id": s["id"],
@@ -573,7 +589,7 @@ async def get_meeting_review(days: int = 3):
 
     # Epics
     for e in epics_list:
-        if not _after_cutoff(e):
+        if not _in_window(e):
             continue
         all_items.append({
             "id": e["id"],
@@ -591,7 +607,7 @@ async def get_meeting_review(days: int = 3):
 
     # Initiatives
     for i in get_initiatives().get("initiatives", []):
-        if not _after_cutoff(i):
+        if not _in_window(i):
             continue
         all_items.append({
             "id": i["id"],
@@ -612,7 +628,7 @@ async def get_meeting_review(days: int = 3):
 
     # Decisions
     for d in decisions_list:
-        if not _after_cutoff(d):
+        if not _in_window(d):
             continue
         # Resolve hierarchy via linked_id if available
         h_path: list[dict] = []
@@ -640,13 +656,15 @@ async def get_meeting_review(days: int = 3):
         })
 
     # --- group by source meeting ---
+    # Use source_title as grouping key (smart tasks always have this set to the
+    # Notion page name).  Fall back to source_page_id, then "__ungrouped__".
     meetings_map: dict[str, dict] = {}
     for item in all_items:
-        key = item.get("source_page_id") or "__ungrouped__"
+        key = item.get("source_title") or item.get("source_page_id") or "__ungrouped__"
         if key not in meetings_map:
             meetings_map[key] = {
                 "source_page_id": item.get("source_page_id", ""),
-                "source_title": item.get("source_title", "") or ("Other / Manual" if key == "__ungrouped__" else ""),
+                "source_title": item.get("source_title", "") or ("Other items" if key == "__ungrouped__" else ""),
                 "source_url": item.get("source_url", ""),
                 "items": [],
                 "counts": {"auto": 0, "confirmed": 0, "total": 0},
@@ -674,6 +692,8 @@ async def get_meeting_review(days: int = 3):
 
     auto_total = sum(m["counts"]["auto"] for m in meetings)
     confirmed_total = sum(m["counts"]["confirmed"] for m in meetings)
+    # Count groups that have a real source title (= actual meeting/page sources)
+    source_groups = len([m for m in meetings if m["source_title"] and m["source_title"] != "Other items"])
 
     return JSONResponse({
         "meetings": meetings,
@@ -681,7 +701,9 @@ async def get_meeting_review(days: int = 3):
             "total_items": len(all_items),
             "auto_items": auto_total,
             "confirmed_items": confirmed_total,
-            "meetings_count": len([m for m in meetings if m["source_page_id"]]),
+            "meetings_count": source_groups,
+            "groups_count": len(meetings),
+            "date": target_date.isoformat(),
         },
     })
 
