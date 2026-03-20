@@ -147,15 +147,6 @@ export default function CommandCenter() {
         />
       </div>
 
-      {/* Meeting Review */}
-      {meetingReview && (
-        <MeetingReviewCard data={meetingReview} navigate={navigate} onUpdate={(date?: string) => {
-          const params = date ? `?date=${date}` : '';
-          api.get<any>(`/api/meeting-review${params}`).catch(() => ({ meetings: [], summary: {} }))
-            .then((d) => setMeetingReview(d || { meetings: [], summary: {} }));
-        }} />
-      )}
-
       {/* Two column layout */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 20 }}>
         {/* Alerts list */}
@@ -277,6 +268,15 @@ export default function CommandCenter() {
           </div>
         </div>
       </div>
+
+      {/* Meeting Review */}
+      {meetingReview && (
+        <MeetingReviewCard data={meetingReview} navigate={navigate} onUpdate={(date?: string) => {
+          const params = date ? `?date=${date}` : '';
+          api.get<any>(`/api/meeting-review${params}`).catch(() => ({ meetings: [], summary: {} }))
+            .then((d) => setMeetingReview(d || { meetings: [], summary: {} }));
+        }} />
+      )}
 
       {/* Next Meeting card */}
       {meetingPrep && (
