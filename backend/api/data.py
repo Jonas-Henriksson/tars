@@ -439,6 +439,254 @@ async def get_weekly_review():
 
 
 # ---------------------------------------------------------------------------
+# Meeting review (gating newly added items)
+# ---------------------------------------------------------------------------
+
+@router.get("/meeting-review")
+async def get_meeting_review(days: int = 3):
+    """Aggregate recently created items across all entity types for review.
+
+    Groups items by their source meeting (via source_page_id) and resolves
+    hierarchy paths so the user can see where each item landed.
+    """
+    from datetime import datetime, timezone, timedelta
+    from integrations.themes import get_themes
+    from integrations.initiatives import get_initiatives
+    from integrations.epics import get_epics, get_stories
+    from integrations.intel import get_smart_tasks
+    from integrations.decisions import get_decisions
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=days)
+
+    def _after_cutoff(item: dict) -> bool:
+        ca = item.get("created_at", "")
+        if not ca:
+            return False
+        try:
+            dt = datetime.fromisoformat(ca)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt >= cutoff
+        except (ValueError, TypeError):
+            return False
+
+    # Load all entities
+    themes = {t["id"]: t for t in get_themes().get("themes", [])}
+    initiatives = {i["id"]: i for i in get_initiatives().get("initiatives", [])}
+    epics_list = get_epics().get("epics", [])
+    epics = {e["id"]: e for e in epics_list}
+    stories_list = get_stories().get("stories", [])
+    stories = {s["id"]: s for s in stories_list}
+    _task_result = get_smart_tasks(include_done=True)
+    tasks_list = _task_result.get("tasks", _task_result.get("smart_tasks", []))
+    decisions_list = get_decisions(limit=0).get("decisions", [])
+
+    # Build reverse index: task_id -> story_id from stories' linked_task_ids
+    task_to_story: dict[str, str] = {}
+    for s in stories_list:
+        for tid in s.get("linked_task_ids", []):
+            task_to_story[tid] = s["id"]
+
+    # --- hierarchy path helpers ---
+    def _path_from_story(story_id: str) -> list[dict]:
+        path: list[dict] = []
+        s = stories.get(story_id)
+        if not s:
+            return path
+        path.insert(0, {"type": "story", "id": s["id"], "title": s.get("title", "")})
+        e = epics.get(s.get("epic_id", ""))
+        if e:
+            path.insert(0, {"type": "epic", "id": e["id"], "title": e.get("title", "")})
+            init = initiatives.get(e.get("initiative_id", ""))
+            if init:
+                path.insert(0, {"type": "initiative", "id": init["id"], "title": init.get("title", "")})
+                th = themes.get(init.get("theme_id", ""))
+                if th:
+                    path.insert(0, {"type": "theme", "id": th["id"], "title": th.get("title", "")})
+        return path
+
+    def _path_from_epic(epic_id: str) -> list[dict]:
+        path: list[dict] = []
+        e = epics.get(epic_id)
+        if not e:
+            return path
+        path.insert(0, {"type": "epic", "id": e["id"], "title": e.get("title", "")})
+        init = initiatives.get(e.get("initiative_id", ""))
+        if init:
+            path.insert(0, {"type": "initiative", "id": init["id"], "title": init.get("title", "")})
+            th = themes.get(init.get("theme_id", ""))
+            if th:
+                path.insert(0, {"type": "theme", "id": th["id"], "title": th.get("title", "")})
+        return path
+
+    def _path_from_initiative(init_id: str) -> list[dict]:
+        path: list[dict] = []
+        init = initiatives.get(init_id)
+        if not init:
+            return path
+        path.insert(0, {"type": "initiative", "id": init["id"], "title": init.get("title", "")})
+        th = themes.get(init.get("theme_id", ""))
+        if th:
+            path.insert(0, {"type": "theme", "id": th["id"], "title": th.get("title", "")})
+        return path
+
+    # --- collect recent items ---
+    all_items: list[dict] = []
+
+    # Tasks
+    for t in tasks_list:
+        if not _after_cutoff(t):
+            continue
+        sid = t.get("story_id", "") or task_to_story.get(t.get("id", ""), "")
+        all_items.append({
+            "id": t["id"],
+            "entity_type": "tasks",
+            "title": t.get("description", ""),
+            "owner": t.get("owner", ""),
+            "source": t.get("source", "auto"),
+            "created_at": t.get("created_at", ""),
+            "confidence": t.get("confidence"),
+            "source_page_id": t.get("source_page_id", ""),
+            "source_title": t.get("source_title", ""),
+            "source_url": t.get("source_url", ""),
+            "hierarchy_path": _path_from_story(sid) if sid else [],
+        })
+
+    # Stories
+    for s in stories_list:
+        if not _after_cutoff(s):
+            continue
+        all_items.append({
+            "id": s["id"],
+            "entity_type": "stories",
+            "title": s.get("title", ""),
+            "owner": s.get("owner", ""),
+            "source": s.get("source", "auto"),
+            "created_at": s.get("created_at", ""),
+            "confidence": None,
+            "source_page_id": s.get("source_page_id", ""),
+            "source_title": s.get("source_title", ""),
+            "source_url": s.get("source_url", ""),
+            "hierarchy_path": _path_from_epic(s.get("epic_id", "")),
+        })
+
+    # Epics
+    for e in epics_list:
+        if not _after_cutoff(e):
+            continue
+        all_items.append({
+            "id": e["id"],
+            "entity_type": "epics",
+            "title": e.get("title", ""),
+            "owner": e.get("owner", ""),
+            "source": e.get("source", "auto"),
+            "created_at": e.get("created_at", ""),
+            "confidence": None,
+            "source_page_id": e.get("source_page_id", ""),
+            "source_title": e.get("source_title", ""),
+            "source_url": e.get("source_url", ""),
+            "hierarchy_path": _path_from_initiative(e.get("initiative_id", "")),
+        })
+
+    # Initiatives
+    for i in get_initiatives().get("initiatives", []):
+        if not _after_cutoff(i):
+            continue
+        all_items.append({
+            "id": i["id"],
+            "entity_type": "initiatives",
+            "title": i.get("title", ""),
+            "owner": i.get("owner", ""),
+            "source": i.get("source", "auto"),
+            "created_at": i.get("created_at", ""),
+            "confidence": None,
+            "source_page_id": i.get("source_page_id", ""),
+            "source_title": i.get("source_title", ""),
+            "source_url": i.get("source_url", ""),
+            "hierarchy_path": (
+                [{"type": "theme", "id": themes[i["theme_id"]]["id"], "title": themes[i["theme_id"]].get("title", "")}]
+                if i.get("theme_id") and i["theme_id"] in themes else []
+            ),
+        })
+
+    # Decisions
+    for d in decisions_list:
+        if not _after_cutoff(d):
+            continue
+        # Resolve hierarchy via linked_id if available
+        h_path: list[dict] = []
+        lt = d.get("linked_type", "")
+        lid = d.get("linked_id", "")
+        if lt == "initiative" and lid:
+            h_path = _path_from_initiative(lid)
+        elif lt == "epic" and lid:
+            h_path = _path_from_epic(lid)
+        elif lt == "story" and lid:
+            h_path = _path_from_story(lid)
+
+        all_items.append({
+            "id": d["id"],
+            "entity_type": "decisions",
+            "title": d.get("title", ""),
+            "owner": d.get("decided_by", ""),
+            "source": d.get("source", "manual"),
+            "created_at": d.get("created_at", ""),
+            "confidence": None,
+            "source_page_id": d.get("source_page_id", ""),
+            "source_title": d.get("source_title", ""),
+            "source_url": d.get("source_url", ""),
+            "hierarchy_path": h_path,
+        })
+
+    # --- group by source meeting ---
+    meetings_map: dict[str, dict] = {}
+    for item in all_items:
+        key = item.get("source_page_id") or "__ungrouped__"
+        if key not in meetings_map:
+            meetings_map[key] = {
+                "source_page_id": item.get("source_page_id", ""),
+                "source_title": item.get("source_title", "") or ("Other / Manual" if key == "__ungrouped__" else ""),
+                "source_url": item.get("source_url", ""),
+                "items": [],
+                "counts": {"auto": 0, "confirmed": 0, "total": 0},
+            }
+        # Backfill title/url if a later item has it
+        if not meetings_map[key]["source_title"] and item.get("source_title"):
+            meetings_map[key]["source_title"] = item["source_title"]
+        if not meetings_map[key]["source_url"] and item.get("source_url"):
+            meetings_map[key]["source_url"] = item["source_url"]
+
+        # Remove transient fields from the item before appending
+        clean_item = {k: v for k, v in item.items() if k not in ("source_page_id", "source_title", "source_url")}
+        meetings_map[key]["items"].append(clean_item)
+        meetings_map[key]["counts"]["total"] += 1
+        if item.get("source") == "auto":
+            meetings_map[key]["counts"]["auto"] += 1
+        else:
+            meetings_map[key]["counts"]["confirmed"] += 1
+
+    # Sort meetings by most recent item first; sort items within each by entity hierarchy order
+    entity_order = {"initiatives": 0, "epics": 1, "stories": 2, "tasks": 3, "decisions": 4}
+    meetings = sorted(meetings_map.values(), key=lambda m: max((i.get("created_at", "") for i in m["items"]), default=""), reverse=True)
+    for m in meetings:
+        m["items"].sort(key=lambda i: entity_order.get(i.get("entity_type", ""), 9))
+
+    auto_total = sum(m["counts"]["auto"] for m in meetings)
+    confirmed_total = sum(m["counts"]["confirmed"] for m in meetings)
+
+    return JSONResponse({
+        "meetings": meetings,
+        "summary": {
+            "total_items": len(all_items),
+            "auto_items": auto_total,
+            "confirmed_items": confirmed_total,
+            "meetings_count": len([m for m in meetings if m["source_page_id"]]),
+        },
+    })
+
+
+# ---------------------------------------------------------------------------
 # Analytics
 # ---------------------------------------------------------------------------
 
