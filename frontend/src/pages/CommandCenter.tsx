@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import {
   Calendar, AlertTriangle, Mail, TrendingUp, CheckCircle2, ChevronRight, ChevronDown, ChevronLeft,
-  Target, Scale, Users, CalendarCheck, Clock, Zap, User, Package, Eye, X,
+  Target, Scale, Users, CalendarCheck, Clock, Zap, User, Package, Eye, X, Pencil,
 } from 'lucide-react';
 
 interface AlertData {
@@ -374,19 +374,82 @@ const _ENTITY_LABEL: Record<string, string> = {
   tasks: 'task', stories: 'story', epics: 'epic', initiatives: 'init', decisions: 'decision',
 };
 
-function MeetingReviewItem({ item, onReview, onDismiss, onNavigate }: {
+// --- Hierarchy picker (reused from Work.tsx pattern) ---
+const _HIER_COLORS: Record<string, string> = {
+  theme: '#8b5cf6', initiative: '#3b82f6', epic: '#10b981', story: '#f59e0b',
+};
+
+function ReviewHierPicker({ node, depth, search, onSelect }: {
+  node: any; depth: number; search: string; onSelect: (storyId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(depth < 1);
+  const children: any[] = (node.children || []).filter((c: any) => c.type);
+  const isStory = node.type === 'story';
+  const hasChildren = children.length > 0;
+  const matchesSelf = search && (node.title || '').toLowerCase().includes(search.toLowerCase());
+  const hasDescMatch = search ? reviewCheckDescMatch(node, search) : true;
+  if (search && !matchesSelf && !hasDescMatch) return null;
+  const eff = (search && hasDescMatch && !matchesSelf) ? true : expanded;
+
+  return (
+    <div>
+      <div
+        onClick={() => { if (isStory) { onSelect(node.id); return; } if (hasChildren) setExpanded(!expanded); }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px',
+          paddingLeft: depth * 14 + 6, cursor: isStory || hasChildren ? 'pointer' : 'default',
+          borderRadius: 4, transition: 'background-color 0.1s',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+      >
+        {hasChildren
+          ? <span onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }} style={{ display: 'flex', padding: 1 }}>
+              {eff ? <ChevronDown size={10} /> : <span style={{ display: 'inline-block', width: 10, textAlign: 'center', fontSize: 10, color: 'var(--text-muted)' }}>›</span>}
+            </span>
+          : <span style={{ width: 12 }} />
+        }
+        <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: _HIER_COLORS[node.type] || '#666', minWidth: 28 }}>
+          {(node.type || '').slice(0, 4)}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: matchesSelf ? 600 : 400 }}>
+          {node.title || '(untitled)'}
+        </span>
+      </div>
+      {eff && hasChildren && children.map((c: any) => (
+        <ReviewHierPicker key={c.id} node={c} depth={depth + 1} search={search} onSelect={onSelect} />
+      ))}
+    </div>
+  );
+}
+
+function reviewCheckDescMatch(node: any, search: string): boolean {
+  for (const c of (node.children || []).filter((c: any) => c.type)) {
+    if ((c.title || '').toLowerCase().includes(search.toLowerCase())) return true;
+    if (reviewCheckDescMatch(c, search)) return true;
+  }
+  return false;
+}
+
+function MeetingReviewItem({ item, hierTree, onReview, onDismiss, onNavigate, onUpdate }: {
   item: any;
+  hierTree: any[];
   onReview: (entityType: string, id: string, title: string) => void;
   onDismiss: (entityType: string, id: string, title: string) => void;
   onNavigate: (item: any) => void;
+  onUpdate: () => void;
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(item.title || '');
   const [editingOwner, setEditingOwner] = useState(false);
   const [ownerVal, setOwnerVal] = useState(item.owner || '');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [classification, setClassification] = useState(item.classification || 'unclassified');
 
   const titleKey = item.entity_type === 'tasks' ? 'description' : 'title';
   const endpoint = _ENTITY_ENDPOINTS[item.entity_type];
+  const isTask = item.entity_type === 'tasks';
 
   const saveTitle = () => {
     setEditingTitle(false);
@@ -405,155 +468,272 @@ function MeetingReviewItem({ item, onReview, onDismiss, onNavigate }: {
     }
   };
 
+  const linkToStory = (storyId: string) => {
+    api.post<any>(`/api/stories/${storyId}/link-task`, { task_id: item.id }).then(() => {
+      setPickerOpen(false);
+      setPickerSearch('');
+      onUpdate();
+    }).catch(() => {});
+  };
+
+  const markOperational = () => {
+    setClassification('operational');
+    api.post<any>(`/api/intel/tasks/${item.id}/assign`, { classification: 'operational' }).catch(() => {});
+  };
+
+  const markStrategic = () => {
+    setClassification('unclassified');
+    api.post<any>(`/api/intel/tasks/${item.id}/assign`, { classification: 'unclassified' }).catch(() => {});
+  };
+
   const hierColor: Record<string, string> = {
     theme: '#64748b', initiative: '#f97316', epic: '#a855f7', story: '#22c55e',
   };
 
+  const isOperational = classification === 'operational';
+
   return (
-    <div
-      style={{
-        display: 'flex', alignItems: 'flex-start', gap: 8,
-        padding: '8px 10px', backgroundColor: 'var(--bg-card)',
-        borderRadius: 'var(--radius)', transition: 'background-color 0.1s',
-      }}
-      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-card)'}
-    >
-      {/* Entity type badge */}
-      <span style={{
-        fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
-        padding: '2px 6px', borderRadius: 6, flexShrink: 0, marginTop: 2,
-        backgroundColor: `${entityColors[item.entity_type] || '#888'}20`,
-        color: entityColors[item.entity_type] || '#888',
-      }}>
-        {_ENTITY_LABEL[item.entity_type] || item.entity_type?.replace(/s$/, '')}
-      </span>
-
-      {/* Title + hierarchy + owner — all inline-editable */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Editable title */}
-        {editingTitle ? (
-          <input
-            autoFocus
-            value={titleVal}
-            onChange={(e) => setTitleVal(e.target.value)}
-            onBlur={saveTitle}
-            onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setTitleVal(item.title); setEditingTitle(false); } }}
-            style={{
-              fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', width: '100%',
-              background: 'var(--bg-secondary)', border: '1px solid var(--accent)',
-              borderRadius: 4, padding: '2px 6px', outline: 'none',
-            }}
-          />
-        ) : (
-          <div
-            onClick={() => setEditingTitle(true)}
-            title="Click to edit title"
-            style={{
-              fontSize: 12, fontWeight: 500, color: 'var(--text-primary)',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              cursor: 'text', borderRadius: 3, padding: '1px 0',
-            }}
-          >
-            {item.title}
-          </div>
-        )}
-
-        {/* Hierarchy path — clickable to navigate */}
-        {item.hierarchy_path?.length > 0 ? (
-          <div style={{ fontSize: 10, marginTop: 2, display: 'flex', alignItems: 'center', gap: 2, overflow: 'hidden' }}>
-            {item.hierarchy_path.map((h: any, idx: number) => (
-              <React.Fragment key={h.id}>
-                {idx > 0 && <span style={{ color: 'var(--text-muted)' }}> › </span>}
-                <span style={{ color: hierColor[h.type] || 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                  {h.title}
-                </span>
-              </React.Fragment>
-            ))}
-          </div>
-        ) : (
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, fontStyle: 'italic' }}>
-            No hierarchy assigned
-          </div>
-        )}
-
-        {/* Editable owner */}
-        {editingOwner ? (
-          <input
-            autoFocus
-            value={ownerVal}
-            onChange={(e) => setOwnerVal(e.target.value)}
-            onBlur={saveOwner}
-            onKeyDown={(e) => { if (e.key === 'Enter') saveOwner(); if (e.key === 'Escape') { setOwnerVal(item.owner); setEditingOwner(false); } }}
-            style={{
-              fontSize: 10, color: 'var(--text-primary)', marginTop: 2,
-              background: 'var(--bg-secondary)', border: '1px solid var(--accent)',
-              borderRadius: 3, padding: '1px 4px', outline: 'none', width: 120,
-            }}
-          />
-        ) : (
-          <div
-            onClick={() => { setOwnerVal(item.owner || ''); setEditingOwner(true); }}
-            title="Click to edit owner"
-            style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1, cursor: 'text', display: 'flex', alignItems: 'center', gap: 3 }}
-          >
-            <User size={9} />
-            {item.owner || 'Unassigned'}
-          </div>
-        )}
-      </div>
-
-      {/* Created timestamp */}
-      {item.created_at && (
-        <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, marginTop: 3, whiteSpace: 'nowrap' }}>
-          {(() => {
-            const d = new Date(item.created_at);
-            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-              + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-          })()}
+    <div style={{ position: 'relative' }}>
+      <div
+        style={{
+          display: 'flex', alignItems: 'flex-start', gap: 8,
+          padding: '8px 10px', backgroundColor: 'var(--bg-card)',
+          borderRadius: pickerOpen ? 'var(--radius) var(--radius) 0 0' : 'var(--radius)',
+          transition: 'background-color 0.1s',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-card)'}
+      >
+        {/* Entity type badge */}
+        <span style={{
+          fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+          padding: '2px 6px', borderRadius: 6, flexShrink: 0, marginTop: 2,
+          backgroundColor: `${entityColors[item.entity_type] || '#888'}20`,
+          color: entityColors[item.entity_type] || '#888',
+        }}>
+          {_ENTITY_LABEL[item.entity_type] || item.entity_type?.replace(/s$/, '')}
         </span>
-      )}
 
-      {/* Source badge */}
-      <span style={{
-        fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
-        padding: '2px 6px', borderRadius: 6, flexShrink: 0, marginTop: 2,
-        backgroundColor: item.source === 'auto' ? 'rgba(245,158,11,0.15)' : 'rgba(34,197,94,0.15)',
-        color: item.source === 'auto' ? '#f59e0b' : '#22c55e',
-      }}>
-        {item.source}
-      </span>
+        {/* Title + hierarchy + owner */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Editable title */}
+          {editingTitle ? (
+            <input
+              autoFocus
+              value={titleVal}
+              onChange={(e) => setTitleVal(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setTitleVal(item.title); setEditingTitle(false); } }}
+              style={{
+                fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', width: '100%',
+                background: 'var(--bg-secondary)', border: '1px solid var(--accent)',
+                borderRadius: 4, padding: '2px 6px', outline: 'none',
+              }}
+            />
+          ) : (
+            <div
+              onClick={() => setEditingTitle(true)}
+              title="Click to edit title"
+              style={{
+                fontSize: 12, fontWeight: 500, color: 'var(--text-primary)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                cursor: 'text', borderRadius: 3, padding: '1px 0',
+              }}
+            >
+              {item.title}
+            </div>
+          )}
 
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginTop: 1 }}>
-        <button
-          title="Review (approve &amp; remove from review)"
-          onClick={(e) => { e.stopPropagation(); onReview(item.entity_type, item.id, item.title); }}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3, color: '#22c55e', borderRadius: 4, display: 'flex' }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(34,197,94,0.15)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-        >
-          <CheckCircle2 size={14} />
-        </button>
-        <button
-          title="Dismiss (delete item)"
-          onClick={(e) => { e.stopPropagation(); onDismiss(item.entity_type, item.id, item.title); }}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3, color: 'var(--danger)', borderRadius: 4, display: 'flex' }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.15)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-        >
-          <X size={14} />
-        </button>
-        <button
-          title="View"
-          onClick={(e) => { e.stopPropagation(); onNavigate(item); }}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3, color: 'var(--text-muted)', borderRadius: 4, display: 'flex' }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-        >
-          <ChevronRight size={14} />
-        </button>
+          {/* Hierarchy path with link button */}
+          <div style={{ fontSize: 10, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+            {isOperational ? (
+              <span style={{ color: '#64748b', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 4 }}>
+                Operational
+                {isTask && (
+                  <button
+                    onClick={() => markStrategic()}
+                    title="Remove operational classification"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 1, color: 'var(--text-muted)', display: 'flex', borderRadius: 3 }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                  >
+                    <X size={9} />
+                  </button>
+                )}
+              </span>
+            ) : item.hierarchy_path?.length > 0 ? (
+              <>
+                {item.hierarchy_path.map((h: any, idx: number) => (
+                  <React.Fragment key={h.id}>
+                    {idx > 0 && <span style={{ color: 'var(--text-muted)' }}> › </span>}
+                    <span style={{ color: hierColor[h.type] || 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      {h.title}
+                    </span>
+                  </React.Fragment>
+                ))}
+                {isTask && (
+                  <button
+                    onClick={() => setPickerOpen(!pickerOpen)}
+                    title="Change hierarchy link"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 1, color: 'var(--text-muted)', display: 'flex', borderRadius: 3, flexShrink: 0 }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                  >
+                    <Pencil size={9} />
+                  </button>
+                )}
+              </>
+            ) : (
+              <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 4 }}>
+                No hierarchy assigned
+                {isTask && (
+                  <>
+                    <button
+                      onClick={() => setPickerOpen(!pickerOpen)}
+                      title="Link to story in hierarchy"
+                      style={{
+                        fontSize: 9, fontWeight: 500, border: 'none', borderRadius: 4, padding: '1px 6px',
+                        cursor: 'pointer', backgroundColor: 'rgba(99,102,241,0.1)', color: 'var(--accent)',
+                        display: 'flex', alignItems: 'center', gap: 3,
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(99,102,241,0.2)'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(99,102,241,0.1)'}
+                    >
+                      + Link
+                    </button>
+                    <button
+                      onClick={markOperational}
+                      title="Mark as operational (not strategic)"
+                      style={{
+                        fontSize: 9, fontWeight: 500, border: 'none', borderRadius: 4, padding: '1px 6px',
+                        cursor: 'pointer', backgroundColor: 'rgba(100,116,139,0.1)', color: '#64748b',
+                        display: 'flex', alignItems: 'center', gap: 3,
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(100,116,139,0.2)'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(100,116,139,0.1)'}
+                    >
+                      Operational
+                    </button>
+                  </>
+                )}
+              </span>
+            )}
+          </div>
+
+          {/* Editable owner */}
+          {editingOwner ? (
+            <input
+              autoFocus
+              value={ownerVal}
+              onChange={(e) => setOwnerVal(e.target.value)}
+              onBlur={saveOwner}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveOwner(); if (e.key === 'Escape') { setOwnerVal(item.owner); setEditingOwner(false); } }}
+              style={{
+                fontSize: 10, color: 'var(--text-primary)', marginTop: 2,
+                background: 'var(--bg-secondary)', border: '1px solid var(--accent)',
+                borderRadius: 3, padding: '1px 4px', outline: 'none', width: 120,
+              }}
+            />
+          ) : (
+            <div
+              onClick={() => { setOwnerVal(item.owner || ''); setEditingOwner(true); }}
+              title="Click to edit owner"
+              style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1, cursor: 'text', display: 'flex', alignItems: 'center', gap: 3 }}
+            >
+              <User size={9} />
+              {item.owner || 'Unassigned'}
+            </div>
+          )}
+        </div>
+
+        {/* Created timestamp */}
+        {item.created_at && (
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, marginTop: 3, whiteSpace: 'nowrap' }}>
+            {(() => {
+              const d = new Date(item.created_at);
+              return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+            })()}
+          </span>
+        )}
+
+        {/* Source badge */}
+        <span style={{
+          fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+          padding: '2px 6px', borderRadius: 6, flexShrink: 0, marginTop: 2,
+          backgroundColor: item.source === 'auto' ? 'rgba(245,158,11,0.15)' : 'rgba(34,197,94,0.15)',
+          color: item.source === 'auto' ? '#f59e0b' : '#22c55e',
+        }}>
+          {item.source}
+        </span>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginTop: 1 }}>
+          <button
+            title="Review (approve &amp; remove from review)"
+            onClick={(e) => { e.stopPropagation(); onReview(item.entity_type, item.id, item.title); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3, color: '#22c55e', borderRadius: 4, display: 'flex' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(34,197,94,0.15)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <CheckCircle2 size={14} />
+          </button>
+          <button
+            title="Dismiss (delete item)"
+            onClick={(e) => { e.stopPropagation(); onDismiss(item.entity_type, item.id, item.title); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3, color: 'var(--danger)', borderRadius: 4, display: 'flex' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.15)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <X size={14} />
+          </button>
+          <button
+            title="View"
+            onClick={(e) => { e.stopPropagation(); onNavigate(item); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3, color: 'var(--text-muted)', borderRadius: 4, display: 'flex' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
       </div>
+
+      {/* Hierarchy picker dropdown */}
+      {pickerOpen && isTask && (
+        <div style={{
+          border: '1px solid var(--border)', borderTop: 'none',
+          borderRadius: '0 0 var(--radius) var(--radius)',
+          backgroundColor: 'var(--bg-secondary)', overflow: 'hidden',
+        }}>
+          <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Eye size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+            <input
+              autoFocus
+              value={pickerSearch}
+              onChange={(e) => setPickerSearch(e.target.value)}
+              placeholder="Search hierarchy..."
+              style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontSize: 12, color: 'var(--text-primary)' }}
+            />
+            <button
+              onClick={() => { setPickerOpen(false); setPickerSearch(''); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-muted)', display: 'flex' }}
+            >
+              <X size={12} />
+            </button>
+          </div>
+          <div style={{ maxHeight: 220, overflowY: 'auto', padding: 4 }}>
+            {hierTree.map((theme: any) => (
+              <ReviewHierPicker key={theme.id} node={theme} depth={0} search={pickerSearch} onSelect={linkToStory} />
+            ))}
+            {hierTree.length === 0 && (
+              <div style={{ padding: 12, fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
+                No hierarchy available
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -570,6 +750,12 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
     return data?.summary?.date || new Date().toISOString().split('T')[0];
   });
   const [undoStack, setUndoStack] = useState<{ label: string; items: { entity_type: string; id: string }[] }[]>([]);
+  const [hierTree, setHierTree] = useState<any[]>([]);
+
+  // Load hierarchy tree for linking tasks
+  useEffect(() => {
+    api.get<any>('/api/hierarchy').then((d) => setHierTree(d.tree || [])).catch(() => {});
+  }, []);
 
   const todayStr = new Date().toISOString().split('T')[0];
   const currentDateParam = dateMode === 'single' ? selectedDate : undefined;
@@ -818,9 +1004,11 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
                     <MeetingReviewItem
                       key={item.id}
                       item={item}
+                      hierTree={hierTree}
                       onReview={handleReview}
                       onDismiss={handleDismiss}
                       onNavigate={navigateToItem}
+                      onUpdate={() => onUpdate(currentDateParam)}
                     />
                   ))}
                 </div>

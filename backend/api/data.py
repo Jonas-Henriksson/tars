@@ -697,6 +697,7 @@ async def get_meeting_review(days: int = 3, date: str = ""):
             "source": t.get("source", "auto"),
             "created_at": t.get("created_at", ""),
             "confidence": t.get("confidence"),
+            "classification": t.get("classification", "unclassified"),
             "source_page_id": t.get("source_page_id", ""),
             "source_title": t.get("source_title", ""),
             "source_url": t.get("source_url", ""),
