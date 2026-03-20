@@ -399,7 +399,7 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
     try {
       await api.post(`/api/approve/${entityType}/${id}`, {});
       setProcessedIds((prev) => new Set(prev).add(id));
-      onUpdate();
+      onUpdate(selectedDate);
     } catch { /* ignore */ }
   };
 
@@ -407,7 +407,7 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
     try {
       await api.post(`/api/dismiss/${entityType}/${id}`, {});
       setProcessedIds((prev) => new Set(prev).add(id));
-      onUpdate();
+      onUpdate(selectedDate);
     } catch { /* ignore */ }
   };
 
@@ -605,6 +605,19 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
                           </div>
                         )}
                       </div>
+
+                      {/* Created timestamp */}
+                      {item.created_at && (
+                        <span style={{
+                          fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, marginTop: 3, whiteSpace: 'nowrap',
+                        }}>
+                          {(() => {
+                            const d = new Date(item.created_at);
+                            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                              + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+                          })()}
+                        </span>
+                      )}
 
                       {/* Source badge */}
                       <span style={{
