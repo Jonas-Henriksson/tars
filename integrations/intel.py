@@ -202,6 +202,87 @@ async def _llm_extract_metadata(title: str, content: str) -> dict | None:
         return None
 
 
+async def _describe_images(images: list[dict], page_title: str) -> list[dict]:
+    """Use Claude vision to describe images from a Notion page.
+
+    Args:
+        images: List of dicts with 'url' and optional 'caption'.
+        page_title: Page title for context.
+
+    Returns:
+        List of dicts with 'url', 'caption', and 'description'.
+    """
+    client = _get_llm_client()
+    if client is None or not images:
+        return []
+
+    results = []
+    for img in images[:5]:  # Cap at 5 images per page to control cost
+        url = img.get("url", "")
+        caption = img.get("caption", "")
+        if not url:
+            continue
+
+        try:
+            # Fetch the image bytes
+            import httpx
+            async with httpx.AsyncClient(timeout=15) as http:
+                resp = await http.get(url)
+                if resp.status_code != 200:
+                    logger.debug("Failed to fetch image for '%s': HTTP %d", page_title, resp.status_code)
+                    continue
+                image_bytes = resp.content
+                content_type = resp.headers.get("content-type", "image/png")
+                # Normalize content type for Claude API
+                if "jpeg" in content_type or "jpg" in content_type:
+                    media_type = "image/jpeg"
+                elif "gif" in content_type:
+                    media_type = "image/gif"
+                elif "webp" in content_type:
+                    media_type = "image/webp"
+                else:
+                    media_type = "image/png"
+
+            import base64
+            b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
+
+            # Skip very large images (>5MB base64 ~ 3.75MB raw)
+            if len(b64) > 5_000_000:
+                logger.debug("Skipping oversized image in '%s'", page_title)
+                continue
+
+            context = f"Page: {page_title}"
+            if caption:
+                context += f"\nCaption: {caption}"
+
+            response = await asyncio.to_thread(
+                client.messages.create,
+                model="claude-haiku-4-5-20251001",
+                max_tokens=300,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {"type": "base64", "media_type": media_type, "data": b64},
+                        },
+                        {
+                            "type": "text",
+                            "text": f"{context}\n\nDescribe this image concisely — focus on data, text, diagrams, or key visual information relevant to a business/meeting context. 2-3 sentences max.",
+                        },
+                    ],
+                }],
+            )
+            description = response.content[0].text.strip()
+            results.append({"url": url, "caption": caption, "description": description})
+            logger.info("Described image in '%s': %s", page_title, description[:80])
+
+        except Exception as exc:
+            logger.warning("Image description failed for '%s': %s", page_title, exc)
+
+    return results
+
+
 def _extract_source_context(text: str, description: str, window: int = 300) -> str:
     """Extract surrounding text around where a task was found in the source.
 
@@ -653,14 +734,25 @@ async def scan_notion(
 
     async def _process_page_content(
         title: str, content: str, page_url: str, page_id: str, page_date: str,
+        images: list[dict] | None = None,
     ) -> None:
         """Process a single page's content for topics, people, and tasks."""
         nonlocal pages_with_content
 
-        if not content.strip():
+        if not content.strip() and not images:
             logger.debug("Intel scan: skipping empty page '%s'", title)
             return
         pages_with_content += 1
+
+        # Describe images via vision and append to content
+        image_descriptions = []
+        if images:
+            image_descriptions = await _describe_images(images, title)
+            if image_descriptions:
+                content += "\n\n[Images in this page]\n"
+                for img_desc in image_descriptions:
+                    label = img_desc.get("caption") or "Image"
+                    content += f"• {label}: {img_desc['description']}\n"
 
         # Check LLM cache — skip extraction if page hasn't changed
         existing_page = intel.get("page_index", {}).get(page_id, {})
@@ -722,6 +814,10 @@ async def scan_notion(
             "summary": summary,
             "last_edited": page_date,
             "llm_extracted_at": llm_ts,
+            "images": [
+                {"url": d.get("url", ""), "caption": d.get("caption", ""), "description": d.get("description", "")}
+                for d in image_descriptions
+            ] if image_descriptions else [],
         }
 
         # Detect delegations -> smart tasks
@@ -844,8 +940,10 @@ async def scan_notion(
         page_url = page.get("url", "")
         page_date = page.get("last_edited_time", "")
 
+        page_images = content_data.get("image_urls", [])
+
         # Process the main page content (Summary)
-        await _process_page_content(title, content, page_url, page["id"], page_date)
+        await _process_page_content(title, content, page_url, page["id"], page_date, images=page_images)
 
         # Process child pages (e.g. Summary, Transcript tabs from meeting tools)
         for child in content_data.get("child_pages", []):
@@ -853,11 +951,13 @@ async def scan_notion(
                 child_data = await get_page_content(child["id"])
                 child_title = child.get("title", "") or child_data.get("title", "")
                 child_content = child_data.get("content", "")
+                child_images = child_data.get("image_urls", [])
                 logger.info("Intel scan: reading child page '%s' of '%s'", child_title, title)
                 # Use parent title as source for better context
                 source_title = f"{title} > {child_title}" if child_title else title
                 await _process_page_content(
                     source_title, child_content, page_url, child["id"], page_date,
+                    images=child_images,
                 )
             except Exception as exc:
                 logger.warning("Failed to read child page %s: %s", child.get("title", "?"), exc)

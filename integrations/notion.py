@@ -65,6 +65,19 @@ def _extract_block_text(block: dict) -> str:
     return ""
 
 
+def _extract_image_url(block: dict) -> str | None:
+    """Extract image URL from an image block, if present."""
+    if block.get("type") != "image":
+        return None
+    img = block.get("image", {})
+    # Notion images can be "file" (hosted by Notion) or "external"
+    if img.get("type") == "file":
+        return img.get("file", {}).get("url")
+    elif img.get("type") == "external":
+        return img.get("external", {}).get("url")
+    return None
+
+
 def _format_page(page: dict) -> dict[str, Any]:
     """Format a Notion page object into a clean dict."""
     props = page.get("properties", {})
@@ -191,12 +204,18 @@ async def get_page_content(page_id: str, recurse: bool = True) -> dict:
 
     lines = []
     child_pages = []
+    image_urls = []
     for block in blocks:
         block_type = block.get("type", "")
         # Track child pages for callers that want to recurse into them
         if block_type == "child_page":
             child_title = block.get("child_page", {}).get("title", "")
             child_pages.append({"id": block["id"], "title": child_title})
+        # Collect image URLs
+        img_url = _extract_image_url(block)
+        if img_url:
+            caption = _extract_text(block.get("image", {}).get("caption", []))
+            image_urls.append({"url": img_url, "caption": caption})
         text = _extract_block_text(block)
         if text:
             lines.append(text)
@@ -210,6 +229,7 @@ async def get_page_content(page_id: str, recurse: bool = True) -> dict:
         "content": "\n".join(lines),
         "block_count": len(blocks),
         "child_pages": child_pages,
+        "image_urls": image_urls,
     }
 
 
