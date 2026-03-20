@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 
 from backend.database import init_db
 from backend.tools.handlers import register_all_tools
+from backend.scheduler import start_scheduler, stop_scheduler
 
 # Configure logging
 logging.basicConfig(
@@ -46,7 +47,14 @@ async def startup():
     logger.info("Initializing TARS v2...")
     init_db()
     register_all_tools()
+    start_scheduler()
     logger.info("TARS v2 ready.")
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    """Clean up background tasks."""
+    stop_scheduler()
 
 
 # ---------------------------------------------------------------------------
