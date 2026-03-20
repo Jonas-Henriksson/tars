@@ -453,15 +453,18 @@ async def get_weekly_review():
 
 @router.get("/meeting-review")
 async def get_meeting_review(days: int = 3, date: str = ""):
-    """Aggregate recently created items across all entity types for review.
+    """Aggregate items across all entity types for review, grouped by source meeting.
 
-    Groups items by their source meeting (via source_title) and resolves
-    hierarchy paths so the user can see where each item landed.
+    Items are grouped by source meeting and each meeting group is assigned a
+    ``meeting_date`` extracted from the source_title (e.g. ``@ 2026-02-09``
+    or an ISO timestamp suffix).  The ``date`` / ``days`` query params filter
+    by this meeting date, not by item ``created_at``.
 
     Query params:
-      date  – YYYY-MM-DD to show items created on that specific day only.
-      days  – fallback: show items created in the last N days (default 3).
+      date  – YYYY-MM-DD to show items from meetings on that specific day.
+      days  – fallback: show meetings from the last N days (default 3).
     """
+    import re as _re
     from datetime import datetime, timezone, timedelta, date as date_type
     from integrations.themes import get_themes
     from integrations.initiatives import get_initiatives
@@ -471,30 +474,54 @@ async def get_meeting_review(days: int = 3, date: str = ""):
 
     now = datetime.now(timezone.utc)
 
-    # Determine filter window
+    # Determine target date for the response header
     if date:
         try:
             target_date = date_type.fromisoformat(date)
         except ValueError:
             target_date = now.date()
-        day_start = datetime(target_date.year, target_date.month, target_date.day, tzinfo=timezone.utc)
-        day_end = day_start + timedelta(days=1)
     else:
-        day_start = now - timedelta(days=days)
-        day_end = now + timedelta(days=1)  # include today fully
         target_date = now.date()
 
-    def _in_window(item: dict) -> bool:
-        ca = item.get("created_at", "")
-        if not ca:
-            return False
-        try:
-            dt = datetime.fromisoformat(ca)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return day_start <= dt < day_end
-        except (ValueError, TypeError):
-            return False
+    # --- helper: extract a date from a source_title string ---
+    _ISO_RE = _re.compile(r'(\d{4}-\d{2}-\d{2})T\d{2}:\d{2}')
+    _AT_DATE_RE = _re.compile(r'@\s*(\d{4}-\d{2}-\d{2})')
+    _BARE_DATE_RE = _re.compile(r'(\d{4}-\d{2}-\d{2})')
+
+    def _extract_meeting_date(source_title: str) -> str | None:
+        """Return YYYY-MM-DD from source_title, or None."""
+        if not source_title:
+            return None
+        # Try @ prefix first (most explicit): "... @ 2026-02-09"
+        m = _AT_DATE_RE.search(source_title)
+        if m:
+            return m.group(1)
+        # Try ISO timestamp: "...2026-03-06T08:58:00.000+01:00"
+        m = _ISO_RE.search(source_title)
+        if m:
+            return m.group(1)
+        # Try bare date
+        m = _BARE_DATE_RE.search(source_title)
+        if m:
+            return m.group(1)
+        return None
+
+    def _clean_source_title(source_title: str) -> str:
+        """Strip embedded timestamps/dates from source_title for display."""
+        if not source_title:
+            return source_title
+        # Remove ISO timestamps (e.g. "2026-03-06T08:58:00.000+01:00")
+        cleaned = _re.sub(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z)', '', source_title)
+        # Remove "@ 2026-02-09" style dates
+        cleaned = _re.sub(r'\s*@\s*\d{4}-\d{2}-\d{2}', '', cleaned)
+        # Trim trailing whitespace and separators
+        cleaned = cleaned.rstrip(' —->')
+        return cleaned.strip()
+
+    # No created_at window filter — we load ALL items, then filter meetings
+    # by their extracted meeting_date after grouping.
+    def _in_window(_item: dict) -> bool:
+        return True  # accept all items; date filtering happens on meetings
 
     # Load all entities
     themes = {t["id"]: t for t in get_themes().get("themes", [])}
@@ -768,20 +795,27 @@ async def get_meeting_review(days: int = 3, date: str = ""):
     # Notion page name).  Fall back to source_page_id, then "__ungrouped__".
     meetings_map: dict[str, dict] = {}
     for item in all_items:
-        key = item.get("source_title") or item.get("source_page_id") or "__ungrouped__"
+        raw_title = item.get("source_title", "")
+        key = raw_title or item.get("source_page_id") or "__ungrouped__"
         if key not in meetings_map:
+            meeting_date_str = _extract_meeting_date(raw_title)
             meetings_map[key] = {
                 "source_page_id": item.get("source_page_id", ""),
-                "source_title": item.get("source_title", "") or ("Other items" if key == "__ungrouped__" else ""),
+                "source_title": _clean_source_title(raw_title) or ("Other items" if key == "__ungrouped__" else raw_title),
                 "source_url": item.get("source_url", ""),
+                "meeting_date": meeting_date_str or "",
                 "items": [],
                 "counts": {"auto": 0, "confirmed": 0, "total": 0},
             }
         # Backfill title/url if a later item has it
         if not meetings_map[key]["source_title"] and item.get("source_title"):
-            meetings_map[key]["source_title"] = item["source_title"]
+            meetings_map[key]["source_title"] = _clean_source_title(item["source_title"])
         if not meetings_map[key]["source_url"] and item.get("source_url"):
             meetings_map[key]["source_url"] = item["source_url"]
+        if not meetings_map[key]["meeting_date"] and item.get("source_title"):
+            md = _extract_meeting_date(item["source_title"])
+            if md:
+                meetings_map[key]["meeting_date"] = md
 
         # Remove transient fields from the item before appending
         clean_item = {k: v for k, v in item.items() if k not in ("source_page_id", "source_title", "source_url")}
@@ -792,12 +826,63 @@ async def get_meeting_review(days: int = 3, date: str = ""):
         else:
             meetings_map[key]["counts"]["confirmed"] += 1
 
-    # Sort meetings by most recent item first; sort items within each by entity hierarchy order
+    # --- filter meetings by date ---
+    if date:
+        # Specific date requested: only show meetings from that day
+        date_str = target_date.isoformat()
+        filtered = {
+            k: m for k, m in meetings_map.items()
+            if m["meeting_date"] == date_str
+            # Keep ungrouped items if they were created on that day
+            or (k == "__ungrouped__" and any(
+                (item.get("created_at", ""))[:10] == date_str for item in m["items"]
+            ))
+        }
+        # For ungrouped, further filter to only items created on that day
+        if "__ungrouped__" in filtered:
+            ug = filtered["__ungrouped__"]
+            ug["items"] = [i for i in ug["items"] if (i.get("created_at", ""))[:10] == date_str]
+            ug["counts"] = {
+                "auto": sum(1 for i in ug["items"] if i.get("source") == "auto"),
+                "confirmed": sum(1 for i in ug["items"] if i.get("source") != "auto"),
+                "total": len(ug["items"]),
+            }
+            if not ug["items"]:
+                del filtered["__ungrouped__"]
+        meetings_map = filtered
+    else:
+        # No specific date: show meetings from the last N days
+        cutoff = (now.date() - timedelta(days=days)).isoformat()
+        filtered = {
+            k: m for k, m in meetings_map.items()
+            if (m["meeting_date"] and m["meeting_date"] >= cutoff)
+            or (k == "__ungrouped__" and any(
+                (item.get("created_at", ""))[:10] >= cutoff for item in m["items"]
+            ))
+        }
+        if "__ungrouped__" in filtered:
+            ug = filtered["__ungrouped__"]
+            ug["items"] = [i for i in ug["items"] if (i.get("created_at", ""))[:10] >= cutoff]
+            ug["counts"] = {
+                "auto": sum(1 for i in ug["items"] if i.get("source") == "auto"),
+                "confirmed": sum(1 for i in ug["items"] if i.get("source") != "auto"),
+                "total": len(ug["items"]),
+            }
+            if not ug["items"]:
+                del filtered["__ungrouped__"]
+        meetings_map = filtered
+
+    # Sort meetings by meeting_date desc (then by most recent item); sort items by entity hierarchy
     entity_order = {"initiatives": 0, "epics": 1, "stories": 2, "tasks": 3, "decisions": 4}
-    meetings = sorted(meetings_map.values(), key=lambda m: max((i.get("created_at", "") for i in m["items"]), default=""), reverse=True)
+    meetings = sorted(
+        meetings_map.values(),
+        key=lambda m: (m.get("meeting_date") or "", max((i.get("created_at", "") for i in m["items"]), default="")),
+        reverse=True,
+    )
     for m in meetings:
         m["items"].sort(key=lambda i: entity_order.get(i.get("entity_type", ""), 9))
 
+    total_items = sum(m["counts"]["total"] for m in meetings)
     auto_total = sum(m["counts"]["auto"] for m in meetings)
     confirmed_total = sum(m["counts"]["confirmed"] for m in meetings)
     # Count groups that have a real source title (= actual meeting/page sources)
@@ -806,7 +891,7 @@ async def get_meeting_review(days: int = 3, date: str = ""):
     return JSONResponse({
         "meetings": meetings,
         "summary": {
-            "total_items": len(all_items),
+            "total_items": total_items,
             "auto_items": auto_total,
             "confirmed_items": confirmed_total,
             "meetings_count": source_groups,

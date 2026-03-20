@@ -522,8 +522,22 @@ function MeetingReviewCard({ data, navigate, onUpdate }: {
                 onMouseLeave={(e) => { if (!isExpanded) e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'; }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
-                    {meeting.source_title || 'Other items'}
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {meeting.source_title || 'Other items'}
+                    </span>
+                    {meeting.meeting_date && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 400, color: 'var(--text-muted)',
+                        padding: '1px 6px', backgroundColor: 'var(--bg-card)',
+                        borderRadius: 4, flexShrink: 0, whiteSpace: 'nowrap',
+                      }}>
+                        {(() => {
+                          const d = new Date(meeting.meeting_date + 'T12:00:00');
+                          return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        })()}
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', gap: 8 }}>
                     <span>{items.length} item{items.length !== 1 ? 's' : ''}</span>
